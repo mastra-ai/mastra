@@ -274,4 +274,27 @@ describe('MemoryLibSQL actions', () => {
       'user:what now?',
     ]);
   });
+
+  it('stores a first question once when its model call failed and it is resent', async () => {
+    const failing = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'failing',
+      supportedUrls: {},
+      doGenerate: async () => {
+        throw new Error('provider down');
+      },
+      doStream: async () => {
+        throw new Error('provider down');
+      },
+    } as never;
+    const inputs = ['hello', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }]];
+    for (const input of inputs) {
+      for await (const _ of runAgent({ model: failing, threadId: 't1', resourceId: 'user-1', memory: store, input }))
+        void _;
+    }
+
+    const log = await store.listActions({ threadId: 't1' });
+    expect(log.flatMap(a => (a.type === 'text' ? [`${a.role}:${a.text}`] : []))).toEqual(['user:hello']);
+  });
 });

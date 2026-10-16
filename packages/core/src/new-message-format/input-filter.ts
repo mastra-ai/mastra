@@ -29,7 +29,13 @@ export function trimResentInput(input: AgentInput, log: PersistableAction[]): To
   if (last === -1) return { system, actions: openOutcomes(all, log) };
 
   const boundary = messages.findLastIndex(m => m.role === 'assistant');
-  if (boundary === -1 || !matchesLastAssistantTurn(messages[boundary]!.actions, log)) {
+  if (boundary === -1) {
+    // No assistant to anchor on: a retry of input the log holds unanswered (the first model call failed)
+    // starts with that input, so drop it once.
+    const kept = withoutClosedOutcomes(all, log);
+    return { system, actions: kept.slice(storedInputPrefix(kept, lastAssistantTurn(log).after)) };
+  }
+  if (!matchesLastAssistantTurn(messages[boundary]!.actions, log)) {
     return { system, actions: withoutClosedOutcomes(all, log) };
   }
   if (messages[last]!.role === 'assistant') {

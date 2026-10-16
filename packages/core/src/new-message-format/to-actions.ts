@@ -180,7 +180,11 @@ function convertModelPart(part: AnyPart, role: string, out: ToActionsResult) {
         type: 'reasoning',
         role: 'assistant',
         text: '',
-        providerMetadata: { ...(providerMetadata.providerMetadata ?? {}), redacted: { data: part.data } },
+        // Redacted reasoning is Anthropic's `redacted_thinking`; its provider reads it back from this key.
+        providerMetadata: {
+          ...(providerMetadata.providerMetadata ?? {}),
+          anthropic: { ...providerMetadata.providerMetadata?.anthropic, redactedData: part.data },
+        },
       } as ActionDraft);
       return;
     case 'reasoning-file':

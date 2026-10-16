@@ -105,6 +105,15 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
       }
       case 'signal':
         user({ type: 'text', text: signalText(action) });
+        // The text names each file in place; the files themselves follow it.
+        for (const c of action.contents)
+          if (c.type === 'file')
+            user({
+              type: 'file',
+              data: toData(c.data),
+              mediaType: c.mediaType,
+              ...(c.filename ? { filename: c.filename } : {}),
+            });
         break;
       case 'turn-start':
         if (current?.role === 'assistant' || current?.role === 'tool') current = undefined;

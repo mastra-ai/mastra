@@ -1,3 +1,5 @@
+import { createAnthropic } from '@ai-sdk/anthropic-v7';
+import { streamText } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import type { ActionDraft } from './to-actions';
 import { toActions } from './to-actions';
@@ -81,5 +83,54 @@ describe('toModelMessages', () => {
       },
     ];
     expect(toModelMessages(stamp(toActions(input).actions))).toEqual(input);
+  });
+
+  it('sends the files inside a signal, not just their names', () => {
+    const [message] = toModelMessages(
+      stamp([
+        {
+          type: 'signal',
+          category: 'notification',
+          tagName: 'upload',
+          contents: [
+            { type: 'text', text: 'see attached' },
+            { type: 'file', data: 'aGVsbG8=', mediaType: 'text/plain', filename: 'a.txt' },
+          ],
+        },
+      ]),
+    );
+    expect(message).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: '<upload>see attached\n[file a.txt]</upload>' },
+        { type: 'file', data: 'aGVsbG8=', mediaType: 'text/plain', filename: 'a.txt' },
+      ],
+    });
+  });
+
+  it('sends redacted reasoning back to Anthropic as redacted_thinking', async () => {
+    const log = stamp([
+      ...toActions({ role: 'user', content: 'hi' }).actions,
+      ...toActions({
+        role: 'assistant',
+        content: [
+          { type: 'redacted-reasoning', data: 'ENCRYPTED' },
+          { type: 'text', text: 'Hello.' },
+        ],
+      }).actions,
+      ...toActions({ role: 'user', content: 'again' }).actions,
+    ]);
+    let body: { messages: { content: { type: string; data?: string }[] }[] } | undefined;
+    const anthropic = createAnthropic({
+      apiKey: 'test',
+      fetch: async (_url, init) => {
+        body = JSON.parse(String(init!.body));
+        return new Response('{}', { status: 500 });
+      },
+    });
+    const result = streamText({ model: anthropic('claude-sonnet-4-5'), messages: toModelMessages(log), maxRetries: 0 });
+    for await (const _ of result.fullStream) void _;
+
+    expect(body!.messages[1]!.content).toContainEqual({ type: 'redacted_thinking', data: 'ENCRYPTED' });
   });
 });
