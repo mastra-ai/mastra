@@ -20,3 +20,5 @@ await controller.createSession({ id: 'run-a', resourceId: 'repo-1' });
 const session = await controller.getSession('run-a');
 await controller.deleteSession({ sessionId: 'run-a' });
 ```
+
+`createSession` throws when an explicit `resourceId` doesn't match the resource of the live session with that id, so a session id can't be used to take over another resource's session.

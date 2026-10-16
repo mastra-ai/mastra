@@ -4,7 +4,7 @@
 
 **Breaking:** Agent controller session routes are addressed by session id: `/agent-controller/:controllerId/sessions/:sessionId/...`. The `sessionScope` query param is removed.
 
-`POST /agent-controller/:controllerId/sessions` takes `resourceId` plus an optional `sessionId` (and `threadId`). Without a `sessionId` the session id is the `threadId`, or else the `resourceId`, so callers that never passed one reach the same URLs as before. Thread listing returns every thread of the session's resource. When a session is no longer live (for example after a restart), the routes recreate it on the resource of the thread with the session's id, falling back to the session id itself.
+`POST /agent-controller/:controllerId/sessions` takes `resourceId` plus an optional `sessionId` (and `threadId`). `resourceId` may be omitted when `sessionId` is sent; the session then resumes on the resource it already has. Without a `sessionId` the session id is the `resourceId`, so callers that never passed one reach the same URLs as before. Thread listing returns every thread of the session's resource. When a session is no longer live (for example after a restart), the routes recreate it on the resource of the thread with the session's id, falling back to the session id itself.
 
 ```http
 # Before

@@ -14,4 +14,4 @@ const session = client.getAgentController('code').session('run-a');
 await session.create({ resourceId: 'repo-1' });
 ```
 
-`create()` without a `resourceId` uses the session id as the resource, so `session('user-1').create()` behaves as before.
+`create()` without a `resourceId` resumes the session on the resource it already has, or uses the session id as the resource for a new session, so `session('user-1').create()` behaves as before.
