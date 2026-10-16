@@ -2267,7 +2267,7 @@ describe('Memory', () => {
           embeddings: [fakeEmbedding],
         }),
         modelId: 'mock-384-embedder',
-        specificationVersion: 'v1',
+        specificationVersion: 'v2',
         provider: 'mock',
       } as any;
 
@@ -2394,7 +2394,7 @@ describe('Memory', () => {
       const mockEmbedder = {
         doEmbed: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]], usage: { tokens: 3 } }),
         modelId: 'threshold-embedder',
-        specificationVersion: 'v1',
+        specificationVersion: 'v2',
         provider: 'mock',
       } as any;
 
@@ -3809,7 +3809,7 @@ describe('Memory', () => {
       const mockEmbedder = {
         doEmbed: vi.fn().mockResolvedValue({ embeddings: [new Array(1536).fill(0.1)] }),
         modelId: 'mock-embedder',
-        specificationVersion: 'v1',
+        specificationVersion: 'v2',
         provider: 'mock',
       } as any;
 

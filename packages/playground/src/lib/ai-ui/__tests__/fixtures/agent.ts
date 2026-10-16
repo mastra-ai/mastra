@@ -13,8 +13,6 @@ export const v2Agent: GetAgentResponse = {
   modelVersion: 'v2',
   modelList: undefined,
   defaultOptions: {},
-  defaultGenerateOptionsLegacy: {},
-  defaultStreamOptionsLegacy: {},
 };
 
 /** Memory disabled — keeps the memory sidebar/status fan-out quiet. */

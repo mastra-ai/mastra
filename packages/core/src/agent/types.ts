@@ -1,5 +1,4 @@
-import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
-import type { CallSettings } from '@internal/ai-sdk-v5';
+import type { GenerateTextOnStepFinishCallback, CallSettings } from '@internal/ai-sdk-v5';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
@@ -77,15 +76,9 @@ import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
-export type {
-  MastraDBMessage,
-  MastraMessageContentV2,
-  MastraMessagePart,
-  UIMessageWithMetadata,
-  MessageList,
-} from './message-list/index';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageList } from './message-list/index';
 export type { ReasoningLevel } from '../loop/types';
-export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
+export type { UIMessage as AiMessageType } from '@internal/ai-sdk-v5';
 export type {
   NotificationDeliveryPolicyConfig,
   NotificationDeliveryPolicyDecider,
@@ -748,7 +741,7 @@ interface AgentConfigBase<
   tools?: DynamicArgument<TTools, TRequestContext>;
   /**
    * Hooks that run before and after any tool call made by this agent.
-   * Per-execution hooks passed to `generate`, `stream`, `generateLegacy`, or `streamLegacy` override matching hooks here.
+   * Per-execution hooks passed to `generate` or `stream` override matching hooks here.
    * If a workspace also defines tool hooks, workspace hooks wrap the workspace tool first, then agent hooks wrap the exposed tool call.
    */
   hooks?: ToolHooks;
@@ -774,14 +767,6 @@ interface AgentConfigBase<
    * ```
    */
   durable?: AgentDurableOption;
-  /**
-   * Default options used when calling `generate()`.
-   */
-  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions, TRequestContext>;
-  /**
-   * Default options used when calling `stream()`.
-   */
-  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions, TRequestContext>;
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
@@ -1046,197 +1031,6 @@ export type AgentMemoryOption = {
   onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
-/**
- * Options for generating responses with an agent
- * @template OUTPUT - The schema type for structured output (Zod schema or JSON schema)
- * @template EXPERIMENTAL_OUTPUT - The schema type for structured output generation alongside tool calls (Zod schema or JSON schema)
- */
-export type AgentGenerateOptions<
-  OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = {
-  /** Optional instructions to override the agent's default instructions */
-  instructions?: SystemMessage;
-  /** Additional tool sets that can be used for this generation */
-  toolsets?: ToolsetsInput;
-  clientTools?: ToolsInput;
-  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
-  hooks?: ToolHooks;
-  /** Additional context messages to include */
-  context?: CoreMessage[];
-  /** New memory options (preferred) */
-  memory?: AgentMemoryOption;
-  /** Unique ID for this generation run */
-  runId?: string;
-  /** Callback fired after each generation step completes */
-  onStepFinish?: OUTPUT extends undefined ? GenerateTextOnStepFinishCallback<any> : never;
-  /** Maximum number of steps allowed for generation */
-  maxSteps?: number;
-  /** Schema for structured output, does not work with tools, use experimental_output instead */
-  output?: OutputType | OUTPUT;
-  /** Schema for structured output generation alongside tool calls. */
-  experimental_output?: EXPERIMENTAL_OUTPUT;
-  /** Controls how tools are selected during generation */
-  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
-  /** RequestContext for dependency injection */
-  requestContext?: RequestContext;
-  /** Trusted server-side signal for this agent FGA check. */
-  actor?: ActorSignal;
-  /**
-   * Per-invocation version overrides for sub-agents (and future primitives).
-   * Merged on top of Mastra instance-level versions and propagated via requestContext.
-   *
-   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
-   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
-   * independent (generate/stream options do not extend the base). Do not remove.
-   */
-  versions?: VersionOverrides;
-  /** Scorers to use for this generation */
-  scorers?:
-    | MastraScorers
-    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
-  /** Whether to return the input required to run scorers for agents, defaults to false */
-  returnScorerData?: boolean;
-  /**
-   * Whether to save messages incrementally on step finish
-   * @default false
-   */
-  savePerStep?: boolean;
-  /** Input processors to use for this generation call (overrides agent's default) */
-  inputProcessors?: InputProcessorOrWorkflow[];
-  /** Output processors to use for this generation call (overrides agent's default) */
-  outputProcessors?: OutputProcessorOrWorkflow[];
-  /**
-   * Maximum number of times processors can trigger a retry for this generation.
-   * Overrides the agent's default maxProcessorRetries. Input and output processor
-   * retries require an explicit cap; error processors default to a cap of 3 when
-   * they resolve to a non-empty list and no cap is set.
-   */
-  maxProcessorRetries?: number;
-  /** Error processors to use for this generation call. Replaces the agent's resolved list, including its defaults. */
-  errorProcessors?: ErrorProcessorOrWorkflow[];
-  /** tracing options for starting new traces */
-  tracingOptions?: TracingOptions;
-  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
-  providerOptions?: ProviderOptions;
-} & Partial<ObservabilityContext> &
-  (
-    | {
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        resourceId?: undefined;
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        threadId?: undefined;
-      }
-    | {
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        resourceId: string;
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        threadId: string;
-      }
-  ) &
-  (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
-
-/**
- * Options for streaming responses with an agent
- * @template OUTPUT - The schema type for structured output (Zod schema or JSON schema)
- * @template EXPERIMENTAL_OUTPUT - The schema type for structured output generation alongside tool calls (Zod schema or JSON schema)
- */
-export type AgentStreamOptions<
-  OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = {
-  /** Optional instructions to override the agent's default instructions */
-  instructions?: SystemMessage;
-  /** Additional tool sets that can be used for this generation */
-  toolsets?: ToolsetsInput;
-  clientTools?: ToolsInput;
-  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
-  hooks?: ToolHooks;
-  /** Additional context messages to include */
-  context?: CoreMessage[];
-  /**
-   * @deprecated Use the `memory` property instead for all memory-related options.
-   */
-  memoryOptions?: MemoryConfigInternal;
-  /** New memory options (preferred) */
-  memory?: AgentMemoryOption;
-  /** Unique ID for this generation run */
-  runId?: string;
-  /** Callback fired when streaming completes */
-  onFinish?: OUTPUT extends undefined ? StreamTextOnFinishCallback<any> : StreamObjectOnFinishCallback<OUTPUT>;
-  /** Callback fired after each generation step completes */
-  onStepFinish?: OUTPUT extends undefined ? StreamTextOnStepFinishCallback<any> : never;
-  /** Maximum number of steps allowed for generation */
-  maxSteps?: number;
-  /** Schema for structured output */
-  output?: OutputType | OUTPUT;
-  /** Temperature parameter for controlling randomness */
-  temperature?: number;
-  /** Controls how tools are selected during generation */
-  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
-  /** Experimental schema for structured output */
-  experimental_output?: EXPERIMENTAL_OUTPUT;
-  /** RequestContext for dependency injection */
-  requestContext?: RequestContext;
-  /** Trusted server-side signal for this agent FGA check. */
-  actor?: ActorSignal;
-  /**
-   * Per-invocation version overrides for sub-agents (and future primitives).
-   * Merged on top of Mastra instance-level versions and propagated via requestContext.
-   *
-   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
-   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
-   * independent (generate/stream options do not extend the base). Do not remove.
-   */
-  versions?: VersionOverrides;
-  /**
-   * Whether to save messages incrementally on step finish
-   * @default false
-   */
-  savePerStep?: boolean;
-  /** Input processors to use for this generation call (overrides agent's default) */
-  inputProcessors?: InputProcessorOrWorkflow[];
-  /** tracing options for starting new traces */
-  tracingOptions?: TracingOptions;
-  /** Scorers to use for this generation */
-  scorers?:
-    | MastraScorers
-    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
-  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
-  providerOptions?: ProviderOptions;
-} & Partial<ObservabilityContext> &
-  (
-    | {
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        resourceId?: undefined;
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        threadId?: undefined;
-      }
-    | {
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        resourceId: string;
-        /**
-         * @deprecated Use the `memory` property instead for all memory-related options.
-         */
-        threadId: string;
-      }
-  ) &
-  (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
-
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
@@ -1268,7 +1062,7 @@ export type AgentExecuteOnFinishOptions = {
   waitUntil?: WaitUntilFn;
 };
 
-export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+export type AgentMethodType = 'generate' | 'stream';
 
 // =============================================================================
 // Durable Agent Types

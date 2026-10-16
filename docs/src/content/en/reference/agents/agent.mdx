@@ -1042,18 +1042,6 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description: 'Default options used when calling `stream()` and `generate()`.',
   },
   {
-    name: 'defaultGenerateOptionsLegacy',
-    type: 'AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>',
-    isOptional: true,
-    description: 'Default options used when calling `generateLegacy()`.',
-  },
-  {
-    name: 'defaultStreamOptionsLegacy',
-    type: 'AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>',
-    isOptional: true,
-    description: 'Default options used when calling `streamLegacy()`.',
-  },
-  {
     name: 'mastra',
     type: 'Mastra',
     isOptional: true,

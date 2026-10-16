@@ -167,15 +167,6 @@ describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
         return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
       }
 
-      // Mock observeStreamLegacy endpoint
-      if (url.includes('/observe-stream-legacy?runId=')) {
-        const body = Workflow.createRecordStream([
-          { type: 'cache', payload: { legacy: true } },
-          { type: 'live', payload: { legacy: false } },
-        ]);
-        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
-      }
-
       // Mock resumeStream endpoint
       if (url.includes('/resume-stream?runId=')) {
         const body = Workflow.createRecordStream([
@@ -246,27 +237,6 @@ describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
       value: { type: 'live', payload: { message: 'mañana' } },
     });
     await expect(reader.read()).resolves.toMatchObject({ done: true });
-  });
-
-  it('observeStreamLegacy returns ReadableStream with legacy streaming', async () => {
-    const stream = await agentBuilder.observeStreamLegacy({ runId: 'run-789' });
-    const reader = (stream as ReadableStream<any>).getReader();
-    const records: any[] = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      records.push(value);
-    }
-
-    expect(records).toEqual([
-      { type: 'cache', payload: { legacy: true } },
-      { type: 'live', payload: { legacy: false } },
-    ]);
-
-    // Verify correct endpoint was called
-    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/observe-stream-legacy?runId='));
-    expect(call).toBeTruthy();
   });
 
   it('resumeStream returns ReadableStream with resume results', async () => {

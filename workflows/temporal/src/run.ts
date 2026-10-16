@@ -99,12 +99,6 @@ export class TemporalRun<
     return this.unsupported('stream');
   }
 
-  override streamLegacy(
-    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['streamLegacy']>
-  ): never {
-    return this.unsupported('streamLegacy');
-  }
-
   override resumeStream(..._args: unknown[]): never {
     return this.unsupported('resumeStream');
   }

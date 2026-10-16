@@ -10,7 +10,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model'
 
 const mockStorage = new InMemoryStore();
 
-export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
+export function toolApprovalAndSuspensionTests(version: 'v2') {
   const mockFindUser = vi.fn().mockImplementation(async data => {
     const list = [
       { name: 'Dero Israel', email: 'dero@mail.com' },
@@ -25,7 +25,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
   });
 
   describe('tool approval and suspension', () => {
-    describe.skipIf(version === 'v1')('requireToolApproval (mock-based)', () => {
+    describe('requireToolApproval (mock-based)', () => {
       it('should call findUserTool with requireToolApproval on tool and resume via stream when autoResumeSuspendedTools is true', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',

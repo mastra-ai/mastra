@@ -3,7 +3,6 @@ import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
-import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { AISDKV7LanguageModel } from './aisdk/v7/model';
@@ -13,7 +12,6 @@ import type {
   MastraModelConfig,
   OpenAICompatibleConfig,
   MastraLanguageModel,
-  MastraLegacyLanguageModel,
 } from './shared.types';
 
 /**
@@ -100,7 +98,7 @@ export async function resolveModelConfig(
       }) => MastraModelConfig | Promise<MastraModelConfig>),
   requestContext: RequestContext = new RequestContext(),
   mastra?: Mastra,
-): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+): Promise<MastraLanguageModel> {
   // If it's a function, resolve it first
   if (typeof modelConfig === 'function') {
     modelConfig = await modelConfig({ requestContext, mastra });
@@ -108,9 +106,7 @@ export async function resolveModelConfig(
 
   if (isIdentifiedModelConfig(modelConfig)) {
     const resolved = await resolveModelConfig(modelConfig.model, requestContext, mastra);
-    if ('specificationVersion' in resolved && resolved.specificationVersion !== 'v1') {
-      (resolved as MastraLanguageModel).id = modelConfig.id;
-    }
+    resolved.id = modelConfig.id;
     return resolved;
   }
 
@@ -118,7 +114,6 @@ export async function resolveModelConfig(
   // TODO need a better trick, maybe symbol
   if (
     modelConfig instanceof ModelRouterLanguageModel ||
-    modelConfig instanceof AISDKV4LegacyLanguageModel ||
     modelConfig instanceof AISDKV5LanguageModel ||
     modelConfig instanceof AISDKV6LanguageModel ||
     modelConfig instanceof AISDKV7LanguageModel
@@ -137,14 +132,14 @@ export async function resolveModelConfig(
     if (modelConfig.specificationVersion === 'v4') {
       return new AISDKV7LanguageModel(modelConfig as LanguageModelV4);
     }
-    if (modelConfig.specificationVersion === 'v1') {
-      // Wrap legacy v1 models so the underlying SDK client (and any
-      // enumerable config) does not leak into observability spans.
-      return new AISDKV4LegacyLanguageModel(modelConfig);
+    if ((modelConfig as { specificationVersion: string }).specificationVersion === 'v1') {
+      throw new Error(
+        'AI SDK v4 (LanguageModelV1) models are not supported. Use an AI SDK v5+ model or a Mastra model router string such as "openai/gpt-5-mini".',
+      );
     }
     // Unknown specificationVersion from a third-party provider (e.g. ollama-ai-provider-v2).
     // If the model has doStream/doGenerate methods, wrap it as a modern model
-    // to prevent the stream()/streamLegacy() catch-22 where neither method accepts the model.
+    // to prevent the case where no supported specification version matches.
     if (typeof (modelConfig as any).doStream === 'function' && typeof (modelConfig as any).doGenerate === 'function') {
       return new AISDKV5LanguageModel(modelConfig as unknown as LanguageModelV2);
     }

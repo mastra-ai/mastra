@@ -89,7 +89,7 @@ async function runT74() {
         [
           {
             role: 'assistant',
-            content: [{ type: 'tool-call', toolCallId: call.toolCallId, toolName: 'askClient', args: call.args }],
+            content: [{ type: 'tool-call', toolCallId: call.toolCallId, toolName: 'askClient', input: call.args }],
           },
           {
             role: 'tool',
@@ -98,7 +98,7 @@ async function runT74() {
                 type: 'tool-result',
                 toolCallId: call.toolCallId,
                 toolName: 'askClient',
-                result: CLIENT_ANSWER,
+                output: { type: 'json', value: CLIENT_ANSWER },
               },
             ],
           },

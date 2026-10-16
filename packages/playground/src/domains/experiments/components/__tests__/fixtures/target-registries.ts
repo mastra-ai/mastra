@@ -20,8 +20,6 @@ export const agent = (id: string, name: string): GetAgentResponse => ({
   modelVersion: 'v2',
   modelList: undefined,
   defaultOptions: {},
-  defaultGenerateOptionsLegacy: {},
-  defaultStreamOptionsLegacy: {},
 });
 
 export const workflow = (name: string): GetWorkflowResponse => ({

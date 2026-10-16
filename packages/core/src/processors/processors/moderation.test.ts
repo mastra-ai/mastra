@@ -1,10 +1,10 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import type { ModerationResult } from './moderation';
 import { ModerationProcessor } from './moderation';
 
@@ -54,23 +54,22 @@ function createMockModerationResult(flagged: boolean, categories: string[] = [])
   };
 }
 
-function setupMockModel(result: { object: ModerationResult } | { object: ModerationResult }[]): MockLanguageModelV1 {
+function setupMockModel(
+  result: { object: ModerationResult } | { object: ModerationResult }[],
+): ReturnType<typeof mockTextModel> {
   const results = Array.isArray(result) ? result : [result];
   let callCount = 0;
 
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
-    doGenerate: async () => {
-      const currentResult = results[callCount % results.length];
-      callCount++;
+  return mockTextModel(async () => {
+    const currentResult = results[callCount % results.length];
+    callCount++;
 
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `${JSON.stringify(currentResult.object)}`,
-      };
-    },
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: `${JSON.stringify(currentResult.object)}`,
+    };
   });
 }
 
@@ -428,11 +427,8 @@ describe('ModerationProcessor', () => {
 
   describe('error handling', () => {
     it('should fail open when moderation agent fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new TripWire('Agent failed');
-        },
+      const model = mockTextModel(async () => {
+        throw new TripWire('Agent failed');
       });
       const moderator = new ModerationProcessor({
         model,
@@ -458,11 +454,8 @@ describe('ModerationProcessor', () => {
     it.each(['processInput', 'processOutputResult'] as const)(
       'should propagate the processor tripwire from %s when strict model moderation fails',
       async method => {
-        const model = new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
-          doGenerate: async () => {
-            throw new Error('provider failure');
-          },
+        const model = mockTextModel(async () => {
+          throw new Error('provider failure');
         });
         const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
         const tripwire = new TripWire('strict moderation failure');
@@ -480,7 +473,7 @@ describe('ModerationProcessor', () => {
     it('should propagate the processor tripwire when legacy moderation returns no object', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
       const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
-      vi.spyOn((moderator as any).moderationAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      vi.spyOn((moderator as any).moderationAgent, 'generate').mockResolvedValue({ object: undefined });
       const tripwire = new TripWire('strict moderation failure');
       const abort = vi.fn(() => {
         throw tripwire;
@@ -493,11 +486,8 @@ describe('ModerationProcessor', () => {
     });
 
     it('should not emit a stream part when strict model moderation fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new Error('provider failure');
-        },
+      const model = mockTextModel(async () => {
+        throw new Error('provider failure');
       });
       const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
       const tripwire = new TripWire('strict moderation failure');
@@ -588,15 +578,12 @@ describe('ModerationProcessor', () => {
 
   describe('edge cases', () => {
     it('should handle malformed moderation results gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'invalid json',
-        }),
-      });
+      const model = mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'invalid json',
+      }));
       const moderator = new ModerationProcessor({
         model,
         strategy: 'warn',

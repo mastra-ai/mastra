@@ -155,12 +155,6 @@ const workflowExecutionBodySchema = z.object({
 });
 
 /**
- * Schema for legacy stream workflow body (no closeOnSuspend support)
- * Used by /stream-legacy endpoints
- */
-export const streamLegacyWorkflowBodySchema = workflowExecutionBodySchema;
-
-/**
  * Schema for stream workflow body
  * Used by both /stream and /streamVNext endpoints
  */

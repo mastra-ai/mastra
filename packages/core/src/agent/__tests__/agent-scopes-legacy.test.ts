@@ -1,10 +1,10 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import { MastraServerBase } from '../../server/base';
 import { InMemoryStore } from '../../storage';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
 
 function legacyAgent(scopes?: string[]) {
@@ -13,14 +13,12 @@ function legacyAgent(scopes?: string[]) {
     id: 'legacy-scopes',
     name: 'Legacy Scopes',
     instructions: 'Test',
-    model: new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 1, completionTokens: 1 },
-        text: 'ok',
-      }),
-    }),
+    model: mockTextModel(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 1, completionTokens: 1 },
+      text: 'ok',
+    })),
     memory,
     scopes,
   });
@@ -30,7 +28,7 @@ function legacyAgent(scopes?: string[]) {
 describe('agent scopes on legacy runs', () => {
   it('generateLegacy reads memory identity from agent and request context scopes', async () => {
     const { agent, memory } = legacyAgent(['resource:u1']);
-    await agent.generateLegacy('hello', {
+    await agent.generate('hello', {
       requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['thread:t1']]]),
     });
     const thread = await memory.getThreadById({ threadId: 't1' });
@@ -39,7 +37,7 @@ describe('agent scopes on legacy runs', () => {
 
   it('generateLegacy throws when agent scopes conflict with memory options', async () => {
     const { agent } = legacyAgent(['thread:a']);
-    await expect(agent.generateLegacy('hello', { memory: { resource: 'u1', thread: 'b' } })).rejects.toMatchObject({
+    await expect(agent.generate('hello', { memory: { resource: 'u1', thread: 'b' } })).rejects.toMatchObject({
       id: 'AGENT_SCOPES_CONFLICT',
     });
   });
@@ -50,7 +48,7 @@ describe('agent scopes on legacy runs', () => {
     const mastra = new Mastra({ logger: false, agents: { agent } });
     mastra.setMastraServer(new OutdatedServer({ app: {} }));
     await expect(
-      mastra.getAgent('agent').generateLegacy('hello', {
+      mastra.getAgent('agent').generate('hello', {
         requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:victim']]]),
       }),
     ).rejects.toMatchObject({ id: 'AGENT_SCOPES_SERVER_OUTDATED' });

@@ -1,5 +1,5 @@
-import { Agent, isSupportedLanguageModel } from '@mastra/core/agent';
-import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import { defaultKeywordExtractPrompt, PromptTemplate } from '../prompts';
 import type { KeywordExtractPrompt } from '../prompts';
 import type { BaseNode } from '../schema';
@@ -19,7 +19,7 @@ type ExtractKeyword = {
  * Extract keywords from a list of nodes.
  */
 export class KeywordExtractor extends BaseExtractor {
-  llm: MastraLanguageModel | MastraLegacyLanguageModel;
+  llm: MastraLanguageModel;
   keywords: number = 5;
   promptTemplate: KeywordExtractPrompt;
 
@@ -73,26 +73,16 @@ export class KeywordExtractor extends BaseExtractor {
           'You are a keyword extractor. You are given a node and you need to extract the keywords from the node.',
       });
 
-      if (isSupportedLanguageModel(this.llm)) {
-        const result = await miniAgent.generate([
-          {
-            role: 'user',
-            content: this.promptTemplate.format({
-              context: node.getContent(),
-              maxKeywords: this.keywords.toString(),
-            }),
-          },
-        ]);
-        keywords = result.text;
-      } else {
-        const result = await miniAgent.generateLegacy([
-          {
-            role: 'user',
-            content: this.promptTemplate.format({ context: node.getContent(), maxKeywords: this.keywords.toString() }),
-          },
-        ]);
-        keywords = result.text;
-      }
+      const result = await miniAgent.generate([
+        {
+          role: 'user',
+          content: this.promptTemplate.format({
+            context: node.getContent(),
+            maxKeywords: this.keywords.toString(),
+          }),
+        },
+      ]);
+      keywords = result.text;
 
       if (!keywords) {
         console.warn('Keyword extraction LLM output returned empty');

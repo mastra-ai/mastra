@@ -31,7 +31,7 @@ const makeEmbedder = (dimension: number, modelId = 'mock-embedder') =>
   ({
     doEmbed: vi.fn().mockResolvedValue({ embeddings: [new Array(dimension).fill(0.1)] }),
     modelId,
-    specificationVersion: 'v1',
+    specificationVersion: 'v2',
     provider: 'mock',
   }) as any;
 

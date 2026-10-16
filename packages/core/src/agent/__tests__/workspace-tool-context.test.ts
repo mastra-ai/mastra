@@ -35,7 +35,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-tool-test-'));
 
-    if (version === 'v2') {
+    {
       mockModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -71,47 +71,6 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
-        }),
-      });
-    } else {
-      // v3
-      mockModel = new MockLanguageModelV3({
-        doGenerate: async () => ({
-          finishReason: 'tool-calls',
-          usage: {
-            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-            outputTokens: { total: 20, text: 20, reasoning: undefined },
-          },
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: 'call-workspace-1',
-              toolName: 'workspaceTool',
-              input: '{"action":"test"}',
-            },
-          ],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStreamV3([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-workspace-1',
-              toolName: 'workspaceTool',
-              input: '{"action":"test"}',
-              providerExecuted: false,
-            },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: {
-                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-                outputTokens: { total: 20, text: 20, reasoning: undefined },
-              },
-            },
-          ]),
         }),
       });
     }
@@ -348,7 +307,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
 
         // Create a mock model that calls fileTool (not workspaceTool)
         let fileToolMockModel: MockLanguageModelV2 | MockLanguageModelV3;
-        if (version === 'v2') {
+        {
           fileToolMockModel = new MockLanguageModelV2({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
@@ -384,47 +343,6 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
               ]),
               rawCall: { rawPrompt: null, rawSettings: {} },
               warnings: [],
-            }),
-          });
-        } else {
-          // v3
-          fileToolMockModel = new MockLanguageModelV3({
-            doGenerate: async () => ({
-              finishReason: 'tool-calls',
-              usage: {
-                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-                outputTokens: { total: 20, text: 20, reasoning: undefined },
-              },
-              content: [
-                {
-                  type: 'tool-call',
-                  toolCallId: 'call-file-1',
-                  toolName: 'fileTool',
-                  input: '{"action":"test"}',
-                },
-              ],
-              warnings: [],
-            }),
-            doStream: async () => ({
-              stream: convertArrayToReadableStreamV3([
-                { type: 'stream-start', warnings: [] },
-                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                {
-                  type: 'tool-call',
-                  toolCallId: 'call-file-1',
-                  toolName: 'fileTool',
-                  input: '{"action":"test"}',
-                  providerExecuted: false,
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'tool-calls',
-                  usage: {
-                    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-                    outputTokens: { total: 20, text: 20, reasoning: undefined },
-                  },
-                },
-              ]),
             }),
           });
         }

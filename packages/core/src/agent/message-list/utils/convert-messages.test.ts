@@ -1,4 +1,3 @@
-import type * as AIV4 from '@internal/ai-sdk-v4';
 import type * as AIV5 from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage } from '../index';
@@ -12,20 +11,6 @@ describe('convertMessages', () => {
       parts: [{ type: 'text', text: 'Hello world' }],
     };
 
-    it('converts AIV5 UI to AIV4 UI', () => {
-      const result = convertMessages(v5UIMessage).to('AIV4.UI');
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe('user');
-      expect(result[0].content).toBe('Hello world');
-    });
-
-    it('converts AIV5 UI to AIV4 Core', () => {
-      const result = convertMessages(v5UIMessage).to('AIV4.Core');
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe('user');
-      expect(result[0].content).toEqual([{ type: 'text', text: 'Hello world' }]);
-    });
-
     it('converts AIV5 UI to Mastra V2', () => {
       const result = convertMessages(v5UIMessage).to('Mastra.V2');
       expect(result).toHaveLength(1);
@@ -37,16 +22,15 @@ describe('convertMessages', () => {
     });
   });
 
-  describe('AIV4 UI to other formats', () => {
-    const v4UIMessage: AIV4.UIMessage = {
+  describe('AIV5 assistant UI to other formats', () => {
+    const assistantUIMessage: AIV5.UIMessage = {
       id: 'test-2',
       role: 'assistant',
-      content: 'Hi there!',
       parts: [{ type: 'text', text: 'Hi there!' }],
     };
 
-    it('converts AIV4 UI to AIV5 UI', () => {
-      const result = convertMessages(v4UIMessage).to('AIV5.UI');
+    it('converts assistant UI to AIV5 UI', () => {
+      const result = convertMessages(assistantUIMessage).to('AIV5.UI');
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe('assistant');
       // Check for text part - may have additional parts
@@ -55,15 +39,15 @@ describe('convertMessages', () => {
       expect(textPart?.text).toBe('Hi there!');
     });
 
-    it('converts AIV4 UI to AIV5 Model', () => {
-      const result = convertMessages(v4UIMessage).to('AIV5.Model');
+    it('converts assistant UI to AIV5 Model', () => {
+      const result = convertMessages(assistantUIMessage).to('AIV5.Model');
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe('assistant');
       expect(result[0].content).toEqual([{ type: 'text', text: 'Hi there!' }]);
     });
 
-    it('converts AIV4 UI to Mastra V2', () => {
-      const result = convertMessages(v4UIMessage).to('Mastra.V2');
+    it('converts assistant UI to Mastra V2', () => {
+      const result = convertMessages(assistantUIMessage).to('Mastra.V2');
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe('assistant');
       expect(result[0].content.format).toBe(2);
@@ -86,13 +70,6 @@ describe('convertMessages', () => {
       },
     };
 
-    it('converts Mastra V2 to AIV4 UI', () => {
-      const result = convertMessages(mastraV2Message).to('AIV4.UI');
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe('user');
-      expect(result[0].content).toBe('Test message');
-    });
-
     it('converts Mastra V2 to AIV5 UI', () => {
       const result = convertMessages(mastraV2Message).to('AIV5.UI');
       expect(result).toHaveLength(1);
@@ -102,10 +79,9 @@ describe('convertMessages', () => {
   });
 
   // Regression for issue #17218: a declined approval is stored as `state: 'output-denied'`.
-  // AI SDK v4 has no denied state and requires every tool invocation to carry a result, so
-  // converting to AIV4.Core (used by the agent's onFinish memory save) used to throw
-  // "ToolInvocation must have a result". It must downgrade to a result whose value is the reason.
-  describe('Mastra V2 completed tool invocations unsupported by AI SDK v4', () => {
+  // Converting it used to throw "ToolInvocation must have a result". The model view must carry
+  // the decline reason as the tool result.
+  describe('Mastra V2 denied and errored tool invocations', () => {
     const deniedMessage: MastraDBMessage = {
       id: 'assistant-denied',
       role: 'assistant',
@@ -128,22 +104,26 @@ describe('convertMessages', () => {
       },
     };
 
-    it('converts to AIV4.Core without throwing, using the decline reason as the result', () => {
-      const result = convertMessages(deniedMessage).to('AIV4.Core');
+    it('converts to AIV5.Model without throwing, using the decline reason as the result', () => {
+      const result = convertMessages(deniedMessage).to('AIV5.Model');
       const toolMessage = result.find(m => m.role === 'tool');
       expect(toolMessage).toBeDefined();
       expect(toolMessage?.content).toMatchObject([
-        { type: 'tool-result', toolCallId: 'call-1', result: 'Tool call was not approved by the user' },
+        {
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          output: { type: 'text', value: 'Tool call was not approved by the user' },
+        },
       ]);
     });
 
-    it('converts to AIV4.UI as an output-available tool part carrying the reason', () => {
-      const [uiMessage] = convertMessages(deniedMessage).to('AIV4.UI');
-      const toolPart = (uiMessage.parts ?? []).find((p: any) => p.type === 'tool-invocation') as any;
-      expect(toolPart?.toolInvocation).toMatchObject({
-        state: 'result',
+    it('converts to AIV5.UI as an output-available tool part carrying the reason', () => {
+      const [uiMessage] = convertMessages(deniedMessage).to('AIV5.UI');
+      const toolPart = uiMessage.parts.find((p: any) => p.type === 'tool-findUserTool') as any;
+      expect(toolPart).toMatchObject({
+        state: 'output-available',
         toolCallId: 'call-1',
-        result: 'Tool call was not approved by the user',
+        output: 'Tool call was not approved by the user',
       });
     });
 
@@ -168,57 +148,48 @@ describe('convertMessages', () => {
       },
     };
 
-    it('converts output-error to AIV4.Core without throwing, using the error text as the result', () => {
-      const result = convertMessages(errorMessage).to('AIV4.Core');
+    it('converts output-error to AIV5.Model without throwing, using the error text as the result', () => {
+      const result = convertMessages(errorMessage).to('AIV5.Model');
       const toolMessage = result.find(message => message.role === 'tool');
       expect(toolMessage?.content).toMatchObject([
-        { type: 'tool-result', toolCallId: 'call-2', result: 'TOOL_FAILED' },
+        { type: 'tool-result', toolCallId: 'call-2', output: { type: 'error-text', value: 'TOOL_FAILED' } },
       ]);
     });
 
-    it('converts output-error to AIV4.UI as a result carrying the error text', () => {
-      const [uiMessage] = convertMessages(errorMessage).to('AIV4.UI');
-      const toolPart = (uiMessage.parts ?? []).find((part: any) => part.type === 'tool-invocation') as any;
-      expect(toolPart?.toolInvocation).toMatchObject({
-        state: 'result',
-        toolCallId: 'call-2',
-        result: 'TOOL_FAILED',
-        // v4 has no output-error state, so the downgrade to `result` has to stay
-        // distinguishable from a tool that actually succeeded.
-        isError: true,
-      });
+    it('converts output-error to AIV5.UI as an output-error part carrying the error text', () => {
+      const [uiMessage] = convertMessages(errorMessage).to('AIV5.UI');
+      const toolPart = uiMessage.parts.find((part: any) => part.type === 'tool-failingTool') as any;
+      expect(toolPart).toMatchObject({ state: 'output-error', toolCallId: 'call-2', errorText: 'TOOL_FAILED' });
     });
 
     it('does not mark a denied approval as an error', () => {
-      const [uiMessage] = convertMessages(deniedMessage).to('AIV4.UI');
-      const toolPart = (uiMessage.parts ?? []).find((part: any) => part.type === 'tool-invocation') as any;
-      expect(toolPart?.toolInvocation.isError).toBeUndefined();
+      const [uiMessage] = convertMessages(deniedMessage).to('AIV5.UI');
+      const toolPart = uiMessage.parts.find((part: any) => part.type === 'tool-findUserTool') as any;
+      expect(toolPart.state).not.toBe('output-error');
+      expect(toolPart.errorText).toBeUndefined();
     });
   });
 
   describe('Multiple messages', () => {
-    const messages: AIV4.UIMessage[] = [
+    const messages: AIV5.UIMessage[] = [
       {
         id: 'msg-1',
         role: 'user',
-        content: 'Hello',
         parts: [{ type: 'text', text: 'Hello' }],
       },
       {
         id: 'msg-2',
         role: 'assistant',
-        content: 'Hi! How can I help?',
         parts: [{ type: 'text', text: 'Hi! How can I help?' }],
       },
       {
         id: 'msg-3',
         role: 'user',
-        content: 'What is the weather?',
         parts: [{ type: 'text', text: 'What is the weather?' }],
       },
     ];
 
-    it('converts multiple AIV4 UI messages to AIV5 UI', () => {
+    it('converts multiple UI messages to AIV5 UI', () => {
       const result = convertMessages(messages).to('AIV5.UI');
       expect(result).toHaveLength(3);
       expect(result[0].role).toBe('user');
@@ -317,31 +288,6 @@ describe('convertMessages', () => {
       });
     });
 
-    it('should preserve data-* parts when converting Mastra V2 to AIV4 UI', () => {
-      const result = convertMessages(mastraV2MessageWithDataParts).to('AIV4.UI');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe('assistant');
-
-      const textPart = result[0].parts.find(p => p.type === 'text');
-      expect(textPart).toBeDefined();
-
-      const progressPart = result[0].parts.find((p: any) => p.type === 'data-progress');
-      expect(progressPart).toBeDefined();
-      expect((progressPart as any).data).toEqual({
-        taskName: 'file-upload',
-        progress: 50,
-        status: 'in-progress',
-      });
-
-      const fileRefPart = result[0].parts.find((p: any) => p.type === 'data-file-reference');
-      expect(fileRefPart).toBeDefined();
-      expect((fileRefPart as any).data).toEqual({
-        fileId: 'file-123',
-        fileName: 'document.pdf',
-      });
-    });
-
     it('should preserve data-tool-call-suspended parts for HITL workflow resume', () => {
       const suspendedMessage: MastraDBMessage = {
         id: 'test-suspended',
@@ -365,7 +311,7 @@ describe('convertMessages', () => {
         },
       };
 
-      const result = convertMessages(suspendedMessage).to('AIV4.UI');
+      const result = convertMessages(suspendedMessage).to('AIV5.UI');
 
       expect(result).toHaveLength(1);
       const suspendedPart = result[0].parts.find((p: any) => p.type === 'data-tool-call-suspended');

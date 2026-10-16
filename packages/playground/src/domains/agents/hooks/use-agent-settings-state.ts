@@ -10,7 +10,6 @@ export const defaultSettings: AgentSettings = {
   modelSettings: {
     maxRetries: 2,
     maxSteps: 15,
-    chatWithGenerateLegacy: false,
     chatWithGenerate: false,
     chatWithLegacyStream: false,
   },

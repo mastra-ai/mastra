@@ -1,7 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -60,14 +59,12 @@ const mock = createGatewayMock({
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
-function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
+function agentE2ETests({ version }: { version: 'v2' }) {
   const integration = new TestIntegration();
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
+  let openaiModel: LanguageModelV2;
 
   beforeEach(() => {
-    if (version === 'v1') {
-      openaiModel = openai('gpt-4o');
-    } else {
+    {
       openaiModel = openai_v5('gpt-4o');
     }
   });
@@ -175,13 +172,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
       let toolCall;
       let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Use the noSchemaTool to get test data', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
-      } else {
+      {
         response = await agent.generate('Use the noSchemaTool to get test data');
 
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
@@ -220,13 +211,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
       let toolCall;
       let response;
-      if (version === 'v1') {
-        response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-      } else {
+      {
         response = await agentOne.generate('Find the user with name - Dero Israel');
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
       }
@@ -246,20 +231,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       let result;
-      if (version === 'v1') {
-        result = await userAgent.generateLegacy('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-        });
-      } else {
+      {
         result = await userAgent.generate('Make it green', {
           clientTools: {
             changeColor: {
@@ -287,23 +259,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
       let result;
 
-      if (version === 'v1') {
-        result = await userAgent.streamLegacy('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-          onFinish: props => {
-            expect(props.toolCalls.length).toBeGreaterThan(0);
-          },
-        });
-      } else {
+      {
         result = await userAgent.stream('Make it green', {
           clientTools: {
             changeColor: {
@@ -354,12 +310,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       let res;
       let toolCall;
 
-      if (version === 'v1') {
-        res = await agentOne.generateLegacy(
-          'Use the \"findUserTool\" to Find the user with name - Joe and return the name and email',
-        );
-        toolCall = res.steps[0].toolResults.find((result: any) => result.toolName === 'findUserTool');
-      } else {
+      {
         res = await agentOne.generate(
           'Use the \"findUserTool\" to Find the user with name - Joe and return the name and email',
         );
@@ -383,12 +334,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
 
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Call testTool 10 times.', {
-          toolChoice: 'required',
-          maxSteps: 7,
-        });
-      } else {
+      {
         response = await agent.generate('Call testTool 10 times.', {
           toolChoice: 'required',
           stopWhen: stepCountIs(7),
@@ -400,7 +346,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
     // v1 (AI SDK v4) throws AI_ToolExecutionError on tool failures rather than feeding errors
     // back to the model for retry. Only v2's agentic loop supports tool error recovery.
-    it.skipIf(version === 'v1')(
+    it(
       'should retry when tool fails and eventually succeed with maxSteps=5',
       { retry: 2, timeout: 500000 },
       async () => {
@@ -479,23 +425,13 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         content: 'What are your instructions?',
       };
 
-      const complexSystemMessage =
-        version === 'v2'
-          ? {
-              role: 'system' as const,
-              content: [{ type: 'text' as const, text: 'Complex system message from context' }],
-            }
-          : {
-              role: 'system' as const,
-              content: 'Complex system message from context',
-            };
+      const complexSystemMessage = {
+        role: 'system' as const,
+        content: [{ type: 'text' as const, text: 'Complex system message from context' }],
+      };
 
       let result;
-      if (version === 'v1') {
-        result = await agent.streamLegacy('Tell me about yourself', {
-          context: [systemMessage, userMessage, complexSystemMessage],
-        });
-      } else {
+      {
         result = await agent.stream('Tell me about yourself', {
           context: [systemMessage, userMessage, complexSystemMessage],
         });
@@ -507,13 +443,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       let messages: any[];
-      if (version === 'v1') {
-        const requestData = await result.request;
-        if (!requestData?.body) {
-          return;
-        }
-        messages = JSON.parse(requestData.body).messages;
-      } else {
+      {
         const requestData = await (result as any).getFullOutput();
         messages = requestData.request.body.input;
       }
@@ -538,14 +468,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       const userMessages = messages.filter((m: any) => m.role === 'user');
       expect(userMessages.length).toBe(2);
 
-      if (version === 'v1') {
-        expect(
-          userMessages.find(
-            (m: any) =>
-              m.content?.[0]?.text === 'What are your instructions?' || m.content === 'What are your instructions?',
-          ),
-        ).toBeDefined();
-      } else {
+      {
         expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
       }
     }, 20000);
@@ -574,11 +497,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       let result;
-      if (version === 'v1') {
-        result = await agent.streamLegacy('Current question', {
-          context: contextMessages,
-        });
-      } else {
+      {
         result = await agent.stream('Current question', {
           context: contextMessages,
         });
@@ -588,13 +507,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       let messages: any[];
-      if (version === 'v1') {
-        const requestData = await result.request;
-        if (!requestData?.body) {
-          return;
-        }
-        messages = JSON.parse(requestData.body).messages;
-      } else {
+      {
         const requestData = await (result as any).getFullOutput();
         messages = requestData.request.body.input;
       }
@@ -653,26 +566,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       let stepCount = 0;
       let caught = false;
       try {
-        if (version === 'v1') {
-          await agent.generateLegacy(
-            'Please echo this and then use the error tool. Be verbose and take multiple steps.',
-            {
-              threadId: 'thread-partial-rescue-generate',
-              resourceId: 'resource-partial-rescue-generate',
-              experimental_continueSteps: true,
-              savePerStep: true,
-              onStepFinish: (result: any) => {
-                if (result.toolCalls && result.toolCalls.length > 1) {
-                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                }
-                stepCount++;
-                if (stepCount === 2) {
-                  throw new Error('Simulated error in onStepFinish');
-                }
-              },
-            },
-          );
-        } else {
+        {
           await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
             memory: {
               thread: 'thread-partial-rescue-generate',
@@ -747,13 +641,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         tools: { echoTool },
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Echo: Please echo this long message and explain why.', {
-          threadId: 'thread-echo-generate',
-          resourceId: 'resource-echo-generate',
-          savePerStep: true,
-        });
-      } else {
+      {
         await agent.generate('Echo: Please echo this long message and explain why.', {
           memory: {
             thread: 'thread-echo-generate',
@@ -822,16 +710,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         tools: { echoTool, uppercaseTool },
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy(
-          'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
-          {
-            threadId: 'thread-multi-generate',
-            resourceId: 'resource-multi-generate',
-            savePerStep: true,
-          },
-        );
-      } else {
+      {
         await agent.generate(
           'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
           {
@@ -863,7 +742,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
     }, 500000);
   });
 
-  if (version === 'v2') {
+  {
     describe(`${version} - stream destructuring support (e2e)`, () => {
       it('should support destructuring of stream properties and methods', async () => {
         const agent = new Agent({
@@ -913,28 +792,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       model: openaiModel,
     });
 
-    if (version === 'v1') {
-      const result = await userAgent.streamLegacy('Make it green', {
-        clientTools: {
-          changeColor: {
-            id: 'changeColor',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              color: z.string(),
-            }),
-          },
-        },
-        onFinish: props => {
-          expect(props.toolCalls.length).toBeGreaterThan(0);
-        },
-        experimental_output: z.object({
-          color: z.string(),
-        }),
-      });
-
-      for await (const _ of result.fullStream) {
-      }
-    } else {
+    {
       const result = await userAgent.stream('Make it green', {
         clientTools: {
           changeColor: {
@@ -970,24 +828,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         model: openaiModel,
       });
 
-      if (version === 'v1') {
-        const result = await userAgent.generateLegacy('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-            },
-          },
-          experimental_output: z.object({
-            color: z.string(),
-          }),
-        });
-
-        expect(result.toolCalls.length).toBeGreaterThan(0);
-      } else {
+      {
         const result = await userAgent.generate('Make it green', {
           clientTools: {
             changeColor: {
@@ -1013,7 +854,6 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 }
 
 describe('Agent E2E Tests', () => {
-  agentE2ETests({ version: 'v1' });
   agentE2ETests({ version: 'v2' });
 });
 

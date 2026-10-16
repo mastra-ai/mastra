@@ -18,7 +18,6 @@ import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { DYNAMIC_WORKFLOWS_ROUTES } from './dynamic-workflows';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
-import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
@@ -177,7 +176,6 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
   ...WORKSPACE_ROUTES,
-  ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
   ...DYNAMIC_WORKFLOWS_ROUTES,
@@ -218,7 +216,6 @@ export type ServerRoutes = readonly [
   ...typeof A2A_ROUTES,
   ...typeof AGENT_BUILDER_ROUTES,
   ...typeof WORKSPACE_ROUTES,
-  ...typeof LEGACY_ROUTES,
   ...typeof MCP_ROUTES,
   ...StoredAgentRoutes,
   ...typeof STORED_MCP_CLIENTS_ROUTES,

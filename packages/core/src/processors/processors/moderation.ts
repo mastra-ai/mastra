@@ -333,39 +333,24 @@ export class ModerationProcessor implements Processor<'moderation'> {
       });
 
       let result: ModerationResult;
-      if (isSupportedLanguageModel(model)) {
-        const response = await this.moderationAgent.generate(prompt, {
-          structuredOutput: {
-            ...(this.structuredOutputOptions ?? {}),
-            schema,
-          },
-          modelSettings: {
-            temperature: 0,
-          },
-          providerOptions: this.providerOptions,
-          requestContext,
-          ...observabilityContext,
-        });
 
-        if (!response.object) {
-          throw new Error('Structured output returned no object');
-        }
-        result = response.object;
-      } else {
-        const standardSchema = toStandardSchema(schema as PublicSchema);
-        const response = await this.moderationAgent.generateLegacy(prompt, {
-          output: standardSchemaToJSONSchema(standardSchema),
+      const response = await this.moderationAgent.generate(prompt, {
+        structuredOutput: {
+          ...(this.structuredOutputOptions ?? {}),
+          schema,
+        },
+        modelSettings: {
           temperature: 0,
-          providerOptions: this.providerOptions as SharedV2ProviderOptions,
-          requestContext,
-          ...observabilityContext,
-        });
+        },
+        providerOptions: this.providerOptions,
+        requestContext,
+        ...observabilityContext,
+      });
 
-        if (!response.object) {
-          throw new Error('Legacy output returned no object');
-        }
-        result = response.object as ModerationResult;
+      if (!response.object) {
+        throw new Error('Structured output returned no object');
       }
+      result = response.object;
 
       return result;
     } catch (error) {

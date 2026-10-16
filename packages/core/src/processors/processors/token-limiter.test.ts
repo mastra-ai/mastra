@@ -1,5 +1,5 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { TextPart } from '@internal/ai-sdk-v4';
+import type { TextPart } from '@internal/ai-sdk-v5';
 import { estimateTokenCount } from 'tokenx';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 

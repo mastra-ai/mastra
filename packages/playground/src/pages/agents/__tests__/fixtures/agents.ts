@@ -20,8 +20,6 @@ export const agentsList: Record<string, GetAgentResponse> = {
     modelVersion: 'v2',
     modelList: undefined,
     defaultOptions: {},
-    defaultGenerateOptionsLegacy: {},
-    defaultStreamOptionsLegacy: {},
   },
   analyst: {
     id: 'analyst',
@@ -35,8 +33,6 @@ export const agentsList: Record<string, GetAgentResponse> = {
     modelVersion: 'v2',
     modelList: undefined,
     defaultOptions: {},
-    defaultGenerateOptionsLegacy: {},
-    defaultStreamOptionsLegacy: {},
   },
 };
 

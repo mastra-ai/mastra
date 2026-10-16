@@ -204,20 +204,6 @@ function createWeatherToolMessages({
   ];
 }
 
-function createLegacyGenerateResult(text: string) {
-  return {
-    text,
-    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-    finishReason: 'stop',
-    response: {
-      id: 'legacy-model-response',
-      timestamp: new Date(),
-      modelId: 'legacy-model',
-      messages: [],
-    },
-  } as unknown as Awaited<ReturnType<Agent['generateLegacy']>>;
-}
-
 function createStreamResult(
   text: string,
   providerMetadata?: Record<string, Record<string, unknown> | undefined>,
@@ -285,41 +271,6 @@ function createStreamResultFromChunks({
   } as unknown as Awaited<ReturnType<Agent['stream']>>;
 }
 
-function createLegacyStreamResult({
-  text,
-  chunks = [
-    {
-      type: 'text-delta',
-      textDelta: 'Hello',
-    },
-    {
-      type: 'text-delta',
-      textDelta: ' world',
-    },
-  ],
-}: {
-  text: string;
-  chunks?: Array<Record<string, unknown>>;
-}) {
-  const fullStream = Promise.resolve(
-    new ReadableStream({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(chunk);
-        }
-        controller.close();
-      },
-    }),
-  );
-
-  return {
-    fullStream,
-    text: Promise.resolve(text),
-    finishReason: Promise.resolve('stop'),
-    usage: Promise.resolve({ promptTokens: 12, completionTokens: 4, totalTokens: 16 }),
-  } as unknown as Awaited<ReturnType<Agent['streamLegacy']>>;
-}
-
 async function readJson(response: Response) {
   return response.json();
 }
@@ -346,11 +297,11 @@ async function readSseEvents(response: Response): Promise<SseEventPayload[]> {
     });
 }
 
-function mockAgentSpecVersion(agent: Agent, specificationVersion: 'v1' | 'v2' = 'v2') {
+function mockAgentSpecVersion(agent: Agent) {
   vi.spyOn(agent, 'getModel').mockResolvedValue({
-    specificationVersion,
+    specificationVersion: 'v2',
     provider: 'openai',
-    modelId: specificationVersion === 'v1' ? 'legacy-model' : 'test-model',
+    modelId: 'test-model',
   } as never);
 }
 
@@ -975,95 +926,6 @@ describe('Responses Handlers', () => {
     });
   });
 
-  it('maps text.format json_object to output for legacy generate requests', async () => {
-    mockAgentSpecVersion(agent, 'v1');
-    const legacyGenerateSpy = vi
-      .spyOn(agent, 'generateLegacy')
-      .mockResolvedValue(createLegacyGenerateResult('{"summary":"Legacy hello"}'));
-
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'openai/gpt-4.1',
-      agent_id: 'test-agent',
-      input: 'Return JSON',
-      text: {
-        format: {
-          type: 'json_object',
-        },
-      },
-      stream: false,
-      store: false,
-    })) as Response;
-
-    const created = await readJson(response);
-
-    expect(legacyGenerateSpy).toHaveBeenCalledWith(
-      [{ role: 'user', content: 'Return JSON' }],
-      expect.objectContaining({
-        output: {
-          type: 'object',
-          additionalProperties: true,
-        },
-      }),
-    );
-    expect(created.output).toMatchObject([
-      {
-        type: 'message',
-        content: [{ text: '{"summary":"Legacy hello"}' }],
-      },
-    ]);
-  });
-
-  it('maps text.format json_schema to output for legacy generate requests', async () => {
-    mockAgentSpecVersion(agent, 'v1');
-    const legacyGenerateSpy = vi
-      .spyOn(agent, 'generateLegacy')
-      .mockResolvedValue(createLegacyGenerateResult('{"summary":"Legacy schema hello"}'));
-
-    const schema = {
-      type: 'object',
-      properties: {
-        summary: { type: 'string' },
-      },
-      required: ['summary'],
-      additionalProperties: false,
-    };
-
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'openai/gpt-4.1',
-      agent_id: 'test-agent',
-      input: 'Return typed JSON',
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'legacy_summary',
-          strict: true,
-          schema,
-        },
-      },
-      stream: false,
-      store: false,
-    })) as Response;
-
-    const created = await readJson(response);
-
-    expect(legacyGenerateSpy).toHaveBeenCalledWith(
-      [{ role: 'user', content: 'Return typed JSON' }],
-      expect.objectContaining({
-        output: schema,
-      }),
-    );
-    expect(created.text).toEqual({
-      format: {
-        type: 'json_schema',
-        name: 'legacy_summary',
-        strict: true,
-        schema,
-      },
-    });
-  });
-
   it('returns 400 when store is requested for an agent without memory', async () => {
     const statelessAgent = new Agent({
       id: 'stateless-agent',
@@ -1358,41 +1220,6 @@ describe('Responses Handlers', () => {
     ).rejects.toThrow(HTTPException);
   });
 
-  it('falls back to generateLegacy for AI SDK v4 agents', async () => {
-    mockAgentSpecVersion(agent, 'v1');
-    const generateLegacySpy = vi
-      .spyOn(agent, 'generateLegacy')
-      .mockResolvedValue(createLegacyGenerateResult('Legacy hello'));
-    const generateSpy = vi.spyOn(agent, 'generate');
-
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'openai/gpt-4o',
-      agent_id: 'test-agent',
-      input: 'Hello',
-      store: false,
-      stream: false,
-    })) as Response;
-
-    const created = await readJson(response);
-    expect(created).toMatchObject({
-      model: 'openai/gpt-4o',
-      status: 'completed',
-      output: [
-        {
-          content: [{ text: 'Legacy hello' }],
-        },
-      ],
-      usage: {
-        input_tokens: 10,
-        output_tokens: 5,
-        total_tokens: 15,
-      },
-    });
-    expect(generateLegacySpy).toHaveBeenCalledOnce();
-    expect(generateSpy).not.toHaveBeenCalled();
-  });
-
   it('passes providerOptions through to generate calls', async () => {
     const generateSpy = vi.spyOn(agent, 'generate').mockResolvedValue(
       createGenerateResult({
@@ -1523,90 +1350,6 @@ describe('Responses Handlers', () => {
         },
       }),
     );
-  });
-
-  it('falls back to streamLegacy for AI SDK v4 agents', async () => {
-    mockAgentSpecVersion(agent, 'v1');
-    const streamLegacySpy = vi
-      .spyOn(agent, 'streamLegacy')
-      .mockResolvedValue(createLegacyStreamResult({ text: 'Hello world' }));
-    const streamSpy = vi.spyOn(agent, 'stream');
-
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'openai/gpt-4o',
-      agent_id: 'test-agent',
-      input: 'Hello',
-      store: false,
-      stream: true,
-    })) as Response;
-
-    const body = await response.text();
-    expect(body).toContain('event: response.completed');
-    expect(body).toContain('event: response.output_item.done');
-    expect(body).toContain('"text":"Hello world"');
-    expect(streamLegacySpy).toHaveBeenCalledOnce();
-    expect(streamSpy).not.toHaveBeenCalled();
-  });
-
-  it('streams legacy v1 tool-call chunks through Responses events', async () => {
-    const toolTurn = { callId: 'call_legacy_stream', city: 'Lagos', weather: 'sunny' };
-    mockAgentSpecVersion(agent, 'v1');
-    const streamLegacySpy = vi.spyOn(agent, 'streamLegacy').mockResolvedValue(
-      createLegacyStreamResult({
-        text: 'Legacy tool done.',
-        chunks: [
-          {
-            type: 'tool-call',
-            toolCallId: toolTurn.callId,
-            toolName: 'weather',
-            args: { city: toolTurn.city },
-          },
-          {
-            type: 'tool-result',
-            toolCallId: toolTurn.callId,
-            toolName: 'weather',
-            result: { weather: toolTurn.weather },
-          },
-          {
-            type: 'text-delta',
-            textDelta: 'Legacy tool done.',
-          },
-        ],
-      }),
-    );
-    const streamSpy = vi.spyOn(agent, 'stream');
-
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'openai/gpt-4o',
-      agent_id: 'test-agent',
-      input: 'Use a legacy tool',
-      store: false,
-      stream: true,
-    })) as Response;
-
-    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'response.function_call_arguments.done',
-          item_id: 'call_legacy_stream',
-          name: 'weather',
-          arguments: JSON.stringify({ city: 'Lagos' }),
-        }),
-        expect.objectContaining({
-          type: 'response.output_item.done',
-          item: expect.objectContaining({
-            id: 'call_legacy_stream:output',
-            type: 'function_call_output',
-            call_id: 'call_legacy_stream',
-          }),
-        }),
-      ]),
-    );
-    expect(streamLegacySpy).toHaveBeenCalledOnce();
-    expect(streamSpy).not.toHaveBeenCalled();
   });
 
   it('passes providerOptions through to stream calls', async () => {

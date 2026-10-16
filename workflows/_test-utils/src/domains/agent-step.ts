@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 // @ts-ignore
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { createTextStreamModel } from '../mock-models';
@@ -610,12 +610,13 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV1({
+          model: new MockLanguageModelV2({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'Paris',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text', text: 'Paris' }],
+              warnings: [],
             }),
           }),
         });
@@ -624,12 +625,13 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV1({
+          model: new MockLanguageModelV2({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'London',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text', text: 'London' }],
+              warnings: [],
             }),
           }),
         });
@@ -670,7 +672,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
               outputSchema: z.object({ text: z.string() }),
               execute: async ({ inputData, mastra }) => {
                 const agent = mastra.getAgent('test-agent-1');
-                const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+                const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
                 return { text: result.text };
               },
             }),
@@ -688,7 +690,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
               outputSchema: z.object({ text: z.string() }),
               execute: async ({ inputData, mastra }) => {
                 const agent = mastra.getAgent('test-agent-2');
-                const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+                const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
                 return { text: result.text };
               },
             }),
@@ -745,12 +747,13 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV1({
+          model: new MockLanguageModelV2({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'Paris',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text', text: 'Paris' }],
+              warnings: [],
             }),
           }),
         });
@@ -759,12 +762,13 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV1({
+          model: new MockLanguageModelV2({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'London',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [{ type: 'text', text: 'London' }],
+              warnings: [],
             }),
           }),
         });
@@ -781,7 +785,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           outputSchema: z.object({ text: z.string() }),
           execute: async ({ inputData, mastra }) => {
             const agent = mastra.getAgent(inputData.agentName);
-            const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+            const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
             return { text: result.text };
           },
         });

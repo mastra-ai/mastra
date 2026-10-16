@@ -1,9 +1,9 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createScorer } from '../evals/base';
 import { RequestContext } from '../request-context';
+import { mockTextModel } from '../test-utils/llm-mock';
 import { createStep, createWorkflow } from '../workflows';
 import { DefaultExecutionEngine } from '../workflows/default';
 import { runScorersForStep } from '../workflows/handlers/step';
@@ -20,14 +20,12 @@ describe('Scorer Registration', () => {
   const waitForScorerRegistration = () => new Promise(resolve => setTimeout(resolve, 50));
 
   const createMockModel = () =>
-    new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Test response',
-      }),
-    });
+    mockTextModel(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: 'Test response',
+    }));
 
   const createTestScorer = (id: string) =>
     createScorer({

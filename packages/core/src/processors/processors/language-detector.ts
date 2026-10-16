@@ -317,37 +317,23 @@ export class LanguageDetector implements Processor<'language-detector'> {
           : baseSchema;
 
       let result: LanguageDetectionResult;
-      if (isSupportedLanguageModel(model)) {
-        const response = await this.detectionAgent.generate(prompt, {
-          structuredOutput: {
-            schema,
-          },
-          modelSettings: {
-            temperature: 0,
-          },
-          providerOptions: this.providerOptions,
-          requestContext,
-          ...observabilityContext,
-        });
 
-        if (!response.object) {
-          throw new Error('Structured output returned no object');
-        }
-        result = response.object;
-      } else {
-        const response = await this.detectionAgent.generateLegacy(prompt, {
-          output: standardSchemaToJSONSchema(schema),
+      const response = await this.detectionAgent.generate(prompt, {
+        structuredOutput: {
+          schema,
+        },
+        modelSettings: {
           temperature: 0,
-          providerOptions: this.providerOptions as SharedV2ProviderOptions,
-          requestContext,
-          ...observabilityContext,
-        });
+        },
+        providerOptions: this.providerOptions,
+        requestContext,
+        ...observabilityContext,
+      });
 
-        if (!response.object) {
-          throw new Error('Legacy output returned no object');
-        }
-        result = response.object as LanguageDetectionResult;
+      if (!response.object) {
+        throw new Error('Structured output returned no object');
       }
+      result = response.object;
 
       if (result.translated_text && !result.confidence) {
         result.confidence = 0.95;

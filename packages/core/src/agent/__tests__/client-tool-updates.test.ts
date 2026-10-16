@@ -103,15 +103,18 @@ function promptUserText(prompt: any[]) {
     .map((part: any) => part.text);
 }
 
-function echoedAssistant(id: string, toolInvocation: Record<string, unknown>) {
+type Outcome = { output: unknown } | { errorText: string };
+
+/** The assistant message `useChat` sends back after `addToolOutput`, as a v5 UI message. */
+function echoedAssistant(id: string, outcome: Outcome) {
+  const base = { type: 'tool-pickColor', toolCallId: 'call_1', input: { hint: 'warm' } };
   return {
     id,
     role: 'assistant' as const,
     parts: [
-      {
-        type: 'tool-invocation' as const,
-        toolInvocation: { toolCallId: 'call_1', toolName: 'pickColor', args: { hint: 'warm' }, ...toolInvocation },
-      },
+      'errorText' in outcome
+        ? { ...base, state: 'output-error', errorText: outcome.errorText }
+        : { ...base, state: 'output-available', output: outcome.output },
     ],
   };
 }
@@ -127,7 +130,7 @@ describe('client tool updates on an existing thread', () => {
 
     const prompt = await stream([
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'pick one' }] },
-      echoedAssistant(assistant.id, { state: 'result', result: { color: 'red' } }),
+      echoedAssistant(assistant.id, { output: { color: 'red' } }),
       { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'thanks' }] },
     ]);
 
@@ -141,10 +144,10 @@ describe('client tool updates on an existing thread', () => {
 
   it('does not overwrite a stored result with the echo sent together with the next user message', async () => {
     const { assistant, stream, stored } = await setup();
-    await stream([echoedAssistant(assistant.id, { state: 'result', result: { color: 'red' } })]);
+    await stream([echoedAssistant(assistant.id, { output: { color: 'red' } })]);
 
     const prompt = await stream([
-      echoedAssistant(assistant.id, { state: 'result', result: { color: 'blue' } }),
+      echoedAssistant(assistant.id, { output: { color: 'blue' } }),
       { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'thanks' }] },
     ]);
 
@@ -160,7 +163,7 @@ describe('client tool updates on an existing thread', () => {
     const { stream, stored } = await setup();
 
     const prompt = await stream([
-      echoedAssistant('client-folded-id', { state: 'result', result: { color: 'red' } }),
+      echoedAssistant('client-folded-id', { output: { color: 'red' } }),
       { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'thanks' }] },
     ]);
 
@@ -175,9 +178,9 @@ describe('client tool updates on an existing thread', () => {
 
   it('does not overwrite a stored result with a stale echo on a trailing assistant message', async () => {
     const { assistant, stream, stored } = await setup();
-    await stream([echoedAssistant(assistant.id, { state: 'result', result: { color: 'red' } })]);
+    await stream([echoedAssistant(assistant.id, { output: { color: 'red' } })]);
 
-    const prompt = await stream([echoedAssistant(assistant.id, { state: 'result', result: { color: 'blue' } })]);
+    const prompt = await stream([echoedAssistant(assistant.id, { output: { color: 'blue' } })]);
 
     expect(promptToolResults(prompt)).toEqual([{ type: 'json', value: { color: 'red' } }]);
     expect(toolParts(await stored())).toMatchObject([
@@ -188,9 +191,7 @@ describe('client tool updates on an existing thread', () => {
   it('keeps a client tool error sent on a trailing assistant message', async () => {
     const { assistant, stream, stored } = await setup();
 
-    const prompt = await stream([
-      echoedAssistant(assistant.id, { state: 'output-error', errorText: 'user closed the picker' }),
-    ]);
+    const prompt = await stream([echoedAssistant(assistant.id, { errorText: 'user closed the picker' })]);
 
     expect(JSON.stringify(promptToolResults(prompt))).toContain('user closed the picker');
     expect(toolParts(await stored())).toMatchObject([
@@ -330,7 +331,7 @@ describe('client tool updates on an existing thread', () => {
     const output = await agent.stream(
       [
         { id: 'seed-u1', role: 'user', parts: [{ type: 'text', text: 'pick one' }] },
-        echoedAssistant('seed-a1', { state: 'result', result: { color: 'red' } }),
+        echoedAssistant('seed-a1', { output: { color: 'red' } }),
         { id: 'seed-u2', role: 'user', parts: [{ type: 'text', text: 'thanks' }] },
       ],
       { memory: { thread: threadId, resource: 'r', options: { lastMessages: 20 } } },

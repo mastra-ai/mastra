@@ -1,4 +1,4 @@
-import { Agent, isSupportedLanguageModel } from '../../agent';
+import { Agent } from '../../agent';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { createSimilarityPrompt } from '../relevance-score-provider';
 import type { RelevanceScoreProvider } from '../relevance-score-provider';
@@ -28,16 +28,8 @@ Always return just the number, no explanation.`,
   async getRelevanceScore(query: string, text: string): Promise<number> {
     const prompt = createSimilarityPrompt(query, text);
 
-    const model = await this.agent.getModel();
+    const response = await this.agent.generate(prompt);
 
-    let response: string;
-    if (isSupportedLanguageModel(model)) {
-      const responseText = await this.agent.generate(prompt);
-      response = responseText.text;
-    } else {
-      const responseText = await this.agent.generateLegacy(prompt);
-      response = responseText.text;
-    }
-    return parseFloat(response);
+    return parseFloat(response.text);
   }
 }

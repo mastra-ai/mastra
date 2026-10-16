@@ -30,25 +30,20 @@ describe('TemporalRun', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'streamLegacy',
-    'resumeStream',
-    'resume',
-    'resumeAsync',
-    'restart',
-    'timeTravel',
-    'timeTravelStream',
-  ] as const)('rejects unsupported %s calls instead of using the local workflow engine', async method => {
-    const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
-      { client: { workflow: {} } as unknown as Client, taskQueue: 'test-queue' },
-    );
-    const run = await workflow.createRun({ runId: 'test-run' });
+  it.each(['resumeStream', 'resume', 'resumeAsync', 'restart', 'timeTravel', 'timeTravelStream'] as const)(
+    'rejects unsupported %s calls instead of using the local workflow engine',
+    async method => {
+      const workflow = createWorkflow(
+        { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+        { client: { workflow: {} } as unknown as Client, taskQueue: 'test-queue' },
+      );
+      const run = await workflow.createRun({ runId: 'test-run' });
 
-    expect(() => (run[method] as (...args: unknown[]) => unknown)()).toThrow(
-      `@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`,
-    );
-  });
+      expect(() => (run[method] as (...args: unknown[]) => unknown)()).toThrow(
+        `@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`,
+      );
+    },
+  );
 
   it('cancels the matching Temporal workflow before updating local state', async () => {
     const cancel = vi.fn().mockResolvedValue(undefined);

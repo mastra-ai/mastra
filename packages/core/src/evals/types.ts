@@ -1,4 +1,4 @@
-import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4';
+import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent';
 import { SpanType } from '../observability';

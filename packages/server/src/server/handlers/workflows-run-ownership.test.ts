@@ -14,7 +14,6 @@ import {
   RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE,
   GET_WORKFLOW_RUN_BY_ID_ROUTE,
   START_ASYNC_WORKFLOW_ROUTE,
-  STREAM_LEGACY_WORKFLOW_ROUTE,
   STREAM_WORKFLOW_ROUTE,
 } from './workflows';
 
@@ -120,7 +119,6 @@ describe('with a resource mapper, a scoped caller', () => {
     ['/stream', STREAM_WORKFLOW_ROUTE],
     ['/create-run', CREATE_WORKFLOW_RUN_ROUTE],
     ['/start-async', START_ASYNC_WORKFLOW_ROUTE],
-    ['/stream-legacy', STREAM_LEGACY_WORKFLOW_ROUTE],
   ])("is denied %s against another tenant's existing run id", async (_path, route) => {
     const { mastra, runId } = await setup({ mapper: true, runResourceId: 'tenant-a' });
     await expect(call(route, mastra, runId, caller('tenant-b'))).rejects.toMatchObject({ status: 403 });

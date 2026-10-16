@@ -166,7 +166,7 @@ createWorkflowTestSuite({
     return result as WorkflowResult;
   },
 
-  streamWorkflow: async (workflow, inputData, options = {}, api = 'stream'): Promise<StreamWorkflowResult> => {
+  streamWorkflow: async (workflow, inputData, options = {}): Promise<StreamWorkflowResult> => {
     const wf = workflow as Workflow<any, any, any, any, any, any, any>;
 
     const run = await wf.createRun({
@@ -176,36 +176,20 @@ createWorkflowTestSuite({
 
     const events: StreamEvent[] = [];
 
-    if (api === 'streamLegacy') {
-      const { stream, getWorkflowState } = run.streamLegacy({
-        inputData,
-        initialState: options.initialState,
-        perStep: options.perStep,
-        requestContext: options.requestContext as any,
-      });
+    const streamResult = run.stream({
+      inputData,
+      initialState: options.initialState,
+      perStep: options.perStep,
+      requestContext: options.requestContext as any,
+      closeOnSuspend: options.closeOnSuspend,
+    });
 
-      for await (const event of stream) {
-        events.push(JSON.parse(JSON.stringify(event)));
-      }
-
-      const result = await getWorkflowState();
-      return { events, result: result as WorkflowResult };
-    } else {
-      const streamResult = run.stream({
-        inputData,
-        initialState: options.initialState,
-        perStep: options.perStep,
-        requestContext: options.requestContext as any,
-        closeOnSuspend: options.closeOnSuspend,
-      });
-
-      for await (const event of streamResult.fullStream) {
-        events.push(JSON.parse(JSON.stringify(event)));
-      }
-
-      const result = await streamResult.result;
-      return { events, result: result as WorkflowResult };
+    for await (const event of streamResult.fullStream) {
+      events.push(JSON.parse(JSON.stringify(event)));
     }
+
+    const result = await streamResult.result;
+    return { events, result: result as WorkflowResult };
   },
 
   streamResumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<StreamWorkflowResult> => {
@@ -1697,42 +1681,6 @@ describe('Workflow (Default Engine Specifics)', () => {
       });
 
       expect(nestedWorkflowStoreResult?.status).toBe('success');
-    });
-  });
-
-  describe('streamLegacy cleanup error safety', () => {
-    it('completes cleanup when an observer stream is not consumed', async () => {
-      const step = createStep({
-        id: 'test-step',
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ value: z.string() }),
-        execute: async ({ inputData }) => inputData,
-      });
-
-      const workflow = createWorkflow({
-        id: 'stream-legacy-cleanup-error-wf',
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ value: z.string() }),
-        steps: [step],
-      })
-        .then(step)
-        .commit();
-
-      const run = await workflow.createRun();
-      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 'test' } });
-      const observer = run.observeStreamLegacy();
-
-      for await (const _event of stream) {
-        // Discard events
-      }
-
-      const result = await getWorkflowState();
-      expect(result.status).toBe('success');
-      await expect((run as any).closeStreamAction()).resolves.toBeUndefined();
-
-      for await (const _event of observer.stream) {
-        // Consume events queued before cleanup
-      }
     });
   });
 });

@@ -1,14 +1,11 @@
-import type { CoreMessage, Message } from '@internal/ai-sdk-v4';
 import type * as AIV5 from '@internal/ai-sdk-v5';
 import type * as AIV6 from '@internal/ai-v6';
 import type * as AIV7 from '@internal/ai-v7';
 
 import type { CreatedAgentSignal } from '../signals';
-import type { MastraDBMessage, MastraMessageV1, UIMessageWithMetadata } from './state/types';
+import type { MastraDBMessage, MastraMessageV1 } from './state/types';
 
 // Re-export AI SDK types
-export type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
-export type * as AIV4Type from '@internal/ai-sdk-v4';
 export type * as AIV5Type from '@internal/ai-sdk-v5';
 export type * as AIV6Type from '@internal/ai-v6';
 export type * as AIV7Type from '@internal/ai-v7';
@@ -20,10 +17,9 @@ export type {
   MastraMessageContentV2,
   MastraMessagePart,
   MastraErrorPart,
-  UIMessageV4Part,
+  MastraBasePart,
   MessageSource,
   MemoryInfo,
-  UIMessageWithMetadata,
 } from './state/types';
 
 // MessageList input types
@@ -37,9 +33,6 @@ export type MessageInput =
   | AIV6.ModelMessage
   | AIV5.UIMessage
   | AIV5.ModelMessage
-  | UIMessageWithMetadata
-  | Message
-  | CoreMessage
   | MastraMessageV1
   | MastraDBMessage;
 

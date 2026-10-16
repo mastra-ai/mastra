@@ -28,7 +28,6 @@ describe('@mastra/inngest actor signal threading (hermetic)', () => {
   //   public path        -> event sink              -> covered by
   //   start              -> _start                  -> "serializes actor on the start (_start) path"
   //   stream             -> _start                  -> (shared _start sink)
-  //   streamLegacy       -> _start                  -> (shared _start sink)
   //   startAsync         -> startAsync (own send)    -> "serializes actor ... on the start path" (startAsync)
   //   resume             -> _resumeAndSendEvent      -> (shared resume sink)
   //   resumeAsync        -> _resumeAndSendEvent      -> "forwards a re-supplied actor through the resume event payload"
@@ -255,7 +254,7 @@ describe('@mastra/inngest actor signal threading (hermetic)', () => {
   });
 
   it('serializes actor on the start (_start) path', async () => {
-    // Covers start + stream + streamLegacy, which all funnel through `_start`.
+    // Covers start + stream, which both funnel through `_start`.
     const inngest = new Inngest({ id: 'mastra-test' });
     const { createWorkflow, createStep } = init(inngest);
 

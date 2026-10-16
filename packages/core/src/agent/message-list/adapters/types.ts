@@ -1,4 +1,4 @@
-import type { UIMessage as UIMessageV4, CoreMessage as CoreMessageV4, IdGenerator } from '@internal/ai-sdk-v4';
+import type { IdGenerator } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage } from '../state/types';
 import type { AIV5Type } from '../types';
@@ -9,12 +9,10 @@ export type {
   MessageSource,
   MemoryInfo,
   MastraMessageContentV2,
-  UIMessageWithMetadata,
 } from '../state/types';
 
 // Re-export for convenience
 export type { AIV5Type };
-export type { UIMessageV4, CoreMessageV4 };
 
 // Common adapter context passed to all adapters
 export interface AdapterContext {

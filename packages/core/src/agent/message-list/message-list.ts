@@ -1,6 +1,4 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1Prompt, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type * as AIV4Type from '@internal/ai-sdk-v4';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -12,20 +10,17 @@ import type { IdGeneratorContext } from '../../types';
 import { safeStringify } from '../../utils/safe-stringify';
 import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
-import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
+import { AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
-  aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
   aiV5PromptToAIV6Prompt,
   aiV5PromptToAIV7Prompt,
   coreContentToString,
   messagesAreEqual,
   inputToMastraDBMessage as convertInputToMastraDBMessage,
-  aiV4UIMessagesToAIV4CoreMessages,
   aiV5UIMessagesToAIV5ModelMessages as convertAIV5UIToModelMessages,
-  aiV4CoreMessagesToAIV5ModelMessages as convertAIV4CoreToAIV5ModelMessages,
-  systemMessageToAIV4Core,
+  toSystemMessage,
   StepContentExtractor,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
@@ -52,7 +47,6 @@ import type {
   MastraMessageV1,
   MessageSource,
   MemoryInfo,
-  UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
 import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
@@ -272,9 +266,9 @@ export class MessageList {
   };
 
   // passed in by dev in input or context
-  private systemMessages: AIV4Type.CoreSystemMessage[] = [];
+  private systemMessages: AIV5Type.SystemModelMessage[] = [];
   // passed in by us for a specific purpose, eg memory system message
-  private taggedSystemMessages: Record<string, AIV4Type.CoreSystemMessage[]> = {};
+  private taggedSystemMessages: Record<string, AIV5Type.SystemModelMessage[]> = {};
 
   private memoryInfo: null | MemoryInfo = null;
 
@@ -326,10 +320,6 @@ export class MessageList {
     return mergeSignalDataParts(messages.map(message => AIV5Adapter.toUIMessage(message, options)));
   }
 
-  private toAIV4UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
-    return mergeSignalDataParts(messages.map(message => AIV4Adapter.toUIMessage(message, options)));
-  }
-
   private toAIV6UIMessages(messages: MastraDBMessage[]) {
     return mergeSignalDataParts(messages.map(AIV6Adapter.toUIMessage));
   }
@@ -344,7 +334,7 @@ export class MessageList {
     ids?: string[];
     text?: string;
     tag?: string;
-    message?: CoreMessageV4;
+    message?: AIV5Type.SystemModelMessage;
   }> = [];
 
   constructor({
@@ -392,7 +382,7 @@ export class MessageList {
     ids?: string[];
     text?: string;
     tag?: string;
-    message?: CoreMessageV4;
+    message?: AIV5Type.SystemModelMessage;
   }> {
     const events = [...this.recordedEvents];
     return events;
@@ -408,7 +398,7 @@ export class MessageList {
     ids?: string[];
     text?: string;
     tag?: string;
-    message?: CoreMessageV4;
+    message?: AIV5Type.SystemModelMessage;
   }> {
     if (span) {
       const events = this.spanRecordings.get(span) ?? [];
@@ -596,7 +586,7 @@ export class MessageList {
     messages: Array<{ role: string; content: unknown }>;
     systemMessages: Array<{ role: string; content: unknown; tag?: string }>;
   } {
-    const coreMessages = this.all.aiV4.core();
+    const coreMessages = this.all.aiV5.model();
 
     return {
       messages: coreMessages.map(msg => ({
@@ -710,7 +700,7 @@ export class MessageList {
   }
 
   public getLatestUserContent(): string | null {
-    const currentUserMessages = this.all.core().filter(m => m.role === 'user');
+    const currentUserMessages = this.all.aiV5.model().filter(m => m.role === 'user');
     const content = currentUserMessages.at(-1)?.content;
     if (!content) return null;
     return coreContentToString(content);
@@ -950,12 +940,10 @@ export class MessageList {
 
       // Used when calling AI SDK streamText/generateText
       prompt: (): AIV5Type.ModelMessage[] => {
-        const systemMessages = convertAIV4CoreToAIV5ModelMessages(
-          [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
-          `system`,
-          this.createAdapterContext(),
-          this.messages,
-        );
+        const systemMessages: AIV5Type.ModelMessage[] = [
+          ...this.systemMessages,
+          ...Object.values(this.taggedSystemMessages).flat(),
+        ];
         const promptMessages = this.getMessagesForModelPrompt();
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
@@ -1037,12 +1025,10 @@ export class MessageList {
             }
           }
         }
-        const systemMessages = convertAIV4CoreToAIV5ModelMessages(
-          [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
-          `system`,
-          this.createAdapterContext(),
-          this.messages,
-        );
+        const systemMessages: AIV5Type.ModelMessage[] = [
+          ...this.systemMessages,
+          ...Object.values(this.taggedSystemMessages).flat(),
+        ];
 
         // Attachments that failed to download while building this prompt.
         const unavailableUrls = new Set<string>();
@@ -1168,35 +1154,6 @@ export class MessageList {
         skipUnavailableAttachments?: boolean;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
-
-    /* @deprecated use list.get.all.aiV4.prompt() instead */
-    prompt: () => this.all.aiV4.prompt(),
-    /* @deprecated use list.get.all.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.all.db()),
-    /* @deprecated use list.get.all.aiV4.core() */
-    core: (): CoreMessageV4[] =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { transformToolPayloads: false })),
-    aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.all.db()),
-      core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(
-          this.toAIV4UIMessages(this.getMessagesForModelPrompt(), { transformToolPayloads: false }),
-        ),
-
-      // Used when calling AI SDK streamText/generateText
-      prompt: () => {
-        const coreMessages = this.all.aiV4.core();
-        return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
-      },
-
-      // Used for creating LLM prompt messages without AI SDK streamText/generateText
-      llmPrompt: (): LanguageModelV1Prompt => {
-        const coreMessages = this.all.aiV4.core();
-
-        const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        return [...systemMessages, ...coreMessages].map(aiV4CoreMessageToV1PromptMessage);
-      },
-    },
   };
 
   private remembered = {
@@ -1214,17 +1171,6 @@ export class MessageList {
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.remembered.db()),
     },
-
-    /* @deprecated use list.get.remembered.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
-    /* @deprecated use list.get.remembered.aiV4.core() */
-    core: (): CoreMessageV4[] =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { transformToolPayloads: false })),
-    aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
-      core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { transformToolPayloads: false })),
-    },
   };
   private rememberedPersisted = {
     db: () => this.all.db().filter(m => this.memoryMessagesPersisted.has(m)),
@@ -1240,21 +1186,6 @@ export class MessageList {
     },
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.rememberedPersisted.db()),
-    },
-
-    /* @deprecated use list.getPersisted.remembered.aiV4.ui() */
-    ui: () => this.toAIV4UIMessages(this.rememberedPersisted.db()),
-    /* @deprecated use list.getPersisted.remembered.aiV4.core() */
-    core: () =>
-      aiV4UIMessagesToAIV4CoreMessages(
-        this.toAIV4UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
-      ),
-    aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.rememberedPersisted.db()),
-      core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(
-          this.toAIV4UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
-        ),
     },
   };
 
@@ -1273,17 +1204,6 @@ export class MessageList {
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.input.db()),
     },
-
-    /* @deprecated use list.get.input.aiV4.ui() instead */
-    ui: () => this.toAIV4UIMessages(this.input.db()),
-    /* @deprecated use list.get.core.aiV4.ui() instead */
-    core: () =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { transformToolPayloads: false })),
-    aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.input.db()),
-      core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { transformToolPayloads: false })),
-    },
   };
   private inputPersisted = {
     db: (): MastraDBMessage[] => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
@@ -1299,21 +1219,6 @@ export class MessageList {
     },
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.inputPersisted.db()),
-    },
-
-    /* @deprecated use list.getPersisted.input.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
-    /* @deprecated use list.getPersisted.input.aiV4.core() */
-    core: () =>
-      aiV4UIMessagesToAIV4CoreMessages(
-        this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
-      ),
-    aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
-      core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(
-          this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
-        ),
     },
   };
 
@@ -1349,12 +1254,6 @@ export class MessageList {
     },
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.response.db()),
-    },
-
-    aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.response.db()),
-      core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.response.db(), { transformToolPayloads: false })),
     },
   };
   /** Ids of pruned response messages that are not (again) tracked as response messages in the live list. */
@@ -1406,16 +1305,6 @@ export class MessageList {
     },
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.responsePersisted.db()),
-    },
-
-    /* @deprecated use list.getPersisted.response.aiV4.ui() */
-    ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.responsePersisted.db()),
-    aiV4: {
-      ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.responsePersisted.db()),
-      core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(
-          this.toAIV4UIMessages(this.responsePersisted.db(), { transformToolPayloads: false }),
-        ),
     },
   };
 
@@ -2167,7 +2056,7 @@ export class MessageList {
     return false;
   }
 
-  public getSystemMessages(tag?: string): CoreMessageV4[] {
+  public getSystemMessages(tag?: string): AIV5Type.SystemModelMessage[] {
     if (tag) {
       return this.taggedSystemMessages[tag] || [];
     }
@@ -2178,7 +2067,7 @@ export class MessageList {
    * Get all system messages (both tagged and untagged)
    * @returns Array of all system messages
    */
-  public getAllSystemMessages(): CoreMessageV4[] {
+  public getAllSystemMessages(): AIV5Type.SystemModelMessage[] {
     return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
   }
 
@@ -2200,7 +2089,7 @@ export class MessageList {
    * leaving tagged system message buckets (owned by other processors) intact.
    * @param messages - Array of system messages to set as untagged
    */
-  public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
+  public replaceAllSystemMessages(messages: AIV5Type.ModelMessage[]): this {
     this.systemMessages = [];
 
     for (const message of messages) {
@@ -2213,8 +2102,6 @@ export class MessageList {
 
   public addSystem(
     messages:
-      | CoreMessageV4
-      | CoreMessageV4[]
       | AIV6Type.ModelMessage
       | AIV6Type.ModelMessage[]
       | AIV5Type.ModelMessage
@@ -2234,10 +2121,10 @@ export class MessageList {
   }
 
   private addOneSystem(
-    message: CoreMessageV4 | AIV6Type.ModelMessage | AIV5Type.ModelMessage | MastraDBMessage | string,
+    message: AIV6Type.ModelMessage | AIV5Type.ModelMessage | MastraDBMessage | string,
     tag?: string,
   ) {
-    const coreMessage = systemMessageToAIV4Core(message);
+    const coreMessage = toSystemMessage(message);
 
     if (coreMessage.role !== `system`) {
       throw new Error(
@@ -2262,19 +2149,19 @@ export class MessageList {
     }
   }
 
-  private isDuplicateSystem(message: CoreMessageV4, tag?: string) {
+  private isDuplicateSystem(message: AIV5Type.SystemModelMessage, tag?: string) {
     if (tag) {
       if (!this.taggedSystemMessages[tag]) return false;
       return this.taggedSystemMessages[tag].some(
         m =>
-          CacheKeyGenerator.fromAIV4CoreMessageContent(m.content) ===
-          CacheKeyGenerator.fromAIV4CoreMessageContent(message.content),
+          CacheKeyGenerator.fromSystemMessageContent(m.content) ===
+          CacheKeyGenerator.fromSystemMessageContent(message.content),
       );
     }
     return this.systemMessages.some(
       m =>
-        CacheKeyGenerator.fromAIV4CoreMessageContent(m.content) ===
-        CacheKeyGenerator.fromAIV4CoreMessageContent(message.content),
+        CacheKeyGenerator.fromSystemMessageContent(m.content) ===
+        CacheKeyGenerator.fromSystemMessageContent(message.content),
     );
   }
 
@@ -2376,7 +2263,6 @@ export class MessageList {
 
       // Check if the message is in a supported format for system messages
       const isSupportedSystemFormat =
-        TypeDetector.isAIV4CoreMessage(message) ||
         TypeDetector.isAIV6CoreMessage(message) ||
         TypeDetector.isAIV5CoreMessage(message) ||
         TypeDetector.isMastraDBMessage(message);

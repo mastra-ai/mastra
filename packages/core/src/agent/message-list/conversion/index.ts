@@ -1,9 +1,4 @@
-export {
-  aiV4CoreMessageToV1PromptMessage,
-  aiV5ModelMessageToV2PromptMessage,
-  aiV5PromptToAIV6Prompt,
-  aiV5PromptToAIV7Prompt,
-} from './to-prompt';
+export { aiV5ModelMessageToV2PromptMessage, aiV5PromptToAIV6Prompt, aiV5PromptToAIV7Prompt } from './to-prompt';
 export { coreContentToString, messagesAreEqual } from './utils';
 export {
   inputToMastraDBMessage,
@@ -12,13 +7,10 @@ export {
 } from './input-converter';
 export type { InputConversionContext } from './input-converter';
 export {
-  sanitizeAIV4UIMessages,
   sanitizeV5UIMessages,
   addStartStepPartsForAIV5,
-  aiV4UIMessagesToAIV4CoreMessages,
   aiV5UIMessagesToAIV5ModelMessages,
-  aiV4CoreMessagesToAIV5ModelMessages,
-  systemMessageToAIV4Core,
+  toSystemMessage,
 } from './output-converter';
 export type { ToolCallConversionMode } from './output-converter';
 export { StepContentExtractor } from './step-content';

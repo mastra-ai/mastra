@@ -1,7 +1,6 @@
-import type { Message as AIV4Message, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
-
+import type { LegacyCoreMessage, LegacyUIMessage } from '../state/legacy-shapes';
 import type { MastraDBMessage, MastraMessageV1 } from '../state/types';
-import type { AIV5Type, AIV6Type, AIV7Type, CoreMessageV4 } from '../types';
+import type { AIV5Type, AIV6Type, AIV7Type } from '../types';
 
 /**
  * Type representing all possible message input formats
@@ -13,9 +12,6 @@ export type MessageInput =
   | AIV6Type.ModelMessage
   | AIV5Type.UIMessage
   | AIV5Type.ModelMessage
-  | (UIMessageV4 & { metadata?: Record<string, unknown> })
-  | AIV4Message
-  | CoreMessageV4
   | MastraMessageV1
   | MastraDBMessage;
 
@@ -60,18 +56,6 @@ export class TypeDetector {
   }
 
   /**
-   * Check if a message is an AIV4 UIMessage
-   */
-  static isAIV4UIMessage(msg: MessageInput): msg is UIMessageV4 {
-    return (
-      !TypeDetector.isMastraMessage(msg) &&
-      !TypeDetector.isAIV4CoreMessage(msg) &&
-      'parts' in msg &&
-      !TypeDetector.hasAIV5UIMessageCharacteristics(msg)
-    );
-  }
-
-  /**
    * Check if a message is an AIV6 UIMessage.
    *
    * At runtime, the v5 and v6 UI shapes overlap heavily. We only treat a
@@ -80,11 +64,8 @@ export class TypeDetector {
   static isAIV6UIMessage(msg: MessageInput): msg is AIV6Type.UIMessage {
     return (
       !TypeDetector.isMastraMessage(msg) &&
-      !TypeDetector.isAIV4CoreMessage(msg) &&
       'parts' in msg &&
-      TypeDetector.hasAIV6UIMessageCharacteristics(
-        msg as AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | UIMessageV4 | AIV4Message,
-      )
+      TypeDetector.hasAIV6UIMessageCharacteristics(msg as AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage)
     );
   }
 
@@ -98,20 +79,6 @@ export class TypeDetector {
       !TypeDetector.isAIV5CoreMessage(msg) &&
       'parts' in msg &&
       TypeDetector.hasAIV5UIMessageCharacteristics(msg)
-    );
-  }
-
-  /**
-   * Check if a message is an AIV4 CoreMessage
-   */
-  static isAIV4CoreMessage(msg: MessageInput): msg is CoreMessageV4 {
-    // V4 CoreMessage has role and content like V5/V6, but content can be an
-    // array of parts with v4-specific field names.
-    return (
-      !TypeDetector.isMastraMessage(msg) &&
-      !('parts' in msg) &&
-      'content' in msg &&
-      !TypeDetector.hasAIV5CoreMessageCharacteristics(msg)
     );
   }
 
@@ -144,7 +111,7 @@ export class TypeDetector {
    * Check if a message has AIV6-only UI characteristics.
    */
   static hasAIV6UIMessageCharacteristics(
-    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | UIMessageV4 | AIV4Message,
+    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | LegacyUIMessage,
   ): msg is AIV6Type.UIMessage {
     if (!('parts' in msg) || !msg.parts) return false;
 
@@ -175,7 +142,7 @@ export class TypeDetector {
    * V5 UIMessages have specific part types and field names that differ from V4.
    */
   static hasAIV5UIMessageCharacteristics(
-    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | UIMessageV4 | AIV4Message,
+    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | LegacyUIMessage,
   ): msg is AIV5Type.UIMessage {
     // AI SDK v4 has separate arrays of tool invocations, reasoning, and
     // attachments that do not preserve overall part ordering, so their
@@ -212,14 +179,15 @@ export class TypeDetector {
       if (part.type === 'file' && 'mediaType' in part) return true;
     }
 
-    return false; // default to v4 for backwards compatibility
+    // No v4-only markers: the shape is compatible with the v5 UI format.
+    return true;
   }
 
   /**
    * Check if a message has AIV6-only core characteristics.
    */
   static hasAIV6CoreMessageCharacteristics(
-    msg: CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | AIV7Type.ModelMessage | AIV4Message,
+    msg: LegacyCoreMessage | AIV5Type.ModelMessage | AIV6Type.ModelMessage | AIV7Type.ModelMessage,
   ): msg is AIV6Type.ModelMessage {
     if ('parts' in msg || !Array.isArray(msg.content)) return false;
 
@@ -239,13 +207,7 @@ export class TypeDetector {
    * `mediaType` vs `mimeType`).
    */
   static hasAIV5CoreMessageCharacteristics(
-    msg:
-      | CoreMessageV4
-      | AIV6Type.ModelMessage
-      | AIV5Type.ModelMessage
-      | AIV7Type.ModelMessage
-      // This is here because the AIV4 Message type can omit parts entirely.
-      | AIV4Message,
+    msg: LegacyCoreMessage | AIV6Type.ModelMessage | AIV5Type.ModelMessage | AIV7Type.ModelMessage | LegacyUIMessage,
   ): msg is AIV5Type.ModelMessage {
     if ('experimental_providerMetadata' in msg) return false;
     // String or missing content is compatible with the v5 model format.
@@ -274,7 +236,7 @@ export class TypeDetector {
    * Maps `tool` to `assistant` because tool messages are displayed as part of
    * the assistant conversation.
    */
-  static getRole(message: MessageInput): MastraDBMessage['role'] {
+  static getRole(message: { role: string }): MastraDBMessage['role'] {
     if (message.role === 'assistant' || message.role === 'tool') return 'assistant';
     if (message.role === 'user') return 'user';
     if (message.role === 'system') return 'system';

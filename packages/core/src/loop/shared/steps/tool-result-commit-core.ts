@@ -1,3 +1,5 @@
+import type { JSONValue, ToolModelMessage } from '@internal/ai-sdk-v5';
+
 import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
@@ -169,11 +171,13 @@ export function commitToolResult(deps: {
               type: 'tool-result' as const,
               toolCallId: deps.toolCallId,
               toolName,
-              result: outcome.kind === 'error' ? errorText : outcome.result,
-              isError: outcome.kind === 'error',
+              output: {
+                type: 'json' as const,
+                value: ((outcome.kind === 'error' ? errorText : outcome.result) ?? '') as JSONValue,
+              },
             },
           ],
-        },
+        } satisfies ToolModelMessage,
       ],
       'response',
     );

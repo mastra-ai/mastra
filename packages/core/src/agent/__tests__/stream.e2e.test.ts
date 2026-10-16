@@ -5,7 +5,6 @@ import { openai as openai_v7 } from '@ai-sdk/openai-v7';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
@@ -31,17 +30,11 @@ const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
-function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
+function runStreamE2ETest(version: 'v2' | 'v3' | 'v4') {
+  let openaiModel: LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
 
-  if (version === 'v1') {
-    openaiModel = openai('gpt-4o-mini');
-  } else if (version === 'v2') {
+  {
     openaiModel = openai_v5('gpt-4o-mini');
-  } else if (version === 'v3') {
-    openaiModel = openai_v6('gpt-4o-mini');
-  } else {
-    openaiModel = openai_v7('gpt-4o-mini');
   }
 
   describe(`${version} - stream`, () => {
@@ -98,26 +91,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       let stepCount = 0;
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy(
-          'Please echo this and then use the error tool. Be verbose and take multiple steps.',
-          {
-            threadId: 'thread-partial-rescue',
-            resourceId: 'resource-partial-rescue',
-            experimental_continueSteps: true,
-            savePerStep: true,
-            onStepFinish: (result: any) => {
-              if (result.toolCalls && result.toolCalls.length > 1) {
-                throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-              }
-              stepCount++;
-              if (stepCount === 2) {
-                throw new Error('Simulated error in onStepFinish');
-              }
-            },
-          },
-        );
-      } else {
+      {
         stream = await agent.stream(
           'Please echo this and then use the error tool. Be verbose and you must take multiple steps. Call tools 2x in parallel.',
           {
@@ -207,13 +181,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
 
       let stream;
 
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('Echo: Please echo this long message and explain why.', {
-          threadId: 'thread-echo',
-          resourceId: 'resource-echo',
-          savePerStep: true,
-        });
-      } else {
+      {
         stream = await agent.stream('Echo: Please echo this long message and explain why.', {
           memory: {
             thread: 'thread-echo',
@@ -284,16 +252,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy(
-          'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
-          {
-            threadId: 'thread-multi',
-            resourceId: 'resource-multi',
-            savePerStep: true,
-          },
-        );
-      } else {
+      {
         stream = await agent.stream(
           'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
           {
@@ -339,9 +298,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         let result;
         let request;
 
-        if (version === 'v1') {
-          result = await agent.streamLegacy(`hello!`);
-        } else {
+        {
           result = await agent.stream(`hello!`);
         }
 
@@ -350,19 +307,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           parts.push(part);
         }
 
-        if (version === 'v1') {
-          request = JSON.parse((await result.request).body).messages;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: 'hello!',
-            },
-          ]);
-        } else {
+        {
           request = (await result.request).body.input;
           expect(request).toEqual([
             {
@@ -386,13 +331,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agent.streamLegacy([
-            { role: `user`, content: `hello!` },
-            { role: 'assistant', content: 'hi, how are you?' },
-            { role: 'user', content: "I'm good, how are you?" },
-          ]);
-        } else {
+        {
           result = await agent.stream([
             { role: `user`, content: `hello!` },
             { role: 'assistant', content: 'hi, how are you?' },
@@ -406,21 +345,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         }
 
         let request;
-        if (version === 'v1') {
-          request = JSON.parse((await result.request).body).messages;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: 'hello!',
-            },
-            { role: 'assistant', content: 'hi, how are you?' },
-            { role: 'user', content: "I'm good, how are you?" },
-          ]);
-        } else {
+        {
           request = (await result.request).body.input;
           expect(request).toEqual([
             {
@@ -486,17 +411,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agent.streamLegacy([{ role: 'user', content: "I'm good, how are you?" }], {
-            memory: {
-              thread: '1',
-              resource: '2',
-              options: {
-                lastMessages: 10,
-              },
-            },
-          });
-        } else {
+        {
           result = await agent.stream([{ role: 'user', content: "I'm good, how are you?" }], {
             memory: {
               thread: '1',
@@ -512,21 +427,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         }
 
         let request;
-        if (version === 'v1') {
-          request = JSON.parse((await result.request).body).messages;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: 'hello!',
-            },
-            { role: 'assistant', content: 'hi, how are you?' },
-            { role: 'user', content: "I'm good, how are you?" },
-          ]);
-        } else {
+        {
           request = (await result.request).body.input;
           expect(request).toEqual([
             {
@@ -606,30 +507,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         });
 
         let firstResponse;
-        if (version === 'v1') {
-          firstResponse = await agent.generateLegacy('What is the weather in London?', {
-            threadId,
-            resourceId,
-            onStepFinish: args => {
-              args;
-            },
-          });
-          // The response should contain the weather.
-          expect(firstResponse.response.messages).toEqual([
-            expect.objectContaining({
-              role: 'assistant',
-              content: [expect.objectContaining({ type: 'tool-call' })],
-            }),
-            expect.objectContaining({
-              role: 'tool',
-              content: [expect.objectContaining({ type: 'tool-result' })],
-            }),
-            expect.objectContaining({
-              role: 'assistant',
-              content: [expect.objectContaining({ type: 'text' })],
-            }),
-          ]);
-        } else {
+        {
           firstResponse = await agent.generate('What is the weather in London?', {
             memory: {
               thread: threadId,
@@ -663,17 +541,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         await new Promise(resolve => setTimeout(resolve, 10));
 
         let secondResponse;
-        if (version === 'v1') {
-          secondResponse = await agent.generateLegacy('What was the tool you just used?', {
-            memory: {
-              thread: threadId,
-              resource: resourceId,
-              options: {
-                lastMessages: 10,
-              },
-            },
-          });
-        } else {
+        {
           secondResponse = await agent.generate('What was the tool you just used?', {
             memory: {
               thread: threadId,
@@ -691,9 +559,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
             // and keeps only output-available parts. When convertToModelMessages processes
             // an output-available tool part, it generates both function_call and function_call_output.
             // @ai-sdk/openai-v6 sends the full function_call item; v5 sends an item_reference.
-            version === 'v2'
-              ? expect.objectContaining({ type: 'item_reference', id: expect.stringContaining(`fc_`) })
-              : expect.objectContaining({ type: 'function_call', call_id: expect.stringContaining(`call_`) }),
+            expect.objectContaining({ type: 'item_reference', id: expect.stringContaining(`fc_`) }),
             expect.objectContaining({
               type: 'function_call_output',
               output: expect.stringContaining(`It is currently 70 degrees and feels like 65 degrees.`),
@@ -761,7 +627,6 @@ describe('OpenAI WebSocket transport (router)', () => {
   }, 30_000);
 });
 
-runStreamE2ETest('v1');
 runStreamE2ETest('v2');
 runStreamE2ETest('v3');
 runStreamE2ETest('v4');

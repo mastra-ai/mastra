@@ -605,8 +605,6 @@ export type SkippableTest =
   | 'streamingTripwireOutputStream'
   // Streaming detailed event structure (exact event count/structure assertions)
   | 'streamingDetailedEvents'
-  // Streaming suspend/resume with streamLegacy API
-  | 'streamingSuspendResumeLegacy'
   // Auto-resume without specifying step parameter (single suspended step)
   | 'resumeAutoNoStep'
   // Resume with resumeSchema defaults (empty resumeData uses schema defaults)
@@ -735,13 +733,11 @@ export interface WorkflowTestConfig {
    * @param workflow - The workflow to stream
    * @param inputData - Input data for the workflow
    * @param options - Optional execution options
-   * @param api - Which streaming API to use ('stream' or 'streamLegacy')
    */
   streamWorkflow?: <T>(
     workflow: Workflow<any, any, any, any, any, any, any>,
     inputData: T,
     options?: ExecuteWorkflowOptions,
-    api?: 'stream' | 'streamLegacy',
   ) => Promise<StreamWorkflowResult>;
 
   /**
@@ -963,7 +959,6 @@ export interface WorkflowTestContext extends WorkflowCreatorContext {
     workflow: Workflow<any, any, any, any, any, any, any>,
     inputData: T,
     options?: ExecuteWorkflowOptions,
-    api?: 'stream' | 'streamLegacy',
   ) => Promise<StreamWorkflowResult>;
 
   /**

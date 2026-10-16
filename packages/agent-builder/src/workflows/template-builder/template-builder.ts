@@ -2,13 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, extname, basename } from 'node:path';
-import { openai } from '@ai-sdk/openai';
-import {
-  Agent,
-  tryGenerateWithJsonFallback,
-  tryStreamWithJsonFallback,
-  isSupportedLanguageModel,
-} from '@mastra/core/agent';
+import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '@mastra/core/agent';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { FullOutput } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
@@ -177,7 +171,7 @@ const discoverUnitsStep = createStep({
 
     console.info('targetPath', targetPath);
 
-    const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+    const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: 'openai/gpt-4.1' });
 
     try {
       const agent = new Agent({
@@ -221,9 +215,6 @@ Return the actual exported names of the units, as well as the file names.`,
         },
       });
 
-      const resolvedModel = await agent.getModel();
-      const isSupported = isSupportedLanguageModel(resolvedModel);
-
       const prompt = `Analyze the Mastra project directory structure at "${templateDir}".
 
             List directory contents using listDirectory tool, and then analyze each file with readFile tool.
@@ -244,23 +235,12 @@ Return the actual exported names of the units, as well as the file names.`,
         other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
       });
 
-      let result: FullOutput<z.infer<typeof output>>;
-      if (isSupported) {
-        result = await tryGenerateWithJsonFallback(agent, prompt, {
-          structuredOutput: {
-            schema: output,
-          },
-          maxSteps: 100,
-        });
-      } else {
-        const standardSchema = toStandardSchema(output);
-        const jsonSchema = standardSchemaToJSONSchema(standardSchema);
-
-        result = (await agent.generateLegacy(prompt, {
-          experimental_output: jsonSchema,
-          maxSteps: 100,
-        })) as unknown as FullOutput<z.infer<typeof output>>;
-      }
+      const result: FullOutput<z.infer<typeof output>> = await tryGenerateWithJsonFallback(agent, prompt, {
+        structuredOutput: {
+          schema: output,
+        },
+        maxSteps: 100,
+      });
 
       const template = result.object ?? {};
 
@@ -977,7 +957,7 @@ const intelligentMergeStep = createStep({
     const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
     const targetPath = resolveTargetPath(inputData, requestContext);
     try {
-      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: 'openai/gpt-4.1' });
 
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
@@ -1184,10 +1164,8 @@ Start by listing your tasks and work through them systematically!
 `;
 
       // Process tasks systematically
-      const resolvedModel = await agentBuilder.getModel();
-      const isSupported = isSupportedLanguageModel(resolvedModel);
 
-      const result = isSupported ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
+      const result = await agentBuilder.stream(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{
@@ -1213,7 +1191,7 @@ Start by listing your tasks and work through them systematically!
             const chunkData = 'payload' in chunk ? chunk.payload : chunk;
             if (chunkData.toolName === 'manageTaskList') {
               try {
-                const toolResult = chunkData.result;
+                const toolResult = chunkData.result as any;
                 if (toolResult.action === 'update' && toolResult.status === 'completed') {
                   actualResolutions.push({
                     taskId: toolResult.taskId || '',
@@ -1316,7 +1294,7 @@ const validationAndFixStep = createStep({
     let currentIteration = 1; // Declare at function scope for error handling
 
     try {
-      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: 'openai/gpt-4.1' });
 
       const allTools = await AgentBuilderDefaults.listToolsForMode(targetPath, 'template');
 
@@ -1462,18 +1440,12 @@ Start by running validateCode with all validation types to get a complete pictur
 
 Previous iterations may have fixed some issues, so start by re-running validateCode to see the current state, then fix any remaining issues.`;
 
-        const resolvedModel = await validationAgent.getModel();
-        const isSupported = isSupportedLanguageModel(resolvedModel);
         const output = z.object({ success: z.boolean() });
-        const result = isSupported
-          ? await tryStreamWithJsonFallback(validationAgent, iterationPrompt, {
-              structuredOutput: {
-                schema: output,
-              },
-            })
-          : await validationAgent.streamLegacy(iterationPrompt, {
-              experimental_output: output as any,
-            });
+        const result = await tryStreamWithJsonFallback(validationAgent, iterationPrompt, {
+          structuredOutput: {
+            schema: output,
+          },
+        });
 
         let iterationErrors = 0;
         let previousErrors = validationResults.remainingErrors;
@@ -1494,7 +1466,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
             // Track validation results
             const chunkData = 'payload' in chunk ? chunk.payload : chunk;
             if (chunkData.toolName === 'validateCode') {
-              const toolResult = chunkData.result;
+              const toolResult = chunkData.result as any;
               lastValidationResult = toolResult; // Store the full result
               if (toolResult?.summary) {
                 iterationErrors = toolResult.summary.totalErrors || 0;

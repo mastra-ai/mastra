@@ -14,7 +14,7 @@ import { createObservabilityContext } from './context-factory';
 import type { TracingContext, AnySpan } from './types';
 
 const AGENT_GETTERS = ['getAgent', 'getAgentById'];
-const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateLegacy', 'streamLegacy'];
+const AGENT_METHODS_TO_WRAP = ['generate', 'stream'];
 
 const WORKFLOW_GETTERS = ['getWorkflow', 'getWorkflowById'];
 const WORKFLOW_METHODS_TO_WRAP = ['execute', 'createRun', 'createRun'];

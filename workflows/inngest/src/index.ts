@@ -3,10 +3,17 @@ import { Agent, MessageList, TripWire } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraScorers } from '@mastra/core/evals';
-import type { CoreMessage } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { Processor, ProcessorStepOutput, ProcessorStepInputSchema, OutputResult } from '@mastra/core/processors';
+import type {
+  Processor,
+  ProcessorStepOutput,
+  ProcessorStepInputSchema,
+  OutputResult,
+  ProcessInputResultWithSystemMessages,
+} from '@mastra/core/processors';
+
+type CoreMessage = ProcessInputResultWithSystemMessages['systemMessages'][number];
 import {
   ProcessorRunner,
   ProcessorState,
@@ -45,7 +52,6 @@ type InngestSubAgent<TId extends string = string> = {
   getModel: () => Promise<{ specificationVersion: string }> | { specificationVersion: string };
   generate: (...args: any[]) => Promise<any>;
   stream: (...args: any[]) => Promise<{ fullStream: ReadableStream<any> }>;
-  streamLegacy?: (...args: any[]) => Promise<{ fullStream: ReadableStream<any> }>;
 };
 
 // ============================================

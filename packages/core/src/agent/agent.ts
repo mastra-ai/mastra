@@ -1,5 +1,4 @@
-import type { UIMessage } from '@internal/ai-sdk-v4';
-import type { ModelMessage } from '@internal/ai-sdk-v5';
+import type { UIMessage, ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -29,7 +28,6 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
-import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectResult,
   GenerateTextResult,
@@ -41,12 +39,7 @@ import { MastraLLMVNext } from '../llm/model/model.loop';
 import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
-import type {
-  MastraLanguageModel,
-  MastraLegacyLanguageModel,
-  MastraModelConfig,
-  WidenedMastraModelConfig,
-} from '../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
@@ -165,7 +158,6 @@ import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
-import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
@@ -197,7 +189,7 @@ import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './du
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
-import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import type { MessageInput, MessageListInput, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
@@ -222,10 +214,8 @@ import type {
   AgentConfig,
   AgentUpdateThreadPeerOptions,
   AgentDurableOption,
-  AgentGenerateOptions,
   AgentNotificationConfig,
   GoalConfig,
-  AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
   AgentModelManagerConfig,
@@ -273,7 +263,7 @@ import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageMod
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
-export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+export type MastraLLM = MastraLLMVNext;
 
 // Structural shape of the lazily-built `DurableAgent` wrapper used by
 // `Agent`'s standalone-durable delegators. Declared as a concrete interface
@@ -842,8 +832,6 @@ export class Agent<
   // Per-request memoization so one resolver call serves both context injection and tool creation.
   #resolvedSkillsByRequest = new WeakMap<RequestContext<TRequestContext>, Promise<SkillInput[]>>();
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
-  #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
-  #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
@@ -896,7 +884,6 @@ export class Agent<
    * `agent → agent/durable → agent`.
    */
   #standaloneDurable?: unknown;
-  #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
 
@@ -980,8 +967,6 @@ export class Agent<
       this.#workflows = config.workflows;
     }
 
-    this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
-    this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config.transform ?? (config as any).toolPayloadProjection,
@@ -3259,125 +3244,6 @@ export class Agent<
   }
 
   /**
-   * Gets the legacy handler instance, initializing it lazily if needed.
-   * @internal
-   */
-  private getLegacyHandler(): AgentLegacyHandler {
-    if (!this.#legacyHandler) {
-      this.#legacyHandler = new AgentLegacyHandler({
-        logger: this.logger,
-        name: this.name,
-        id: this.id,
-        mastra: this.#mastra,
-        getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
-        getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
-        hasOwnMemory: this.hasOwnMemory.bind(this),
-        getScopes: this.getScopes.bind(this),
-        getInstructions: async (options: { requestContext: RequestContext }) => {
-          const result = await this.getInstructions(options);
-          return result;
-        },
-        getLLM: this.getLLM.bind(this) as any,
-        getMemory: this.getMemory.bind(this),
-        convertTools: this.convertTools.bind(this),
-        getMemoryMessages: (...args) => this.getMemoryMessages(...args),
-        __runInputProcessors: this.__runInputProcessors.bind(this),
-        __runProcessInputStep: this.__runProcessInputStep.bind(this),
-        getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
-        genTitle: this.genTitle.bind(this),
-        resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        convertInstructionsToString: this.#convertInstructionsToString.bind(this),
-        tracingPolicy: this.#options?.tracingPolicy,
-        resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
-        listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
-        __runOutputProcessors: this.__runOutputProcessors.bind(this),
-        runScorers: this.#runScorers.bind(this),
-      });
-    }
-    return this.#legacyHandler;
-  }
-
-  /**
-   * Gets the default generate options for the legacy generate method.
-   * These options are used as defaults when calling `generateLegacy()` without explicit options.
-   *
-   * @example
-   * ```typescript
-   * const options = await agent.getDefaultGenerateOptionsLegacy();
-   * console.log(options.maxSteps); // 5
-   * ```
-   */
-  public getDefaultGenerateOptionsLegacy({
-    requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
-    if (typeof this.#defaultGenerateOptionsLegacy !== 'function') {
-      return this.#defaultGenerateOptionsLegacy;
-    }
-
-    const result = this.#defaultGenerateOptionsLegacy({
-      requestContext: requestContext as RequestContext<TRequestContext>,
-      mastra: this.#mastra,
-    });
-    return resolveMaybePromise(result, options => {
-      if (!options) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_DEFAULT_GENERATE_OPTIONS_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Function-based default generate options returned empty value`,
-        });
-        this.logger.trackException(mastraError);
-        throw mastraError;
-      }
-
-      return options;
-    });
-  }
-
-  /**
-   * Gets the default stream options for the legacy stream method.
-   * These options are used as defaults when calling `streamLegacy()` without explicit options.
-   *
-   * @example
-   * ```typescript
-   * const options = await agent.getDefaultStreamOptionsLegacy();
-   * console.log(options.temperature); // 0.7
-   * ```
-   */
-  public getDefaultStreamOptionsLegacy({
-    requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): AgentStreamOptions | Promise<AgentStreamOptions> {
-    if (typeof this.#defaultStreamOptionsLegacy !== 'function') {
-      return this.#defaultStreamOptionsLegacy;
-    }
-
-    const result = this.#defaultStreamOptionsLegacy({
-      requestContext: requestContext as RequestContext<TRequestContext>,
-      mastra: this.#mastra,
-    });
-    return resolveMaybePromise(result, options => {
-      if (!options) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_DEFAULT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Function-based default stream options returned empty value`,
-        });
-        this.logger.trackException(mastraError);
-        throw mastraError;
-      }
-
-      return options;
-    });
-  }
-
-  /**
    * Gets the default options for this agent, resolving function-based options if necessary.
    * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
    *
@@ -3519,30 +3385,21 @@ export class Agent<
 
       const resolvedModel = this.resolveModelConfig(firstEnabledModel, requestContext);
 
-      return resolveMaybePromise(resolvedModel, modelInfo => {
-        let llm: MastraLLM | Promise<MastraLLM>;
-        if (isSupportedLanguageModel(modelInfo)) {
-          // Filter disabled entries before prepareModels so their model factories and
-          // dynamic resolvers are never invoked on the streaming path. A disabled
-          // entry's throwing/side-effecting factory must not break the request.
-          const enabledSelection = Array.isArray(modelSelection)
-            ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
-            : modelSelection;
+      return resolveMaybePromise(resolvedModel, () => {
+        // Filter disabled entries before prepareModels so their model factories and
+        // dynamic resolvers are never invoked on the streaming path. A disabled
+        // entry's throwing/side-effecting factory must not break the request.
+        const enabledSelection = Array.isArray(modelSelection)
+          ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
+          : modelSelection;
 
-          llm = this.prepareModels(requestContext, enabledSelection).then(models => {
-            return new MastraLLMVNext({
-              models,
-              mastra: this.#mastra,
-              options: { tracingPolicy: this.#options?.tracingPolicy },
-            });
-          });
-        } else {
-          llm = new MastraLLMV1({
-            model: modelInfo,
+        const llm = this.prepareModels(requestContext, enabledSelection).then(models => {
+          return new MastraLLMVNext({
+            models,
             mastra: this.#mastra,
             options: { tracingPolicy: this.#options?.tracingPolicy },
           });
-        }
+        });
 
         return resolveMaybePromise(llm, resolvedLLM => {
           // Apply stored primitives if available
@@ -3567,7 +3424,7 @@ export class Agent<
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
     requestContext: RequestContext,
-  ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+  ): Promise<MastraLanguageModel> {
     try {
       return await resolveModelConfig(modelConfig, requestContext, this.#mastra);
     } catch (error) {
@@ -3579,7 +3436,7 @@ export class Agent<
           agentName: this.name,
           originalError: error instanceof Error ? error.message : String(error),
         },
-        text: `[Agent:${this.name}] - Failed to resolve model configuration`,
+        text: `[Agent:${this.name}] - Failed to resolve model configuration: ${error instanceof Error ? error.message : String(error)}`,
       });
       this.logger.trackException(mastraError);
       throw mastraError;
@@ -3643,9 +3500,7 @@ export class Agent<
    * Ensures a model can participate in prepared multi-model execution.
    * @internal
    */
-  private assertSupportsPreparedModels(
-    model: MastraLanguageModel | MastraLegacyLanguageModel,
-  ): asserts model is MastraLanguageModel {
+  private assertSupportsPreparedModels(model: MastraLanguageModel): asserts model is MastraLanguageModel {
     if (!isSupportedLanguageModel(model)) {
       const mastraError = new MastraError({
         id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
@@ -3723,7 +3578,7 @@ export class Agent<
   private resolveModelFromSelection(
     resolved: ResolvedModelSelection,
     requestContext: RequestContext,
-  ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+  ): Promise<MastraLanguageModel> {
     if (!Array.isArray(resolved)) {
       return this.resolveModelConfig(resolved, requestContext);
     }
@@ -3763,7 +3618,7 @@ export class Agent<
   }: {
     requestContext?: RequestContext;
     modelConfig?: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
-  } = {}): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+  } = {}): MastraLanguageModel | Promise<MastraLanguageModel> {
     return this.resolveModelSelection(modelConfig, requestContext).then(resolved =>
       this.resolveModelFromSelection(resolved, requestContext),
     );
@@ -3814,7 +3669,7 @@ export class Agent<
     /** Per-call model override (`stream(msgs, { model })`). */
     model?: Parameters<Agent['resolveModelSelection']>[0];
   } = {}): Promise<{
-    model: MastraLanguageModel | MastraLegacyLanguageModel;
+    model: MastraLanguageModel;
     modelList: Array<AgentModelManagerConfig> | null;
     fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
   }> {
@@ -4138,17 +3993,17 @@ export class Agent<
     for (const part of parts) {
       if (part.type === 'text') {
         lines.push(`${role}: ${part.text}`);
-      } else if (part.type === 'tool-invocation') {
-        const inv = part.toolInvocation;
-        if (inv.state === 'result') {
-          const resultStr = typeof inv.result === 'string' ? inv.result : JSON.stringify(inv.result);
-          lines.push(`Tool Result ${inv.toolName}: ${resultStr.slice(0, 200)}`);
-        } else {
-          lines.push(`Tool Call ${inv.toolName}: ${JSON.stringify(inv.args).slice(0, 200)}`);
+      } else if (part.type === 'dynamic-tool' || (part.type.startsWith('tool-') && 'toolCallId' in part)) {
+        const toolName = part.type === 'dynamic-tool' ? part.toolName : part.type.slice('tool-'.length);
+        if (part.state === 'output-available') {
+          const resultStr = typeof part.output === 'string' ? part.output : JSON.stringify(part.output);
+          lines.push(`Tool Result ${toolName}: ${resultStr.slice(0, 200)}`);
+        } else if (part.state === 'input-available' || part.state === 'input-streaming') {
+          lines.push(`Tool Call ${toolName}: ${JSON.stringify(part.input).slice(0, 200)}`);
         }
       } else if (part.type === 'reasoning') {
-        if (part.reasoning) {
-          lines.push(`Reasoning: ${part.reasoning}`);
+        if (part.text) {
+          lines.push(`Reasoning: ${part.text}`);
         }
       } else if (part.type === 'source-url') {
         lines.push(`${role}: User added URL: ${part.url.substring(0, 100)}`);
@@ -4165,20 +4020,11 @@ export class Agent<
    * formats each one's parts with role context, and joins the results.
    */
   formatMessagesForTitle(
-    messages: Array<{ role: string; content?: string; parts?: Array<{ type: string; [key: string]: any }> }>,
+    messages: Array<{ role: string; parts?: Array<{ type: string; [key: string]: any }> }>,
   ): string {
     const lines: string[] = [];
     for (const msg of messages) {
       const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      // AIV4 UI messages can carry the same text in both `content` and a text part.
-      // Skip `content` only when a text part carries the exact same text, so each
-      // message's text is emitted once without ever dropping distinct content.
-      const hasContent = typeof msg.content === 'string' && msg.content !== '';
-      const contentDuplicatedByPart =
-        hasContent && msg.parts?.some(part => part.type === 'text' && part.text === msg.content);
-      if (hasContent && !contentDuplicatedByPart) {
-        lines.push(`${role}: ${msg.content}`);
-      }
       if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
         lines.push(...this.formatMessagePartsForTitle(msg.parts, role));
       }
@@ -4232,63 +4078,42 @@ export class Agent<
     // Resolve instructions using the dedicated method
     const systemInstructions = await this.resolveTitleInstructions(requestContext, instructions);
 
-    let text = '';
-
-    if (isSupportedLanguageModel(llm.getModel())) {
-      const messageList = new MessageList()
-        .add(
-          [
-            {
-              role: 'system',
-              content: systemInstructions,
-            },
-          ],
-          'system',
-        )
-        .add(
-          [
-            {
-              role: 'user',
-              content: userContent,
-            },
-          ],
-          'input',
-        );
-      const result = (llm as MastraLLMVNext).stream({
-        methodType: 'generate',
-        requestContext,
-        ...observabilityContext,
-        messageList,
-        agentId: this.id,
-        agentName: this.name,
-      });
-
-      text = await result.text;
-    } else {
-      const result = await (llm as MastraLLMV1).__text({
-        requestContext,
-        ...observabilityContext,
-        messages: [
+    const messageList = new MessageList()
+      .add(
+        [
           {
             role: 'system',
             content: systemInstructions,
           },
+        ],
+        'system',
+      )
+      .add(
+        [
           {
             role: 'user',
             content: userContent,
           },
         ],
-      });
+        'input',
+      );
+    const result = llm.stream({
+      methodType: 'generate',
+      requestContext,
+      ...observabilityContext,
+      messageList,
+      agentId: this.id,
+      agentName: this.name,
+    });
 
-      text = result.text;
-    }
+    const text = await result.text;
 
     // Strip out any r1 think tags if present
     const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     return cleanedText;
   }
 
-  getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>) {
+  getMostRecentUserMessage(messages: UIMessage[]) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
   }
@@ -4327,7 +4152,7 @@ export class Agent<
         });
       }
       if (userMessage) {
-        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.aiV5.ui().at(-1);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
@@ -4391,7 +4216,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -4464,7 +4289,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
@@ -4554,7 +4379,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     suppressEagerSkillTools: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -4633,7 +4458,7 @@ export class Agent<
     requestContext: RequestContext;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedBrowserTools: Record<string, CoreTool> = {};
@@ -4724,7 +4549,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedProcessorTools: Record<string, CoreTool> = {};
@@ -5202,8 +5027,8 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    model?: MastraLanguageModel | MastraLegacyLanguageModel;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    model?: MastraLanguageModel;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -5286,7 +5111,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -5362,8 +5187,8 @@ export class Agent<
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    model?: MastraLanguageModel | MastraLegacyLanguageModel;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    model?: MastraLanguageModel;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -5490,7 +5315,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
@@ -5730,10 +5555,7 @@ export class Agent<
             // This must happen before rejection handling so the rejection path can
             // save messages via resolvedAgent.getMemory().
             if (
-              (methodType === 'generate' ||
-                methodType === 'generateLegacy' ||
-                methodType === 'stream' ||
-                methodType === 'streamLegacy') &&
+              (methodType === 'generate' || methodType === 'stream') &&
               supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
               if (!resolvedAgent.hasOwnMemory() && this.#memory) {
@@ -5795,10 +5617,7 @@ export class Agent<
                   reason: rejectionMessage,
                 });
 
-                if (
-                  (methodType === 'stream' || methodType === 'streamLegacy') &&
-                  supportedLanguageModelSpecifications.includes(resolvedModelVersion)
-                ) {
+                if (methodType === 'stream' && supportedLanguageModelSpecifications.includes(resolvedModelVersion)) {
                   await context.writer?.write({
                     type: 'text-delta',
                     payload: {
@@ -6045,10 +5864,7 @@ export class Agent<
               // signal and keep looping after the parent is cancelled. See issue #14820.
               const subAgentAbortOptions = context?.abortSignal ? { abortSignal: context.abortSignal } : {};
 
-              if (
-                (methodType === 'generate' || methodType === 'generateLegacy') &&
-                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
-              ) {
+              if (methodType === 'generate' && supportedLanguageModelSpecifications.includes(resolvedModelVersion)) {
                 const generateResult = shouldResumeSubAgent
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
@@ -6167,25 +5983,7 @@ export class Agent<
                   usage: generateResult.usage,
                 };
               } else if (
-                (methodType === 'generate' || methodType === 'generateLegacy') &&
-                resolvedModelVersion === 'v1'
-              ) {
-                if (typeof resolvedAgent.generateLegacy !== 'function') {
-                  throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement generateLegacy`);
-                }
-                const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
-                  requestContext: subAgentRequestContext,
-                  actor: invocationActor,
-                  ...resolveObservabilityContext(context ?? {}),
-                  context: filteredContextMessages as CoreMessage[],
-                  ...subAgentAbortOptions,
-                });
-                result = {
-                  text: generateResult.text,
-                  ...(generateResult.usage ? { usage: generateResult.usage } : {}),
-                };
-              } else if (
-                (methodType === 'stream' || methodType === 'streamLegacy') &&
+                methodType === 'stream' &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const streamResult = shouldResumeSubAgent
@@ -6351,40 +6149,7 @@ export class Agent<
                     isAgentSuspend: true,
                   });
                 }
-              } else {
-                if (typeof resolvedAgent.streamLegacy !== 'function') {
-                  throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement streamLegacy`);
-                }
-                const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
-                  requestContext: subAgentRequestContext,
-                  actor: invocationActor,
-                  ...resolveObservabilityContext(context ?? {}),
-                  ...subAgentAbortOptions,
-                });
-
-                let fullText = '';
-                for await (const chunk of streamResult.fullStream) {
-                  if (context?.writer) {
-                    // Data chunks from writer.custom() should bubble up directly without wrapping
-                    if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
-                    } else {
-                      await context.writer.write(chunk);
-                    }
-                  }
-
-                  if (chunk.type === 'text-delta') {
-                    fullText += chunk.textDelta;
-                  }
-                }
-
-                result = { text: fullText };
               }
-
-              // Note: `usage` is included in `result` for successful generate, generateLegacy,
-              // and stream code paths. The `streamLegacy` path accumulates text only and won't
-              // have `usage`. Error/rejected delegation callbacks may also omit it.
 
               // Call onDelegationComplete hook if provided
               if (delegation?.onDelegationComplete) {
@@ -6669,7 +6434,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
-    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    getModel: () => Promise<MastraLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
@@ -6760,7 +6525,7 @@ export class Agent<
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
-              if (methodType === 'generate' || methodType === 'generateLegacy') {
+              if (methodType === 'generate') {
                 if (shouldResumeWorkflow) {
                   result = await run.resume({
                     resumeData,
@@ -6777,23 +6542,6 @@ export class Agent<
                     ...(initialState && { initialState }),
                   });
                 }
-              } else if (methodType === 'streamLegacy') {
-                const streamResult = run.streamLegacy({
-                  inputData: workflowInputData,
-                  requestContext,
-                  actor: invocationActor,
-                  ...resolveObservabilityContext(context ?? {}),
-                });
-
-                if (context?.writer) {
-                  await streamResult.stream.pipeTo(context.writer);
-                } else {
-                  for await (const _chunk of streamResult.stream) {
-                    // complete the stream
-                  }
-                }
-
-                result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
                 const streamResult = shouldResumeWorkflow
                   ? run.resumeStream({
@@ -6953,7 +6701,7 @@ export class Agent<
     methodType?: AgentMethodType;
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptionsBase<any>['backgroundTaskPolicy'];
-    model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    model?: MastraLanguageModel;
     /** @internal In-flight run messages, so recovery can restore processor-loaded tools. */
     runMessages?: MastraDBMessage[];
   }): Promise<Record<string, CoreTool>> {
@@ -7040,7 +6788,7 @@ export class Agent<
     };
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
-    model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    model?: MastraLanguageModel;
     runMessages?: MastraDBMessage[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -7055,7 +6803,7 @@ export class Agent<
     // tool source shares a single snapshot instead of re-running the (possibly dynamic)
     // resolver per tool. Sources without tools never resolve it, and a per-call `model`
     // override (e.g. generate({ model })) wins over the configured model for all sources.
-    let modelSnapshot: Promise<MastraLanguageModel | MastraLegacyLanguageModel> | undefined;
+    let modelSnapshot: Promise<MastraLanguageModel> | undefined;
     const getResolvedModel = () => (modelSnapshot ??= Promise.resolve(model ?? this.getModel({ requestContext })));
 
     const assignedTools = await this.listAssignedTools({
@@ -7468,7 +7216,7 @@ export class Agent<
     resolvedSelection?: ResolvedModelSelection,
     resolvedModel?: {
       index: number;
-      model: MastraLanguageModel | MastraLegacyLanguageModel;
+      model: MastraLanguageModel;
     },
   ): Promise<Array<AgentModelManagerConfig>> {
     const selection =
@@ -8823,7 +8571,7 @@ export class Agent<
             | undefined,
         );
 
-        const uiMessages = messageList.get.all.ui();
+        const uiMessages = messageList.get.all.aiV5.ui();
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title) {
@@ -9067,30 +8815,6 @@ export class Agent<
       requestContext: mergedOptions.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
-
-    const modelInfo = llm.getModel();
-
-    if (!isSupportedLanguageModel(modelInfo)) {
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-      const specVersion = modelInfo.specificationVersion;
-
-      throw new MastraError({
-        id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: specVersion,
-        },
-      });
-    }
 
     const executeOptions = {
       ...loopOptions,
@@ -9843,30 +9567,6 @@ export class Agent<
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
-    const modelInfo = llm.getModel();
-
-    if (!isSupportedLanguageModel(modelInfo)) {
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-      const specVersion = modelInfo.specificationVersion;
-
-      throw new MastraError({
-        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: specVersion,
-        },
-      });
-    }
-
     const threadStreamPubSub = this.getPubSub();
     mergedOptions.runId ??=
       this.#mastra?.generateId({
@@ -10248,25 +9948,6 @@ export class Agent<
         model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
       });
 
-      if (!isSupportedLanguageModel(llm.getModel())) {
-        const modelInfo = llm.getModel();
-        const specVersion = modelInfo.specificationVersion;
-        throw new MastraError({
-          id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text:
-            specVersion === 'v1'
-              ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
-              : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-          details: {
-            modelId: modelInfo.modelId,
-            provider: modelInfo.provider,
-            specificationVersion: specVersion,
-          },
-        });
-      }
-
       await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
         this as Agent<any, any, any, any>,
         loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
@@ -10452,29 +10133,6 @@ export class Agent<
         requestContext: mergedOptions.requestContext,
         model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
       });
-
-      const modelInfo = llm.getModel();
-
-      if (!isSupportedLanguageModel(modelInfo)) {
-        const modelId = modelInfo.modelId || 'unknown';
-        const provider = modelInfo.provider || 'unknown';
-        const specVersion = modelInfo.specificationVersion;
-        throw new MastraError({
-          id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text:
-            specVersion === 'v1'
-              ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-              : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-          details: {
-            agentName: this.name,
-            modelId,
-            provider,
-            specificationVersion: specVersion,
-          },
-        });
-      }
 
       const result = await this.#execute({
         ...loopOptions,
@@ -10961,119 +10619,6 @@ export class Agent<
     const { reason, ...resumeOptions } = options;
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
-  }
-
-  /**
-   * Legacy implementation of generate method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models.
-   *
-   * @example
-   * ```typescript
-   * const result = await agent.generateLegacy('What is 2+2?');
-   * console.log(result.text);
-   * ```
-   */
-  async generateLegacy(
-    messages: MessageListInput,
-    args?: AgentGenerateOptions<undefined, undefined> & {
-      output?: never;
-      experimental_output?: never;
-      model?: DynamicArgument<MastraModelConfig>;
-    },
-  ): Promise<GenerateTextResult<any, undefined>>;
-  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: MessageListInput,
-    args?: AgentGenerateOptions<OUTPUT, undefined> & {
-      output?: OUTPUT;
-      experimental_output?: never;
-      model?: DynamicArgument<MastraModelConfig>;
-    },
-  ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: MessageListInput,
-    args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
-      output?: never;
-      experimental_output?: EXPERIMENTAL_OUTPUT;
-      model?: DynamicArgument<MastraModelConfig>;
-    },
-  ): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
-  async generateLegacy<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
-      model?: DynamicArgument<MastraModelConfig>;
-    } = {},
-  ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    return this.getLegacyHandler().generateLegacy(messages, generateOptions);
-  }
-
-  /**
-   * Legacy implementation of stream method using AI SDK v4 models.
-   * Use this method if you need to continue using AI SDK v4 models.
-   *
-   * @example
-   * ```typescript
-   * const result = await agent.streamLegacy('Tell me a story');
-   * for await (const chunk of result.textStream) {
-   *   process.stdout.write(chunk);
-   * }
-   * ```
-   */
-  async streamLegacy<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
-      output?: never;
-      experimental_output?: never;
-      model?: DynamicArgument<MastraModelConfig>;
-    },
-  ): Promise<StreamTextResult<any, OUTPUT>>;
-  async streamLegacy<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
-      output?: OUTPUT;
-      experimental_output?: never;
-      model?: DynamicArgument<MastraModelConfig>;
-    },
-  ): Promise<StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties>;
-  async streamLegacy<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
-      output?: never;
-      experimental_output?: EXPERIMENTAL_OUTPUT;
-      model?: DynamicArgument<MastraModelConfig>;
-    },
-  ): Promise<
-    StreamTextResult<any, EXPERIMENTAL_OUTPUT> & {
-      partialObjectStream: StreamTextResult<any, EXPERIMENTAL_OUTPUT>['experimental_partialOutputStream'];
-    }
-  >;
-  async streamLegacy<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
-      model?: DynamicArgument<MastraModelConfig>;
-    } = {},
-  ): Promise<
-    | StreamTextResult<any, OUTPUT>
-    | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
-  > {
-    return this.getLegacyHandler().streamLegacy(messages, streamOptions) as Promise<
-      | StreamTextResult<any, OUTPUT>
-      | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
-    >;
   }
 
   /**

@@ -1,9 +1,9 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { LanguageDetector } from './language-detector';
 import { ModerationProcessor } from './moderation';
 import { PIIDetector } from './pii-detector';
@@ -38,16 +38,13 @@ function createTextDelta(text: string): ChunkType {
   } as ChunkType;
 }
 
-function mockModelReturning(result: unknown): MockLanguageModelV1 {
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
-      usage: { promptTokens: 10, completionTokens: 20 },
-      text: JSON.stringify(result),
-    }),
-  });
+function mockModelReturning(result: unknown): ReturnType<typeof mockTextModel> {
+  return mockTextModel(async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: JSON.stringify(result),
+  }));
 }
 
 /**

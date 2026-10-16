@@ -1,3 +1,5 @@
+import type { JSONValue, ToolModelMessage } from '@internal/ai-sdk-v5';
+
 import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
@@ -183,16 +185,14 @@ export async function applyBackgroundToolResult(deps: {
       messageList.add(
         [
           {
-            role: 'tool' as const,
-            type: 'tool-call',
+            role: 'assistant' as const,
             id: deps.generateId?.() ?? globalThis.crypto.randomUUID(),
-            createdAt: new Date(),
             content: [
               {
                 type: 'tool-call' as const,
                 toolCallId: params.toolCallId,
                 toolName: params.toolName,
-                args: transformed.transcriptArgs,
+                input: transformed.transcriptArgs,
               },
             ],
           },
@@ -209,12 +209,11 @@ export async function applyBackgroundToolResult(deps: {
               type: 'tool-result' as const,
               toolCallId: params.toolCallId,
               toolName: params.toolName,
-              result: transformed.transcriptResult,
-              isError: failed,
+              output: { type: 'json' as const, value: (transformed.transcriptResult ?? '') as JSONValue },
               providerOptions: providerMetadata,
             },
           ],
-        },
+        } satisfies ToolModelMessage,
       ],
       'response',
     );

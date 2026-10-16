@@ -356,10 +356,12 @@ describe('OpenAI reasoning round-trip', () => {
       },
     ];
 
-    expect(CacheKeyGenerator.fromAIV4Parts(uiFirst as any)).not.toBe(CacheKeyGenerator.fromAIV4Parts(uiSecond as any));
+    expect(CacheKeyGenerator.fromLegacyParts(uiFirst as any)).not.toBe(
+      CacheKeyGenerator.fromLegacyParts(uiSecond as any),
+    );
     expect(CacheKeyGenerator.fromAIV5Parts(uiFirst as any)).not.toBe(CacheKeyGenerator.fromAIV5Parts(uiSecond as any));
-    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(modelFirst as any)).not.toBe(
-      CacheKeyGenerator.fromAIV4CoreMessageContent(modelSecond as any),
+    expect(CacheKeyGenerator.fromV1Content(modelFirst as any)).not.toBe(
+      CacheKeyGenerator.fromV1Content(modelSecond as any),
     );
     expect(CacheKeyGenerator.fromAIV5ModelMessageContent(modelFirst as any)).not.toBe(
       CacheKeyGenerator.fromAIV5ModelMessageContent(modelSecond as any),
@@ -390,9 +392,7 @@ describe('OpenAI reasoning round-trip', () => {
       },
     ];
 
-    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(first as any)).not.toBe(
-      CacheKeyGenerator.fromAIV4CoreMessageContent(second as any),
-    );
+    expect(CacheKeyGenerator.fromV1Content(first as any)).not.toBe(CacheKeyGenerator.fromV1Content(second as any));
   });
 
   it('should canonicalize mirrored Azure and OpenAI itemIds in cache keys', () => {
@@ -422,9 +422,7 @@ describe('OpenAI reasoning round-trip', () => {
       },
     ];
 
-    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(azureOnly as any)).toBe(
-      CacheKeyGenerator.fromAIV4CoreMessageContent(mirrored as any),
-    );
+    expect(CacheKeyGenerator.fromV1Content(azureOnly as any)).toBe(CacheKeyGenerator.fromV1Content(mirrored as any));
   });
 
   it('should deduplicate mirrored provider metadata and options in cache keys', () => {
@@ -456,8 +454,8 @@ describe('OpenAI reasoning round-trip', () => {
       },
     ];
 
-    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(providerOptionsOnly as any)).toBe(
-      CacheKeyGenerator.fromAIV4CoreMessageContent(mirroredAcrossBags as any),
+    expect(CacheKeyGenerator.fromV1Content(providerOptionsOnly as any)).toBe(
+      CacheKeyGenerator.fromV1Content(mirroredAcrossBags as any),
     );
   });
 
@@ -513,8 +511,8 @@ describe('OpenAI reasoning round-trip', () => {
       },
     ];
 
-    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(azureReasoningOnly as any)).not.toBe(
-      CacheKeyGenerator.fromAIV4CoreMessageContent(mirroredReasoningWithDifferentValues as any),
+    expect(CacheKeyGenerator.fromV1Content(azureReasoningOnly as any)).not.toBe(
+      CacheKeyGenerator.fromV1Content(mirroredReasoningWithDifferentValues as any),
     );
     expect(CacheKeyGenerator.fromAIV5ModelMessageContent(azureTextOnly as any)).not.toBe(
       CacheKeyGenerator.fromAIV5ModelMessageContent(mirroredTextWithDifferentValues as any),

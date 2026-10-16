@@ -1,9 +1,10 @@
-import type { GenerateLegacyParams } from '@mastra/client-js';
+import type { SendAgentMessageParams } from '@mastra/client-js';
 import type { ToolsInput } from '@mastra/core/agent';
 
 export type ClientToolsInput = ToolsInput;
 export type ClientToolsResolver = () => ClientToolsInput | undefined;
-export type ProviderOptionsInput = GenerateLegacyParams['providerOptions'];
+type SignalStreamOptions = NonNullable<NonNullable<SendAgentMessageParams['ifIdle']>['streamOptions']>;
+export type ProviderOptionsInput = SignalStreamOptions['providerOptions'];
 
 export interface ModelSettings {
   frequencyPenalty?: number;

@@ -16,8 +16,6 @@ export const makeCodeAgent = (editor: AgentEditorConfig | undefined): GetAgentRe
   modelVersion: 'v2',
   modelList: undefined,
   defaultOptions: {},
-  defaultGenerateOptionsLegacy: {},
-  defaultStreamOptionsLegacy: {},
   source: 'code',
   status: 'published',
   activeVersionId: VERSION_ID,

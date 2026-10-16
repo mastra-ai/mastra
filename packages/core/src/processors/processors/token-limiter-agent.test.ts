@@ -1,5 +1,4 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 
@@ -9,6 +8,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import type { MastraDBMessage } from '../../memory/types';
 import { InMemoryStore } from '../../storage';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { createStep, createWorkflow } from '../../workflows';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../step-schema';
 
@@ -203,16 +203,14 @@ describe('TokenLimiterProcessor through an agent', () => {
 
     it('trims the prompt in generateLegacy()', async () => {
       const prompts: unknown[][] = [];
-      const model = new MockLanguageModelV1({
-        doGenerate: async ({ prompt }) => {
-          prompts.push(prompt);
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 1, completionTokens: 1 },
-            text: 'ok',
-          };
-        },
+      const model = mockTextModel(async ({ prompt }) => {
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 1, completionTokens: 1 },
+          text: 'ok',
+        };
       });
       const agent = new Agent({
         id: 'limiter-legacy',
@@ -222,7 +220,7 @@ describe('TokenLimiterProcessor through an agent', () => {
         inputProcessors: [new TokenLimiterProcessor(500)],
       });
 
-      await agent.generateLegacy(longHistory());
+      await agent.generate(longHistory());
 
       const prompt = prompts.at(-1) as Array<{ role: string }> | undefined;
       const count = prompt?.filter(message => message.role !== 'system').length ?? 0;

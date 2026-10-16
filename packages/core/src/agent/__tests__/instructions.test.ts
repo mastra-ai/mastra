@@ -1,6 +1,4 @@
-import type { CoreSystemMessage } from '@internal/ai-sdk-v4';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import type { SystemModelMessage } from '@internal/ai-sdk-v5';
+import type { CoreSystemMessage, SystemModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../../logger';
@@ -10,26 +8,11 @@ import { delay } from '../../utils';
 import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
 
-function instructionTests(version: 'v1' | 'v2') {
-  let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+function instructionTests(version: 'v2') {
+  let dummyModel: MockLanguageModelV2;
 
   beforeEach(() => {
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'Dummy response',
-        }),
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-    } else {
+    {
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -58,16 +41,7 @@ function instructionTests(version: 'v1' | 'v2') {
     let mastra: Mastra;
 
     beforeEach(() => {
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Logger test response`,
-          }),
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -124,9 +98,7 @@ function instructionTests(version: 'v1' | 'v2') {
       requestContext.set('info', 'test-info');
 
       let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('hello', { requestContext });
-      } else {
+      {
         response = await agent.generate('hello', { requestContext });
       }
 
@@ -146,9 +118,7 @@ function instructionTests(version: 'v1' | 'v2') {
       });
 
       let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('hello');
-      } else {
+      {
         response = await agent.generate('hello');
       }
 
@@ -170,9 +140,7 @@ function instructionTests(version: 'v1' | 'v2') {
       });
 
       let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('hello');
-      } else {
+      {
         response = await agent.generate('hello');
       }
 
@@ -401,7 +369,7 @@ function instructionTests(version: 'v1' | 'v2') {
         content: 'Be concise in your responses.',
       };
 
-      if (version === 'v2') {
+      {
         // This test only applies to V2
         // Simply verify that generate works with the system option
         // without throwing errors
@@ -411,9 +379,6 @@ function instructionTests(version: 'v1' | 'v2') {
 
         // Basic check that response was generated
         expect(response.text).toBe('Dummy response');
-      } else {
-        // Skip for V1
-        expect(true).toBe(true);
       }
     });
 
@@ -437,7 +402,7 @@ function instructionTests(version: 'v1' | 'v2') {
       // Use string array for additional system messages
       const additionalSystem: string[] = ['Be concise.', 'Use examples.'];
 
-      if (version === 'v2') {
+      {
         // This test only applies to V2
         // Simply verify that generate works with array system option
         // without throwing errors
@@ -447,9 +412,6 @@ function instructionTests(version: 'v1' | 'v2') {
 
         // Basic check that response was generated
         expect(response.text).toBe('Dummy response');
-      } else {
-        // Skip for V1
-        expect(true).toBe(true);
       }
     });
 
@@ -485,15 +447,7 @@ function instructionTests(version: 'v1' | 'v2') {
         model: dummyModel,
       });
 
-      if (version === 'v1') {
-        const response = await agent.generateLegacy('Hello', {
-          instructions: {
-            role: 'system',
-            content: 'Override instructions',
-          },
-        });
-        expect(response.text).toBe('Dummy response');
-      } else {
+      {
         // For v2, use generate
         const response = await agent.generate('Hello', {
           instructions: {
@@ -574,7 +528,7 @@ function instructionTests(version: 'v1' | 'v2') {
     });
 
     it('should combine instructions with system option in stream', async () => {
-      if (version === 'v2') {
+      {
         const agent = new Agent({
           id: 'test-agent',
           name: 'Test Agent',
@@ -594,8 +548,6 @@ function instructionTests(version: 'v1' | 'v2') {
         // Verify stream completes without error
         const result = await stream.getFullOutput();
         expect(result).toBeDefined();
-      } else {
-        expect(true).toBe(true);
       }
     });
 
@@ -607,12 +559,7 @@ function instructionTests(version: 'v1' | 'v2') {
         model: dummyModel,
       });
 
-      if (version === 'v1') {
-        const response = await agent.generateLegacy('Hello', {
-          instructions: ['Override instruction 1', 'Override instruction 2'],
-        });
-        expect(response.text).toBe('Dummy response');
-      } else {
+      {
         // For v2, use generate
         const response = await agent.generate('Hello', {
           instructions: ['Override instruction 1', 'Override instruction 2'],
@@ -668,7 +615,7 @@ function instructionTests(version: 'v1' | 'v2') {
       // Spy on MessageList.addSystem to capture what's being added
       const addSystemSpy = vi.spyOn(MessageList.prototype, 'addSystem');
 
-      if (version === 'v2') {
+      {
         try {
           // This will trigger the message list building
           await agent.generate('Hello');
@@ -697,13 +644,9 @@ function instructionTests(version: 'v1' | 'v2') {
           // Restore the spy
           addSystemSpy.mockRestore();
         }
-      } else {
-        // Skip for v1
-        expect(true).toBe(true);
       }
     });
   });
 }
 
-instructionTests('v1');
 instructionTests('v2');

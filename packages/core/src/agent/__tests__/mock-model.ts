@@ -1,9 +1,7 @@
-import { openai as openai_v4 } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { openai as openai_v7 } from '@ai-sdk/openai-v7';
-import { simulateReadableStream } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
@@ -14,19 +12,12 @@ import {
   MockLanguageModelV4,
 } from '@internal/ai-v7/test';
 
-export type MockModelSpecVersion = 'v1' | 'v2' | 'v3' | 'v4';
+export type MockModelSpecVersion = 'v2' | 'v3' | 'v4';
 
 // Return type is a union of AI SDK provider return types - we use a generic return to avoid type portability issues
 export function getOpenAIModel(
   version: MockModelSpecVersion,
-):
-  | ReturnType<typeof openai_v4>
-  | ReturnType<typeof openai_v5>
-  | ReturnType<typeof openai_v6>
-  | ReturnType<typeof openai_v7> {
-  if (version === 'v1') {
-    return openai_v4('gpt-4o-mini');
-  }
+): ReturnType<typeof openai_v5> | ReturnType<typeof openai_v6> | ReturnType<typeof openai_v7> {
   if (version === 'v2') {
     return openai_v5('gpt-4o-mini');
   }
@@ -38,22 +29,7 @@ export function getOpenAIModel(
 }
 
 export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
-  if (version === 'v1') {
-    return new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `Dummy response`,
-      }),
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
-        }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
-    });
-  } else if (version === 'v2') {
+  if (version === 'v2') {
     return new MockLanguageModelV2({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -181,34 +157,7 @@ export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
 }
 
 export function getDummyResponseModel(version: MockModelSpecVersion) {
-  if (version === 'v1') {
-    return new MockLanguageModelV1({
-      doGenerate: async _options => ({
-        text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
-      doStream: async _options => {
-        let count = 0;
-        const stream = new ReadableStream({
-          pull(controller) {
-            if (count < 10) {
-              controller.enqueue({
-                type: 'text-delta',
-                textDelta: `Dummy response ${count}`,
-                createdAt: new Date(Date.now() + count * 1000).toISOString(),
-              });
-              count++;
-            } else {
-              controller.close();
-            }
-          },
-        });
-        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-      },
-    });
-  } else if (version === 'v2') {
+  if (version === 'v2') {
     return new MockLanguageModelV2({
       doGenerate: async _options => ({
         text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
@@ -349,22 +298,7 @@ export function getDummyResponseModel(version: MockModelSpecVersion) {
 }
 
 export function getEmptyResponseModel(version: MockModelSpecVersion) {
-  if (version === 'v1') {
-    return new MockLanguageModelV1({
-      doGenerate: async _options => ({
-        text: undefined,
-        finishReason: 'stop',
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: [],
-        }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
-    });
-  } else if (version === 'v2') {
+  if (version === 'v2') {
     return new MockLanguageModelV2({
       doGenerate: async _options => ({
         text: undefined,
@@ -469,22 +403,7 @@ export function getEmptyResponseModel(version: MockModelSpecVersion) {
 }
 
 export function getErrorResponseModel(version: MockModelSpecVersion) {
-  if (version === 'v1') {
-    // Model throws immediately before emitting any part
-    return new MockLanguageModelV1({
-      doGenerate: async _options => {
-        throw new Error('Immediate interruption');
-      },
-      doStream: async _options => {
-        const stream = new ReadableStream({
-          pull() {
-            throw new Error('Immediate interruption');
-          },
-        });
-        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-      },
-    });
-  } else if (version === 'v2') {
+  if (version === 'v2') {
     // Model throws immediately before emitting any part
     return new MockLanguageModelV2({
       doGenerate: async _options => {
@@ -518,5 +437,5 @@ export function getErrorResponseModel(version: MockModelSpecVersion) {
 }
 
 // Re-export mock classes for direct use in tests
-export { MockLanguageModelV1, MockLanguageModelV2, MockLanguageModelV3, MockLanguageModelV4 };
+export { MockLanguageModelV2, MockLanguageModelV3, MockLanguageModelV4 };
 export { convertArrayToReadableStream, convertArrayToReadableStreamV3, convertArrayToReadableStreamV4 };

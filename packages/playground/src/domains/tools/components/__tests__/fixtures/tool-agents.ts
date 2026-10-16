@@ -17,8 +17,6 @@ const baseAgent: GetAgentResponse = {
   modelVersion: 'v2',
   modelList: undefined,
   defaultOptions: {},
-  defaultGenerateOptionsLegacy: {},
-  defaultStreamOptionsLegacy: {},
 };
 
 /** Two agents share `refundUser`; a third doesn't have it. */

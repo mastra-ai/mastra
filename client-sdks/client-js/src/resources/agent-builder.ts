@@ -251,34 +251,6 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Observes an existing agent builder action run stream using legacy streaming API.
-   * Replays cached execution from the beginning, then continues with live stream.
-   * This calls `/agent-builder/:actionId/observe-stream-legacy`.
-   */
-  async observeStreamLegacy(params: {
-    runId: string;
-  }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
-    const searchParams = new URLSearchParams();
-    searchParams.set('runId', params.runId);
-
-    const url = `/agent-builder/${this.actionId}/observe-stream-legacy?${searchParams.toString()}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to observe agent builder action stream legacy: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    return response.body.pipeThrough(this.createRecordParserTransform());
-  }
-
-  /**
    * Resumes a suspended agent builder action and streams the results.
    * This calls `/agent-builder/:actionId/resume-stream`.
    */

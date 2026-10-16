@@ -1471,7 +1471,7 @@ describe('useChat optimistic pending user message', () => {
         message: 'look at this',
         threadId: 'thread-1',
         coreUserMessages: [
-          { role: 'user', content: [{ type: 'image', image: 'https://example.com/cat.png', mimeType: 'image/png' }] },
+          { role: 'user', content: [{ type: 'image', image: 'https://example.com/cat.png', mediaType: 'image/png' }] },
         ],
       });
     });

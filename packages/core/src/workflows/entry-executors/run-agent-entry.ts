@@ -49,23 +49,6 @@ export function resolveRegisteredAgent<T>(agent: T, mastra?: Mastra): T {
 }
 
 /**
- * Returns the agent to run through `streamLegacy()`. v1 models have no durable
- * execution path, and a durable wrapper's inherited `streamLegacy()` would skip
- * the wrapped agent's own config (processors, memory, tools), so a wrapper is
- * unwrapped to the agent it wraps. Warns because the step runs non-durably.
- */
-export function resolveLegacyAgent<T>(agent: T, mastra?: Mastra): T {
-  if (!isDurableAgentLike(agent)) return agent;
-  mastra
-    ?.getLogger()
-    ?.warn(
-      `Agent "${agent.id}" is durable but uses a legacy v1 model, which has no durable execution path, so the step runs it non-durably.`,
-    );
-  const inner: unknown = agent.agent;
-  return (inner !== agent ? inner : agent) as T;
-}
-
-/**
  * Runs a declarative `agent` entry: resolves the agent (inline handle, else the
  * Mastra registry), streams the prompt through it, forwards stream chunks, and
  * returns either the structured output or `{ text }`.
@@ -90,18 +73,7 @@ export async function runAgentEntry(
   // engine (see getEntryRetries); everything else is passed to the agent run.
   const { retries: _retries, scorers: _scorers, metadata: _metadata, ...agentOptions } = (entry.options ?? {}) as any;
 
-  const {
-    inputData,
-    runId,
-    [PUBSUB_SYMBOL]: pubsub,
-    [STREAM_FORMAT_SYMBOL]: streamFormat,
-    requestContext,
-    actor,
-    abortSignal,
-    abort,
-    writer,
-    ...rest
-  } = ctx;
+  const { inputData, runId, requestContext, actor, abortSignal, abort, writer, ...rest } = ctx;
   const observabilityContext = resolveObservabilityContext(rest);
   const resolvedActor = resolveEntryActor(agentOptions, actor);
   let streamPromise = {} as {
@@ -148,52 +120,33 @@ export async function runAgentEntry(
   let cleanup: (() => void) | undefined;
 
   try {
-    if (
-      (await agent.getModel({ requestContext })).specificationVersion === 'v1' &&
-      typeof agent.streamLegacy === 'function'
-    ) {
-      const legacyAgent = resolveLegacyAgent(agent, registry);
-      const { fullStream } = await legacyAgent.streamLegacy((inputData as { prompt: string }).prompt, {
-        ...agentOptions,
-        requestContext,
-        actor: resolvedActor,
-        ...observabilityContext,
-        onFinish: handleFinish,
-        abortSignal,
-      });
-      stream = fullStream as any;
-    } else {
-      const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
-        ...agentOptions,
-        requestContext,
-        actor: resolvedActor,
-        ...observabilityContext,
-        onFinish: handleFinish,
-        abortSignal,
-      });
-      const isDurableStreamResult =
-        typeof streamResult.cleanup === 'function' && streamResult.output && typeof streamResult.output === 'object';
-      const modelOutput = isDurableStreamResult ? streamResult.output : streamResult;
-      cleanup = isDurableStreamResult ? streamResult.cleanup : undefined;
+    const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
+      ...agentOptions,
+      requestContext,
+      actor: resolvedActor,
+      ...observabilityContext,
+      onFinish: handleFinish,
+      abortSignal,
+    });
+    const isDurableStreamResult =
+      typeof streamResult.cleanup === 'function' && streamResult.output && typeof streamResult.output === 'object';
+    const modelOutput = isDurableStreamResult ? streamResult.output : streamResult;
+    cleanup = isDurableStreamResult ? streamResult.cleanup : undefined;
 
-      // handleFinish (the agent's onFinish) is the sole source of truth for the
-      // final text — the success side of .text is intentionally a no-op.
-      // `modelOutput.text` can resolve with '' if a downstream output-processor
-      // throws inside the base output's try/catch (see output.ts:970-973,978-981)
-      // and it fires BEFORE handleFinish, so racing here would poison
-      // streamPromise. Only the rejection channel below is wired up so genuine
-      // stream errors still propagate.
-      void modelOutput.text.then(
-        () => {},
-        (err: unknown) => streamPromise.reject(err),
-      );
-      stream = modelOutput.fullStream as ReadableStream<ChunkType>;
-    }
+    // handleFinish (the agent's onFinish) is the sole source of truth for the
+    // final text — the success side of .text is intentionally a no-op.
+    // `modelOutput.text` can resolve with '' if a downstream output-processor
+    // throws inside the base output's try/catch (see output.ts:970-973,978-981)
+    // and it fires BEFORE handleFinish, so racing here would poison
+    // streamPromise. Only the rejection channel below is wired up so genuine
+    // stream errors still propagate.
+    void modelOutput.text.then(
+      () => {},
+      (err: unknown) => streamPromise.reject(err),
+    );
+    stream = modelOutput.fullStream as ReadableStream<ChunkType>;
 
-    const tripwireChunk =
-      streamFormat === 'legacy'
-        ? await bridgeLegacyWatchEvents({ stream, pubsub, runId, toolData })
-        : await consumeStreamForTripwire(stream, writer);
+    const tripwireChunk = await consumeStreamForTripwire(stream, writer);
 
     // If a tripwire was detected, throw TripWire to abort the workflow step
     if (tripwireChunk) {
@@ -239,58 +192,6 @@ export async function runAgentEntry(
   } finally {
     cleanup?.();
   }
-}
-
-/**
- * Legacy-format watch-event bridge: instead of forwarding chunks to the step
- * writer, mirrors the agent stream onto the run's pubsub watch channel as
- * `tool-call-streaming-*` / `tool-call-delta` events (the shape v1 watchers
- * expect). Returns the tripwire chunk if one was seen, else `null`.
- */
-async function bridgeLegacyWatchEvents({
-  stream,
-  pubsub,
-  runId,
-  toolData,
-}: {
-  stream: ReadableStream<any>;
-  pubsub: PubSub;
-  runId: string;
-  toolData: { name: string; args: unknown };
-}): Promise<any> {
-  let tripwireChunk: any = null;
-  await pubsub.publish(`workflow.events.v2.${runId}`, {
-    type: 'watch',
-    runId,
-    data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-  });
-  try {
-    for await (const chunk of stream) {
-      if (chunk.type === 'tripwire') {
-        tripwireChunk = chunk;
-        break;
-      }
-      if (chunk.type === 'text-delta') {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-        });
-      }
-    }
-  } finally {
-    // Watchers pair streaming-start with streaming-finish; publish it even
-    // when iteration throws or breaks early so they never hang open. Swallow
-    // publish failures here so they can't mask the original error.
-    await pubsub
-      .publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-      })
-      .catch(() => {});
-  }
-  return tripwireChunk;
 }
 
 /**

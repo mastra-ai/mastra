@@ -5,8 +5,7 @@ export type {
   MastraMessageContentV2,
   MastraMessagePart,
   MastraStepStartPart,
-  UIMessageV4Part,
-  UIMessageWithMetadata,
+  MastraBasePart,
   MemoryInfo,
 } from './types';
 export { serializeMessage, deserializeMessage, serializeMessages, deserializeMessages } from './serialization';

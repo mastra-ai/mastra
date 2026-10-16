@@ -1,6 +1,11 @@
-import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
-
 import type { AgentExecutionOptions } from '../agent/agent.types';
+import type {
+  AssistantContent,
+  LegacyCoreMessage as CoreMessage,
+  ToolContent,
+  UserContent,
+} from '../agent/message-list/state/legacy-shapes';
+
 import type { AgentConfig } from '../agent/types';
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
@@ -15,7 +20,7 @@ import type { VectorFilter } from '../vector/filter/base';
 import type { MemoryRunStateAccessor } from './run-state';
 import type { MemoryProcessor } from '.';
 
-export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
+export type { UIMessage as AiMessageType } from '@internal/ai-sdk-v5';
 export type { MastraLanguageModel };
 
 // Types for the memory system

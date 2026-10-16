@@ -589,10 +589,6 @@ export interface InngestAgent<TOutput = undefined> {
   listWorkflows(...args: any[]): any;
   /** Get default execution options. Forwarded to the underlying Agent. */
   getDefaultOptions(...args: any[]): any;
-  /** Get legacy generate options. Forwarded to the underlying Agent. */
-  getDefaultGenerateOptionsLegacy(...args: any[]): any;
-  /** Get legacy stream options. Forwarded to the underlying Agent. */
-  getDefaultStreamOptionsLegacy(...args: any[]): any;
   /** Get available models. Forwarded to the underlying Agent. */
   getModelList(...args: any[]): any;
   /** Get configured processor workflows. Forwarded to the underlying Agent. */

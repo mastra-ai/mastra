@@ -18,7 +18,6 @@ const modelSettingsSchema = z.object({
   topP: clearable(z.number()),
   seed: clearable(z.number()),
   providerOptions: clearable(z.record(z.string(), z.record(z.string(), z.json()))),
-  chatWithGenerateLegacy: clearable(z.boolean()),
   chatWithGenerate: clearable(z.boolean()),
   chatWithLegacyStream: clearable(z.boolean()),
   requireToolApproval: clearable(z.boolean()),

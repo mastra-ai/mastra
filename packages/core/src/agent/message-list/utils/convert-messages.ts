@@ -1,8 +1,7 @@
-import type * as AIV4 from '@internal/ai-sdk-v4';
 import type * as AIV5 from '@internal/ai-sdk-v5';
 import type * as AIV6 from '@internal/ai-v6';
 
-import type { MastraDBMessage, UIMessageWithMetadata, MessageListInput } from '../index';
+import type { MastraDBMessage, MessageListInput } from '../index';
 
 import { MessageList } from '../index';
 
@@ -10,14 +9,12 @@ import { MessageList } from '../index';
  * Available output formats for message conversion.
  *
  * @remarks
- * - `Mastra.V2` - Current database storage format, compatible with AI SDK v4
- * - `AIV4.UI` - AI SDK v4 UIMessage format (for frontend components)
- * - `AIV4.Core` - AI SDK v4 CoreMessage format (for LLM API calls)
+ * - `Mastra.V2` - Current database storage format
  * - `AIV5.UI` - AI SDK v5 UIMessage format (for frontend components)
  * - `AIV5.Model` - AI SDK v5 ModelMessage format (for LLM API calls)
  * - `AIV6.UI` - AI SDK v6 UIMessage format (for frontend components)
  */
-export type OutputFormat = 'Mastra.V2' | 'AIV4.UI' | 'AIV4.Core' | 'AIV5.UI' | 'AIV5.Model' | 'AIV6.UI';
+export type OutputFormat = 'Mastra.V2' | 'AIV5.UI' | 'AIV5.Model' | 'AIV6.UI';
 
 class MessageConverter {
   private messageList: MessageList;
@@ -35,18 +32,6 @@ class MessageConverter {
    * @returns Array of messages in Mastra V2 format, used for database storage
    */
   to(format: 'Mastra.V2'): MastraDBMessage[];
-  /**
-   * Convert messages to AI SDK v4 UIMessage format.
-   * @param format - The format 'AIV4.UI'
-   * @returns Array of UIMessages for use with AI SDK v4 frontend components
-   */
-  to(format: 'AIV4.UI'): UIMessageWithMetadata[] | AIV4.UIMessage[];
-  /**
-   * Convert messages to AI SDK v4 CoreMessage format.
-   * @param format - The format 'AIV4.Core'
-   * @returns Array of CoreMessages for AI SDK v4 LLM API calls
-   */
-  to(format: 'AIV4.Core'): AIV4.CoreMessage[];
   /**
    * Convert messages to AI SDK v5 UIMessage format.
    * @param format - The format 'AIV5.UI'
@@ -70,10 +55,6 @@ class MessageConverter {
       // Old format keys (backward compatibility)
       case 'Mastra.V2':
         return this.messageList.get.all.db();
-      case 'AIV4.UI':
-        return this.messageList.get.all.aiV4.ui();
-      case 'AIV4.Core':
-        return this.messageList.get.all.aiV4.core();
       case 'AIV5.UI':
         return this.messageList.get.all.aiV5.ui();
       case 'AIV5.Model':
@@ -90,7 +71,6 @@ class MessageConverter {
  * Convert messages from any supported format to another format.
  *
  * @param messages - Input messages in any supported format. Accepts:
- *   - AI SDK v4 formats: UIMessage, CoreMessage, Message
  *   - AI SDK v5 formats: UIMessage, ModelMessage
  *   - Mastra formats: MastraMessageV1 (input only), MastraDBMessage
  *   - Simple strings (will be converted to user messages)
@@ -102,9 +82,6 @@ class MessageConverter {
  * ```typescript
  * import { convertMessages } from '@mastra/core/agent';
  *
- * // Convert AI SDK v5 UI messages to v4 Core messages
- * const v4CoreMessages = convertMessages(v5UIMessages).to('AIV4.Core');
- *
  * // Convert database messages (Mastra V2) to AI SDK v5 UI messages for frontend
  * const v5UIMessages = convertMessages(dbMessages).to('AIV5.UI');
  *
@@ -114,8 +91,8 @@ class MessageConverter {
  * // Convert simple strings to formatted messages
  * const messages = convertMessages(['Hello', 'How are you?']).to('AIV5.UI');
  *
- * // Convert v4 UI messages to v5 Model messages for LLM calls
- * const modelMessages = convertMessages(v4UIMessages).to('AIV5.Model');
+ * // Convert v5 UI messages to v5 Model messages for LLM calls
+ * const modelMessages = convertMessages(v5UIMessages).to('AIV5.Model');
  * ```
  *
  * @remarks

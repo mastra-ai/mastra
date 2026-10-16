@@ -29,15 +29,6 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(llmPrompt.map(m => m.role)).toEqual(['system', 'assistant', 'user']);
     });
 
-    it('aiV4.prompt() and aiV4.llmPrompt() keep a leading assistant turn', () => {
-      const list = new MessageList();
-      list.add({ role: 'assistant', content: 'Previous response' }, 'memory');
-      list.add({ role: 'user', content: 'Current input' }, 'input');
-
-      expect(list.get.all.aiV4.prompt().map(m => m.role)).toEqual(['assistant', 'user']);
-      expect(list.get.all.aiV4.llmPrompt().map(m => m.role)).toEqual(['assistant', 'user']);
-    });
-
     it('should pass through empty message list unchanged', async () => {
       const list = new MessageList();
 
@@ -488,7 +479,6 @@ describe('MessageList - Gemini Compatibility', () => {
 
       expect(list.get.all.aiV5.prompt().map(m => m.role)).toEqual(['system']);
       expect((await list.get.all.aiV5.llmPrompt()).map(m => m.role)).toEqual(['system']);
-      expect(list.get.all.aiV4.prompt().map(m => m.role)).toEqual(['system']);
     });
   });
 

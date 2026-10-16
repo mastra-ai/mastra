@@ -2,7 +2,6 @@ import { z } from 'zod/v4';
 import type { Agent } from '../agent/agent';
 import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { SubAgent } from '../agent/subagent';
-import type { AgentStreamOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { Classifier, ClassifierQuestions } from '../classifier';
 import type { MastraScorers } from '../evals';
@@ -21,9 +20,8 @@ import type {
 } from './types';
 
 // Options that can be passed when wrapping an agent with createStep
-// These work for both stream() (v2) and streamLegacy() (v1) methods
 export type AgentStepOptions<TOUTPUT> = Omit<
-  AgentExecutionOptions<TOUTPUT> & AgentStreamOptions,
+  AgentExecutionOptions<TOUTPUT>,
   | 'format'
   | 'tracingContext'
   | 'requestContext'

@@ -1748,7 +1748,7 @@ describe('convertToV1Messages', () => {
     messageList.add(v2Messages, 'memory');
 
     // Get the core messages (what would be sent to LLM)
-    const coreMessages = messageList.get.all.core();
+    const coreMessages = messageList.get.all.aiV5.model();
 
     // Check if tool calls and text are properly separated in core messages
     // This is critical for the AI to be able to reference tool history
@@ -1844,7 +1844,7 @@ describe('convertToV1Messages', () => {
     messageList.add(newUserMessage, 'user');
 
     // Get what would be sent to the LLM (this is what shows in traces)
-    const promptMessages = messageList.get.all.prompt();
+    const promptMessages = messageList.get.all.aiV5.prompt();
 
     // Verify tool history is present
     const hasToolCall = promptMessages.some(

@@ -19,8 +19,6 @@ const stream = await agent.stream('message for agent')
 
 :::note
 
-**Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.streamLegacy()`](./streamLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
-
 :::
 
 ## Parameters
@@ -999,7 +997,7 @@ Exclusions apply after `experimentalTransform`, so transforms still receive the 
 
 Each [thread subscription](/reference/agents/agent#subscribetothreadoptions) has its own exclusion policy, independent of the initiating stream.
 
-The same policy applies to `resumeStream()`, `untilIdle` continuations, and the deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` methods, including durable agents. Shared execution options also accept `hideSignals` on `generate()` and `resumeGenerate()`, but it doesn't filter their returned results. This option isn't available on HTTP or client-js request options or legacy `streamLegacy()` APIs.
+The same policy applies to `resumeStream()`, `untilIdle` continuations, and the deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` methods, including durable agents. Shared execution options also accept `hideSignals` on `generate()` and `resumeGenerate()`, but it doesn't filter their returned results. This option isn't available on HTTP or client-js request options.
 
 Unlike streams, [memory recall](/reference/memory/recall) hides reminders by default for compatibility. Recall exclusions match stored types exactly rather than normalizing aliases. Use `['reactive', 'system-reminder']` to exclude both reminder representations across surfaces.
 

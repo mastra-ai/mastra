@@ -13,7 +13,6 @@ import {
   workflowRunsResponseSchema,
   workflowInfoSchema,
   listWorkflowsResponseSchema,
-  streamLegacyAgentBuilderBodySchema,
   workflowRunResultSchema,
   workflowRunResultQuerySchema,
 } from '../schemas/agent-builder';
@@ -554,83 +553,6 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
     } catch (error) {
       logger.error('Error cancelling agent builder action run', { error, actionId });
       return handleError(error, 'Error cancelling agent builder action run');
-    } finally {
-      WorkflowRegistry.cleanup();
-    }
-  },
-});
-
-// Legacy routes (deprecated)
-export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agent-builder/:actionId/stream-legacy',
-  responseType: 'stream',
-  pathParamSchema: actionIdPathParams,
-  queryParamSchema: runIdSchema,
-  bodySchema: streamLegacyAgentBuilderBodySchema,
-  responseSchema: streamResponseSchema,
-  summary: '[DEPRECATED] Stream agent-builder action with legacy format',
-  description:
-    'Legacy endpoint for streaming agent-builder action execution. Use /agent-builder/:actionId/stream instead.',
-  tags: ['Agent Builder', 'Legacy'],
-  requiresAuth: true,
-  handler: async ctx => {
-    const { mastra, actionId, runId, requestContext } = ctx;
-    const logger = mastra.getLogger();
-    try {
-      await registerAgentBuilderWorkflows(mastra);
-
-      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
-        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
-      }
-
-      logger.info('Streaming agent builder action (legacy)', { actionId, runId });
-
-      return await workflows.STREAM_LEGACY_WORKFLOW_ROUTE.handler({
-        ...ctx,
-        workflowId: actionId,
-        requestContext,
-      });
-    } catch (error) {
-      logger.error('Error streaming agent builder action (legacy)', { error, actionId });
-      return handleError(error, 'Error streaming agent builder action');
-    } finally {
-      WorkflowRegistry.cleanup();
-    }
-  },
-});
-
-export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agent-builder/:actionId/observe-stream-legacy',
-  responseType: 'stream',
-  pathParamSchema: actionIdPathParams,
-  queryParamSchema: runIdSchema,
-  responseSchema: streamResponseSchema,
-  summary: '[DEPRECATED] Observe agent-builder action stream with legacy format',
-  description:
-    'Legacy endpoint for observing agent-builder action stream. Use /agent-builder/:actionId/observe instead.',
-  tags: ['Agent Builder', 'Legacy'],
-  requiresAuth: true,
-  handler: async ctx => {
-    const { mastra, actionId, runId } = ctx;
-    const logger = mastra.getLogger();
-    try {
-      await registerAgentBuilderWorkflows(mastra);
-
-      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
-        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
-      }
-
-      logger.info('Observing agent builder action stream (legacy)', { actionId, runId });
-
-      return await workflows.OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE.handler({
-        ...ctx,
-        workflowId: actionId,
-      });
-    } catch (error) {
-      logger.error('Error observing agent builder action stream (legacy)', { error, actionId });
-      return handleError(error, 'Error observing agent builder action stream');
     } finally {
       WorkflowRegistry.cleanup();
     }

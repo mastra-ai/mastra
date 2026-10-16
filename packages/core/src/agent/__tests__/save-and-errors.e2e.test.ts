@@ -1,7 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -22,13 +21,11 @@ afterAll(() => mock.saveAndStop());
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
-function saveAndErrorE2ETests(version: 'v1' | 'v2') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
+function saveAndErrorE2ETests(version: 'v2') {
+  let openaiModel: LanguageModelV2;
 
   beforeEach(() => {
-    if (version === 'v1') {
-      openaiModel = openai('gpt-4o');
-    } else {
+    {
       openaiModel = openai_v5('gpt-4o');
     }
   });
@@ -78,26 +75,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
         let stepCount = 0;
         let caught = false;
         try {
-          if (version === 'v1') {
-            await agent.generateLegacy(
-              'Please echo this and then use the error tool. Be verbose and take multiple steps.',
-              {
-                threadId: 'thread-partial-rescue-generate',
-                resourceId: 'resource-partial-rescue-generate',
-                experimental_continueSteps: true,
-                savePerStep: true,
-                onStepFinish: (result: any) => {
-                  if (result.toolCalls && result.toolCalls.length > 1) {
-                    throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                  }
-                  stepCount++;
-                  if (stepCount === 2) {
-                    throw new Error('Simulated error in onStepFinish');
-                  }
-                },
-              },
-            );
-          } else {
+          {
             await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
               memory: {
                 thread: 'thread-partial-rescue-generate',
@@ -177,13 +155,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
           tools: { echoTool },
         });
 
-        if (version === 'v1') {
-          await agent.generateLegacy('Echo: Please echo this long message and explain why.', {
-            threadId: 'thread-echo-generate',
-            resourceId: 'resource-echo-generate',
-            savePerStep: true,
-          });
-        } else {
+        {
           await agent.generate('Echo: Please echo this long message and explain why.', {
             memory: {
               thread: 'thread-echo-generate',
@@ -252,16 +224,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
           tools: { echoTool, uppercaseTool },
         });
 
-        if (version === 'v1') {
-          await agent.generateLegacy(
-            'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
-            {
-              threadId: 'thread-multi-generate',
-              resourceId: 'resource-multi-generate',
-              savePerStep: true,
-            },
-          );
-        } else {
+        {
           await agent.generate(
             'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
             {
@@ -295,7 +258,6 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
   });
 }
 
-saveAndErrorE2ETests('v1');
 saveAndErrorE2ETests('v2');
 
 describe('stream destructuring support', () => {

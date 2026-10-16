@@ -1,9 +1,8 @@
-import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4';
-import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { deepEqual } from '../../../utils/deep-equal';
-import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
+import { AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import { categorizeFileData } from '../prompt/image-utils';
@@ -205,47 +204,6 @@ function splitResponsesToolItemReferences(modelMessages: AIV5Type.ModelMessage[]
 }
 
 /**
- * Sanitizes AIV4 UI messages by filtering out incomplete tool calls.
- * Removes messages with empty parts arrays after sanitization.
- */
-export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
-  const msgs = messages
-    .map(m => {
-      if (m.parts.length === 0) return false;
-      const safeParts = m.parts.filter(p => {
-        // Mastra-only record of a terminal failure. It exists for DB/UI history
-        // and must never reach a provider. Cast because the v4 UI part union has
-        // no `error` member even though the adapter passes the part through.
-        if ((p as { type: string }).type === 'error') return false;
-
-        return (
-          p.type !== `tool-invocation` ||
-          // calls and partial-calls should be updated to be results at this point
-          // if they haven't we can't send them back to the llm and need to remove them.
-          (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`)
-        );
-      });
-
-      // fully remove this message if it has an empty parts array after stripping out incomplete tool calls.
-      if (!safeParts.length) return false;
-
-      const sanitized = {
-        ...m,
-        parts: safeParts,
-      };
-
-      // ensure toolInvocations are also updated to only show results
-      if (`toolInvocations` in m && m.toolInvocations) {
-        sanitized.toolInvocations = m.toolInvocations.filter(t => t.state === `result`);
-      }
-
-      return sanitized;
-    })
-    .filter((m): m is UIMessageV4 => Boolean(m));
-  return msgs;
-}
-
-/**
  * Sanitizes AIV5 UI messages by filtering out streaming states, data-* parts, empty text parts, and optionally incomplete tool calls.
  * Handles legacy data by filtering empty text parts that may exist in pre-existing DB records.
  */
@@ -425,69 +383,6 @@ export function addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Ty
     }
   }
   return messages;
-}
-
-/**
- * Converts AIV4 UI messages to AIV4 Core messages.
- *
- * Provider file IDs (e.g. OpenAI Files API "file-...") stored in
- * `experimental_attachments` would make AI SDK v4's internal `attachmentsToParts`
- * throw `Invalid URL: file-...` inside `convertToCoreMessages`. Strip them before
- * conversion and re-append them as file parts on the resulting user core message
- * so the IDs survive untouched.
- */
-export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreMessageV4[] {
-  const sanitized = sanitizeAIV4UIMessages(messages);
-
-  type AttachmentV4 = NonNullable<UIMessageV4['experimental_attachments']>[number];
-  // Keyed by the user message's position among user messages: each user UI message
-  // converts to exactly one user core message, in order.
-  const fileIdAttachmentsByUserIndex = new Map<number, AttachmentV4[]>();
-  let userIndex = 0;
-
-  const prepared = sanitized.map(m => {
-    if (m.role !== 'user') return m;
-    const currentUserIndex = userIndex++;
-
-    if (!m.experimental_attachments?.length) return m;
-
-    const fileIdAttachments = m.experimental_attachments.filter(
-      a => categorizeFileData(a.url, a.contentType).type === 'providerFileId',
-    );
-    if (!fileIdAttachments.length) return m;
-
-    fileIdAttachmentsByUserIndex.set(currentUserIndex, fileIdAttachments);
-    const remaining = m.experimental_attachments.filter(a => !fileIdAttachments.includes(a));
-    return {
-      ...m,
-      experimental_attachments: remaining.length ? remaining : undefined,
-    };
-  });
-
-  const coreMessages = convertToCoreMessagesV4(prepared);
-  if (!fileIdAttachmentsByUserIndex.size) return coreMessages;
-
-  let coreUserIndex = 0;
-  return coreMessages.map(coreMessage => {
-    if (coreMessage.role !== 'user') return coreMessage;
-    const fileIdAttachments = fileIdAttachmentsByUserIndex.get(coreUserIndex++);
-    if (!fileIdAttachments) return coreMessage;
-
-    const fileParts = fileIdAttachments.map(a => ({
-      type: 'file' as const,
-      data: a.url,
-      mimeType: a.contentType || 'application/octet-stream',
-    }));
-    const existingContent =
-      typeof coreMessage.content === 'string'
-        ? [{ type: 'text' as const, text: coreMessage.content }]
-        : coreMessage.content;
-
-    return {
-      ...coreMessage,
-      content: [...existingContent, ...fileParts],
-    };
-  });
 }
 
 /**
@@ -787,44 +682,35 @@ export function aiV5UIMessagesToAIV5ModelMessages(
 }
 
 /**
- * Converts AIV4 Core messages to AIV5 Model messages.
+ * Normalizes a system message input (string, MastraDBMessage, or AI SDK model message)
+ * to an AI SDK v5 system model message.
  */
-export function aiV4CoreMessagesToAIV5ModelMessages(
-  messages: CoreMessageV4[],
-  source: MessageSource,
-  adapterContext: AdapterContext,
-  dbMessages: MastraDBMessage[],
-): AIV5Type.ModelMessage[] {
-  return aiV5UIMessagesToAIV5ModelMessages(
-    messages.map(m => AIV4Adapter.fromCoreMessage(m, adapterContext, source)).map(m => AIV5Adapter.toUIMessage(m)),
-    dbMessages,
-  );
-}
-
-/**
- * Converts various message formats to AIV4 CoreMessage format for system messages.
- * Supports string, MastraDBMessage, or AI SDK message types.
- */
-export function systemMessageToAIV4Core(
-  message: CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | MastraDBMessage | string,
-): CoreMessageV4 {
+export function toSystemMessage(
+  message: AIV5Type.ModelMessage | AIV6Type.ModelMessage | MastraDBMessage | string,
+): AIV5Type.SystemModelMessage {
   if (typeof message === `string`) {
     return { role: 'system', content: message };
   }
 
-  if (TypeDetector.isAIV6CoreMessage(message)) {
-    const dbMsg = AIV6Adapter.fromModelMessage(message as AIV6Type.ModelMessage, 'system');
-    return AIV4Adapter.systemToV4Core(dbMsg);
-  }
-
-  if (TypeDetector.isAIV5CoreMessage(message)) {
-    const dbMsg = AIV5Adapter.fromModelMessage(message as AIV5Type.ModelMessage, 'system');
-    return AIV4Adapter.systemToV4Core(dbMsg);
-  }
-
   if (TypeDetector.isMastraDBMessage(message)) {
-    return AIV4Adapter.systemToV4Core(message);
+    if (message.role !== `system` || !message.content.content) {
+      throw new MastraError({
+        id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Invalid system message format. System messages must include 'role' and 'content' properties. The content should be a string.`,
+        details: { receivedMessage: JSON.stringify(message, null, 2) },
+      });
+    }
+    return {
+      role: 'system',
+      content: message.content.content,
+      ...(message.content.providerMetadata ? { providerOptions: message.content.providerMetadata } : {}),
+    };
   }
 
-  return message;
+  const dbMsg = TypeDetector.isAIV6CoreMessage(message)
+    ? AIV6Adapter.fromModelMessage(message as AIV6Type.ModelMessage, 'system')
+    : AIV5Adapter.fromModelMessage(message as AIV5Type.ModelMessage, 'system');
+  return toSystemMessage(dbMsg);
 }

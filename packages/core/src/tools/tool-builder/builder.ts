@@ -1071,7 +1071,7 @@ export class CoreToolBuilder extends MastraBase {
     if (model && !optsOutOfStrictSchemas) {
       // Respect the model's own capability flag; do not disable it based solely on specificationVersion.
       const supportsStructuredOutputs =
-        'supportsStructuredOutputs' in model ? (model.supportsStructuredOutputs ?? false) : false;
+        'supportsStructuredOutputs' in model && model.supportsStructuredOutputs === true;
 
       const modelInfo = {
         modelId: model.modelId,

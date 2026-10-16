@@ -1,5 +1,5 @@
-import { Agent, isSupportedLanguageModel } from '@mastra/core/agent';
-import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import { PromptTemplate, defaultSummaryPrompt } from '../prompts';
 import type { SummaryPrompt } from '../prompts';
 import type { BaseNode } from '../schema';
@@ -22,7 +22,7 @@ type ExtractSummary = {
  * @returns Array of summary results
  */
 export class SummaryExtractor extends BaseExtractor {
-  private llm: MastraLanguageModel | MastraLegacyLanguageModel;
+  private llm: MastraLanguageModel;
   summaries: string[];
   promptTemplate: SummaryPrompt;
   private selfSummary: boolean;
@@ -78,13 +78,9 @@ export class SummaryExtractor extends BaseExtractor {
     });
 
     let summary = '';
-    if (isSupportedLanguageModel(this.llm)) {
-      const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
-      summary = result.text;
-    } else {
-      const result = await miniAgent.generateLegacy([{ role: 'user', content: prompt }]);
-      summary = result.text;
-    }
+
+    const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
+    summary = result.text;
 
     if (!summary) {
       console.warn('Summary extraction LLM output returned empty');

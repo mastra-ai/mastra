@@ -1,4 +1,3 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../logger';
@@ -6,6 +5,7 @@ import { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import { mergeVersionOverrides } from '../../mastra/types';
 import { RequestContext, MASTRA_VERSIONS_KEY } from '../../request-context';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
 
 // ---------------------------------------------------------------------------
@@ -39,17 +39,6 @@ function makeMockModel(responseText: string) {
   });
 }
 
-function makeMockModelV1(responseText: string) {
-  return new MockLanguageModelV1({
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
-      usage: { promptTokens: 5, completionTokens: 10 },
-      text: responseText,
-    }),
-  });
-}
-
 function makeSupervisorModel(subAgentKey: string, prompt: string) {
   let callCount = 0;
   return new MockLanguageModelV2({
@@ -79,37 +68,6 @@ function makeSupervisorModel(subAgentKey: string, prompt: string) {
         text: 'Done',
         content: [{ type: 'text' as const, text: 'Done' }],
         warnings: [],
-      };
-    },
-  });
-}
-
-function makeSupervisorModelV1(subAgentKey: string, prompt: string) {
-  let callCount = 0;
-  return new MockLanguageModelV1({
-    doGenerate: async () => {
-      callCount++;
-      if (callCount === 1) {
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: undefined,
-          toolCalls: [
-            {
-              toolCallType: 'function' as const,
-              toolCallId: 'call-1',
-              toolName: `agent-${subAgentKey}`,
-              args: JSON.stringify({ prompt }),
-            },
-          ],
-        };
-      }
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Done',
       };
     },
   });
@@ -345,35 +303,6 @@ describe('Sub-agent version resolution', () => {
     // Verify the versioned agent was invoked, not the original
     expect(versionedGenerateSpy).toHaveBeenCalled();
     expect(originalGenerateSpy).not.toHaveBeenCalled();
-  });
-
-  it('uses generateLegacy for v1 sub-agents when parent is called with generateLegacy', async () => {
-    const sub = new Agent({
-      id: 'sub-agent',
-      name: 'sub',
-      instructions: 'sub',
-      model: makeMockModelV1('legacy sub response'),
-    });
-
-    const generateLegacySpy = vi.spyOn(sub, 'generateLegacy');
-    const streamLegacySpy = vi.spyOn(sub, 'streamLegacy');
-
-    const supervisor = new Agent({
-      id: 'supervisor',
-      name: 'supervisor',
-      instructions: 'You delegate.',
-      model: makeSupervisorModelV1('sub', 'hello'),
-      agents: { sub },
-    });
-
-    new Mastra({
-      agents: { supervisor, sub },
-    });
-
-    await supervisor.generateLegacy('Do something', { maxSteps: 3 });
-
-    expect(generateLegacySpy).toHaveBeenCalled();
-    expect(streamLegacySpy).not.toHaveBeenCalled();
   });
 
   it('propagates versions through requestContext to sub-agents', async () => {

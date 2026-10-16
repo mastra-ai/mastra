@@ -1,5 +1,4 @@
-import { simulateReadableStream } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
@@ -7,19 +6,10 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 
-function dynamicMemoryTest(version: 'v1' | 'v2') {
+function dynamicMemoryTest(version: 'v2') {
   describe(`${version} - dynamic memory configuration`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Dummy response`,
-        }),
-      });
-    } else {
+    let dummyModel: MockLanguageModelV2;
+    {
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -155,17 +145,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       requestContext.set('environment', 'test');
 
       let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-            },
-          },
-          requestContext,
-        });
-      } else {
+      {
         response = await agent.generate('test message', {
           memory: {
             resource: 'user-1',
@@ -190,26 +170,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       const mockMemory = new MockMemory({ storage });
 
       let model;
-      if (version === 'v1') {
-        model = new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Dynamic' },
-                { type: 'text-delta', textDelta: ' memory' },
-                { type: 'text-delta', textDelta: ' response' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
+      {
         model = new MockLanguageModelV2({
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -256,17 +217,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       let stream;
 
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-stream',
-            },
-          },
-          requestContext,
-        });
-      } else {
+      {
         stream = await agent.stream('test message', {
           memory: {
             resource: 'user-1',
@@ -297,21 +248,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response with jokes! Super!!!!',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
@@ -372,13 +311,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         },
       ];
 
-      if (version === 'v1') {
-        await agent.generateLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-      } else {
+      {
         await agent.generate(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
@@ -402,32 +335,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       const storage = new InMemoryStore();
       const mockMemory = new MockMemory({ storage });
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doStream: async ({ prompt }) => {
             capturedMessages = prompt;
@@ -478,17 +388,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         },
       ];
 
-      if (version === 'v1') {
-        const stream = await agent.streamLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          runId: 'test-run',
-        });
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.textStream) {
-          // Just consume the stream
-        }
-      } else {
+      {
         const stream = await agent.stream(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
@@ -513,32 +413,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
     it('should preserve system messages from user input without memory (stream)', async () => {
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doStream: async ({ prompt }) => {
             capturedMessages = prompt;
@@ -588,13 +465,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         },
       ];
 
-      if (version === 'v1') {
-        const stream = await agent.streamLegacy(testMessages);
-        // Consume the stream to trigger the model call
-        for await (const _chunk of stream.textStream) {
-          // Just consume the stream
-        }
-      } else {
+      {
         const stream = await agent.stream(testMessages);
         // Consume the stream to trigger the model call
         for await (const _chunk of stream.fullStream) {
@@ -616,21 +487,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
     it('should preserve system messages from user input without memory', async () => {
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response with jokes! Super!!!!',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
@@ -690,9 +549,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         },
       ];
 
-      if (version === 'v1') {
-        await agent.generateLegacy(testMessages);
-      } else {
+      {
         await agent.generate(testMessages);
       }
 
@@ -711,21 +568,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
     it('should support system option in generate method', async () => {
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
@@ -772,11 +617,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       // Test generate with system option
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello', {
-          system: 'You must respond in JSON format',
-        });
-      } else {
+      {
         await agent.generate('Hello', {
           system: 'You must respond in JSON format',
         });
@@ -795,37 +636,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
     it('should support system option in stream method', async () => {
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Test response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-          doStream: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'Test response' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { promptTokens: 10, completionTokens: 5 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doStream: async ({ prompt }) => {
             capturedMessages = prompt;
@@ -862,15 +675,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       // Test stream with system option
-      if (version === 'v1') {
-        const streamResult = await agent.streamLegacy('Hello', {
-          system: 'Always be concise',
-        });
-        // Properly consume the v1 stream
-        for await (const _chunk of streamResult.textStream) {
-          // Just consume the stream
-        }
-      } else {
+      {
         const streamResult = await agent.stream('Hello', {
           system: 'Always be concise',
         });
@@ -889,21 +694,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
     it('should work with both instructions override and system option', async () => {
       let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            capturedMessages = prompt;
-            return {
-              text: 'Response',
-              usage: { promptTokens: 10, completionTokens: 5 },
-              finishReason: 'stop',
-              rawCall: { rawPrompt: [], rawSettings: {} },
-            };
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
@@ -949,12 +742,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         model: testModel,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello', {
-          instructions: 'Override instructions',
-          system: 'Additional system context',
-        });
-      } else {
+      {
         await agent.generate('Hello', {
           instructions: 'Override instructions',
           system: 'Additional system context',
@@ -970,9 +758,6 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
     it('should support CoreSystemMessage object in generate method', async () => {
       // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
 
       let capturedMessages: any[] = [];
       const testModel = new MockLanguageModelV2({
@@ -1041,9 +826,6 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
     it('should support SystemModelMessage object in stream method', async () => {
       // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
 
       let capturedMessages: any[] = [];
       const testModel = new MockLanguageModelV2({
@@ -1108,9 +890,6 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
     it('should handle mixed system message types correctly', async () => {
       // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
 
       let capturedMessages: any[] = [];
       const testModel = new MockLanguageModelV2({
@@ -1199,9 +978,6 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
     it('should support arrays of system messages', async () => {
       // Skip this test for v1 as it only applies to VNext methods
-      if (version === 'v1') {
-        return;
-      }
 
       let capturedMessages: any[] = [];
       const testModel = new MockLanguageModelV2({
@@ -1293,5 +1069,4 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
   });
 }
 
-dynamicMemoryTest('v1');
 dynamicMemoryTest('v2');

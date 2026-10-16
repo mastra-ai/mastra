@@ -1,7 +1,7 @@
 import type { ObservabilityContext } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
-import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
+import { embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
@@ -76,7 +76,7 @@ export const vectorQuerySearch = async ({
           providerOptions: providerOptions as Parameters<typeof embedV3>[0]['providerOptions'],
         }),
       });
-    } else if (model.specificationVersion === 'v2') {
+    } else {
       embeddingResult = await embedV2({
         model: model,
         value: queryText,
@@ -85,12 +85,6 @@ export const vectorQuerySearch = async ({
         ...(providerOptions && {
           providerOptions: providerOptions as Parameters<typeof embedV2>[0]['providerOptions'],
         }),
-      });
-    } else {
-      embeddingResult = await embedV1({
-        value: queryText,
-        model: model,
-        maxRetries,
       });
     }
   } catch (err) {

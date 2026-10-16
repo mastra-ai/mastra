@@ -182,7 +182,7 @@ type InputShared_Auxiliary_250 =
           };
     };
 
-type InputShared_Auxiliary_678 =
+type InputShared_Auxiliary_674 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,19 +227,19 @@ type InputShared_Auxiliary_678 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_678[];
+      args: InputShared_Auxiliary_674[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_678;
+      arg: InputShared_Auxiliary_674;
     };
 
-type InputShared_Auxiliary_752 = {
+type InputShared_Auxiliary_748 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_752[] | undefined;
+  children?: InputShared_Auxiliary_748[] | undefined;
 };
 
 type Shared_Auxiliary_764 = {
@@ -1808,7 +1808,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_678[];
+  predicates: InputShared_Auxiliary_674[];
 };
 
 type InputShared_Type_89 = {
@@ -1822,7 +1822,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_678;
+  predicate: InputShared_Auxiliary_674;
 };
 
 type InputShared_Type_90 =
@@ -2353,16 +2353,6 @@ type Shared_Type_6 = {
   modelList?: Shared_Type_2[] | undefined;
   /** Default options for agent execution */
   defaultOptions?: Shared_Type_5 | undefined;
-  defaultGenerateOptionsLegacy?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  defaultStreamOptionsLegacy?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
   requestContextSchema?: string | undefined;
   source?: ('code' | 'stored' | 'fs') | undefined;
   status?: ('draft' | 'published' | 'archived') | undefined;
@@ -13838,205 +13828,6 @@ export interface PostWorkspacesWorkspaceIdSkillsShUpdate_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/generate-legacy
-// ============================================================================
-export type PostAgentsAgentIdGenerateLegacy_PathParams = GetAgentsAgentId_PathParams;
-
-export type PostAgentsAgentIdGenerateLegacy_Body = {
-  messages: unknown[] | string;
-  instructions?: (string | string[] | unknown | unknown[]) | undefined;
-  system?: (string | string[] | unknown | unknown[]) | undefined;
-  context?: unknown[] | undefined;
-  memory?: InputShared_Type_0 | undefined;
-  runId?: string | undefined;
-  savePerStep?: boolean | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  versions?: InputShared_Type_1 | undefined;
-  maxSteps?: number | undefined;
-  stopWhen?: unknown | undefined;
-  model?: string | undefined;
-  providerOptions?:
-    | {
-        [key: string]: {
-          [key: string]: InputShared_Auxiliary_21;
-        };
-      }
-    | undefined;
-  modelSettings?: unknown | undefined;
-  activeTools?: string[] | undefined;
-  toolsets?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  clientTools?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  toolChoice?:
-    | (
-        | ('auto' | 'none' | 'required')
-        | {
-            type: 'tool';
-            toolName: string;
-          }
-      )
-    | undefined;
-  requireToolApproval?: boolean | undefined;
-  scorers?:
-    | (
-        | {
-            [key: string]: unknown;
-          }
-        | {
-            [key: string]: {
-              scorer: string;
-              sampling?: unknown | undefined;
-            };
-          }
-      )
-    | undefined;
-  returnScorerData?: boolean | undefined;
-  tracingOptions?: InputShared_Type_2 | undefined;
-  output?: unknown | undefined;
-  structuredOutput?: InputShared_Type_3 | undefined;
-  untilIdle?:
-    | (
-        | boolean
-        | {
-            maxIdleMs?: number | undefined;
-          }
-      )
-    | undefined;
-  resourceId?: string | undefined;
-  resourceid?: string | undefined;
-  threadId?: string | undefined;
-  [x: string]: unknown;
-};
-
-export type PostAgentsAgentIdGenerateLegacy_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostAgentsAgentIdGenerateLegacy_Request = Simplify<
-  (PostAgentsAgentIdGenerateLegacy_PathParams extends never
-    ? {}
-    : { params: PostAgentsAgentIdGenerateLegacy_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostAgentsAgentIdGenerateLegacy_Body extends never
-      ? {}
-      : {} extends PostAgentsAgentIdGenerateLegacy_Body
-        ? { body?: PostAgentsAgentIdGenerateLegacy_Body }
-        : { body: PostAgentsAgentIdGenerateLegacy_Body })
->;
-
-export interface PostAgentsAgentIdGenerateLegacy_RouteContract {
-  pathParams: PostAgentsAgentIdGenerateLegacy_PathParams;
-  queryParams: never;
-  body: PostAgentsAgentIdGenerateLegacy_Body;
-  request: PostAgentsAgentIdGenerateLegacy_Request;
-  response: PostAgentsAgentIdGenerateLegacy_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /agents/:agentId/stream-legacy
-// ============================================================================
-export type PostAgentsAgentIdStreamLegacy_PathParams = GetAgentsAgentId_PathParams;
-
-export type PostAgentsAgentIdStreamLegacy_Body = PostAgentsAgentIdGenerateLegacy_Body;
-
-export type PostAgentsAgentIdStreamLegacy_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostAgentsAgentIdStreamLegacy_Request = Simplify<
-  (PostAgentsAgentIdStreamLegacy_PathParams extends never ? {} : { params: PostAgentsAgentIdStreamLegacy_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostAgentsAgentIdStreamLegacy_Body extends never
-      ? {}
-      : {} extends PostAgentsAgentIdStreamLegacy_Body
-        ? { body?: PostAgentsAgentIdStreamLegacy_Body }
-        : { body: PostAgentsAgentIdStreamLegacy_Body })
->;
-
-export interface PostAgentsAgentIdStreamLegacy_RouteContract {
-  pathParams: PostAgentsAgentIdStreamLegacy_PathParams;
-  queryParams: never;
-  body: PostAgentsAgentIdStreamLegacy_Body;
-  request: PostAgentsAgentIdStreamLegacy_Request;
-  response: PostAgentsAgentIdStreamLegacy_Response;
-  responseType: 'datastream-response';
-}
-
-// ============================================================================
-// Route: POST /workflows/:workflowId/stream-legacy
-// ============================================================================
-export type PostWorkflowsWorkflowIdStreamLegacy_PathParams = GetWorkflowsWorkflowId_PathParams;
-
-export type PostWorkflowsWorkflowIdStreamLegacy_QueryParams = PostWorkflowsWorkflowIdStream_QueryParams;
-
-export type PostWorkflowsWorkflowIdStreamLegacy_Body = PostWorkflowsWorkflowIdStream_Body;
-
-export type PostWorkflowsWorkflowIdStreamLegacy_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostWorkflowsWorkflowIdStreamLegacy_Request = Simplify<
-  (PostWorkflowsWorkflowIdStreamLegacy_PathParams extends never
-    ? {}
-    : { params: PostWorkflowsWorkflowIdStreamLegacy_PathParams }) &
-    (PostWorkflowsWorkflowIdStreamLegacy_QueryParams extends never
-      ? {}
-      : {} extends PostWorkflowsWorkflowIdStreamLegacy_QueryParams
-        ? { query?: PostWorkflowsWorkflowIdStreamLegacy_QueryParams }
-        : { query: PostWorkflowsWorkflowIdStreamLegacy_QueryParams }) &
-    (PostWorkflowsWorkflowIdStreamLegacy_Body extends never
-      ? {}
-      : {} extends PostWorkflowsWorkflowIdStreamLegacy_Body
-        ? { body?: PostWorkflowsWorkflowIdStreamLegacy_Body }
-        : { body: PostWorkflowsWorkflowIdStreamLegacy_Body })
->;
-
-export interface PostWorkflowsWorkflowIdStreamLegacy_RouteContract {
-  pathParams: PostWorkflowsWorkflowIdStreamLegacy_PathParams;
-  queryParams: PostWorkflowsWorkflowIdStreamLegacy_QueryParams;
-  body: PostWorkflowsWorkflowIdStreamLegacy_Body;
-  request: PostWorkflowsWorkflowIdStreamLegacy_Request;
-  response: PostWorkflowsWorkflowIdStreamLegacy_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /workflows/:workflowId/observe-stream-legacy
-// ============================================================================
-export type PostWorkflowsWorkflowIdObserveStreamLegacy_PathParams = GetWorkflowsWorkflowId_PathParams;
-
-export type PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams = PostWorkflowsWorkflowIdStream_QueryParams;
-
-export type PostWorkflowsWorkflowIdObserveStreamLegacy_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostWorkflowsWorkflowIdObserveStreamLegacy_Request = Simplify<
-  (PostWorkflowsWorkflowIdObserveStreamLegacy_PathParams extends never
-    ? {}
-    : { params: PostWorkflowsWorkflowIdObserveStreamLegacy_PathParams }) &
-    (PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams extends never
-      ? {}
-      : {} extends PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams
-        ? { query?: PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams }
-        : { query: PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
-  pathParams: PostWorkflowsWorkflowIdObserveStreamLegacy_PathParams;
-  queryParams: PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams;
-  body: never;
-  request: PostWorkflowsWorkflowIdObserveStreamLegacy_Request;
-  response: PostWorkflowsWorkflowIdObserveStreamLegacy_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
 // Route: GET /mcp/v0/servers
 // ============================================================================
 export type GetMcpV0Servers_QueryParams = {
@@ -18243,7 +18034,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_752[] | undefined;
+  files?: InputShared_Auxiliary_748[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18301,7 +18092,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_752[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_748[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21415,42 +21206,6 @@ export interface PostAgentBuilderActionIdStream_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agent-builder/:actionId/stream-legacy
-// ============================================================================
-export type PostAgentBuilderActionIdStreamLegacy_PathParams = GetAgentBuilderActionId_PathParams;
-
-export type PostAgentBuilderActionIdStreamLegacy_QueryParams = PostWorkflowsWorkflowIdStream_QueryParams;
-
-export type PostAgentBuilderActionIdStreamLegacy_Body = PostWorkflowsWorkflowIdStartAsync_Body;
-
-export type PostAgentBuilderActionIdStreamLegacy_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostAgentBuilderActionIdStreamLegacy_Request = Simplify<
-  (PostAgentBuilderActionIdStreamLegacy_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdStreamLegacy_PathParams }) &
-    (PostAgentBuilderActionIdStreamLegacy_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStreamLegacy_QueryParams
-        ? { query?: PostAgentBuilderActionIdStreamLegacy_QueryParams }
-        : { query: PostAgentBuilderActionIdStreamLegacy_QueryParams }) &
-    (PostAgentBuilderActionIdStreamLegacy_Body extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdStreamLegacy_Body
-        ? { body?: PostAgentBuilderActionIdStreamLegacy_Body }
-        : { body: PostAgentBuilderActionIdStreamLegacy_Body })
->;
-
-export interface PostAgentBuilderActionIdStreamLegacy_RouteContract {
-  pathParams: PostAgentBuilderActionIdStreamLegacy_PathParams;
-  queryParams: PostAgentBuilderActionIdStreamLegacy_QueryParams;
-  body: PostAgentBuilderActionIdStreamLegacy_Body;
-  request: PostAgentBuilderActionIdStreamLegacy_Request;
-  response: PostAgentBuilderActionIdStreamLegacy_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
 // Route: POST /agent-builder/:actionId/start-async
 // ============================================================================
 export type PostAgentBuilderActionIdStartAsync_PathParams = GetAgentBuilderActionId_PathParams;
@@ -21547,36 +21302,6 @@ export interface PostAgentBuilderActionIdObserve_RouteContract {
   body: never;
   request: PostAgentBuilderActionIdObserve_Request;
   response: PostAgentBuilderActionIdObserve_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agent-builder/:actionId/observe-stream-legacy
-// ============================================================================
-export type PostAgentBuilderActionIdObserveStreamLegacy_PathParams = GetAgentBuilderActionId_PathParams;
-
-export type PostAgentBuilderActionIdObserveStreamLegacy_QueryParams = PostWorkflowsWorkflowIdStream_QueryParams;
-
-export type PostAgentBuilderActionIdObserveStreamLegacy_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostAgentBuilderActionIdObserveStreamLegacy_Request = Simplify<
-  (PostAgentBuilderActionIdObserveStreamLegacy_PathParams extends never
-    ? {}
-    : { params: PostAgentBuilderActionIdObserveStreamLegacy_PathParams }) &
-    (PostAgentBuilderActionIdObserveStreamLegacy_QueryParams extends never
-      ? {}
-      : {} extends PostAgentBuilderActionIdObserveStreamLegacy_QueryParams
-        ? { query?: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams }
-        : { query: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostAgentBuilderActionIdObserveStreamLegacy_RouteContract {
-  pathParams: PostAgentBuilderActionIdObserveStreamLegacy_PathParams;
-  queryParams: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams;
-  body: never;
-  request: PostAgentBuilderActionIdObserveStreamLegacy_Request;
-  response: PostAgentBuilderActionIdObserveStreamLegacy_Response;
   responseType: 'stream';
 }
 
@@ -23966,10 +23691,6 @@ export interface RouteTypes {
   'POST /workspaces/:workspaceId/skills-sh/install': PostWorkspacesWorkspaceIdSkillsShInstall_RouteContract;
   'POST /workspaces/:workspaceId/skills-sh/remove': PostWorkspacesWorkspaceIdSkillsShRemove_RouteContract;
   'POST /workspaces/:workspaceId/skills-sh/update': PostWorkspacesWorkspaceIdSkillsShUpdate_RouteContract;
-  'POST /agents/:agentId/generate-legacy': PostAgentsAgentIdGenerateLegacy_RouteContract;
-  'POST /agents/:agentId/stream-legacy': PostAgentsAgentIdStreamLegacy_RouteContract;
-  'POST /workflows/:workflowId/stream-legacy': PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
-  'POST /workflows/:workflowId/observe-stream-legacy': PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
   'GET /mcp/v0/servers': GetMcpV0Servers_RouteContract;
   'GET /mcp/v0/servers/:id': GetMcpV0ServersId_RouteContract;
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
@@ -24120,11 +23841,9 @@ export interface RouteTypes {
   'GET /agent-builder/:actionId/runs/:runId': GetAgentBuilderActionIdRunsRunId_RouteContract;
   'POST /agent-builder/:actionId/create-run': PostAgentBuilderActionIdCreateRun_RouteContract;
   'POST /agent-builder/:actionId/stream': PostAgentBuilderActionIdStream_RouteContract;
-  'POST /agent-builder/:actionId/stream-legacy': PostAgentBuilderActionIdStreamLegacy_RouteContract;
   'POST /agent-builder/:actionId/start-async': PostAgentBuilderActionIdStartAsync_RouteContract;
   'POST /agent-builder/:actionId/start': PostAgentBuilderActionIdStart_RouteContract;
   'POST /agent-builder/:actionId/observe': PostAgentBuilderActionIdObserve_RouteContract;
-  'POST /agent-builder/:actionId/observe-stream-legacy': PostAgentBuilderActionIdObserveStreamLegacy_RouteContract;
   'POST /agent-builder/:actionId/resume-async': PostAgentBuilderActionIdResumeAsync_RouteContract;
   'POST /agent-builder/:actionId/resume-no-wait': PostAgentBuilderActionIdResumeNoWait_RouteContract;
   'POST /agent-builder/:actionId/resume': PostAgentBuilderActionIdResume_RouteContract;
@@ -24211,9 +23930,6 @@ export interface Client {
   '/agent-builder/:actionId/observe': {
     POST: PostAgentBuilderActionIdObserve_RouteContract;
   };
-  '/agent-builder/:actionId/observe-stream-legacy': {
-    POST: PostAgentBuilderActionIdObserveStreamLegacy_RouteContract;
-  };
   '/agent-builder/:actionId/resume': {
     POST: PostAgentBuilderActionIdResume_RouteContract;
   };
@@ -24243,9 +23959,6 @@ export interface Client {
   };
   '/agent-builder/:actionId/stream': {
     POST: PostAgentBuilderActionIdStream_RouteContract;
-  };
-  '/agent-builder/:actionId/stream-legacy': {
-    POST: PostAgentBuilderActionIdStreamLegacy_RouteContract;
   };
   '/agent-controller': {
     GET: GetAgentController_RouteContract;
@@ -24366,9 +24079,6 @@ export interface Client {
   '/agents/:agentId/generate': {
     POST: PostAgentsAgentIdGenerate_RouteContract;
   };
-  '/agents/:agentId/generate-legacy': {
-    POST: PostAgentsAgentIdGenerateLegacy_RouteContract;
-  };
   '/agents/:agentId/generate/vnext': {
     POST: PostAgentsAgentIdGenerateVnext_RouteContract;
   };
@@ -24431,9 +24141,6 @@ export interface Client {
   };
   '/agents/:agentId/stream': {
     POST: PostAgentsAgentIdStream_RouteContract;
-  };
-  '/agents/:agentId/stream-legacy': {
-    POST: PostAgentsAgentIdStreamLegacy_RouteContract;
   };
   '/agents/:agentId/stream-until-idle': {
     POST: PostAgentsAgentIdStreamUntilIdle_RouteContract;
@@ -25170,9 +24877,6 @@ export interface Client {
   '/workflows/:workflowId/observe': {
     POST: PostWorkflowsWorkflowIdObserve_RouteContract;
   };
-  '/workflows/:workflowId/observe-stream-legacy': {
-    POST: PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
-  };
   '/workflows/:workflowId/restart': {
     POST: PostWorkflowsWorkflowIdRestart_RouteContract;
   };
@@ -25218,9 +24922,6 @@ export interface Client {
   };
   '/workflows/:workflowId/stream': {
     POST: PostWorkflowsWorkflowIdStream_RouteContract;
-  };
-  '/workflows/:workflowId/stream-legacy': {
-    POST: PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
   };
   '/workflows/:workflowId/time-travel': {
     POST: PostWorkflowsWorkflowIdTimeTravel_RouteContract;

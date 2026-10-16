@@ -1,11 +1,11 @@
-import type { TextPart } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import type { TextPart } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';
 import { PIIDetector } from './pii-detector';
@@ -54,23 +54,20 @@ function createMockPIIResult(
   return result;
 }
 
-function setupMockModel(result: PIIDetectionResult | PIIDetectionResult[]): MockLanguageModelV1 {
+function setupMockModel(result: PIIDetectionResult | PIIDetectionResult[]): ReturnType<typeof mockTextModel> {
   const results = Array.isArray(result) ? result : [result];
   let callCount = 0;
 
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
-    doGenerate: async () => {
-      const currentResult = results[callCount % results.length];
-      callCount++;
+  return mockTextModel(async () => {
+    const currentResult = results[callCount % results.length];
+    callCount++;
 
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: JSON.stringify(currentResult),
-      };
-    },
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: JSON.stringify(currentResult),
+    };
   });
 }
 
@@ -653,11 +650,8 @@ describe('PIIDetector', () => {
 
   describe('error handling', () => {
     it('should fail open when detection agent fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new TripWire('Detection agent failed');
-        },
+      const model = mockTextModel(async () => {
+        throw new TripWire('Detection agent failed');
       });
       const detector = new PIIDetector({
         model,
@@ -683,11 +677,8 @@ describe('PIIDetector', () => {
     it.each(['processInput', 'processOutputResult'] as const)(
       'should propagate the processor tripwire from %s when strict model detection fails',
       async method => {
-        const model = new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
-          doGenerate: async () => {
-            throw new Error('provider failure');
-          },
+        const model = mockTextModel(async () => {
+          throw new Error('provider failure');
         });
         const detector = new PIIDetector({ model, detectionTypes: ['name'], errorStrategy: 'strict' });
         const tripwire = new TripWire('strict PII failure');
@@ -710,7 +701,7 @@ describe('PIIDetector', () => {
     it('should propagate the processor tripwire when legacy detection returns no object', async () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model, detectionTypes: ['name'], strategy: 'block', errorStrategy: 'strict' });
-      vi.spyOn((detector as any).detectionAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      vi.spyOn((detector as any).detectionAgent, 'generate').mockResolvedValue({ object: undefined });
       const tripwire = new TripWire('strict PII failure');
       const abort = vi.fn(() => {
         throw tripwire;
@@ -723,11 +714,8 @@ describe('PIIDetector', () => {
     });
 
     it('should not emit buffered text when strict streaming model detection fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new Error('provider failure');
-        },
+      const model = mockTextModel(async () => {
+        throw new Error('provider failure');
       });
       const detector = new PIIDetector({
         model,
@@ -830,15 +818,12 @@ describe('PIIDetector', () => {
 
   describe('edge cases', () => {
     it('should handle malformed detection results gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'invalid json',
-        }),
-      });
+      const model = mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'invalid json',
+      }));
       const detector = new PIIDetector({
         model,
         strategy: 'warn',
@@ -1007,17 +992,14 @@ describe('PIIDetector', () => {
 
     it('should not make LLM calls during streaming (regex-only types)', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
 
@@ -1468,17 +1450,14 @@ describe('PIIDetector', () => {
   describe('regression: issue #16466 — streaming cost/latency/accuracy', () => {
     it('should make zero LLM calls with regex-only types (cost regression)', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
       const state: Record<string, any> = {};
@@ -1504,17 +1483,14 @@ describe('PIIDetector', () => {
 
     it('should make far fewer LLM calls with LLM-only types via buffering', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       // Include 'name' (LLM-only) to trigger buffering
       const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'] });
@@ -1546,17 +1522,14 @@ describe('PIIDetector', () => {
       const detections: PIIDetection[] = [
         { type: 'name', value: 'John Smith', confidence: 0.9, start: 0, end: 10, redacted_value: null },
       ];
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult(['name'], detections, '[REDACTED] is a person')),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult(['name'], detections, '[REDACTED] is a person')),
+        };
       });
       const detector = new PIIDetector({ model, detectionTypes: REGEX_ONLY_TYPES });
 
@@ -1677,17 +1650,14 @@ describe('PIIDetector', () => {
       const detections: PIIDetection[] = [
         { type: 'name', value: 'John Smith', confidence: 0.9, start: 18, end: 28, redacted_value: '[REDACTED]' },
       ];
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult(['name'], detections, 'The user is named [REDACTED]')),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult(['name'], detections, 'The user is named [REDACTED]')),
+        };
       });
       // Include 'name' to trigger buffering
       const detector = new PIIDetector({ model, strategy: 'block', detectionTypes: ['email', 'name'] });
@@ -1732,17 +1702,14 @@ describe('PIIDetector', () => {
 
     it('should flush buffer on sentence boundary during streaming', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'] });
       const state: Record<string, any> = {};
@@ -1789,17 +1756,14 @@ describe('PIIDetector', () => {
 
     it('should respect custom bufferSize option', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       // Small buffer size of 50 chars
       const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'], bufferSize: 50 });
@@ -2081,17 +2045,14 @@ describe('PIIDetector', () => {
 
     it('flushes mixed regex and LLM buffers once before non-text parts', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       const events: any[] = [];
       const detector = new PIIDetector({
@@ -2153,7 +2114,7 @@ describe('PIIDetector', () => {
 
     it('emits stable prefixes exactly once across the bounded carryover', async () => {
       const detector = new PIIDetector({
-        model: new MockLanguageModelV1(),
+        model: mockTextModel(undefined),
         strategy: 'redact',
         redactionMethod: 'placeholder',
         detectionTypes: ['email'],
@@ -2188,7 +2149,7 @@ describe('PIIDetector', () => {
 
     it('pulls emission back when PII straddles the carryover boundary', async () => {
       const detector = new PIIDetector({
-        model: new MockLanguageModelV1(),
+        model: mockTextModel(undefined),
         strategy: 'redact',
         redactionMethod: 'placeholder',
         detectionTypes: ['email'],
@@ -2220,7 +2181,7 @@ describe('PIIDetector', () => {
       const text = `${'a'.repeat(100)} mail «secret@example.com», n°123-45-6789, card 4111 1111 1111 1111 end`;
       const stream = async (chunks: string[]) => {
         const detector = new PIIDetector({
-          model: new MockLanguageModelV1(),
+          model: mockTextModel(undefined),
           strategy: 'redact',
           redactionMethod: 'placeholder',
           detectionTypes: ['email', 'ssn', 'credit-card'],
@@ -2258,7 +2219,7 @@ describe('PIIDetector', () => {
       const text = `${'a'.repeat(100)} mail «secret@example.com», n°123-45-6789, card 4111 1111 1111 1111 end`;
       const stream = async (chunks: string[]) => {
         const detector = new PIIDetector({
-          model: new MockLanguageModelV1(),
+          model: mockTextModel(undefined),
           strategy,
           detectionTypes: ['email', 'ssn', 'credit-card'],
         });
@@ -2304,7 +2265,7 @@ describe('PIIDetector', () => {
       ['filter', ['Mail ', 'secret@example.com'], ''],
     ] as const)('%s releases no prefix of PII split over many chunks: %j', async (strategy, chunks, expected) => {
       const detector = new PIIDetector({
-        model: new MockLanguageModelV1(),
+        model: mockTextModel(undefined),
         strategy,
         detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
       });
@@ -2338,7 +2299,7 @@ describe('PIIDetector', () => {
       async strategy => {
         const address = `${'a'.repeat(64)}@${'1'.repeat(63)}.${'2'.repeat(63)}.com`;
         const detector = new PIIDetector({
-          model: new MockLanguageModelV1(),
+          model: mockTextModel(undefined),
           strategy,
           redactionMethod: 'placeholder',
           detectionTypes: ['email'],
@@ -2371,15 +2332,12 @@ describe('PIIDetector', () => {
     );
 
     it('keeps mixed-mode sentence fragments in regex carryover', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop' as const,
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: JSON.stringify(createMockPIIResult()),
-        }),
-      });
+      const model = mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: JSON.stringify(createMockPIIResult()),
+      }));
       const detector = new PIIDetector({
         model,
         strategy: 'redact',
@@ -2421,17 +2379,14 @@ describe('PIIDetector', () => {
 
     it('preserves regex carryover and replacement lengths across mixed-mode flushes', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       const detector = new PIIDetector({
         model,
@@ -2479,15 +2434,12 @@ describe('PIIDetector', () => {
     });
 
     it('keeps text queued behind direct-call non-text parts', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop' as const,
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: JSON.stringify(createMockPIIResult()),
-        }),
-      });
+      const model = mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: JSON.stringify(createMockPIIResult()),
+      }));
       const events: any[] = [];
       const detector = new PIIDetector({
         model,
@@ -2536,17 +2488,14 @@ describe('PIIDetector', () => {
 
     it('should drain queued non-text parts in FIFO order', async () => {
       let _llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          _llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        _llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'], strategy: 'block' });
       const state: Record<string, any> = {};
@@ -2605,17 +2554,14 @@ describe('PIIDetector', () => {
 
     it('should use default bufferSize of 200 when not specified', async () => {
       let llmCallCount = 0;
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          llmCallCount++;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: JSON.stringify(createMockPIIResult()),
-          };
-        },
+      const model = mockTextModel(async () => {
+        llmCallCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        };
       });
       const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'] });
       const state: Record<string, any> = {};
@@ -2746,11 +2692,8 @@ describe('PIIDetector', () => {
     });
 
     it('should handle output detection failures gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new Error('Detection failed');
-        },
+      const model = mockTextModel(async () => {
+        throw new Error('Detection failed');
       });
       const detector = new PIIDetector({ model });
       const messages: MastraDBMessage[] = [createTestMessage('My email is test@example.com', 'assistant')];

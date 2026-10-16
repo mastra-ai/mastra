@@ -1527,67 +1527,6 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(writes).toEqual([]);
     });
   });
-
-  describe('files that only exist as attachments (AI SDK v4 UI messages)', () => {
-    const attachment = (bytes: Buffer, name: string, contentType: string) => ({
-      name,
-      contentType,
-      url: `data:${contentType};base64,${bytes.toString('base64')}`,
-    });
-    const uiMessage = (...attachments: Array<ReturnType<typeof attachment>>) => ({
-      id: 'ui-message-1',
-      role: 'user' as const,
-      content: 'Read the attachments',
-      parts: [{ type: 'text' as const, text: 'Read the attachments' }],
-      experimental_attachments: attachments,
-    });
-
-    it('uploads them and replaces them with notes placed before the text, in order', async () => {
-      const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox);
-      const first = Buffer.from('first attachment');
-      const second = Buffer.from('second attachment');
-
-      await agent.generate(
-        [uiMessage(attachment(first, 'one.txt', 'text/plain'), attachment(second, 'two.txt', 'text/plain'))],
-        { memory: MEMORY },
-      );
-
-      expect(writes[0]!.map(written => written.content)).toEqual([first, second]);
-      expect(filePartsIn(prompts.at(-1))).toEqual([]);
-      const texts = textsIn(prompts.at(-1));
-      expect(texts).toHaveLength(3);
-      expect(texts[0]).toMatch(uploadedPath('\\.txt'));
-      expect(texts[0]).toContain('name: one.txt');
-      expect(texts[1]).toMatch(uploadedPath('\\.txt'));
-      expect(texts[1]).toContain('name: two.txt');
-      expect(texts[2]).toBe('Read the attachments');
-    });
-
-    it('gives the filter the name of an attachment, which the prompt no longer carries', async () => {
-      const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox, { filter: ({ extension }) => extension === 'csv' });
-
-      await agent.generate([uiMessage(attachment(Buffer.from('a,b'), 'data.csv', 'application/octet-stream'))], {
-        memory: MEMORY,
-      });
-
-      expect(filePartsIn(prompts.at(-1))).toEqual([]);
-      expect(writes.flat().map(written => written.path)).toEqual([expect.stringMatching(uploadedPath('\\.csv'))]);
-    });
-
-    it('leaves an attachment the filter rejects where it is', async () => {
-      const { sandbox, writes } = createFakeSandbox();
-      const { agent, prompts } = createHarness(sandbox, { filter: ({ mimeType }) => mimeType === 'application/pdf' });
-
-      await agent.generate([uiMessage(attachment(Buffer.from('kept'), 'kept.txt', 'text/plain'))], {
-        memory: MEMORY,
-      });
-
-      expect(writes).toEqual([]);
-      expect(filePartsIn(prompts.at(-1))).toHaveLength(1);
-    });
-  });
 });
 
 describe('FileUploadProcessor.processLLMRequest', () => {

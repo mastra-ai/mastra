@@ -21,8 +21,6 @@ export const codeAgent: GetAgentResponse = {
   modelVersion: 'v2',
   modelList: undefined,
   defaultOptions: {},
-  defaultGenerateOptionsLegacy: {},
-  defaultStreamOptionsLegacy: {},
   source: 'code',
   status: 'published',
   activeVersionId: PUBLISHED_VERSION_ID,

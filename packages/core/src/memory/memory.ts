@@ -1,4 +1,4 @@
-import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
+import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
 import { MastraBase } from '../base';

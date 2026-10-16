@@ -1,1 +1,1 @@
-export type { MastraMessagePart, UIMessageV4Part, MastraMessageContentV2 } from '../state/types';
+export type { MastraMessagePart, MastraBasePart, MastraMessageContentV2 } from '../state/types';

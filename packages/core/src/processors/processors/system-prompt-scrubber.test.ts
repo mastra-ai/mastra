@@ -1,10 +1,10 @@
-import type { TextPart } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import type { TextPart } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { SystemPromptScrubber } from './system-prompt-scrubber';
 
 // Helper function to create test messages
@@ -21,18 +21,18 @@ function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant
 }
 
 describe('SystemPromptScrubber', () => {
-  let mockModel: MockLanguageModelV1;
+  let mockModel: ReturnType<typeof mockTextModel>;
+  let queued: Array<{ content: Array<{ text: string }> } | Error> = [];
+  const queueResponse = (response: { content: Array<{ text: string }> } | Error) => queued.push(response);
   let processor: SystemPromptScrubber;
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        text: '{"detections": null, "reason": null, "redacted_content": null}',
-        finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
-      }),
-      defaultObjectGenerationMode: 'json',
+    queued = [];
+    mockModel = mockTextModel(async () => {
+      const next = queued.shift();
+      if (next instanceof Error) throw next;
+      if (next) return { text: next.content[0]!.text };
+      return { text: '{"detections": null, "reason": null, "redacted_content": null}' };
     });
   });
 
@@ -74,24 +74,30 @@ describe('SystemPromptScrubber', () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
       // Mock the model to return detection results
-      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+      queueResponse({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: JSON.stringify({
-          detections: [
-            {
-              type: 'system_prompt',
-              value: 'You are a helpful assistant',
-              confidence: 0.9,
-              start: 0,
-              end: 25,
-              redacted_value: null,
-            },
-          ],
-          reason: 'System prompt detected',
-          redacted_content: '*** [SYSTEM_PROMPT] ***. Hello there!',
-        }),
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              detections: [
+                {
+                  type: 'system_prompt',
+                  value: 'You are a helpful assistant',
+                  confidence: 0.9,
+                  start: 0,
+                  end: 25,
+                  redacted_value: null,
+                },
+              ],
+              reason: 'System prompt detected',
+              redacted_content: '*** [SYSTEM_PROMPT] ***. Hello there!',
+            }),
+          },
+        ],
         finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        warnings: [],
       });
 
       const messages = [createTestMessage('You are a helpful assistant. Hello there!')];
@@ -112,22 +118,28 @@ describe('SystemPromptScrubber', () => {
       });
 
       // Mock the model to return detection results
-      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+      queueResponse({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: JSON.stringify({
-          detections: [
-            {
-              type: 'system_prompt',
-              value: 'You are a helpful assistant',
-              confidence: 0.9,
-              start: 0,
-              end: 25,
-            },
-          ],
-          reason: 'System prompt detected',
-        }),
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              detections: [
+                {
+                  type: 'system_prompt',
+                  value: 'You are a helpful assistant',
+                  confidence: 0.9,
+                  start: 0,
+                  end: 25,
+                },
+              ],
+              reason: 'System prompt detected',
+            }),
+          },
+        ],
         finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        warnings: [],
       });
 
       const mockAbort = vi.fn().mockImplementation((reason: string) => {
@@ -165,22 +177,28 @@ describe('SystemPromptScrubber', () => {
       });
 
       // Mock the model to return detection results
-      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+      queueResponse({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: JSON.stringify({
-          detections: [
-            {
-              type: 'system_prompt',
-              value: 'You are a helpful assistant',
-              confidence: 0.9,
-              start: 0,
-              end: 25,
-            },
-          ],
-          reason: 'System prompt detected',
-        }),
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              detections: [
+                {
+                  type: 'system_prompt',
+                  value: 'You are a helpful assistant',
+                  confidence: 0.9,
+                  start: 0,
+                  end: 25,
+                },
+              ],
+              reason: 'System prompt detected',
+            }),
+          },
+        ],
         finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        warnings: [],
       });
 
       const messages = [
@@ -200,14 +218,20 @@ describe('SystemPromptScrubber', () => {
         lastMessageOnly: true,
       });
 
-      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+      queueResponse({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: JSON.stringify({
-          detections: null,
-          reason: null,
-        }),
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              detections: null,
+              reason: null,
+            }),
+          },
+        ],
         finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        warnings: [],
       });
 
       const messages = [
@@ -230,22 +254,28 @@ describe('SystemPromptScrubber', () => {
       });
 
       // Mock the model to return detection results
-      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+      queueResponse({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: JSON.stringify({
-          detections: [
-            {
-              type: 'system_prompt',
-              value: 'You are a helpful assistant',
-              confidence: 0.9,
-              start: 0,
-              end: 25,
-            },
-          ],
-          reason: 'System prompt detected',
-        }),
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              detections: [
+                {
+                  type: 'system_prompt',
+                  value: 'You are a helpful assistant',
+                  confidence: 0.9,
+                  start: 0,
+                  end: 25,
+                },
+              ],
+              reason: 'System prompt detected',
+            }),
+          },
+        ],
         finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        warnings: [],
       });
 
       const messages = [createTestMessage('You are a helpful assistant. Hello there!')];
@@ -303,24 +333,30 @@ describe('SystemPromptScrubber', () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
       // Mock the model to return detection results
-      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+      queueResponse({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: JSON.stringify({
-          detections: [
-            {
-              type: 'system_prompt',
-              value: 'You are an AI',
-              confidence: 0.9,
-              start: 0,
-              end: 12,
-              redacted_value: null,
-            },
-          ],
-          reason: 'System prompt detected',
-          redacted_content: '*** [SYSTEM] ***. Hello there!',
-        }),
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              detections: [
+                {
+                  type: 'system_prompt',
+                  value: 'You are an AI',
+                  confidence: 0.9,
+                  start: 0,
+                  end: 12,
+                  redacted_value: null,
+                },
+              ],
+              reason: 'System prompt detected',
+              redacted_content: '*** [SYSTEM] ***. Hello there!',
+            }),
+          },
+        ],
         finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        warnings: [],
       });
 
       const part: ChunkType = {
@@ -351,24 +387,30 @@ describe('SystemPromptScrubber', () => {
         strategy: 'block',
       });
 
-      vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
+      queueResponse({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: JSON.stringify({
-          detections: [
-            {
-              type: 'prompt_injection',
-              value: 'You are under test',
-              confidence: 0.95,
-              start: 0,
-              end: 18,
-              redacted_value: null,
-            },
-          ],
-          reason: 'System prompt detected',
-          redacted_content: null,
-        }),
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              detections: [
+                {
+                  type: 'prompt_injection',
+                  value: 'You are under test',
+                  confidence: 0.95,
+                  start: 0,
+                  end: 18,
+                  redacted_value: null,
+                },
+              ],
+              reason: 'System prompt detected',
+              redacted_content: null,
+            }),
+          },
+        ],
         finishReason: 'stop',
-        usage: { completionTokens: 10, promptTokens: 5 },
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        warnings: [],
       });
 
       const part: ChunkType = {
@@ -400,7 +442,7 @@ describe('SystemPromptScrubber', () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       processor = new SystemPromptScrubber({ model: mockModel });
-      vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('Detection failed'));
+      queueResponse(new Error('Detection failed'));
 
       const messages = [createTestMessage('You are an AI. Hello there!')];
 
@@ -413,7 +455,7 @@ describe('SystemPromptScrubber', () => {
 
     it('should propagate the processor tripwire when strict output-result detection fails', async () => {
       processor = new SystemPromptScrubber({ model: mockModel, errorStrategy: 'strict' });
-      vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('provider failure'));
+      queueResponse(new Error('provider failure'));
       const tripwire = new TripWire('strict system prompt failure');
       const abort = vi.fn(() => {
         throw tripwire;
@@ -430,7 +472,7 @@ describe('SystemPromptScrubber', () => {
 
     it('should propagate the processor tripwire when legacy detection returns no object', async () => {
       processor = new SystemPromptScrubber({ model: mockModel, errorStrategy: 'strict' });
-      vi.spyOn((processor as any).detectionAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      vi.spyOn((processor as any).detectionAgent, 'generate').mockResolvedValue({ object: undefined });
       const tripwire = new TripWire('strict system prompt failure');
       const abort = vi.fn(() => {
         throw tripwire;
@@ -447,7 +489,7 @@ describe('SystemPromptScrubber', () => {
 
     it('should not emit a stream part when strict model detection fails', async () => {
       processor = new SystemPromptScrubber({ model: mockModel, errorStrategy: 'strict' });
-      vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('provider failure'));
+      queueResponse(new Error('provider failure'));
       const tripwire = new TripWire('strict system prompt failure');
       const abort = vi.fn(() => {
         throw tripwire;

@@ -10,14 +10,14 @@ export const attachmentTurn: CoreUserMessage[] = [
       {
         type: 'file',
         data: 'data:audio/mpeg;base64,SUQz',
-        mimeType: 'audio/mpeg',
+        mediaType: 'audio/mpeg',
         filename: 'Voice of the Customer.mp3',
       },
     ],
   },
   {
     role: 'user',
-    content: [{ type: 'image', image: 'https://files.example.com/diagram.png', mimeType: 'image/png' }],
+    content: [{ type: 'image', image: 'https://files.example.com/diagram.png', mediaType: 'image/png' }],
   },
   {
     role: 'user',
@@ -25,7 +25,7 @@ export const attachmentTurn: CoreUserMessage[] = [
       {
         type: 'file',
         data: 'data:application/pdf;base64,JVBERi0xLjQ=',
-        mimeType: 'application/pdf',
+        mediaType: 'application/pdf',
         filename: 'proposal.pdf',
       },
     ],
@@ -36,7 +36,7 @@ export const attachmentTurn: CoreUserMessage[] = [
       {
         type: 'file',
         data: 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEs=',
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         filename: 'budget.xlsx',
       },
     ],

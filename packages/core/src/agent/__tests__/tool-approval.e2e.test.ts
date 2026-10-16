@@ -53,7 +53,7 @@ afterEach(async () => {
   mockStorage = null;
 });
 
-export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
+export function toolApprovalAndSuspensionTests(version: 'v2') {
   const mockFindUser = vi.fn().mockImplementation(async data => {
     const list = [
       { name: 'Dero Israel', email: 'dero@mail.com' },
@@ -69,7 +69,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
   describe('tool approval and suspension', () => {
     const openaiModel = getOpenAIModel(version);
-    describe.skipIf(version === 'v1')('requireToolApproval', () => {
+    describe('requireToolApproval', () => {
       it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
         mockFindUser.mockClear(); // Reset mock call count before this test
 
@@ -153,13 +153,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         let toolCall;
         let response;
-        if (version === 'v1') {
-          response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-            maxSteps: 2,
-            toolChoice: 'required',
-          });
-          toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-        } else {
+        {
           const stream = await agentOne.stream('Find the user with name - Dero Israel', {
             requireToolApproval: true,
           });
@@ -279,13 +273,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         let toolCall;
         let response;
-        if (version === 'v1') {
-          response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-            maxSteps: 2,
-            toolChoice: 'required',
-          });
-          toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-        } else {
+        {
           const stream = await agentOne.stream('Find the user with name - Dero Israel');
           let toolCallId = '';
           for await (const _chunk of stream.fullStream) {
@@ -490,7 +478,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
       }, 500000);
     });
 
-    describe.skipIf(version === 'v1')('suspension', () => {
+    describe('suspension', () => {
       it('should call findUserTool with suspend and resume', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
@@ -1427,7 +1415,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
       );
     });
 
-    describe.skipIf(version === 'v1')('persist model output stream state', () => {
+    describe('persist model output stream state', () => {
       it('should persist text stream state', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
@@ -1458,13 +1446,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         let toolCall;
         let response;
-        if (version === 'v1') {
-          response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-            maxSteps: 2,
-            toolChoice: 'required',
-          });
-          toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-        } else {
+        {
           const stream = await agentOne.stream(
             'First tell me about what tools you have. Then call the user tool to find the user with name - Dero Israel. Then tell me about what format you received the data and tell me what it would look like in human readable form.',
             {

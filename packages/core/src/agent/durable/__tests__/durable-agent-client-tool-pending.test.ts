@@ -159,12 +159,17 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
         { role: 'user', content: [{ type: 'text', text: 'test prompt' }] },
         {
           role: 'assistant',
-          content: [{ type: 'tool-call', toolCallId: TOOL_CALL_ID, toolName: 'client-tool', args: { label: 'Done' } }],
+          content: [{ type: 'tool-call', toolCallId: TOOL_CALL_ID, toolName: 'client-tool', input: { label: 'Done' } }],
         },
         {
           role: 'tool',
           content: [
-            { type: 'tool-result', toolCallId: TOOL_CALL_ID, toolName: 'client-tool', result: { confirmed: true } },
+            {
+              type: 'tool-result',
+              toolCallId: TOOL_CALL_ID,
+              toolName: 'client-tool',
+              output: { type: 'json', value: { confirmed: true } },
+            },
           ],
         },
       ] satisfies Parameters<typeof durableAgent.stream>[0],

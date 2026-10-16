@@ -1,4 +1,3 @@
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import {
@@ -16,26 +15,11 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
 
-function saveAndErrorTests(version: 'v1' | 'v2') {
-  let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+function saveAndErrorTests(version: 'v2') {
+  let dummyModel: MockLanguageModelV2;
 
   beforeEach(() => {
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Dummy response`,
-        }),
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-    } else {
+    {
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -79,70 +63,12 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
   describe(`${version} - Agent save message parts`, () => {
     // Model that emits 10 parts
-    let dummyResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
-    let emptyResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
-    let errorResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let dummyResponseModel: MockLanguageModelV2;
+    let emptyResponseModel: MockLanguageModelV2;
+    let errorResponseModel: MockLanguageModelV2;
 
     beforeEach(() => {
-      if (version === 'v1') {
-        dummyResponseModel = new MockLanguageModelV1({
-          doGenerate: async _options => ({
-            text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async _options => {
-            let count = 0;
-            const stream = new ReadableStream({
-              pull(controller) {
-                if (count < 10) {
-                  controller.enqueue({
-                    type: 'text-delta',
-                    textDelta: `Dummy response ${count}`,
-                    createdAt: new Date(Date.now() + count * 1000).toISOString(),
-                  });
-                  count++;
-                } else {
-                  controller.close();
-                }
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        // Model never emits any parts
-        emptyResponseModel = new MockLanguageModelV1({
-          doGenerate: async _options => ({
-            text: undefined,
-            finishReason: 'stop',
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-
-        // Model throws immediately before emitting any part
-        errorResponseModel = new MockLanguageModelV1({
-          doGenerate: async _options => {
-            throw new Error('Immediate interruption');
-          },
-          doStream: async _options => {
-            const stream = new ReadableStream({
-              pull() {
-                throw new Error('Immediate interruption');
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-      } else {
+      {
         dummyResponseModel = new MockLanguageModelV2({
           doGenerate: async _options => ({
             text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
@@ -242,12 +168,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           model: dummyResponseModel,
           memory: mockMemory,
         });
-        if (version === 'v1') {
-          await agent.generateLegacy('repeat tool calls', {
-            threadId: 'thread-1-generate',
-            resourceId: 'resource-1-generate',
-          });
-        } else {
+        {
           await agent.generate('repeat tool calls', {
             memory: {
               thread: 'thread-1-generate',
@@ -287,12 +208,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           memory: mockMemory,
         });
 
-        if (version === 'v1') {
-          await agent.generateLegacy('no progress', {
-            threadId: `thread-2-${version}-generate`,
-            resourceId: `resource-2-${version}-generate`,
-          });
-        } else {
+        {
           await agent.generate('no progress', {
             memory: {
               thread: `thread-2-${version}-generate`,
@@ -333,12 +249,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       });
 
       try {
-        if (version === 'v1') {
-          await agent.generateLegacy('interrupt before step', {
-            threadId: 'thread-3-generate',
-            resourceId: 'resource-3-generate',
-          });
-        } else {
+        {
           await agent.generate('interrupt before step', {
             memory: {
               thread: 'thread-3-generate',
@@ -355,11 +266,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         resourceId: 'resource-3-generate',
       });
 
-      if (version === 'v1') {
-        // Input-only failed turns remain excluded by MessageHistory's orphan guard.
-        expect(result.messages.length).toBe(0);
-        expect(saveCallCount).toBe(0);
-      } else {
+      {
         // v2 records the terminal failure as a first-class `error` part, so the
         // failed turn becomes a real user/assistant pair instead of an input-only
         // turn the orphan guard has to drop. It persists through MessageHistory's
@@ -383,14 +290,8 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
-      let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
-      if (version === 'v1') {
-        errorModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            throw new Error('Simulated error during response');
-          },
-        });
-      } else {
+      let errorModel: MockLanguageModelV2;
+      {
         errorModel = new MockLanguageModelV2({
           doGenerate: async () => {
             throw new Error('Simulated error during response');
@@ -411,16 +312,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
       let errorCaught = false;
       try {
-        if (version === 'v1') {
-          await agent.generateLegacy('trigger error', {
-            memory: {
-              resource: 'user-err',
-              thread: {
-                id: 'thread-err',
-              },
-            },
-          });
-        } else {
+        {
           await agent.generate('trigger error', {
             memory: {
               resource: 'user-err',
@@ -445,7 +337,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
     });
   });
 
-  if (version === 'v2') {
+  {
     describe('terminal error persistence', () => {
       /** Streams one text part, then fails terminally with no recovery available. */
       function createPartialThenErrorModel(errorMessage: string) {
@@ -1913,7 +1805,6 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
   }
 }
 
-saveAndErrorTests('v1');
 saveAndErrorTests('v2');
 
 /**

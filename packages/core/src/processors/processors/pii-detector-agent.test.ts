@@ -1,7 +1,7 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent/agent';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { PIIDetector } from './pii-detector';
 
 const ssn = '123-45-6789';
@@ -12,15 +12,12 @@ function detectorModel() {
     detections: [{ type: 'ssn', value: ssn, confidence: 0.95, start: 0, end: ssn.length, redacted_value: null }],
     redacted_content: null,
   };
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
-      usage: { promptTokens: 10, completionTokens: 20 },
-      text: JSON.stringify(result),
-    }),
-  });
+  return mockTextModel(async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: JSON.stringify(result),
+  }));
 }
 
 describe('PIIDetector in Agent.generate (#25553)', () => {

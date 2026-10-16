@@ -45,7 +45,6 @@ import type {
 import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
-type ResolvedAgentModel = Awaited<ReturnType<Agent['getModel']>>;
 
 type ResponseExecutionResult = {
   text?: string;
@@ -100,7 +99,6 @@ type PreparedCreateResponseRequest = {
   didStore: boolean;
   executionInput: AgentExecutionInput;
   previousResponseTurnRecord: ResponseTurnRecord | null;
-  resolvedModel: ResolvedAgentModel;
   responseId: string;
   responseModel: string;
   responseMetadata: Omit<
@@ -331,7 +329,6 @@ async function resolveAgentMemoryStore({
  */
 async function executeGenerate({
   agent,
-  resolvedModel,
   modelOverride,
   instructions,
   text,
@@ -342,7 +339,6 @@ async function executeGenerate({
   threadContext,
 }: {
   agent: Agent;
-  resolvedModel: ResolvedAgentModel;
   modelOverride?: string;
   instructions: string | undefined;
   text: CreateResponseBody['text'];
@@ -364,30 +360,6 @@ async function executeGenerate({
     providerOptions,
     ...(executionMemory ?? {}),
   };
-
-  if (resolvedModel.specificationVersion === 'v1') {
-    if (threadContext) {
-      return (await agent.generateLegacy(input, {
-        instructions,
-        requestContext,
-        abortSignal,
-        ...modelOption,
-        output: structuredOutput?.schema,
-        providerOptions,
-        resourceId: threadContext.resourceId,
-        threadId: threadContext.threadId,
-      } as never)) as ResponseExecutionResult;
-    }
-
-    return (await agent.generateLegacy(input, {
-      instructions,
-      requestContext,
-      abortSignal,
-      ...modelOption,
-      output: structuredOutput?.schema,
-      providerOptions,
-    } as never)) as ResponseExecutionResult;
-  }
 
   return (await agent.generate(input, commonOptions as never)) as ResponseExecutionResult;
 }
@@ -397,7 +369,6 @@ async function executeGenerate({
  */
 async function executeStream({
   agent,
-  resolvedModel,
   modelOverride,
   instructions,
   text,
@@ -408,7 +379,6 @@ async function executeStream({
   threadContext,
 }: {
   agent: Agent;
-  resolvedModel: ResolvedAgentModel;
   modelOverride?: string;
   instructions: string | undefined;
   text: CreateResponseBody['text'];
@@ -430,30 +400,6 @@ async function executeStream({
     providerOptions,
     ...(executionMemory ?? {}),
   };
-
-  if (resolvedModel.specificationVersion === 'v1') {
-    if (threadContext) {
-      return (await agent.streamLegacy(input, {
-        instructions,
-        requestContext,
-        abortSignal,
-        ...modelOption,
-        output: structuredOutput?.schema,
-        providerOptions,
-        resourceId: threadContext.resourceId,
-        threadId: threadContext.threadId,
-      } as never)) as ResponseStreamResult;
-    }
-
-    return (await agent.streamLegacy(input, {
-      instructions,
-      requestContext,
-      abortSignal,
-      ...modelOption,
-      output: structuredOutput?.schema,
-      providerOptions,
-    } as never)) as ResponseStreamResult;
-  }
 
   return (await agent.stream(input, commonOptions as never)) as ResponseStreamResult;
 }
@@ -756,7 +702,6 @@ async function prepareCreateResponseRequest({
     didStore,
     executionInput,
     previousResponseTurnRecord,
-    resolvedModel,
     responseId,
     responseModel,
     responseMetadata: {
@@ -929,7 +874,6 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         didStore,
         executionInput,
         previousResponseTurnRecord,
-        resolvedModel,
         responseId,
         responseModel,
         responseMetadata,
@@ -939,7 +883,6 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       if (!body.stream) {
         const result = await executeGenerate({
           agent,
-          resolvedModel,
           modelOverride: body.model,
           instructions: body.instructions,
           text: body.text,
@@ -971,7 +914,6 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
 
       const streamResult = await executeStream({
         agent,
-        resolvedModel,
         modelOverride: body.model,
         instructions: body.instructions,
         text: body.text,

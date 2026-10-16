@@ -173,11 +173,8 @@ export function setupUseChatV4() {
       let error: Error | null = null;
       const threadId = randomUUID();
 
-      await agent.generateLegacy(`hi`, {
-        threadId,
-        resourceId,
-      });
-      await agent.generateLegacy(`LA weather`, { threadId, resourceId });
+      await agent.generate(`hi`, { memory: { thread: threadId, resource: resourceId } });
+      await agent.generate(`LA weather`, { memory: { thread: threadId, resource: resourceId } });
 
       const agentMemory = (await agent.getMemory())!;
       // Get initial messages from memory and convert to AI SDK v4 format

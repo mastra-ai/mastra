@@ -1,4 +1,3 @@
-import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from '@internal/ai-sdk-v4';
 import { isToolUIPart } from '@internal/ai-sdk-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
@@ -69,22 +68,6 @@ describe('MessageList V5 Support', () => {
         expect(hasAIV5CoreMessageCharacteristics(v5Message)).toBe(true);
       });
 
-      it('should detect v4 messages with result in tool-result parts', () => {
-        const v4Message: AIV4CoreMessage = {
-          role: 'tool',
-          content: [
-            {
-              type: 'tool-result',
-              toolName: 'test',
-              toolCallId: 'call-1',
-              result: { data: 'success' }, // v4 uses result
-            },
-          ],
-        };
-
-        expect(hasAIV5CoreMessageCharacteristics(v4Message)).toBe(false);
-      });
-
       it('should detect v5 messages with input in tool-call parts', () => {
         const v5Message: AIV5ModelMessage = {
           role: 'assistant',
@@ -99,22 +82,6 @@ describe('MessageList V5 Support', () => {
         };
 
         expect(hasAIV5CoreMessageCharacteristics(v5Message)).toBe(true);
-      });
-
-      it('should detect v4 messages with args in tool-call parts', () => {
-        const v4Message: AIV4CoreMessage = {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              args: { param: 'value' }, // v4 uses args
-              toolName: 'test-tool',
-            },
-          ],
-        };
-
-        expect(hasAIV5CoreMessageCharacteristics(v4Message)).toBe(false);
       });
 
       it('should detect v5 messages with mediaType in file parts', () => {
@@ -132,47 +99,8 @@ describe('MessageList V5 Support', () => {
         expect(hasAIV5CoreMessageCharacteristics(v5Message)).toBe(true);
       });
 
-      it('should detect v4 messages with mimeType in file parts', () => {
-        const v4Message: AIV4CoreMessage = {
-          role: 'user',
-          content: [
-            {
-              type: 'file',
-              data: 'base64data',
-              mimeType: 'image/png', // v4 uses mimeType
-            },
-          ],
-        };
-
-        expect(hasAIV5CoreMessageCharacteristics(v4Message)).toBe(false);
-      });
-
-      it('should detect v4 messages with experimental_providerMetadata', () => {
-        const v4Message: AIV4CoreMessage = {
-          role: 'assistant',
-          content: 'Hello',
-          experimental_providerMetadata: { custom: { stuff: 'data' } }, // v4-only property
-        };
-
-        expect(hasAIV5CoreMessageCharacteristics(v4Message)).toBe(false);
-      });
-
-      it('should detect v4 messages with redacted-reasoning type', () => {
-        const v4Message: AIV4CoreMessage = {
-          role: 'assistant',
-          content: [
-            {
-              type: 'redacted-reasoning', // v4-only type
-              data: 'redacted',
-            },
-          ],
-        };
-
-        expect(hasAIV5CoreMessageCharacteristics(v4Message)).toBe(false);
-      });
-
       it('should treat identical messages as v5-compatible', () => {
-        const identicalMessage: AIV4CoreMessage | AIV5ModelMessage = {
+        const identicalMessage: AIV5ModelMessage = {
           role: 'user',
           content: 'Hello world', // string content is identical in both
         };
@@ -182,7 +110,7 @@ describe('MessageList V5 Support', () => {
       });
 
       it('should treat messages with no distinguishing features as v5-compatible', () => {
-        const simpleMessage: AIV4CoreMessage | AIV5ModelMessage = {
+        const simpleMessage: AIV5ModelMessage = {
           role: 'assistant',
           content: [
             {
@@ -198,26 +126,6 @@ describe('MessageList V5 Support', () => {
     });
 
     describe('hasAIV5UIMessageCharacteristics', () => {
-      it('should detect v4 messages with toolInvocations array', () => {
-        const v4Message = {
-          id: 'msg-1',
-          role: 'assistant',
-          content: 'Processing...',
-          parts: [],
-          toolInvocations: [
-            {
-              toolCallId: 'call-1',
-              toolName: 'test-tool',
-              args: { param: 'value' },
-              state: 'result',
-              result: { data: 'success' },
-            },
-          ],
-        } satisfies AIV4UIMessage;
-
-        expect(hasAIV5UIMessageCharacteristics(v4Message)).toBe(false);
-      });
-
       it('should detect v5 messages with tool parts having tool-${toolName} format', () => {
         const v5Message: AIV5UIMessage = {
           id: 'msg-1',
@@ -236,32 +144,6 @@ describe('MessageList V5 Support', () => {
         expect(hasAIV5UIMessageCharacteristics(v5Message)).toBe(true);
       });
 
-      it('should detect v4 messages with tool-invocation type', () => {
-        const v4Message: AIV4UIMessage = {
-          id: 'msg-1',
-          role: 'assistant',
-          content: '',
-          parts: [
-            {
-              type: 'text',
-              text: 'Calling tool...',
-            },
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                toolCallId: 'call-1',
-                toolName: 'test-tool',
-                args: { param: 'value' },
-                state: 'result',
-                result: { data: 'success' },
-              },
-            },
-          ],
-        };
-
-        expect(hasAIV5UIMessageCharacteristics(v4Message)).toBe(false);
-      });
-
       it('should detect v5 messages with source-url type', () => {
         const v5Message: AIV5UIMessage = {
           id: 'msg-1',
@@ -276,27 +158,6 @@ describe('MessageList V5 Support', () => {
         };
 
         expect(hasAIV5UIMessageCharacteristics(v5Message)).toBe(true);
-      });
-
-      it('should detect v4 messages with source type', () => {
-        const v4Message: AIV4UIMessage = {
-          id: 'msg-1',
-          role: 'user',
-          content: '',
-          parts: [
-            {
-              type: 'source', // v4 type
-              source: {
-                url: 'https://example.com',
-                sourceType: 'url',
-                id: '1',
-                providerMetadata: { custom: { stuff: 'ok' } },
-              },
-            },
-          ],
-        };
-
-        expect(hasAIV5UIMessageCharacteristics(v4Message)).toBe(false);
       });
     });
   });
@@ -485,14 +346,14 @@ describe('MessageList V5 Support', () => {
 
       it.skip('should convert tool calls from v4 to v5 format', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v4CoreMessage: AIV4CoreMessage = {
+        const v4CoreMessage: AIV5ModelMessage = {
           role: 'assistant',
           content: [
             {
               type: 'tool-call',
               toolCallId: 'call-1',
               toolName: 'test-tool',
-              args: { param: 'value' }, // v4 uses args
+              input: { param: 'value' }, // v4 uses args
             },
           ],
         };
@@ -652,159 +513,27 @@ describe('MessageList V5 Support', () => {
     });
   });
 
-  describe('AI SDK V4 API', () => {
-    describe('list.get.all.aiV4.*', () => {
-      it('core() should return AIV4 CoreMessages', () => {
-        const list = new MessageList({ threadId, resourceId });
-        list.add('User message', 'input');
-        list.add({ role: 'assistant', content: 'Assistant response' }, 'response');
-
-        const coreMessages = list.get.all.aiV4.core();
-
-        expect(coreMessages).toHaveLength(2);
-        expect(coreMessages[0].role).toBe('user');
-        expect(coreMessages[1].role).toBe('assistant');
-      });
-
-      it('ui() should return AIV4 UIMessages', () => {
-        const list = new MessageList({ threadId, resourceId });
-        list.add('User message', 'input');
-
-        const uiMessages = list.get.all.aiV4.ui();
-
-        expect(uiMessages).toHaveLength(1);
-        expect(uiMessages[0].role).toBe('user');
-        expect(uiMessages[0].content).toBe('User message');
-      });
-
-      it('prompt() should include system messages', () => {
-        const list = new MessageList({ threadId, resourceId });
-        list.addSystem('System prompt');
-        list.add('User message', 'input');
-
-        const prompt = list.get.all.aiV4.prompt();
-
-        expect(prompt).toHaveLength(2);
-        expect(prompt[0]).toMatchObject({
-          role: 'system',
-          content: 'System prompt',
-        });
-        expect(prompt[1]).toMatchObject({
-          role: 'user',
-          content: expect.any(Array),
-        });
-      });
-
-      it('llmPrompt() should return proper LanguageModelV1Prompt format', () => {
-        const list = new MessageList({ threadId, resourceId });
-        list.addSystem('System message');
-        list.add('User input', 'input');
-
-        const llmPrompt = list.get.all.aiV4.llmPrompt();
-
-        // llmPrompt returns messages array directly
-        expect(Array.isArray(llmPrompt)).toBe(true);
-        expect(llmPrompt).toHaveLength(2);
-      });
-    });
-
-    describe('Deprecated method compatibility', () => {
-      it('list.get.all.prompt() should delegate to aiV4.prompt()', () => {
-        const list = new MessageList({ threadId, resourceId });
-        list.addSystem('System');
-        list.add('User', 'input');
-
-        const deprecatedPrompt = list.get.all.prompt();
-        const v4Prompt = list.get.all.aiV4.prompt();
-
-        expect(deprecatedPrompt).toEqual(v4Prompt);
-      });
-
-      it('list.get.all.ui() should delegate to aiV4.ui()', () => {
-        const list = new MessageList({ threadId, resourceId });
-        list.add('Message', 'input');
-
-        const deprecatedUI = list.get.all.ui();
-        const v4UI = list.get.all.aiV4.ui();
-
-        expect(deprecatedUI).toEqual(v4UI);
-      });
-
-      it('list.get.all.core() should delegate to aiV4.core()', () => {
-        const list = new MessageList({ threadId, resourceId });
-        list.add('Message', 'input');
-
-        const deprecatedCore = list.get.all.core();
-        const v4Core = list.get.all.aiV4.core();
-
-        expect(deprecatedCore).toEqual(v4Core);
-      });
-    });
-  });
-
   describe('Cross-Version Compatibility', () => {
-    it('should handle v4 UIMessage → v5 ModelMessage conversion', () => {
-      const list = new MessageList({ threadId, resourceId });
-
-      const v4UIMessage: AIV4UIMessage = {
-        id: 'msg-1',
-        role: 'user',
-        content: 'Hello from v4',
-        parts: [{ type: 'text', text: 'Hello from v4' }],
-        createdAt: new Date(),
-      };
-
-      list.add(v4UIMessage, 'input');
-
-      const v5Model = list.get.all.aiV5.model();
-      expect(v5Model).toHaveLength(1);
-      expect(v5Model[0]).toMatchObject({
-        role: 'user',
-        content: [{ type: 'text', text: 'Hello from v4' }],
-      });
-    });
-
-    it('should handle v5 UIMessage → v4 CoreMessage conversion', () => {
-      const list = new MessageList({ threadId, resourceId });
-
-      const v5UIMessage: AIV5UIMessage = {
-        id: 'msg-1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'Hello from v5' }],
-      };
-
-      list.add(v5UIMessage, 'input');
-
-      const v4Core = list.get.all.aiV4.core();
-      expect(v4Core).toHaveLength(1);
-      expect(v4Core[0]).toMatchObject({
-        role: 'user',
-        content: [{ type: 'text', text: 'Hello from v5' }],
-      });
-    });
-
-    it('should handle string message in both v4 and v5 formats', () => {
+    it('should handle string message in the v5 model format', () => {
       const list = new MessageList({ threadId, resourceId });
       list.add('Simple string message', 'input');
 
-      const v4Core = list.get.all.aiV4.core();
       const v5Model = list.get.all.aiV5.model();
 
-      expect(v4Core[0].content).toEqual([{ type: 'text', text: 'Simple string message' }]);
       expect(v5Model[0].content).toEqual([expect.objectContaining({ type: 'text', text: 'Simple string message' })]);
     });
 
     it.skip('should handle v4 CoreMessage with tools → v5 with correct tool format', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const v4CoreWithTool: AIV4CoreMessage = {
+      const v4CoreWithTool: AIV5ModelMessage = {
         role: 'assistant',
         content: [
           {
             type: 'tool-call',
             toolCallId: 'call-1',
             toolName: 'calculator',
-            args: { expression: '2+2' },
+            input: { expression: '2+2' },
           },
         ],
       };
@@ -819,54 +548,6 @@ describe('MessageList V5 Support', () => {
             toolCallId: 'call-1',
             toolName: 'calculator',
             input: { expression: '2+2' }, // args → input
-          }),
-        ]),
-      );
-    });
-
-    it('should handle v5 ModelMessage with reasoning → v4 with correct format', () => {
-      const list = new MessageList({ threadId, resourceId });
-
-      // Add a v5 message with reasoning through the conversion pipeline
-      const v2Message: MastraDBMessage = {
-        id: 'msg-1',
-        role: 'assistant',
-        createdAt: new Date(),
-        threadId,
-        resourceId,
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'reasoning',
-              reasoning: '',
-              details: [
-                {
-                  type: 'text',
-                  text: 'Let me think about this...',
-                },
-              ],
-            },
-            {
-              type: 'text',
-              text: 'The answer is 42',
-            },
-          ],
-        },
-      };
-
-      list.add(v2Message, 'response');
-
-      const v4Core = list.get.all.aiV4.core();
-      expect(v4Core[0].content).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            type: 'reasoning',
-            text: 'Let me think about this...',
-          }),
-          expect.objectContaining({
-            type: 'text',
-            text: 'The answer is 42',
           }),
         ]),
       );
@@ -886,7 +567,7 @@ describe('MessageList V5 Support', () => {
             role: 'user',
             content: [
               { type: 'text', text: 'What is in this image?' },
-              { type: 'file', mimeType: 'image/png', data: imageDataUri },
+              { type: 'file', mediaType: 'image/png', data: imageDataUri },
             ],
           },
         ],
@@ -916,7 +597,7 @@ describe('MessageList V5 Support', () => {
             role: 'user',
             content: [
               { type: 'text', text: 'Analyze' },
-              { type: 'file', data: imageDataUri, mimeType: 'image/jpeg' },
+              { type: 'file', data: imageDataUri, mediaType: 'image/jpeg' },
             ],
           },
         ],
@@ -943,7 +624,7 @@ describe('MessageList V5 Support', () => {
             role: 'user',
             content: [
               { type: 'text', text: 'Analyze this' },
-              { type: 'file', mimeType: 'image/png', data: rawBase64 },
+              { type: 'file', mediaType: 'image/png', data: rawBase64 },
             ],
           },
         ],
@@ -969,7 +650,7 @@ describe('MessageList V5 Support', () => {
             role: 'user',
             content: [
               { type: 'text', text: 'Process this image' },
-              { type: 'file', mimeType: 'image/png', data: binaryData },
+              { type: 'file', mediaType: 'image/png', data: binaryData },
             ],
           },
         ],
@@ -995,7 +676,7 @@ describe('MessageList V5 Support', () => {
             role: 'user',
             content: [
               { type: 'text', text: 'Look at this' },
-              { type: 'file', mimeType: 'image/jpeg', data: new URL('https://example.com/image.jpg') },
+              { type: 'file', mediaType: 'image/jpeg', data: new URL('https://example.com/image.jpg') },
             ],
           },
         ],
@@ -1098,7 +779,7 @@ describe('MessageList V5 Support', () => {
                   {
                     type: 'file',
                     data: testUrl,
-                    mimeType: 'image/png',
+                    mediaType: 'image/png',
                   },
                 ],
               },
@@ -1132,7 +813,7 @@ describe('MessageList V5 Support', () => {
                 {
                   type: 'file',
                   data: base64DataUri,
-                  mimeType: 'image/png',
+                  mediaType: 'image/png',
                 },
               ],
             },
@@ -1165,17 +846,17 @@ describe('MessageList V5 Support', () => {
                 {
                   type: 'file',
                   data: httpUrl,
-                  mimeType: 'image/png',
+                  mediaType: 'image/png',
                 },
                 {
                   type: 'file',
                   data: base64DataUri,
-                  mimeType: 'image/png',
+                  mediaType: 'image/png',
                 },
                 {
                   type: 'file',
                   data: rawBase64,
-                  mimeType: 'text/plain',
+                  mediaType: 'text/plain',
                 },
               ],
             },
@@ -1205,7 +886,7 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
 
       // Both v4 and v5 should pass through empty list
-      const v4Prompt = list.get.all.aiV4.prompt();
+      const v4Prompt = list.get.all.aiV5.prompt();
       expect(v4Prompt).toHaveLength(0);
 
       const v5Prompt = list.get.all.aiV5.prompt();
@@ -1224,7 +905,7 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
       list.add({ role: 'assistant', content: 'Assistant only' }, 'response');
 
-      const v4Prompt = list.get.all.aiV4.prompt();
+      const v4Prompt = list.get.all.aiV5.prompt();
       const v5Prompt = list.get.all.aiV5.prompt();
 
       expect(v4Prompt.map(m => m.role)).toEqual(['assistant']);
@@ -1298,7 +979,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(messageWithEmptyReasoning, 'response');
 
-      const v4Core = list.get.all.aiV4.core();
+      const v4Core = list.get.all.aiV5.model();
       // Empty reasoning should be filtered out in conversion
       expect(v4Core[0].content).toHaveLength(1);
       expect(v4Core[0].content[0]).toMatchObject({
@@ -1315,7 +996,7 @@ describe('MessageList V5 Support', () => {
       list.add('Second user message', 'input');
       list.add({ role: 'assistant', content: 'Second response' }, 'response');
 
-      const v4Core = list.get.all.aiV4.core();
+      const v4Core = list.get.all.aiV5.model();
       const v5Model = list.get.all.aiV5.model();
 
       expect(v4Core).toHaveLength(4);
@@ -1632,35 +1313,6 @@ describe('MessageList V5 Support', () => {
   });
 
   describe('data-* parts handling', () => {
-    it('should preserve data-* parts when message is detected as V4 (text + data-* only)', () => {
-      // This message has no V5-specific characteristics, so it's treated as V4
-      // and parts are passed through without filtering - this works correctly
-      const list = new MessageList({ threadId, resourceId });
-
-      const message: AIV5UIMessage = {
-        id: 'msg-v4-path',
-        role: 'assistant',
-        parts: [
-          { type: 'text', text: 'Running task...' },
-          {
-            type: 'data-progress',
-            data: { taskName: 'first-task', step: 1, progress: 33 },
-          } as any,
-        ],
-      };
-
-      list.add(message, 'response');
-
-      const dbMessages = list.get.all.db();
-      const dataProgressParts = dbMessages[0].content.parts.filter((p: any) => p.type?.startsWith('data-'));
-
-      expect(dataProgressParts.length).toBe(1);
-      expect(dataProgressParts[0]).toMatchObject({
-        type: 'data-progress',
-        data: { taskName: 'first-task', step: 1, progress: 33 },
-      });
-    });
-
     it('should preserve data-* parts when message has V5 tool parts', () => {
       const list = new MessageList({ threadId, resourceId });
 
@@ -2003,90 +1655,6 @@ describe('MessageList V5 Support', () => {
       expect(toolResultPart.output).toEqual({
         type: 'content',
         value: [{ type: 'file-data', data: 'base64pdfdata', mediaType: 'application/pdf' }],
-      });
-    });
-
-    it('translates image tool-result media to file content for v7 (spec v4) models', async () => {
-      const list = new MessageList({ threadId, resourceId });
-
-      list.add('Take a screenshot', 'input');
-
-      const continuationMessage: AIV5ModelMessage = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: 'call-v7-1',
-            toolName: 'screenshotTool',
-            input: { url: 'https://example.com' },
-          },
-          {
-            type: 'tool-result',
-            toolCallId: 'call-v7-1',
-            toolName: 'screenshotTool',
-            output: { type: 'json', value: { ok: true } },
-            providerOptions: {
-              mastra: {
-                modelOutput: {
-                  type: 'content',
-                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/png' }],
-                },
-              },
-            },
-          },
-        ],
-      };
-
-      list.add(continuationMessage, 'input');
-
-      const prompt = await list.get.all.aiV7.llmPrompt();
-      const toolRole = prompt.find(m => m.role === 'tool');
-      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
-      expect(toolResultPart.output).toEqual({
-        type: 'content',
-        value: [{ type: 'file', data: { type: 'data', data: 'base64imagedata' }, mediaType: 'image/png' }],
-      });
-    });
-
-    it('translates non-image tool-result media to file content for v7 (spec v4) models', async () => {
-      const list = new MessageList({ threadId, resourceId });
-
-      list.add('Fetch a document', 'input');
-
-      const continuationMessage: AIV5ModelMessage = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: 'call-v7-2',
-            toolName: 'docTool',
-            input: {},
-          },
-          {
-            type: 'tool-result',
-            toolCallId: 'call-v7-2',
-            toolName: 'docTool',
-            output: { type: 'json', value: { ok: true } },
-            providerOptions: {
-              mastra: {
-                modelOutput: {
-                  type: 'content',
-                  value: [{ type: 'media', data: 'base64pdfdata', mediaType: 'application/pdf' }],
-                },
-              },
-            },
-          },
-        ],
-      };
-
-      list.add(continuationMessage, 'input');
-
-      const prompt = await list.get.all.aiV7.llmPrompt();
-      const toolRole = prompt.find(m => m.role === 'tool');
-      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
-      expect(toolResultPart.output).toEqual({
-        type: 'content',
-        value: [{ type: 'file', data: { type: 'data', data: 'base64pdfdata' }, mediaType: 'application/pdf' }],
       });
     });
 

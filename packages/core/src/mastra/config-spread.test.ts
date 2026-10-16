@@ -1,7 +1,7 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { MastraError } from '../error';
+import { mockTextModel } from '../test-utils/llm-mock';
 import { Mastra } from './index';
 
 /**
@@ -17,14 +17,12 @@ describe('Mastra Config Spread Handling', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test agent',
-      model: new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'Test response',
-        }),
-      }),
+      model: mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'Test response',
+      })),
     });
 
   it('should handle config with spread operator', () => {

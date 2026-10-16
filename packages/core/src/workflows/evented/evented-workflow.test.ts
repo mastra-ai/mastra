@@ -236,7 +236,7 @@ createWorkflowTestSuite({
     }
   },
 
-  streamWorkflow: async (workflow, inputData, options = {}, api = 'stream'): Promise<StreamWorkflowResult> => {
+  streamWorkflow: async (workflow, inputData, options = {}): Promise<StreamWorkflowResult> => {
     const mastra = new Mastra({
       workflows: { [workflow.id]: workflow },
       storage: sharedStorage,
@@ -253,36 +253,20 @@ createWorkflowTestSuite({
 
       const events: StreamEvent[] = [];
 
-      if (api === 'streamLegacy') {
-        const { stream, getWorkflowState } = run.streamLegacy({
-          inputData,
-          initialState: options.initialState as any,
-          perStep: options.perStep,
-          requestContext: options.requestContext as any,
-        } as any);
+      const streamResult = run.stream({
+        inputData,
+        initialState: options.initialState,
+        perStep: options.perStep,
+        requestContext: options.requestContext as any,
+        closeOnSuspend: options.closeOnSuspend,
+      });
 
-        for await (const event of stream) {
-          events.push(JSON.parse(JSON.stringify(event)));
-        }
-
-        const result = await getWorkflowState();
-        return { events, result: result as WorkflowResult };
-      } else {
-        const streamResult = run.stream({
-          inputData,
-          initialState: options.initialState,
-          perStep: options.perStep,
-          requestContext: options.requestContext as any,
-          closeOnSuspend: options.closeOnSuspend,
-        });
-
-        for await (const event of streamResult.fullStream) {
-          events.push(JSON.parse(JSON.stringify(event)));
-        }
-
-        const result = await streamResult.result;
-        return { events, result: result as WorkflowResult };
+      for await (const event of streamResult.fullStream) {
+        events.push(JSON.parse(JSON.stringify(event)));
       }
+
+      const result = await streamResult.result;
+      return { events, result: result as WorkflowResult };
     } finally {
       await mastra.stopWorkers();
     }

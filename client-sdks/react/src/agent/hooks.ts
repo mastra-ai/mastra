@@ -429,14 +429,14 @@ export const useChat = ({
           allParts.push({
             type: 'file',
             data: normalizeSignalFileData(part.data),
-            mediaType: part.mimeType,
+            mediaType: part.mediaType,
             ...(part.filename ? { filename: part.filename } : {}),
           });
         } else if (part.type === 'image') {
           allParts.push({
             type: 'file',
             data: normalizeSignalFileData(part.image),
-            mediaType: part.mimeType ?? 'image/png',
+            mediaType: part.mediaType ?? 'image/png',
           });
         }
       }

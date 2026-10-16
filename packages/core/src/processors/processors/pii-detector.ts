@@ -434,38 +434,23 @@ export class PIIDetector implements Processor<'pii-detector'> {
           : baseSchema;
 
       let result: PIIDetectionResult;
-      if (isSupportedLanguageModel(model)) {
-        const response = await this.detectionAgent.generate(prompt, {
-          structuredOutput: {
-            ...(this.structuredOutputOptions ?? {}),
-            schema,
-          },
-          modelSettings: {
-            temperature: 0,
-          },
-          providerOptions: this.providerOptions,
-          requestContext,
-          ...observabilityContext,
-        });
-        if (!response.object) {
-          throw new Error('Structured output returned no object');
-        }
-        result = response.object;
-      } else {
-        const standardSchema = toStandardSchema(schema as PublicSchema);
-        const response = await this.detectionAgent.generateLegacy(prompt, {
-          output: standardSchemaToJSONSchema(standardSchema),
-          temperature: 0,
-          providerOptions: this.providerOptions as SharedV2ProviderOptions,
-          requestContext,
-          ...observabilityContext,
-        });
 
-        if (!response.object) {
-          throw new Error('Legacy output returned no object');
-        }
-        result = response.object as PIIDetectionResult;
+      const response = await this.detectionAgent.generate(prompt, {
+        structuredOutput: {
+          ...(this.structuredOutputOptions ?? {}),
+          schema,
+        },
+        modelSettings: {
+          temperature: 0,
+        },
+        providerOptions: this.providerOptions,
+        requestContext,
+        ...observabilityContext,
+      });
+      if (!response.object) {
+        throw new Error('Structured output returned no object');
       }
+      result = response.object;
 
       // Apply redaction method if not already provided and we have detections
       if (this.strategy === 'redact') {

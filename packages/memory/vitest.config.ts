@@ -5,6 +5,7 @@ export default defineConfig({
     name: 'unit:packages/memory',
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    setupFiles: process.env.PROMPT_RECORD_DIR ? ['../core/src/test-utils/prompt-recorder.setup.ts'] : [],
     typecheck: {
       enabled: true,
       include: ['type-tests/**/*.test-d.ts'],

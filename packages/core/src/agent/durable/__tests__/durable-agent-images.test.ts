@@ -365,7 +365,7 @@ describe('DurableAgent image handling', () => {
           role: 'user',
           content: [
             { type: 'text', text: 'Which breed is this dog?' },
-            { type: 'image', image: GS_URI, mimeType: 'image/png' },
+            { type: 'image', image: GS_URI, mediaType: 'image/png' },
           ],
         },
       ]);
