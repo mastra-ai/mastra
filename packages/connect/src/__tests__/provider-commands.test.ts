@@ -28,6 +28,31 @@ const action = createAction({
 export default action;
 `;
 
+const getUserDriveActionTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({
+  userId: z.string().describe('User ID or user principal name.'),
+});
+const OutputSchema = z.object({ id: z.string() });
+
+const action = createAction({
+  description: "Get a user's personal OneDrive (drive).",
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.get({
+      endpoint: \`/v1.0/users/\${encodeURIComponent(input.userId)}/drive\`,
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
 const imageActionTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -306,6 +331,11 @@ describe('maintainer provider commands', () => {
     const integrationsDir = resolve(packageRoot, '.templates', 'integrations');
     symlinkSync('first-provider', resolve(integrationsDir, 'first-provider-alias'), 'dir');
 
+    const microsoftExcelActionDir = resolve(integrationsDir, 'microsoft-excel-oauth2-cc', 'actions');
+    mkdirSync(microsoftExcelActionDir, { recursive: true });
+    writeFileSync(resolve(microsoftExcelActionDir, 'get-user-drive.ts'), getUserDriveActionTemplate);
+    symlinkSync('microsoft-excel-oauth2-cc', resolve(integrationsDir, 'microsoft-excel'), 'dir');
+
     const openaiActionDir = resolve(integrationsDir, 'openai', 'actions');
     mkdirSync(openaiActionDir, { recursive: true });
     writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
@@ -569,6 +599,43 @@ export default action;
       providerId: 'first-provider-alias',
       localId: 'first-provider-alias',
     });
+  });
+
+  it('adapts shared Office templates for delegated OAuth without changing client-credentials providers', async () => {
+    await addProvider({
+      providerId: 'microsoft-excel',
+      localId: 'microsoft-excel',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+    await addProvider({
+      providerId: 'microsoft-excel-oauth2-cc',
+      localId: 'microsoft-excel-oauth2-cc',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const delegatedTool = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel/tools/get-user-drive.ts'),
+      'utf8',
+    );
+    expect(delegatedTool).toContain('userId: z.string().optional().describe');
+    expect(delegatedTool).toMatch(
+      /endpoint: input\.userId\s*\? `\/v1\.0\/users\/\$\{encodeURIComponent\(input\.userId\)\}\/drive`\s*: ["']\/v1\.0\/me\/drive["']/,
+    );
+    expect(delegatedTool).toContain(
+      "Get the connected user's OneDrive, or another user's drive when userId is provided.",
+    );
+
+    const clientCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel-oauth2-cc/tools/get-user-drive.ts'),
+      'utf8',
+    );
+    expect(clientCredentialsTool).toMatch(
+      /userId: z\.string\(\)\.describe\(["']User ID or user principal name\.["']\)/,
+    );
+    expect(clientCredentialsTool).toContain('endpoint: `/v1.0/users/${encodeURIComponent(input.userId)}/drive`');
+    expect(clientCredentialsTool).not.toContain("'/v1.0/me/drive'");
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
