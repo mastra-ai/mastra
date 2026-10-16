@@ -833,8 +833,6 @@ describe('Agent Routes Authorization', () => {
         getProvider: () => 'test-provider',
         getModelId: () => 'test-model',
       } as any);
-      vi.spyOn(mockAgent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
-      vi.spyOn(mockAgent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
       vi.spyOn(mockAgent, 'getDefaultOptions').mockResolvedValue({});
       vi.spyOn(mockAgent, 'getModelList').mockResolvedValue(null);
 
@@ -861,8 +859,6 @@ describe('Agent Routes Authorization', () => {
         getProvider: () => 'test-provider',
         getModelId: () => 'test-model',
       } as any);
-      vi.spyOn(agent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
-      vi.spyOn(agent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
       vi.spyOn(agent, 'getDefaultOptions').mockResolvedValue({});
       vi.spyOn(agent, 'getModelList').mockResolvedValue(null);
     };

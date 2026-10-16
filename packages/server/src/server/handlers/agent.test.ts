@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
@@ -58,7 +57,7 @@ const makeMockAgent = (config?: Partial<AgentConfig>) =>
     name: 'test-agent',
     description: 'A test agent for unit testing',
     instructions: 'test instructions',
-    model: openai('gpt-4o'),
+    model: openaiV5('gpt-4o'),
     ...(config || {}),
   });
 
@@ -123,15 +122,13 @@ describe('Agent Handlers', () => {
           workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
-          provider: 'openai.chat',
+          provider: 'openai.responses',
           requestContextSchema: undefined,
           hasDraft: false,
           modelId: 'gpt-4o',
-          modelVersion: 'v1',
+          modelVersion: 'v2',
           supportsMemory: true,
           defaultOptions: {},
-          defaultGenerateOptionsLegacy: {},
-          defaultStreamOptionsLegacy: {},
           modelList: undefined,
           source: 'code',
         },
@@ -155,8 +152,6 @@ describe('Agent Handlers', () => {
           modelVersion: 'v2',
           supportsMemory: true,
           defaultOptions: {},
-          defaultGenerateOptionsLegacy: {},
-          defaultStreamOptionsLegacy: {},
           workspaceId: undefined,
           modelList: [
             {
@@ -505,7 +500,7 @@ describe('Agent Handlers', () => {
       expect(result['agent-a'].modelId).toBeUndefined();
 
       expect(result['agent-b']).toBeDefined();
-      expect(result['agent-b'].provider).toBe('openai.chat');
+      expect(result['agent-b'].provider).toBe('openai.responses');
       expect(result['agent-b'].modelId).toBe('gpt-4o');
     });
   });
@@ -599,13 +594,11 @@ describe('Agent Handlers', () => {
         workspaceId: undefined,
         inputProcessors: [],
         outputProcessors: [],
-        provider: 'openai.chat',
+        provider: 'openai.responses',
         modelId: 'gpt-4o',
-        modelVersion: 'v1',
+        modelVersion: 'v2',
         supportsMemory: true,
         defaultOptions: {},
-        defaultGenerateOptionsLegacy: {},
-        defaultStreamOptionsLegacy: {},
         modelList: undefined,
         requestContextSchema: undefined,
         source: 'code',
@@ -818,40 +811,6 @@ describe('Agent Handlers', () => {
     it('should throw 404 when agent not found', async () => {
       await expect(
         GENERATE_AGENT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          agentId: 'non-existing',
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
-    });
-  });
-
-  describe('streamGenerateHandler', () => {
-    it('should stream response from agent', async () => {
-      const mockStreamResult = {
-        toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
-        toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
-      };
-      (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
-
-      const result = await STREAM_GENERATE_LEGACY_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        agentId: 'test-agent',
-        messages: ['test message'],
-        resourceId: 'test-resource',
-        threadId: 'test-thread',
-        experimental_output: undefined,
-      });
-
-      expect(result).toBeInstanceOf(Response);
-    });
-
-    it('should throw 404 when agent not found', async () => {
-      await expect(
-        STREAM_GENERATE_LEGACY_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           agentId: 'non-existing',
           messages: ['test message'],

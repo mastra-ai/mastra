@@ -1,10 +1,5 @@
 import { z } from 'zod/v4';
-import {
-  streamWorkflowBodySchema,
-  resumeBodySchema,
-  startAsyncWorkflowBodySchema,
-  streamLegacyWorkflowBodySchema,
-} from './workflows';
+import { streamWorkflowBodySchema, resumeBodySchema, startAsyncWorkflowBodySchema } from './workflows';
 
 // Path parameter schemas
 
@@ -26,11 +21,6 @@ export const actionRunPathParams = z.object({
  * Schema for stream agent-builder action body
  */
 export const streamAgentBuilderBodySchema = streamWorkflowBodySchema;
-
-/**
- * Schema for legacy stream agent-builder action body
- */
-export const streamLegacyAgentBuilderBodySchema = streamLegacyWorkflowBodySchema;
 
 /**
  * Schema for resume agent-builder action body

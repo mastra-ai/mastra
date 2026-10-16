@@ -39,7 +39,6 @@ import {
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
-  agentExecutionLegacyBodySchema,
   generateResponseSchema,
   streamResponseSchema,
   providersResponseSchema,
@@ -450,8 +449,6 @@ export interface SerializedAgent {
   >;
   // We can't use the true types here because they are not serializable
   defaultOptions?: Record<string, unknown>;
-  defaultGenerateOptionsLegacy?: Record<string, unknown>;
-  defaultStreamOptionsLegacy?: Record<string, unknown>;
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
 
@@ -782,20 +779,6 @@ async function formatAgentList({
     logger.warn('Error getting LLM for agent', { agentName: agent.name, error });
   }
 
-  let defaultGenerateOptionsLegacy: Awaited<ReturnType<Agent['getDefaultGenerateOptionsLegacy']>> | undefined;
-  try {
-    defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
-  } catch (error) {
-    logger.warn('Error getting default generate options for agent', { agentName: agent.name, error });
-  }
-
-  let defaultStreamOptionsLegacy: Awaited<ReturnType<Agent['getDefaultStreamOptionsLegacy']>> | undefined;
-  try {
-    defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
-  } catch (error) {
-    logger.warn('Error getting default stream options for agent', { agentName: agent.name, error });
-  }
-
   let defaultOptions: Awaited<ReturnType<Agent['getDefaultOptions']>> | undefined;
   try {
     defaultOptions = await agent.getDefaultOptions({ requestContext });
@@ -913,8 +896,6 @@ async function formatAgentList({
     supportsMemory,
     defaultOptions,
     modelList,
-    defaultGenerateOptionsLegacy,
-    defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
     editor: agent.__getEditorConfig?.(),
@@ -1128,20 +1109,6 @@ async function formatAgent({
     logger.warn('Error getting LLM for agent', { agentName: agent.name, error });
   }
 
-  let defaultGenerateOptionsLegacy: Awaited<ReturnType<Agent['getDefaultGenerateOptionsLegacy']>> | undefined;
-  try {
-    defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
-  } catch (error) {
-    logger.warn('Error getting default generate options for agent', { agentName: agent.name, error });
-  }
-
-  let defaultStreamOptionsLegacy: Awaited<ReturnType<Agent['getDefaultStreamOptionsLegacy']>> | undefined;
-  try {
-    defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
-  } catch (error) {
-    logger.warn('Error getting default stream options for agent', { agentName: agent.name, error });
-  }
-
   let defaultOptions: Awaited<ReturnType<Agent['getDefaultOptions']>> | undefined;
   try {
     defaultOptions = await agent.getDefaultOptions({ requestContext });
@@ -1233,8 +1200,6 @@ async function formatAgent({
     supportsMemory,
     modelList,
     defaultOptions,
-    defaultGenerateOptionsLegacy,
-    defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
     editor: agent.__getEditorConfig?.(),
@@ -1561,185 +1526,6 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error generating from agent');
-    }
-  },
-});
-
-// Legacy routes (deprecated)
-export const GENERATE_LEGACY_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/generate-legacy',
-  responseType: 'json' as const,
-  pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionLegacyBodySchema,
-  responseSchema: generateResponseSchema,
-  summary: '[DEPRECATED] Generate with legacy format',
-  description: 'Legacy endpoint for generating agent responses. Use /agents/:agentId/generate instead.',
-  tags: ['Agents', 'Legacy'],
-  requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
-    try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-        requestContext,
-      });
-
-      // UI Frameworks may send "client tools" in the body,
-      // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor', 'scopes']);
-      stripClientCredentialHeaders(params);
-
-      const { messages, resourceId, resourceid, threadId, ...rest } = params;
-      // Use resourceId if provided, fall back to resourceid (deprecated)
-      const clientResourceId = resourceId ?? resourceid;
-
-      // Authorization: context values take precedence over client-provided values
-      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
-      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-
-      validateBody({ messages });
-
-      if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
-        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
-      }
-
-      // Validate thread ownership if accessing an existing thread
-      if (effectiveThreadId) {
-        const memory = await agent.getMemory({ requestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-            });
-          }
-        }
-      }
-
-      const result = await agent.generateLegacy(messages, {
-        ...rest,
-        abortSignal,
-        resourceId: effectiveResourceId ?? '',
-        threadId: effectiveThreadId ?? '',
-      });
-
-      return result;
-    } catch (error) {
-      return handleError(error, 'Error generating from agent');
-    }
-  },
-});
-
-export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/stream-legacy',
-  responseType: 'datastream-response' as const,
-  pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionLegacyBodySchema,
-  responseSchema: streamResponseSchema,
-  summary: '[DEPRECATED] Stream with legacy format',
-  description: 'Legacy endpoint for streaming agent responses. Use /agents/:agentId/stream instead.',
-  tags: ['Agents', 'Legacy'],
-  requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
-    try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(requestContext),
-        requestContext,
-      });
-
-      // UI Frameworks may send "client tools" in the body,
-      // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor', 'scopes']);
-      stripClientCredentialHeaders(params);
-
-      const { messages, resourceId, resourceid, threadId, ...rest } = params;
-      // Use resourceId if provided, fall back to resourceid (deprecated)
-      const clientResourceId = resourceId ?? resourceid;
-
-      // Authorization: context values take precedence over client-provided values
-      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
-      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-
-      validateBody({ messages });
-
-      if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
-        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
-      }
-
-      // Validate thread ownership if accessing an existing thread
-      if (effectiveThreadId) {
-        const memory = await agent.getMemory({ requestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-            });
-          }
-        }
-      }
-
-      const streamResult = await agent.streamLegacy(messages, {
-        ...rest,
-        abortSignal,
-        resourceId: effectiveResourceId ?? '',
-        threadId: effectiveThreadId ?? '',
-      });
-
-      // Note: Do NOT set Transfer-Encoding header explicitly in the headers option.
-      // Runtimes automatically add this header for streaming responses,
-      // and setting it explicitly causes duplicate headers which break HTTP protocol.
-      const streamResponse = rest.output
-        ? streamResult.toTextStreamResponse()
-        : // Without `output`, streamLegacy returns a StreamTextResult which has
-          // toDataStreamResponse; TS resolves the object-stream overload because
-          // `output` is optionally typed on the body schema.
-          (
-            streamResult as unknown as {
-              toDataStreamResponse: (options: Record<string, unknown>) => Response;
-            }
-          ).toDataStreamResponse({
-            sendUsage: true,
-            sendReasoning: true,
-            getErrorMessage: (error: any) => {
-              // Sanitize the error message to prevent leaking internal details,
-              // stack traces, or provider-specific error metadata to the client.
-              // See: https://github.com/mastra-ai/mastra/issues/15827
-              if (error instanceof Error) {
-                const safeMessage = error.message
-                  // Strip file paths (e.g. /home/user/..., C:\users\...)
-                  .replace(/([A-Za-z]:)?[\/][^\s,)]+/g, '<path>')
-                  // Strip stack-trace lines ("at Foo (bar.js:10:5)")
-                  .replace(/\s+at\s+[^\n]*/g, '')
-                  // Strip aiohttp/provider response bodies embedded in messages
-                  .replace(/Response body:.*/s, '')
-                  .trim();
-                return `An error occurred while processing your request. ${safeMessage || 'Unknown error'}`;
-              }
-              // For non-Error objects, avoid JSON.stringify which could dump
-              // entire error payloads (including secrets from provider responses).
-              return 'An error occurred while processing your request.';
-            },
-          });
-
-      return streamResponse;
-    } catch (error) {
-      return handleError(error, 'error streaming agent response');
     }
   },
 });

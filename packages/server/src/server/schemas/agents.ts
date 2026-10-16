@@ -280,8 +280,6 @@ export const serializedAgentSchema = z.object({
   supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
   defaultOptions: defaultOptionsSchema.optional(),
-  defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
-  defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
   requestContextSchema: z.string().optional(),
   source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
@@ -460,20 +458,7 @@ export const agentExecutionBodySchema = z
     // Idle-loop streaming (collapses streamUntilIdle into stream)
     untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
   })
-  .passthrough(); // Allow additional fields for forward compatibility
-
-/**
- * Legacy body schema for deprecated endpoints that still use threadId/resourceId
- * Used by /agents/:agentId/generate-legacy and /agents/:agentId/stream-legacy
- */
-export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
-  resourceId: z.string().optional(),
-  resourceid: z.string().optional(), // lowercase variant
-  threadId: z.string().optional(),
-  // Legacy generate/stream expect AI SDK v4 CoreMessage context and a string system message.
-  context: typedPermissive<CoreMessageV4[]>(z.array(coreMessageSchema)).optional(),
-  system: typedPermissive<string>(systemMessageSchema).optional(),
-});
+  .passthrough();
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),

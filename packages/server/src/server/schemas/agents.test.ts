@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   agentExecutionBodySchema,
-  agentExecutionLegacyBodySchema,
   resumeStreamBodySchema,
   serializedAgentSchema,
   serializedToolSchema,
@@ -21,7 +20,6 @@ describe('agent execution providerOptions', () => {
 
   it.each([
     ['execution', agentExecutionBodySchema, { messages: 'hello' }],
-    ['legacy', agentExecutionLegacyBodySchema, { messages: 'hello', threadId: 'thread', resourceId: 'resource' }],
     ['resume', resumeStreamBodySchema, { runId: 'run', resumeData: {} }],
   ] as const)('preserves all provider namespaces in %s requests', (_name, schema, body) => {
     expect(schema.parse({ ...body, providerOptions }).providerOptions).toEqual(providerOptions);
