@@ -21,9 +21,7 @@ export type MastraModelConfig = string | { modelId?: string; specificationVersio
  */
 export interface AgentLike {
   generate(message: unknown, options?: unknown): Promise<unknown>;
-  generateLegacy?(message: unknown, options?: unknown): Promise<unknown>;
   stream(message: unknown, options?: unknown): Promise<unknown>;
-  streamLegacy?(message: unknown, options?: unknown): Promise<unknown>;
 }
 
 /**
@@ -63,16 +61,12 @@ export function getModelRecordingName(model: MastraModelConfig): string {
  * - `agent.generate()` with `memory: { thread, resource }` options
  * - `agent.stream()` with the new streaming API
  *
- * v4 models require:
- * - `agent.generateLegacy()` with `threadId/resourceId` options
- * - `agent.streamLegacy()` for streaming
+ * v4 (LanguageModelV1) models are not supported.
  *
  * @example
  * ```typescript
- * if (isV5PlusModel(model)) {
- *   await agent.generate('Hello', { memory: { thread: threadId } });
- * } else {
- *   await agent.generateLegacy('Hello', { threadId });
+ * if (!isV5PlusModel(model)) {
+ *   throw new Error('unsupported model');
  * }
  * ```
  */
@@ -101,7 +95,7 @@ export interface AgentGenerateOptions {
  *
  * Automatically calls the correct method based on model version:
  * - v5+ models: `agent.generate()` with `memory: { thread, resource }`
- * - v4 models: `agent.generateLegacy()` with `threadId/resourceId`
+ * - v4 models: throws (not supported)
  *
  * @example
  * ```typescript
@@ -136,7 +130,7 @@ export async function agentGenerate(
 
     return agent.generate(message, transformedOptions as any);
   } else {
-    return (agent as any).generateLegacy(message, options);
+    throw new Error('AI SDK v4 (LanguageModelV1) models are not supported.');
   }
 }
 
@@ -145,7 +139,7 @@ export async function agentGenerate(
  *
  * Automatically calls the correct method based on model version:
  * - v5+ models: `agent.stream()` with `memory: { thread, resource }`
- * - v4 models: `agent.streamLegacy()` with `threadId/resourceId`
+ * - v4 models: throws (not supported)
  *
  * @example
  * ```typescript
@@ -178,7 +172,7 @@ export async function agentStream(
 
     return agent.stream(message, transformedOptions as any);
   } else {
-    return (agent as any).streamLegacy(message, options);
+    throw new Error('AI SDK v4 (LanguageModelV1) models are not supported.');
   }
 }
 

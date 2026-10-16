@@ -1,11 +1,11 @@
 /**
  * Type tests for @mastra/client-js Agent resource
- * Tests generate, stream, generateLegacy, streamLegacy, and network methods
+ * Tests generate and stream methods
  */
 import { expectTypeOf, describe, it } from 'vitest';
 import type { FullOutput } from '@mastra/core/stream';
 import { MastraClient } from '@mastra/client-js';
-import type { StreamParams, GenerateLegacyParams, StreamLegacyParams, NetworkStreamParams } from '@mastra/client-js';
+import type { StreamParams } from '@mastra/client-js';
 import { z } from 'zod/v3';
 import { z as zv4 } from 'zod/v4';
 
@@ -161,80 +161,6 @@ describe('stream', () => {
   });
 });
 
-describe('generateLegacy', () => {
-  it('should accept GenerateLegacyParams without output', async () => {
-    const result = await agent.generateLegacy({
-      messages: 'Hello',
-      maxSteps: 5,
-    });
-    expectTypeOf(result).toHaveProperty('text');
-  });
-
-  it('should accept output schema (zod v3)', async () => {
-    const result = await agent.generateLegacy({
-      messages: 'Analyze',
-      output: sentimentSchema,
-    });
-    expectTypeOf(result).toHaveProperty('object');
-    expectTypeOf(result.object).toEqualTypeOf<{ sentiment: 'positive' | 'negative' | 'neutral'; confidence: number }>();
-  });
-
-  it('should accept experimental_output schema', async () => {
-    const result = await agent.generateLegacy({
-      messages: 'Analyze',
-      experimental_output: sentimentSchema,
-    });
-    expectTypeOf(result).toHaveProperty('text');
-  });
-
-  it('should infer complex schema output type', async () => {
-    const reviewSchema = z.object({
-      rating: z.number(),
-      summary: z.string(),
-      pros: z.array(z.string()),
-      cons: z.array(z.string()),
-    });
-
-    const result = await agent.generateLegacy({
-      messages: 'Review product',
-      output: reviewSchema,
-    });
-
-    expectTypeOf(result.object).toEqualTypeOf<{
-      rating: number;
-      summary: string;
-      pros: string[];
-      cons: string[];
-    }>();
-  });
-});
-
-describe('streamLegacy', () => {
-  it('should return Response with processDataStream method', async () => {
-    const result = await agent.streamLegacy({
-      messages: 'Hello',
-    });
-    expectTypeOf(result).toExtend<Response>();
-    expectTypeOf(result).toHaveProperty('processDataStream');
-  });
-
-  it('should accept output schema', async () => {
-    const result = await agent.streamLegacy({
-      messages: 'Analyze',
-      output: sentimentSchema,
-    });
-    expectTypeOf(result).toExtend<Response>();
-  });
-
-  it('should accept experimental_output schema', async () => {
-    const result = await agent.streamLegacy({
-      messages: 'Analyze',
-      experimental_output: sentimentSchema,
-    });
-    expectTypeOf(result).toExtend<Response>();
-  });
-});
-
 describe('StreamParams typing', () => {
   it('should type StreamParams without structured output', () => {
     const params: StreamParams = {
@@ -262,52 +188,5 @@ describe('StreamParams typing', () => {
       structuredOutput: { schema: sentimentSchemaV4 },
     };
     expectTypeOf(params).toExtend<StreamParams<OutputType>>();
-  });
-});
-
-describe('GenerateLegacyParams typing', () => {
-  it('should type GenerateLegacyParams without output', () => {
-    const params: GenerateLegacyParams = {
-      messages: 'Hello',
-      maxSteps: 5,
-    };
-    expectTypeOf(params).toExtend<GenerateLegacyParams>();
-  });
-
-  it('should type GenerateLegacyParams with output schema', () => {
-    const params: GenerateLegacyParams<typeof sentimentSchema> = {
-      messages: 'Hello',
-      output: sentimentSchema,
-    };
-    expectTypeOf(params).toExtend<GenerateLegacyParams<typeof sentimentSchema>>();
-  });
-});
-
-describe('StreamLegacyParams typing', () => {
-  it('should type StreamLegacyParams without output', () => {
-    const params: StreamLegacyParams = {
-      messages: 'Hello',
-      maxSteps: 5,
-    };
-    expectTypeOf(params).toExtend<StreamLegacyParams>();
-  });
-
-  it('should type StreamLegacyParams with output schema', () => {
-    const params: StreamLegacyParams<typeof sentimentSchema> = {
-      messages: 'Stream this',
-      output: sentimentSchema,
-    };
-    expectTypeOf(params).toExtend<StreamLegacyParams<typeof sentimentSchema>>();
-  });
-});
-
-describe('NetworkStreamParams typing', () => {
-  it('should type NetworkStreamParams correctly', () => {
-    const params: NetworkStreamParams = {
-      messages: 'Analyze this task',
-      maxSteps: 20,
-      autoResumeSuspendedTools: true,
-    };
-    expectTypeOf(params).toExtend<NetworkStreamParams>();
   });
 });

@@ -28,18 +28,18 @@ import { agentGenerate, agentStream, isV5PlusModel, getModelRecordingName } from
 
 #### `agentGenerate(agent, message, options, model)`
 
-Calls `agent.generate()` (v5+) or `agent.generateLegacy()` (v4), transforming `threadId`/`resourceId` to the `memory: { thread, resource }` format for v5+. Also maps `output` → `structuredOutput` for v5+.
+Calls `agent.generate()`, transforming `threadId`/`resourceId` to the `memory: { thread, resource }` format. Also maps `output` → `structuredOutput`. Throws for AI SDK v4 models.
 
 ```typescript
 const result = await agentGenerate(agent, 'Hello', { threadId, resourceId }, model);
 
-// With structured output (v5+ uses structuredOutput, v4 uses output)
+// With structured output (mapped to structuredOutput)
 const result = await agentGenerate(agent, 'Extract data', { threadId, output: mySchema }, model);
 ```
 
 #### `agentStream(agent, message, options, model)`
 
-Calls `agent.stream()` (v5+) or `agent.streamLegacy()` (v4), transforming parameters the same way as `agentGenerate`.
+Calls `agent.stream()`, transforming parameters the same way as `agentGenerate`.
 
 ```typescript
 const stream = await agentStream(agent, 'Count to 5', { threadId }, model);
