@@ -486,17 +486,20 @@ export function createChannelThreadIdResolver(startedSessions: SlackStartedSessi
 }
 
 /**
- * The Factory session a repo-backed Slack thread belongs to. A thread created
- * before Slack threads moved onto the Factory resource runs under its session
- * id as its resource; a newer thread runs under the Factory and is named after
- * its session. With no session row for either, the thread is addressed by its
- * own id and fails authorization like any session without a row.
+ * The Factory session a repo-backed Slack thread belongs to. A thread under
+ * the Factory resource is stamped with its session id (the startup migration
+ * stamps threads it moved there). An unmigrated thread runs under its session
+ * id as its resource, and a newer thread is named after its session. With no
+ * session row for either, the thread is addressed by its own id and fails
+ * authorization like any session without a row.
  */
 async function slackThreadSessionId(
   sessions: ReturnType<typeof createSourceControlSessionLookup>,
-  thread: { id: string; resourceId: string },
+  thread: { id: string; resourceId: string; metadata?: Record<string, unknown> },
 ): Promise<string | null> {
   if (thread.resourceId.startsWith('channel:')) return null;
+  const stamped = thread.metadata?.factorySessionId;
+  if (typeof stamped === 'string' && stamped) return stamped;
   if (await sessions.getSourceControlBySessionId(thread.resourceId)) return thread.resourceId;
   if (await sessions.getSourceControlBySessionId(thread.id)) return thread.id;
   // With no session row the thread is its own session: falling back to the
@@ -512,7 +515,15 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
     // A session-bound Slack thread is addressed by its Factory session id and
     // runs under the thread's resource (the Factory). A chat-only thread is its
     // own session, addressed by its `channel:` resource.
-    const sessionId = (await slackThreadSessionId(sourceControlSessions, thread)) ?? thread.resourceId;
+    // Approval clicks pass the thread without its metadata; load the stored
+    // thread whenever the session stamp is missing so a migrated thread's
+    // stamp is read.
+    const stamped = (thread as { metadata?: Record<string, unknown> }).metadata?.factorySessionId;
+    const stored =
+      stamped || thread.resourceId.startsWith('channel:')
+        ? thread
+        : ((await controller.queryThreadById({ threadId: thread.id })) ?? thread);
+    const sessionId = (await slackThreadSessionId(sourceControlSessions, stored)) ?? thread.resourceId;
     const sourceControl = sessionId.startsWith('channel:')
       ? null
       : await sourceControlSessions.getSourceControlBySessionId(sessionId);

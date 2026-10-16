@@ -482,6 +482,34 @@ describe('handler dispatch gating', () => {
     expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
   });
 
+  it('authorizes a migrated legacy thread through the session id it was stamped with', async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn(async (sessionId: string) =>
+          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1' } : null,
+        ),
+      },
+    } as any;
+    // Created before Slack threads were named after their session, then moved onto the Factory.
+    const legacy = { id: 'C-1:1700.42', resourceId: 'fp-1', metadata: { factorySessionId: 'session-1' } };
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({ listThreads: vi.fn().mockResolvedValue({ threads: [legacy] }) }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    const ctx = handlerCtx(mastra);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalled();
+    expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+  });
+
   it('rejects an existing Factory session when the responder is linked to another organization', async () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-2', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
@@ -1211,7 +1239,7 @@ describe('channel session creation context (resolveSession)', () => {
         }),
       },
     };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
     const requestContext = new RequestContext();
 
     const session = await createChannelSessionResolver({ sourceControl } as any)({
@@ -1238,7 +1266,7 @@ describe('channel session creation context (resolveSession)', () => {
     const sourceControl = {
       sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? row : null)) },
     };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1257,7 +1285,11 @@ describe('channel session creation context (resolveSession)', () => {
 
   it('addresses a thread under the Factory with no session row by its own id, not the shared resource', async () => {
     const sourceControl = { sessions: { getBySessionId: vi.fn(async () => null) } };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn(async () => null),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1266,6 +1298,28 @@ describe('channel session creation context (resolveSession)', () => {
 
     expect(controller.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'thread-9', resourceId: 'fp-1', threadId: 'thread-9' }),
+      );
+    });
+
+  it('resolves a migrated legacy thread passed without metadata through its stored session stamp', async () => {
+    const row = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: 'fp-1' };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? row : null)) },
+    };
+    const legacy = { id: 'C-1:1700.42', resourceId: 'fp-1' };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) =>
+        threadId === legacy.id ? { ...legacy, metadata: { factorySessionId: 'session-1' } } : null,
+      ),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
+
+    // Approval clicks resolve the session from the bare thread address.
+    await createChannelSessionResolver({ sourceControl } as any)({ controller, thread: legacy } as any);
+
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-1', resourceId: 'fp-1', threadId: 'C-1:1700.42' }),
     );
   });
 
@@ -1277,7 +1331,7 @@ describe('channel session creation context (resolveSession)', () => {
           .mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: null }),
       },
     };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1291,7 +1345,7 @@ describe('channel session creation context (resolveSession)', () => {
     const sourceControl = {
       sessions: { getBySessionId: vi.fn() },
     };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
