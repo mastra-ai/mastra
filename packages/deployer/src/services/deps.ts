@@ -20,7 +20,9 @@ async function writeManifestAtomically(manifestPath: string, contents: string, i
   const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
   inFlight?.add(tmpPath);
   try {
-    await fsPromises.writeFile(tmpPath, contents);
+    const { mode } = await fsPromises.stat(manifestPath);
+    await fsPromises.writeFile(tmpPath, contents, { mode });
+    await fsPromises.chmod(tmpPath, mode);
     await fsPromises.rename(tmpPath, manifestPath);
   } catch (error) {
     await fsPromises.rm(tmpPath, { force: true });
@@ -37,73 +39,120 @@ async function writeManifestAtomically(manifestPath: string, contents: string, i
  * the original manifests are restored afterwards — also on SIGINT/SIGTERM.
  */
 export async function withPlaceholderVersions<T>(dirs: string[], operation: () => Promise<T>): Promise<T> {
-  const originals = new Map<string, string>();
-  for (const dir of new Set(dirs.map(dir => path.resolve(dir)))) {
-    const manifestPath = path.join(dir, 'package.json');
-    const original = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
-    if (original === undefined) continue;
-    let manifest: PackageJson;
-    try {
-      manifest = JSON.parse(original) as PackageJson;
-    } catch (error) {
-      throw new Error(`Failed to parse ${manifestPath}: ${(error as Error).message}`, { cause: error });
-    }
-    if (!manifest.version) {
-      originals.set(manifestPath, original);
-    }
-  }
-  if (originals.size === 0) {
-    return operation();
-  }
-
-  const injected = new Set<string>();
-  const inFlightTmpPaths = new Set<string>();
-  const restoreSync = () => {
-    // Removing in-flight temp files keeps them out of later tarballs and makes any
-    // pending rename fail instead of overwriting the restored manifest.
-    for (const tmpPath of inFlightTmpPaths) {
-      fs.rmSync(tmpPath, { force: true });
-    }
-    inFlightTmpPaths.clear();
-    for (const manifestPath of injected) {
-      fs.writeFileSync(manifestPath, originals.get(manifestPath)!);
-    }
-    injected.clear();
-  };
-  const onSignal = (signal: NodeJS.Signals) => {
-    restoreSync();
-    removeSignalHandlers();
-    process.kill(process.pid, signal);
-  };
-  const removeSignalHandlers = () => {
-    process.off('SIGINT', onSignal);
-    process.off('SIGTERM', onSignal);
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
-
+  const acquired: string[] = [];
   try {
-    for (const [manifestPath, original] of originals) {
-      const manifest = JSON.parse(original) as PackageJson;
-      // Track before writing so a signal mid-write still restores this manifest.
-      injected.add(manifestPath);
-      await writeManifestAtomically(
-        manifestPath,
-        JSON.stringify({ ...manifest, version: WORKSPACE_PLACEHOLDER_VERSION }, null, 2) + '\n',
-        inFlightTmpPaths,
-      );
+    for (const dir of new Set(dirs.map(dir => path.resolve(dir)))) {
+      const manifestPath = path.join(dir, 'package.json');
+      let lease = placeholderLeases.get(manifestPath);
+      // A lease whose last owner is restoring it can't be joined; wait and start a fresh one.
+      while (lease?.releasing) {
+        await lease.releasing.catch(() => {});
+        lease = placeholderLeases.get(manifestPath);
+      }
+      if (lease) {
+        lease.refs++;
+      } else {
+        lease = { refs: 1, injected: false, ready: Promise.resolve() };
+        lease.ready = injectPlaceholderVersion(manifestPath, lease);
+        placeholderLeases.set(manifestPath, lease);
+        installSignalHandlers();
+      }
+      acquired.push(manifestPath);
+      await lease.ready;
     }
     return await operation();
   } finally {
     try {
-      for (const manifestPath of [...injected]) {
-        await writeManifestAtomically(manifestPath, originals.get(manifestPath)!, inFlightTmpPaths);
-        injected.delete(manifestPath);
+      for (const manifestPath of acquired) {
+        await releasePlaceholderVersion(manifestPath);
       }
     } finally {
-      removeSignalHandlers();
+      if (placeholderLeases.size === 0) {
+        removeSignalHandlers();
+      }
     }
   }
+}
+
+interface PlaceholderLease {
+  refs: number;
+  original?: string;
+  injected: boolean;
+  ready: Promise<void>;
+  releasing?: Promise<void>;
+}
+
+// Shared across calls so one bundle can't restore a manifest another is still packing.
+const placeholderLeases = new Map<string, PlaceholderLease>();
+const inFlightTmpPaths = new Set<string>();
+
+async function injectPlaceholderVersion(manifestPath: string, lease: PlaceholderLease) {
+  const original = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
+  if (original === undefined) return;
+  let manifest: PackageJson;
+  try {
+    manifest = JSON.parse(original) as PackageJson;
+  } catch (error) {
+    throw new Error(`Failed to parse ${manifestPath}: ${(error as Error).message}`, { cause: error });
+  }
+  if (manifest.version) return;
+  lease.original = original;
+  // Mark before writing so a signal mid-write still restores this manifest.
+  lease.injected = true;
+  await writeManifestAtomically(
+    manifestPath,
+    JSON.stringify({ ...manifest, version: WORKSPACE_PLACEHOLDER_VERSION }, null, 2) + '\n',
+    inFlightTmpPaths,
+  );
+}
+
+async function releasePlaceholderVersion(manifestPath: string) {
+  const lease = placeholderLeases.get(manifestPath)!;
+  if (--lease.refs > 0) return;
+  lease.releasing = (async () => {
+    await lease.ready.catch(() => {});
+    try {
+      if (lease.injected) {
+        await writeManifestAtomically(manifestPath, lease.original!, inFlightTmpPaths);
+        lease.injected = false;
+      }
+    } finally {
+      placeholderLeases.delete(manifestPath);
+    }
+  })();
+  await lease.releasing;
+}
+
+function restorePlaceholderVersionsSync() {
+  // Removing in-flight temp files keeps them out of later tarballs and makes any
+  // pending rename fail instead of overwriting the restored manifest.
+  for (const tmpPath of inFlightTmpPaths) {
+    fs.rmSync(tmpPath, { force: true });
+  }
+  inFlightTmpPaths.clear();
+  for (const [manifestPath, lease] of placeholderLeases) {
+    if (lease.injected) {
+      fs.writeFileSync(manifestPath, lease.original!);
+      lease.injected = false;
+    }
+  }
+}
+
+function onPlaceholderSignal(signal: NodeJS.Signals) {
+  restorePlaceholderVersionsSync();
+  removeSignalHandlers();
+  process.kill(process.pid, signal);
+}
+
+function installSignalHandlers() {
+  if (process.listeners('SIGINT').includes(onPlaceholderSignal)) return;
+  process.once('SIGINT', onPlaceholderSignal);
+  process.once('SIGTERM', onPlaceholderSignal);
+}
+
+function removeSignalHandlers() {
+  process.off('SIGINT', onPlaceholderSignal);
+  process.off('SIGTERM', onPlaceholderSignal);
 }
 
 interface LockFileInfo {

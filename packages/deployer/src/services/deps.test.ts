@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
@@ -579,6 +579,41 @@ describe('withPlaceholderVersions', () => {
     expect(seen).toEqual(['0.0.0', '0.0.0']);
     expect(await readFile(join(leaf, 'package.json'), 'utf-8')).toBe(leafOriginal);
     expect(await readFile(join(dependent, 'package.json'), 'utf-8')).toBe(dependentOriginal);
+  });
+
+  it('keeps the placeholder until every overlapping operation sharing a manifest finishes', async () => {
+    const original = '{"name":"@inner/versionless"}';
+    const dir = await makePackage(original);
+    let releaseSecond!: () => void;
+    const secondGate = new Promise<void>(resolve => (releaseSecond = resolve));
+
+    let firstDone!: () => void;
+    const firstFinished = new Promise<void>(resolve => (firstDone = resolve));
+    const first = withPlaceholderVersions([dir], async () => {}).then(firstDone);
+    const second = withPlaceholderVersions([dir], async () => {
+      await firstFinished;
+      const version = (await readManifest(dir)).version;
+      await secondGate;
+      return version;
+    });
+
+    await first;
+    expect((await readManifest(dir)).version).toBe('0.0.0');
+    releaseSecond();
+    expect(await second).toBe('0.0.0');
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
+    expect(process.listeners('SIGINT').some(l => l.name === 'onPlaceholderSignal')).toBe(false);
+  });
+
+  it.skipIf(process.platform === 'win32')('preserves the manifest file mode', async () => {
+    const dir = await makePackage('{"name":"@inner/versionless"}');
+    const manifestPath = join(dir, 'package.json');
+    await chmod(manifestPath, 0o600);
+
+    const modeDuring = await withPlaceholderVersions([dir], async () => (await stat(manifestPath)).mode & 0o777);
+
+    expect(modeDuring).toBe(0o600);
+    expect((await stat(manifestPath)).mode & 0o777).toBe(0o600);
   });
 
   it('restores manifests when the operation fails', async () => {
