@@ -991,6 +991,18 @@
         "values": ["none", "high"]
       }
     ],
+    "reflection/beam": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reflection/beam-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "thinkingmachines/inkling-small": [
       {
         "type": "effort",

@@ -32,6 +32,7 @@
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
@@ -55,6 +56,7 @@
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
@@ -101,6 +103,12 @@
     "zai-org/GLM-5.2": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [

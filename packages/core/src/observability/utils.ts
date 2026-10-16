@@ -268,5 +268,6 @@ export function getTimeToFirstChunkMs(span: {
     ?.completionStartTime;
   if (!completionStartTime) return undefined;
   const ms = new Date(completionStartTime).getTime() - new Date(span.startTime).getTime();
-  return Number.isNaN(ms) ? undefined : ms;
+  // Clock skew between workers (durable runs) can put the first chunk before the start.
+  return Number.isNaN(ms) ? undefined : Math.max(0, ms);
 }

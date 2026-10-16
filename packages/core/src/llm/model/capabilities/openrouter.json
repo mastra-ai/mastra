@@ -492,6 +492,7 @@
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-omni-flash",
+    "reflection/beam-1.0-501b-a23b",
     "rekaai/reka-edge",
     "rekaai/reka-flash-3",
     "relace/relace-search",
@@ -806,6 +807,7 @@
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-omni-flash",
+    "reflection/beam-1.0-501b-a23b",
     "rekaai/reka-edge",
     "rekaai/reka-flash-3",
     "sakana/fugu-max",
@@ -1230,6 +1232,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "reflection/beam-1.0-501b-a23b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "thinkingmachines/inkling-small:free": [
