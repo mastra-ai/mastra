@@ -3612,11 +3612,11 @@ Notes:
 
     // Preserve the storage no-op contract when there is no vector migration to worry about:
     // if the thread already belongs to the target resource there is nothing to move, so return
-    // it untouched. When vector migration IS configured we deliberately do NOT short-circuit on
+    // it untouched. When a vector store is attached we deliberately do NOT short-circuit on
     // a same-resource call, because a previous attempt may have committed the storage move but
     // failed to migrate the vectors — short-circuiting there would make the documented retry a
     // no-op and leave the vectors stale. Re-running the (idempotent) migration repairs that state.
-    if (!migratesVectors) {
+    if (!this.vector) {
       const existing = await memoryStore.getThreadById({ threadId });
       if (existing && existing.resourceId === resourceId) {
         return existing;
@@ -3660,7 +3660,60 @@ Notes:
       }
     }
 
+    if (this.vector) {
+      try {
+        await this.moveObservationVectors(threadId, resourceId);
+      } catch (error) {
+        this.logger.error('Failed to move observation vectors during thread transfer', {
+          threadId,
+          resourceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw new Error(
+          `Thread "${threadId}" was transferred to resource "${resourceId}", but moving its ` +
+            `observation vectors failed. Its observations may not surface in recall search under the new ` +
+            `resource until the transfer is retried. Cause: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+    }
+
     return thread;
+  }
+
+  /**
+   * Re-tag a thread's observation vectors with its new resource. Recall search filters
+   * observations by `resource_id`, so untouched vectors would hide the thread's past
+   * observations under the new owner. Each vector is updated on its own with its metadata
+   * merged, because filter-based updates replace the whole metadata object on some stores.
+   */
+  private async moveObservationVectors(threadId: string, resourceId: string): Promise<void> {
+    const vector = this.vector!;
+    const indexes = await this.getMemoryVectorIndexes([this.observationIndexPrefix]);
+    for (const indexName of indexes) {
+      const { dimension } = await vector.describeIndex({ indexName });
+      // Most stores need a query vector even for a metadata-filtered read; any unit vector will do.
+      const queryVector = Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : 0));
+      const moved = new Set<string>();
+      for (;;) {
+        const stale = await vector.query({
+          indexName,
+          queryVector,
+          topK: 500,
+          filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
+        });
+        const pending = stale.filter(result => !moved.has(result.id));
+        if (pending.length === 0) break;
+        for (const result of pending) {
+          await vector.updateVector({
+            indexName,
+            id: result.id,
+            update: { metadata: { ...result.metadata, resource_id: resourceId } },
+          });
+          moved.add(result.id);
+        }
+      }
+    }
   }
 
   /**
