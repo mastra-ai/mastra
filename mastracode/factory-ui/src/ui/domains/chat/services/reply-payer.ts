@@ -1,3 +1,4 @@
+import { normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { PayerCredential, SessionPayer } from '@mastra/factory/routes/session-payer';
 
 import { providerDisplayName } from '../../settings/components/provider-display-name';
@@ -13,7 +14,8 @@ function payerPossessive(user: SessionPayer['user'], viewerId: string | undefine
 }
 
 export function replyPayerLabel(payer: SessionPayer, sdkProvider: string, viewerId: string | undefined) {
-  const [catalogProvider = sdkProvider] = sdkProvider.split('.');
+  const [sdkProviderRoot = sdkProvider] = sdkProvider.split('.');
+  const catalogProvider = normalizeLegacyProviderId(sdkProviderRoot);
   const credential = payer.credentials[catalogProvider];
   return credential
     ? `${payerPossessive(payer.user, viewerId)} ${credentialName(catalogProvider, credential)}`

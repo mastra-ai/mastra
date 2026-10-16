@@ -35,7 +35,8 @@ const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
 
 interface SessionOwnerProfile {
   id: string;
-  name: string;
+  name?: string;
+  email?: string;
   avatarUrl?: string;
 }
 
@@ -197,11 +198,12 @@ export function createSessionOwnerProfileResolver(users: SessionOwnerUserProvide
 
     for (const user of resolvedUsers) {
       if (!user) continue;
-      const name = user.name?.trim() || user.email?.trim();
-      if (!name) continue;
+      const name = user.name?.trim();
+      const email = user.email?.trim();
       profiles.set(user.id, {
         id: user.id,
-        name,
+        ...(name ? { name } : {}),
+        ...(email ? { email } : {}),
         ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
       });
     }
@@ -212,8 +214,13 @@ export function createSessionOwnerProfileResolver(users: SessionOwnerUserProvide
 }
 
 function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
-  const owner = owners.get(session.userId);
-  return owner ? { ...session, owner } : session;
+  const profile = owners.get(session.userId);
+  const name = profile?.name ?? profile?.email;
+  if (!profile || !name) return session;
+  return {
+    ...session,
+    owner: { id: profile.id, name, ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}) },
+  };
 }
 
 function projectSessionRoutes(

@@ -61,6 +61,7 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'owner', modelId: 'anthropic/claude-opus-4-6' });
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'viewer', modelId: 'openai/gpt-5.5' });
   let orgId = 'org-1';
+  let ownerProfile: { id: string; name?: string; email?: string } = { id: 'owner', name: 'Ward Peeters' };
   const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser', { workosId: 'viewer', organizationId: orgId });
@@ -80,7 +81,7 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
       modelCredentials: seed.credentials,
       modelDefaults: seed.modelDefaults,
       factoryProjects: seed.projects,
-      users: { getUser: async (id: string) => (id === 'owner' ? { id, name: 'Ward Peeters' } : null) },
+      users: { getUser: async (id: string) => (id === 'owner' ? ownerProfile : null) },
       sourceControlSessions: createSourceControlSessionLookup([sourceControl]),
       workItems: seed.workItems,
     }).routes(),
@@ -112,6 +113,9 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
     bind,
     setOrgId: (value: string) => {
       orgId = value;
+    },
+    setOwnerProfile: (value: typeof ownerProfile) => {
+      ownerProfile = value;
     },
   };
 }
@@ -165,6 +169,16 @@ describe('session-owner model catalog', () => {
       expect(body.models.map((m: { id: string }) => m.id)).toEqual(['deepseek/deepseek-flash']);
     },
   );
+
+  it('leaves the payer unnamed when the owner profile has only an email', async () => {
+    const { app, setOwnerProfile } = await setup('user');
+    setOwnerProfile({ id: 'owner', email: 'ward@example.com' });
+
+    const body = await (await app.request('/web/config/models?resourceId=session-1&threadId=chat-thread')).json();
+
+    expect(body.payer.user).toEqual({ id: 'owner' });
+    expect(JSON.stringify(body)).not.toContain('ward@example.com');
+  });
 
   it('keeps user-scoped work items on the owner catalog', async () => {
     const { app, bind } = await setup('user');

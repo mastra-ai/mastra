@@ -1,6 +1,7 @@
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   anthropic: 'Anthropic',
   'github-copilot': 'GitHub Copilot',
+  'kimi-code-plan-cn': 'Kimi',
   openai: 'OpenAI',
   'openai-codex': 'OpenAI',
   xai: 'xAI',

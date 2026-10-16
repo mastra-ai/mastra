@@ -156,6 +156,7 @@ describe('message meta', () => {
   const opus = { modelId: 'claude-opus-4-6', provider: 'anthropic.messages' };
   const gpt = { modelId: 'gpt-5', provider: 'openai.responses' };
   const grok = { modelId: 'grok-4', provider: 'xai.chat' };
+  const kimi = { modelId: 'kimi-k2-thinking', provider: 'kimi-for-coding.messages' };
   const payerCases: Array<{
     payer: SessionPayer;
     viewerId: string;
@@ -185,6 +186,12 @@ describe('message meta', () => {
       viewerId: 'damien',
       model: grok,
       label: 'Grok 4 · Organization SuperGrok/X Premium+',
+    },
+    {
+      payer: { user: ward, credentials: { 'kimi-code-plan-cn': { type: 'api_key' } } },
+      viewerId: 'ward',
+      model: kimi,
+      label: 'Kimi K2 Thinking · Your Kimi API key',
     },
     {
       payer: { user: ward, credentials: { openai: { type: 'api_key' } } },
