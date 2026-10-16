@@ -3484,6 +3484,8 @@ type Shared_Type_61 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3599,6 +3601,8 @@ type Shared_Type_63 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
