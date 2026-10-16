@@ -165,10 +165,11 @@ describe('captureSessionFilesystem', () => {
   });
 
   it('captures Git changes and ignored workspace artifacts', async () => {
-    const { session, executeCommand } = createSession([
-      commandResult({ stdout: 'src/app.ts\0new.txt\0' }),
-      commandResult({ stdout: './.artifacts/hello-world.md\0' }),
-    ]);
+    const { session, executeCommand } = createSession(
+      [commandResult({ stdout: 'src/app.ts\0new.txt\0' }), commandResult({ stdout: './.artifacts/hello-world.md\0' })],
+      'factory-1',
+      'session-1',
+    );
     const dependencies = createDependencies();
 
     await captureSessionFilesystem(session, dependencies);
@@ -191,25 +192,15 @@ describe('captureSessionFilesystem', () => {
       ['-c', 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true', 'sh', '/sessions/s1/worktree'],
       { timeout: 30_000 },
     );
+    // The session sits on a shared resource: its source session is found by its own id.
+    expect(dependencies.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
-      resourceId: 'resource-1',
+      resourceId: 'factory-1',
       threadId: 'thread-1',
       files: [{ path: '.artifacts/hello-world.md' }, { path: 'new.txt' }, { path: 'src/app.ts' }],
     });
     // One checkout: git and artifacts only, the root is the checkout itself.
     expect(executeCommand).toHaveBeenCalledTimes(2);
-  });
-
-  it('finds the source-control session by session id when the session runs under a shared resource', async () => {
-    const { session } = createSession(undefined, 'factory-1', 'session-1');
-    const dependencies = createDependencies();
-
-    await captureSessionFilesystem(session, dependencies);
-
-    expect(dependencies.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
-    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith(
-      expect.objectContaining({ resourceId: 'factory-1', threadId: 'thread-1' }),
-    );
   });
 
   it('clears persisted files after successful empty Git and artifact listings', async () => {

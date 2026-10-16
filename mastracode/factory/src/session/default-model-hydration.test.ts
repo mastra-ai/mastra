@@ -305,29 +305,13 @@ describe('hydrateSessionDefaultModel', () => {
   });
 
   it('does not apply a user default to active Factory run bindings before state is seeded', async () => {
-    const session = createSession();
-    const dependencies = createDependencies();
-    vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
-
-    await hydrateSessionDefaultModel(session, dependencies);
-
-    expect(dependencies.workItems.findRunBindingByThread).toHaveBeenCalledExactlyOnceWith({
-      orgId: 'org-1',
-      threadId: 'session-1',
-      resourceId: 'session-1',
-      sessionId: 'session-1',
-      rejectAmbiguous: true,
-    });
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
-  });
-
-  it('looks up the source session and run binding by session id when the session runs under its Factory', async () => {
     const session = createSession({}, 'factory-1');
     const dependencies = createDependencies();
     vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
 
     await hydrateSessionDefaultModel(session, dependencies);
 
+    // The run session sits on its Factory's resource; the binding is found by its session id.
     expect(dependencies.sourceControl.getBySessionId).toHaveBeenCalledWith('session-1');
     expect(dependencies.workItems.findRunBindingByThread).toHaveBeenCalledExactlyOnceWith({
       orgId: 'org-1',
@@ -336,6 +320,7 @@ describe('hydrateSessionDefaultModel', () => {
       sessionId: 'session-1',
       rejectAmbiguous: true,
     });
+    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
   });
 
   it("primes the owner's scope and applies the owner default to an unbound session in hybrid scope", async () => {
