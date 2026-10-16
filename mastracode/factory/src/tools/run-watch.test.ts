@@ -98,6 +98,53 @@ describe('observeSessionRunReports', () => {
     expect(report).not.toHaveBeenCalled();
   });
 
+  it('announces a stage move paused for approval, and sends no blocked report when the run parks', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    const onApprovalRequested = vi.fn(async () => {});
+    observeSessionRunReports(session, report, { onApprovalRequested });
+    const payload = {
+      kind: 'factory_transition_approval',
+      question: 'Move "Fix it" from triage to done?',
+      stage: 'done',
+    };
+
+    session.emit({
+      type: 'tool_suspended',
+      toolCallId: 'call-1',
+      toolName: 'factory_transition_work_item',
+      args: { stage: 'done' },
+      suspendPayload: payload,
+    } as AgentControllerEvent);
+    session.emit(end('suspended'));
+
+    expect(onApprovalRequested).toHaveBeenCalledWith({
+      toolName: 'factory_transition_work_item',
+      toolCallId: 'call-1',
+      args: payload,
+    });
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('still reports blocked for a tool that paused for something other than approval', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    const onApprovalRequested = vi.fn(async () => {});
+    observeSessionRunReports(session, report, { onApprovalRequested });
+
+    session.emit({
+      type: 'tool_suspended',
+      toolCallId: 'call-1',
+      toolName: 'ask_user',
+      args: {},
+      suspendPayload: { question: 'Which repo?' },
+    } as AgentControllerEvent);
+    session.emit(end('suspended'));
+
+    expect(onApprovalRequested).not.toHaveBeenCalled();
+    expect(report.mock.calls[0]?.[0]).toEqual({ status: 'blocked', toolName: 'ask_user' });
+  });
+
   it("quotes the run's error in a failed report", () => {
     const session = fakeSession();
     const report = vi.fn(async () => {});

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -315,6 +316,26 @@ describe('custom board public runtime', () => {
         const response = await post(transitionPath, approvedRequest);
         const { result } = await response.json();
         expect(result).toMatchObject({ status: 'accepted', stage: 'preparing', revision: workItem.revision + 1 });
+        // The preparer's handoff waits for a person; approve it as the session page would.
+        const [controller] = Object.values(mastra.listAgentControllers());
+        const approver = new RequestContext();
+        approver.set('user', { workosId: 'release-user', organizationId: 'release-org' });
+        await vi.waitFor(
+          async () => {
+            const preparer = (await workItems.listRunBindings('release-org', project.id, workItem.id)).find(
+              binding => binding.role === 'release-preparer',
+            );
+            const session = preparer ? await controller!.getSessionByResource(preparer.sessionId) : undefined;
+            const claim = session?.claimToolSuspension('call_release_handoff');
+            expect(claim?.accepted).toBe(true);
+            if (session && claim?.accepted) {
+              void session
+                .respondToToolSuspension({ address: claim.address, resumeData: 'Approve', requestContext: approver })
+                .finally(() => session.releaseToolResponse(claim.claimKey));
+            }
+          },
+          { timeout: 10_000 },
+        );
         await vi.waitFor(
           async () => {
             expect(

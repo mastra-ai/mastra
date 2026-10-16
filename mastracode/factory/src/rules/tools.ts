@@ -85,7 +85,9 @@ export async function createFactoryTransitionTools(options: {
         ? 'Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Only bugs may request Planning autonomously; closure outcomes may request a terminal stage. Feature requests and other non-bug classifications that remain open must stay in their current Intake or Triage stage for maintainer approval.'
         : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: isTriage ? triageTransitionInputSchema : transitionInputSchema,
-      requireApproval: true,
+      // A person says yes to every move. The tool pauses itself rather than using
+      // the approval prompt, which a session's auto-approve setting answers for it.
+      resumeSchema: transitionAnswerSchema,
       execute: async ({ stage, expectedRevision, rationale, triageType: requestedTriageType }, execution) => {
         const currentResolution = await resolveFactorySessionAddress({
           requestContext: execution.requestContext,
@@ -113,6 +115,32 @@ export async function createFactoryTransitionTools(options: {
         // Only a Work triage binding may classify; other roles can echo the key from history.
         const triageType = board === 'work' && binding.role === 'triage' ? requestedTriageType : undefined;
 
+        const answer = execution.agent?.resumeData as TransitionAnswer | undefined;
+        if (answer === undefined) {
+          const suspend = execution.agent?.suspend;
+          if (!suspend)
+            throw new Error('Factory transitions need a person to approve them, and this run cannot pause.');
+          const title = item.title ? `"${item.title}"` : 'this work item';
+          await suspend({
+            kind: FACTORY_TRANSITION_APPROVAL_KIND,
+            question: `Move ${title} from ${item.stages.join(', ')} to ${stage}${triageType ? ` as ${triageType}` : ''}?`,
+            options: [{ label: TRANSITION_APPROVE }, { label: TRANSITION_DECLINE }],
+            stage,
+            rationale,
+          });
+          return;
+        }
+        if (!isTransitionApproval(answer)) {
+          const reason = transitionAnswerText(answer)
+            .replace(/^decline[:\s-]*/i, '')
+            .trim();
+          return {
+            accepted: false,
+            declined: true,
+            message: `The move to ${stage} was declined${reason ? ` (${reason})` : ''}. Leave the item where it is unless someone asks for a different move.`,
+          };
+        }
+
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
           factoryProjectId: binding.factoryProjectId,
@@ -130,6 +158,21 @@ export async function createFactoryTransitionTools(options: {
       },
     }),
   };
+}
+
+/** The pause a role's stage move makes until a person approves it. */
+export const FACTORY_TRANSITION_APPROVAL_KIND = 'factory_transition_approval';
+export const TRANSITION_APPROVE = 'Approve';
+const TRANSITION_DECLINE = 'Decline';
+const transitionAnswerSchema = z.union([z.string(), z.array(z.string())]);
+type TransitionAnswer = z.infer<typeof transitionAnswerSchema>;
+
+function transitionAnswerText(answer: TransitionAnswer): string {
+  return (Array.isArray(answer) ? answer.join(', ') : answer).trim();
+}
+
+function isTransitionApproval(answer: TransitionAnswer): boolean {
+  return transitionAnswerText(answer).toLowerCase().startsWith(TRANSITION_APPROVE.toLowerCase());
 }
 
 export const REVIEW_VERDICTS = ['approve', 'request changes'] as const;
