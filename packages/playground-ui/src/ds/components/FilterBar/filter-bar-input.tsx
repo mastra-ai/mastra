@@ -1,5 +1,5 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
+import { BracesIcon, ListFilterIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
@@ -73,6 +73,7 @@ function FilterBarInputImpl({
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState<Item | null>(null);
@@ -278,9 +279,6 @@ function FilterBarInputImpl({
     [],
   );
 
-  const searchPlaceholder =
-    step === 'field' ? 'Search fields…' : step === 'operator' ? 'Search operators…' : 'Search values…';
-
   const inputPlaceholder =
     step === 'field'
       ? placeholder
@@ -332,6 +330,7 @@ function FilterBarInputImpl({
         modal={false}
       >
         <div
+          ref={setAnchor}
           data-slot="filter-bar-input-trigger"
           className={cn(
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
@@ -370,6 +369,8 @@ function FilterBarInputImpl({
         </div>
         <ComboboxPrimitive.Portal container={container}>
           <ComboboxPrimitive.Positioner
+            // Base UI anchors to the input, which starts after the filter icon; align with the pill instead.
+            anchor={anchor}
             align="start"
             sideOffset={MENU_SIDE_OFFSET}
             positionMethod={FLOATING_POSITION_METHOD}
@@ -379,27 +380,6 @@ function FilterBarInputImpl({
               className={cn(comboboxStyles.popup, 'min-w-56')}
               data-slot="filter-bar-editor"
             >
-              {(step !== 'value' || valueStep.hasSuggestions) && (
-                // Search row mirroring the bar input, so the popup reads as a searchable combobox.
-                // The bar input stays the only real input: focus and keyboard navigation never move.
-                <div
-                  className={cn(comboboxStyles.searchContainer, 'cursor-text')}
-                  data-slot="filter-bar-search"
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => inputRef.current?.focus()}
-                >
-                  <Search className={comboboxStyles.searchIcon} />
-                  <span
-                    className={cn(
-                      comboboxStyles.searchInput,
-                      'flex items-center truncate',
-                      query === '' && comboboxStyles.placeholder,
-                    )}
-                  >
-                    {query === '' ? searchPlaceholder : query}
-                  </span>
-                </div>
-              )}
               {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
