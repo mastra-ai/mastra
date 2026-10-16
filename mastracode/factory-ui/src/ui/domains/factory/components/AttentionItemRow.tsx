@@ -7,7 +7,6 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Archive,
   ArchiveRestore,
-  Brain,
   Check,
   Hourglass,
   MailOpen,
@@ -19,10 +18,9 @@ import {
   X,
 } from 'lucide-react';
 import { createElement, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
-import { attentionPrompt, supervisorAskPath } from '../../supervisor/services/supervisor';
 import { attentionAuthorName, factoryAttentionTargetPath, readableAttentionDetail } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
 import { RAIL_ROW_BODY } from './Timeline';
@@ -33,7 +31,6 @@ const KIND = {
   activity: { glyph: MessagesSquare, label: 'comment', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', badge: 'destructive' },
   'automation-proposed': { glyph: Sparkles, label: 'suggested', badge: 'orange' },
-  'supervisor-finding': { glyph: Brain, label: 'finding', badge: 'blue' },
   'agent-waiting': { glyph: Hourglass, label: 'waiting', badge: 'orange' },
 } satisfies Record<FactoryAttentionItem['kind'], { glyph: typeof MessageSquare; label: string; badge: BadgeVariant }>;
 
@@ -108,7 +105,6 @@ export function AttentionItemRow({
   onArchive: () => void;
   onRestore: () => void;
 }) {
-  const navigate = useNavigate();
   const author = attentionAuthorName(item);
 
   return (
@@ -152,15 +148,6 @@ export function AttentionItemRow({
           </Txt>
         </span>
         <span className={SHOWN_ON_REVEAL}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip="Ask supervisor"
-            aria-label={`Ask supervisor about ${item.title}`}
-            onClick={() => void navigate(supervisorAskPath(factoryId, attentionPrompt(item)))}
-          >
-            <Brain aria-hidden />
-          </Button>
           {onChooseRepository ? (
             <RowAction
               tooltip="Choose repository"

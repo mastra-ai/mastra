@@ -17,7 +17,7 @@ export function boardSource(source: WorkItemSource): string {
   return source.split('-')[0];
 }
 
-/** Source and project filters browse matching feeds rather than the Intake selector. */
+/** Source and project filters determine which intake feeds to browse. */
 export function hasBoardSourceFilters(filters: Pick<BoardFilterState, 'sources' | 'linearProjectIds'>): boolean {
   if (filters.sources.size > 0) return true;
   return filters.linearProjectIds.size > 0;

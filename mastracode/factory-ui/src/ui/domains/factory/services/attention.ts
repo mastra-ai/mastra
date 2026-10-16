@@ -1,4 +1,3 @@
-import type { FactoryHealthRepair } from '@mastra/factory/supervisor/health';
 import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
 
 import { boardPath } from '../boardCatalog';
@@ -54,15 +53,6 @@ export interface FactoryActivityAttentionItem extends FactoryAttentionItemBase {
   authorName?: string;
 }
 
-export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionItemBase {
-  kind: 'supervisor-finding';
-  findingKey: string;
-  findingTitle: string;
-  evidence: string;
-  beganAt: string | null;
-  suggestedRepair: FactoryHealthRepair | null;
-}
-
 /** A run parked on a plan or a question: the item lives exactly as long as the answer is owed. */
 export interface FactoryAgentWaitingAttentionItem extends FactoryAttentionItemBase {
   kind: 'agent-waiting';
@@ -78,8 +68,7 @@ export type FactoryAttentionItem =
   | FactoryAutomationFailedAttentionItem
   | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
-  | FactoryActivityAttentionItem
-  | FactorySupervisorFindingAttentionItem;
+  | FactoryActivityAttentionItem;
 
 /** Automated attention items have no author; comment-driven kinds carry the person who wrote the comment. */
 export function attentionAuthorName(item: FactoryAttentionItem): string | undefined {
@@ -112,8 +101,6 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
     case 'automation-failed':
     case 'automation-proposed':
       return item.decisionId;
-    case 'supervisor-finding':
-      return item.findingKey;
     case 'agent-waiting':
       return item.sessionId;
   }
@@ -126,7 +113,6 @@ export type FactoryAttentionGroup = 'attention' | 'queue' | 'activity';
 
 const ATTENTION_GROUP_OF_KIND: Record<FactoryAttentionKind, FactoryAttentionGroup> = {
   'automation-failed': 'attention',
-  'supervisor-finding': 'attention',
   'agent-waiting': 'attention',
   mention: 'attention',
   'automation-proposed': 'queue',
@@ -219,13 +205,18 @@ export function fetchFactoryAttention(
   },
 ): Promise<FactoryAttentionResponse> {
   const query = new URLSearchParams({ view: options.view });
-  for (const kind of options.kinds ?? []) query.append('kind', kind);
+  // Ask only for kinds this client renders, so pages and cursors never carry a kind it would drop.
+  for (const kind of options.kinds ?? ATTENTION_KINDS) query.append('kind', kind);
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   return requestJson<FactoryAttentionResponse>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention?${query}`,
     { signal: options.signal },
-  );
+  ).then(page => ({
+    ...page,
+    // A server can still report kinds this client no longer renders; drop them so views never see them.
+    items: page.items.filter(item => Object.hasOwn(ATTENTION_GROUP_OF_KIND, item.kind)),
+  }));
 }
 
 export function updateFactoryAttentionReceipt(

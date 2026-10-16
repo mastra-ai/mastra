@@ -13,7 +13,6 @@ import type {
   FactoryAutomationFailedAttentionItem,
   FactoryAutomationProposedAttentionItem,
   FactoryMentionAttentionItem,
-  FactorySupervisorFindingAttentionItem,
 } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
 import { OverlaysProvider } from '../../../../lib/overlays';
@@ -101,26 +100,6 @@ function proposedItem(): FactoryAutomationProposedAttentionItem {
     detail: 'Waiting for approval to run review',
     decisionType: 'invokeSkill',
     occurredAt: '2026-08-20T10:00:00.000Z',
-    read: false,
-    archived: false,
-    target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
-  };
-}
-
-function supervisorFindingItem(): FactorySupervisorFindingAttentionItem {
-  return {
-    key: `factory:${FACTORY_ID}:attention:supervisor-finding:decision-stuck:${DECISION_ID}:0`,
-    kind: 'supervisor-finding',
-    findingKey: `decision-stuck:${DECISION_ID}`,
-    findingTitle: 'A decision is stuck',
-    evidence: 'The decision has been retrying past its backoff.',
-    beganAt: '2026-09-03T04:45:00.000Z',
-    suggestedRepair: null,
-    occurrence: 0,
-    workItemId: 'item-1',
-    title: 'A decision is stuck',
-    detail: 'The decision has been retrying past its backoff.',
-    occurredAt: '2026-09-03T05:00:00.000Z',
     read: false,
     archived: false,
     target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
@@ -221,11 +200,11 @@ describe('Sidebar activity link', () => {
     expect(link).toHaveTextContent('1');
   });
 
-  it('counts failures, findings and mentions, leaving proposals and followed discussions out of the number', async () => {
-    stubAttention([attentionItem(), supervisorFindingItem(), mentionItem(), proposedItem(), activityItem()]);
+  it('counts failures and mentions, leaving proposals and followed discussions out of the number', async () => {
+    stubAttention([attentionItem(), mentionItem(), proposedItem(), activityItem()]);
     renderAttention();
 
-    expect(await screen.findByRole('link', { name: 'Activity, 3 unread' })).toBeVisible();
+    expect(await screen.findByRole('link', { name: 'Activity, 2 unread' })).toBeVisible();
   });
 
   it('shows no unread count when only followed discussions are new', async () => {

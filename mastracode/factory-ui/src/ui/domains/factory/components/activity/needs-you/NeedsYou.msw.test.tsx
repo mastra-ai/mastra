@@ -101,6 +101,22 @@ function activityItem(workItemId: string, title: string): FactoryActivityAttenti
   };
 }
 
+/** An attention row of a kind this client does not render. */
+function retiredKindItem() {
+  return {
+    key: `factory:${FACTORY_ID}:attention:retired-kind:finding-1:0`,
+    kind: 'retired-kind',
+    occurrence: 0,
+    workItemId: null,
+    title: 'Retired kind row',
+    detail: 'A server older than this client still reports it.',
+    occurredAt: '2026-08-22T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'rules' },
+  };
+}
+
 describe('Needs you', () => {
   it('saves repository choice by work-item ID before retrying without loading the board', async () => {
     const events: string[] = [];
@@ -184,7 +200,6 @@ describe('Needs you', () => {
 
     expect(await screen.findByText('Fix the loader')).toBeVisible();
     expect(screen.getByText('Repair auth')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Ask supervisor about Fix the loader' })).toBeVisible();
     const [goTo] = screen.getAllByRole('link', { name: /View card for/ });
     if (!goTo) throw new Error('Expected a work-item destination');
     expect(goTo).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?item=item-decision-1`);
@@ -417,5 +432,61 @@ describe('Needs you', () => {
     await screen.findByText('Fix the loader');
     items = [mentionItem('comment-1', 'Fix login bug'), ...items];
     expect(await screen.findByText('mention', undefined, { timeout: PAST_ONE_POLL_MS })).toBeVisible();
+  });
+
+  it('skips attention kinds this client does not know and keeps rendering the rest', async () => {
+    const known = [mentionItem('comment-1', 'Fix login bug')];
+    const retiredKind = retiredKindItem();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({ items: [retiredKind, ...known], kinds: attentionKindSummaries(known), hasMore: false }),
+      ),
+    );
+    renderNeedsYou();
+
+    expect(await screen.findByText('Fix login bug')).toBeVisible();
+    expect(screen.queryByText('Retired kind row')).not.toBeInTheDocument();
+  });
+
+  it('shows the empty state when every open item is of a kind this client does not know', async () => {
+    const retiredKind = retiredKindItem();
+    const retiredSummary = {
+      open: 1,
+      unread: 1,
+      latest: { key: retiredKind.key, at: retiredKind.occurredAt, unread: true },
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({
+          items: [retiredKind],
+          kinds: { ...attentionKindSummaries([]), 'retired-kind': retiredSummary },
+          hasMore: false,
+        }),
+      ),
+    );
+    renderNeedsYou();
+
+    expect(await screen.findByText('Nothing needs you right now.')).toBeVisible();
+    expect(screen.queryByText('Retired kind row')).not.toBeInTheDocument();
+  });
+
+  it('asks the server only for the kinds this client renders', async () => {
+    const requestedKinds: string[][] = [];
+    const known = [mentionItem('comment-1', 'Fix login bug')];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
+        requestedKinds.push(new URL(request.url).searchParams.getAll('kind'));
+        return HttpResponse.json({ items: known, kinds: attentionKindSummaries(known), hasMore: false });
+      }),
+    );
+    renderNeedsYou();
+
+    expect(await screen.findByText('Fix login bug')).toBeVisible();
+    const knownKinds = Object.keys(attentionKindSummaries([]));
+    expect(requestedKinds.length).toBeGreaterThan(0);
+    for (const kinds of requestedKinds) {
+      expect(kinds.length).toBeGreaterThan(0);
+      for (const kind of kinds) expect(knownKinds).toContain(kind);
+    }
   });
 });

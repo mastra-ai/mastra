@@ -1,5 +1,5 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, GitPullRequest, ShieldCheck, SquareKanban } from 'lucide-react';
+import { Brain, GitPullRequest, SquareKanban } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
@@ -39,12 +39,11 @@ export function FactorySection() {
           )}
         </Sidebar.NavList>
       </section>
-      <Sidebar.NavList>
-        <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label="Supervisor" />
-        {features.data?.knowledge ? (
+      {features.data?.knowledge ? (
+        <Sidebar.NavList>
           <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
-        ) : null}
-      </Sidebar.NavList>
+        </Sidebar.NavList>
+      ) : null}
     </nav>
   );
 }

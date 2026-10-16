@@ -1,5 +1,89 @@
 # @mastra/server
 
+## 1.78.0
+
+### Minor Changes
+
+- Added an optional `traceRetentionDays` to the observability capabilities type and response schema, for hosts that serve `GET /observability/capabilities` themselves and know how long traces are kept. Clients can use it to stop users picking dates whose traces are already gone. Mastra's own server and built-in stores don't report a retention, so the field is omitted there. ([#27166](https://github.com/mastra-ai/mastra/pull/27166))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.traceRetentionDays; // e.g. 180, or undefined
+  ```
+
+- Added `traceAggregate` to `GET /observability/capabilities`, so clients can tell whether `POST /observability/traces/aggregate` is available. Trace-scope field discovery (`POST /observability/traces/query/fields`) now also returns an `aggregate` block listing the groupable dimensions and available measures when the store supports aggregation. ([#27185](https://github.com/mastra-ai/mastra/pull/27185))
+
+- Added `POST /agents/:agentId/queue-signal`, which queues a typed signal to run after the active thread run completes, or starts a run right away when the thread is idle. The body takes the same `signal` shape as `POST /agents/:agentId/signals`. ([#27081](https://github.com/mastra-ai/mastra/pull/27081))
+
+  ```bash
+  curl -X POST http://localhost:4111/api/agents/support-agent/queue-signal \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "resourceId": "user-123",
+      "threadId": "thread-123",
+      "signal": {
+        "type": "reactive",
+        "tagName": "skill",
+        "attributes": { "name": "triage" },
+        "contents": "Triage the new issue."
+      }
+    }'
+  ```
+
+### Patch Changes
+
+- Agent scopes support: ([#26593](https://github.com/mastra-ai/mastra/pull/26593))
+
+  - Agent routes ignore `scopes` in request bodies (including `ifIdle.streamOptions.scopes`), and `mastra__scopes` is a reserved request context key.
+  - Set scopes from trusted server middleware instead:
+
+    ```ts
+    import { MASTRA_SCOPES_KEY } from '@mastra/core/request-context';
+
+    server: {
+      middleware: [async (c, next) => {
+        c.get('requestContext').set(MASTRA_SCOPES_KEY, [`org:${orgIdFromAuth(c)}`]);
+        await next();
+      }],
+    }
+    ```
+
+  - A conflicting `resource:` or `thread:` scope returns a 400 error.
+  - With an older `@mastra/server` registered, agent calls that pass scopes — from the call or the request context — fail with `AGENT_SCOPES_SERVER_OUTDATED` (HTTP 400). Scopes configured on the agent itself still work. Upgrade the server to lift the restriction.
+
+- Fixed background task events leaking across resources. Previously, calling `BackgroundTaskManager.stream()` without a `resourceId` delivered every resource's task events, including tool arguments and results. Without a `resourceId`, `stream()` now only delivers tasks that have no resource. To subscribe to every resource, pass `allResources: true`: ([#26895](https://github.com/mastra-ai/mastra/pull/26895))
+
+  ```ts
+  const events = mastra.backgroundTaskManager.stream({ agentId: 'my-agent', allResources: true });
+  ```
+
+  The `/background-tasks`, `/background-tasks/stream` and `/background-tasks/:backgroundTaskId` routes now use the resource from the request context. A resource-scoped caller only sees its own tasks: requesting a different `resourceId` returns 403, and fetching another resource's task returns 404. An empty resource id in the request context is rejected with 403. Requests without a resource in the request context keep access to all resources.
+
+- Tightened ownership checks on workflow run routes when `server.auth.mapUserToResourceId` is configured. A caller mapped to a resource can only act on its own runs, including when it passes an existing run id to `/stream`, `/create-run`, `/start-async` or `/stream-legacy`, and when it resumes, recovers or approves a durable agent run. The worker endpoints `steps/execute` and `/workflows/events` apply the same check to the run they address. Restarting all active runs of a workflow now requires a privileged caller. A caller without a resource id is treated as privileged only when a fine-grained authorization (FGA) provider is configured to authorize the route. ([#26958](https://github.com/mastra-ai/mastra/pull/26958))
+
+  **Before:** with `mapUserToResourceId` configured, a caller with no mapped resource id could read and act on any run, and a mapped caller could act on runs saved without a resource id.
+
+  **After:** a mapped caller acts only on its own runs. Admin, service, worker and push-broker callers that are not mapped to a resource need an FGA provider for run access, and restarting all active runs requires such a privileged caller. Runs saved without a resource id are no longer reachable by mapped callers.
+
+  To keep privileged run access, configure an FGA provider next to the mapper:
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      auth: {
+        authenticateToken: async token => verifyAccessToken(token),
+        mapUserToResourceId: user => `${user.workspaceId}:${user.id}`,
+      },
+      fga: fgaProvider,
+    },
+  });
+  ```
+
+  **Servers without `mapUserToResourceId`** keep the previous rule: deny only when the caller's resource id and the run's resource id are both present and differ. That rule now also runs on routes that had no ownership check: `/stream`, `/create-run`, `/start-async`, `/stream-legacy`, `steps/execute`, `/workflows/events`, and the durable agent resume and recover routes. Reusing another resource's run id on those routes used to succeed and now returns 403.
+
+- Updated dependencies [[`0b1ea6c`](https://github.com/mastra-ai/mastra/commit/0b1ea6ca6266158316defb522feb3d2f9bf33174), [`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25), [`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`33eb344`](https://github.com/mastra-ai/mastra/commit/33eb344ebfe918d032e3ad1e410788d4c8bc6526), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`5d12fbf`](https://github.com/mastra-ai/mastra/commit/5d12fbfcd756e5f5b0cae53e45a486a64ad102f5), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e), [`c09fb4b`](https://github.com/mastra-ai/mastra/commit/c09fb4b5758114c8c57d0af48cbe6dfdfe9dde90), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10)]:
+  - @mastra/core@1.78.0
+
 ## 1.78.0-alpha.9
 
 ### Minor Changes

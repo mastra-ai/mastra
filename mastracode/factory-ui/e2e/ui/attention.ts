@@ -25,7 +25,6 @@ export function attentionKindSummaries(items: FactoryAttentionItem[]): FactoryAt
     'automation-proposed': summarize(items, 'automation-proposed'),
     mention: summarize(items, 'mention'),
     activity: summarize(items, 'activity'),
-    'supervisor-finding': summarize(items, 'supervisor-finding'),
     'agent-waiting': summarize(items, 'agent-waiting'),
   };
 }

@@ -9,7 +9,6 @@ const PAGE_TITLES: Record<string, string> = {
   'new-factory': 'New factory',
   review: 'Review',
   rules: 'Rules',
-  supervisor: 'Supervisor',
   work: 'Work',
 };
 

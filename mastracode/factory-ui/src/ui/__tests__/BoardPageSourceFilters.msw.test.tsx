@@ -233,7 +233,7 @@ describe('Board source and Linear project filters', () => {
     expect(view.router.state.location.search).toContain('label=feature');
   });
 
-  it('merges selected source feeds and restores the Intake selector after clearing the filter', async () => {
+  it('merges selected source feeds and restores all sources after clearing the filter', async () => {
     stubSources();
     const view = renderBoard();
     await screen.findByText('GitHub: update dependencies');
@@ -245,7 +245,7 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Intake source filter' }));
     await screen.findByText('Manual follow-up');
-    expect(screen.queryByText('Portal: add account switcher')).not.toBeInTheDocument();
+    expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
     expect(view.router.state.location.search).not.toContain('source=');
   });
 
@@ -266,6 +266,38 @@ describe('Board source and Linear project filters', () => {
     await screen.findByText('Portal: later page');
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
   });
+  it('pages a healthy feed without retrying a failed provider', async () => {
+    stubSources();
+    let githubAttempts = 0;
+    let linearPageRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => {
+        githubAttempts++;
+        return HttpResponse.json({ error: 'GitHub feed unavailable' }, { status: 502 });
+      }),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) => {
+        if (new URL(request.url).searchParams.has('after')) {
+          linearPageRequests++;
+          return HttpResponse.json({
+            issues: [linearIssue('ENG-105', 'project-a', 'Portal: later page')],
+            nextCursor: null,
+          });
+        }
+        return HttpResponse.json({ issues: [linearIssues[0]], nextCursor: 'next-page' });
+      }),
+    );
+
+    renderBoard('?source=github&source=linear');
+    await screen.findAllByText('GitHub: GitHub feed unavailable');
+    await screen.findByText('Portal: add account switcher');
+    const githubAttemptsBeforePaging = githubAttempts;
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
+    await screen.findByText('Portal: later page');
+    expect(linearPageRequests).toBe(1);
+    expect(githubAttempts).toBe(githubAttemptsBeforePaging);
+    expect(screen.getAllByText('GitHub: GitHub feed unavailable')).not.toHaveLength(0);
+  });
+
   it('retries a failed page in a combined feed without losing the other source cards', async () => {
     stubSources();
     let pageAttempts = 0;
@@ -286,7 +318,7 @@ describe('Board source and Linear project filters', () => {
     await waitForMutationsIdle(view.client);
     await screen.findByText('Portal: add account switcher');
     fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
-    await screen.findByText('Linear page unavailable');
+    await screen.findByText('Linear: Linear page unavailable');
     expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByText('Portal: later page');
