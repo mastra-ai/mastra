@@ -21,6 +21,8 @@ const ORPHAN_SESSION = 'aaaaaaaa-0000-4000-8000-000000000004';
 const SIDE_SESSION = 'aaaaaaaa-0000-4000-8000-000000000005';
 /** A Slack DM: private to its sender. */
 const SLACK_DM_SESSION = 'aaaaaaaa-0000-4000-8000-000000000006';
+/** A review run on a pull request: untrusted content, so it keeps its own resource. */
+const PR_SESSION = 'aaaaaaaa-0000-4000-8000-000000000007';
 
 const OBSERVATION_INDEX = 'memory_observations_384';
 
@@ -91,6 +93,32 @@ async function seedLegacyFactory() {
   await sessionRow(ORPHAN_SESSION, 'slack/1700-43', null);
   await sessionRow(SIDE_SESSION, `user/session-${SIDE_SESSION}`, FACTORY_ID, USER_SESSION);
   await sessionRow(SLACK_DM_SESSION, 'slack/D-1-1700-44', FACTORY_ID, undefined, 'private');
+  await sessionRow(PR_SESSION, 'factory/pr-8', FACTORY_ID);
+  const pullRequest = await seed.workItems.upsert({
+    orgId: 'org-1',
+    userId: 'user-1',
+    factoryProjectId: FACTORY_ID,
+    input: {
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: '8' },
+      title: 'Review PR 8',
+      stages: ['review'],
+      sessions: {},
+      metadata: { authorTrusted: true },
+    },
+  });
+  await ops.insertOne('factory_run_bindings', {
+    org_id: 'org-1',
+    factory_project_id: FACTORY_ID,
+    work_item_id: pullRequest.item.id,
+    role: 'review',
+    thread_id: PR_SESSION,
+    resource_id: PR_SESSION,
+    session_id: PR_SESSION,
+    branch: 'factory/pr-8',
+    status: 'revoked',
+    created_at: now,
+    revoked_at: now,
+  });
 
   await ops.insertOne('factory_run_bindings', {
     org_id: 'org-1',
@@ -119,7 +147,15 @@ async function seedLegacyFactory() {
     updated_at: now,
   });
 
-  for (const sessionId of [USER_SESSION, RUN_SESSION, SLACK_SESSION, ORPHAN_SESSION, SIDE_SESSION, SLACK_DM_SESSION]) {
+  for (const sessionId of [
+    USER_SESSION,
+    RUN_SESSION,
+    SLACK_SESSION,
+    ORPHAN_SESSION,
+    SIDE_SESSION,
+    SLACK_DM_SESSION,
+    PR_SESSION,
+  ]) {
     await memory.saveThread({
       thread: {
         id: sessionId,
@@ -186,9 +222,10 @@ describe('migrateSessionResources', () => {
     const report = await migrate();
 
     expect(report).toMatchObject({
-      sessions: 6,
+      sessions: 7,
       factorySessions: 3,
       userSessions: 2,
+      isolatedSessions: 1,
       skipped: [ORPHAN_SESSION],
       failed: [],
       threads: 6,
@@ -238,9 +275,12 @@ describe('migrateSessionResources', () => {
     const { messages } = await memory.listMessages({ threadId: RUN_SESSION });
     expect(messages.map(message => message.resourceId)).toEqual([FACTORY_ID]);
 
-    expect(await ops.findMany('factory_run_bindings', {})).toEqual([
-      expect.objectContaining({ session_id: RUN_SESSION, thread_id: RUN_SESSION, resource_id: FACTORY_ID }),
-    ]);
+    expect(await ops.findMany('factory_run_bindings', {})).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ session_id: RUN_SESSION, thread_id: RUN_SESSION, resource_id: FACTORY_ID }),
+        expect.objectContaining({ session_id: PR_SESSION, thread_id: PR_SESSION, resource_id: PR_SESSION }),
+      ]),
+    );
     expect(await ops.findMany('integration_subscriptions', {})).toEqual([
       expect.objectContaining({ session_id: USER_SESSION, resource_id: 'user-1', session_scope: '/workspace/legacy' }),
     ]);
@@ -250,6 +290,8 @@ describe('migrateSessionResources', () => {
       (await memory.listThreads({ filter: { resourceId }, perPage: false })).threads.map(t => t.id).sort();
     expect(await byResource(FACTORY_ID)).toEqual([RUN_SESSION, SLACK_SESSION, SIDE_SESSION].sort());
     expect(await byResource('user-1')).toEqual([USER_SESSION, SLACK_DM_SESSION, 'user-second-thread'].sort());
+    // The pull request run stays on its own resource, away from the Factory's memory.
+    expect(await byResource(PR_SESSION)).toEqual([PR_SESSION]);
   });
 
   it('changes nothing when it runs again', async () => {
