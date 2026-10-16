@@ -177,8 +177,6 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   let assistantTurns = 0;
   let activeAssistantMessageId: string | undefined;
   let settled = false;
-  // Policy answers for parked tools, applied once the suspended run settles.
-  const pendingResumes = new Map<string, { toolName: string; resumeData: unknown }>();
   let agentStarts = 0;
   let unsubscribe: (() => void) | undefined;
   let resolveResult!: (r: RunMCResult) => void;
@@ -217,15 +215,28 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   }
 
   /**
-   * Resume the next parked tool the policy answered. The session starts a fresh
+   * Ask the policy for the next parked tool. The session starts a fresh
    * run for it, so this run stays open until that run ends. Returns false when
    * nothing is left to resume.
    */
   function resumeNextSuspension(): boolean {
-    const next = pendingResumes.entries().next();
+    const next = session.displayState.get().pendingSuspensions.values().next();
     if (next.done) return false;
-    const [toolCallId, { toolName, resumeData }] = next.value;
-    pendingResumes.delete(toolCallId);
+    const { toolCallId, toolName } = next.value;
+    let outcome: ReturnType<ResolutionPolicy['onSuspension']>;
+    try {
+      outcome = policy.onSuspension({ type: 'tool_suspended', ...next.value });
+    } catch (err) {
+      fail(`Resolution policy failed: ${(err as Error).message}`);
+      return true;
+    }
+    if ('abort' in outcome) {
+      abort();
+      // This run has already ended suspended, so no further agent_end is due.
+      finish('aborted');
+      return true;
+    }
+    const { resumeData } = outcome;
     // The session clears the ending run's state right after emitting
     // agent_end, so resume on a later task, as an interactive client would.
     setTimeout(() => {
@@ -294,30 +305,6 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         });
         queue.push(event);
         return;
-      }
-
-      if (event.type === 'tool_suspended') {
-        let outcome: ReturnType<ResolutionPolicy['onSuspension']>;
-        try {
-          outcome = policy.onSuspension(event);
-        } catch (err) {
-          fail(`Resolution policy failed: ${(err as Error).message}`);
-          return;
-        }
-        if ('abort' in outcome) {
-          queue.push(event);
-          abort();
-          return;
-        }
-        // The run is still streaming here. Resume only after it settles with
-        // agent_end, the same point an interactive client would answer.
-        pendingResumes.set(event.toolCallId, { toolName: event.toolName, resumeData: outcome.resumeData });
-        queue.push(event);
-        return;
-      }
-
-      if (event.type === 'tool_suspension_cancelled') {
-        pendingResumes.delete(event.toolCallId);
       }
 
       if (event.type === 'message_start' && event.message.role === 'assistant') {

@@ -10,7 +10,7 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, it, expect, vi } from 'vitest';
 
-import { denyPolicy } from './policy.js';
+import { autoApprovePolicy, denyPolicy } from './policy.js';
 import { runMC } from './run-mc.js';
 import type { RunMCOptions } from './types.js';
 
@@ -25,6 +25,8 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 interface FakeSessionOptions {
   /** Tool calls the first run parks; resuming one re-ends the run suspended while others stay parked. */
   suspendedToolCallIds?: string[];
+  /** A suspension Core cancels before the run ends. */
+  cancelledToolCallId?: string;
   /** Whether `respondToToolSuspension` finds the parked suspension and resumes it. */
   resumable?: boolean;
   /** Whether the resumed run hangs until it is aborted. */
@@ -33,12 +35,13 @@ interface FakeSessionOptions {
 
 function createFakeSession({
   suspendedToolCallIds = ['access-1'],
+  cancelledToolCallId,
   resumable = true,
   resumedRunHangs = false,
 }: FakeSessionOptions = {}) {
   let listener: ((event: AgentControllerEvent) => void) | undefined;
   const emit = (event: Record<string, unknown>) => listener?.(event as AgentControllerEvent);
-  const parked = new Set<string>();
+  const parked = new Map<string, Omit<Extract<AgentControllerEvent, { type: 'tool_suspended' }>, 'type'>>();
   const responses: Array<{ toolCallId?: string; resumeData: unknown; parked: boolean }> = [];
   let unsubscribed = false;
   // The session resets run state right after emitting agent_end, so a resume
@@ -57,13 +60,22 @@ function createFakeSession({
       emit({ type: 'tool_start', toolCallId, toolName: 'request_access', args: { path: '/shared' } });
       // The suspension is registered before it is emitted, and the run only
       // settles once the stream loop has broken out.
-      parked.add(toolCallId);
-      emit({
-        type: 'tool_suspended',
+      const suspension = {
         toolCallId,
         toolName: 'request_access',
         args: { path: '/shared' },
         suspendPayload: { path: '/shared' },
+      };
+      parked.set(toolCallId, suspension);
+      emit({ type: 'tool_suspended', ...suspension });
+    }
+    if (cancelledToolCallId) {
+      parked.delete(cancelledToolCallId);
+      emit({
+        type: 'tool_suspension_cancelled',
+        toolCallId: cancelledToolCallId,
+        toolName: 'request_access',
+        reason: 'cancelled',
       });
     }
     await tick();
@@ -74,6 +86,7 @@ function createFakeSession({
   }
 
   const session = {
+    displayState: { get: () => ({ pendingSuspensions: parked }) },
     identity: { getResourceId: () => undefined },
     thread: { getId: () => 'thread-1', create: async () => {}, getById: async () => ({ id: 'thread-1' }) },
     subscribe(fn: (event: AgentControllerEvent) => void) {
@@ -82,7 +95,10 @@ function createFakeSession({
         unsubscribed = true;
       };
     },
-    abort: vi.fn(() => emit({ type: 'agent_end', reason: 'aborted' })),
+    abort: vi.fn(() => {
+      parked.clear();
+      if (!endingRun) emit({ type: 'agent_end', reason: 'aborted' });
+    }),
     sendMessage: startRun,
     sendSignal: () => ({ accepted: startRun() }),
     async respondToToolSuspension({ toolCallId, resumeData }: { toolCallId?: string; resumeData: unknown }) {
@@ -155,15 +171,20 @@ describe('runMC suspension lifecycle', () => {
     expect(fake.isUnsubscribed()).toBe(true);
   });
 
-  it('resumes parallel suspensions one at a time until none are left', async () => {
-    const fake = createFakeSession({ suspendedToolCallIds: ['access-1', 'access-2'] });
-    const result = await run(fake.session).result;
+  it('resumes only parked suspensions one at a time until none are left', async () => {
+    const fake = createFakeSession({
+      suspendedToolCallIds: ['cancelled', 'access-1', 'access-2'],
+      cancelledToolCallId: 'cancelled',
+    });
+    const onSuspension = vi.fn(autoApprovePolicy.onSuspension);
+    const result = await run(fake.session, { policy: { ...autoApprovePolicy, onSuspension } }).result;
 
     expect(fake.responses).toEqual([
       { toolCallId: 'access-1', resumeData: 'Yes', parked: true },
       { toolCallId: 'access-2', resumeData: 'Yes', parked: true },
     ]);
     expect(fake.respondedWhileEnding()).toBe(0);
+    expect(onSuspension.mock.calls.map(([event]) => event.toolCallId)).toEqual(['access-1', 'access-2']);
     expect(result.status).toBe('completed');
     expect(result.finishReason).toBe('complete');
     expect(result.toolResults.map(r => r.id)).toEqual(['access-1', 'access-2']);
