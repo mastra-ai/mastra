@@ -340,7 +340,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Scopes to an agent controller hosted on the connected Mastra instance. Use
-   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * `getAgentController(id).session(sessionId)` to create/resume a session,
    * stream its events, and send messages.
    * @param controllerId - The id the agent controller is registered under on Mastra
    */
