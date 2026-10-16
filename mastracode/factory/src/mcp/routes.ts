@@ -19,6 +19,7 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.js';
 import { createFactoryTools } from '../tools/index.js';
 import type { FactoryToolDependencies, FactoryToolScope } from '../tools/index.js';
+import { propagateClientDisconnect } from './disconnect.js';
 
 export const FACTORY_MCP_PATH = '/web/factory/projects/:projectId/mcp';
 const PROTECTED_RESOURCE_PREFIX = '/.well-known/oauth-protected-resource';
@@ -83,9 +84,9 @@ export function connectorSessionId(orgId: string, userId: string, factoryProject
 async function ensureConnectorSession(
   deps: FactoryMcpRoutesDeps,
   args: { orgId: string; userId: string; factoryProjectId: string },
-): Promise<string> {
+): Promise<{ sessionId: string; persisted: boolean }> {
   const sessionId = connectorSessionId(args.orgId, args.userId, args.factoryProjectId);
-  if (await deps.tools.sessions.getBySessionId(sessionId)) return sessionId;
+  if (await deps.tools.sessions.getBySessionId(sessionId)) return { sessionId, persisted: true };
   for (const sourceControl of deps.sourceControls) {
     try {
       await ensureFactorySourceSession({
@@ -97,12 +98,12 @@ async function ensureConnectorSession(
         sessionId,
         visibility: 'private',
       });
-      return sessionId;
+      return { sessionId, persisted: true };
     } catch (error) {
       if (!(error instanceof FactorySourceSessionResolutionError)) throw error;
     }
   }
-  return sessionId;
+  return { sessionId, persisted: false };
 }
 
 function workItemUrl(publicOrigin: string, factoryProjectId: string, workItemId: string): string {
@@ -165,11 +166,15 @@ function createSearchFetchTools(
 export function createFactoryMcpTools(
   scope: FactoryToolScope,
   deps: FactoryMcpRoutesDeps,
+  options: { persistedSession?: boolean } = {},
 ): Record<string, Tool<any, any, any, any>> {
   const factoryTools = createFactoryTools({ scope, deps: deps.tools }) as Record<string, Tool<any, any, any, any>>;
   const tools: Record<string, Tool<any, any, any, any>> = {};
   for (const [name, tool] of Object.entries(factoryTools)) {
-    if (!EXCLUDED_TOOLS.has(name)) tools[name] = tool;
+    if (EXCLUDED_TOOLS.has(name)) continue;
+    // Starting a sub-session needs a real parent session row to file it under.
+    if (name === 'factory_start_session' && options.persistedSession === false) continue;
+    tools[name] = tool;
   }
   Object.assign(tools, createSearchFetchTools(scope, deps, factoryTools.factory_inspect_work_item));
   for (const [name, tool] of Object.entries(tools)) {
@@ -205,7 +210,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
   const project = await deps.projects.get({ orgId: tenant.orgId, id: factoryProjectId });
   if (!project) return c.json({ error: 'not_found' }, 404);
 
-  const sessionId = await ensureConnectorSession(deps, {
+  const { sessionId, persisted } = await ensureConnectorSession(deps, {
     orgId: tenant.orgId,
     userId: tenant.userId,
     factoryProjectId,
@@ -229,7 +234,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     name: `${project.name ?? 'Mastra'} Factory`,
     version: deps.version ?? '1.0.0',
     description: 'Manage work items, sessions and decisions in a Mastra Factory.',
-    tools: createFactoryMcpTools(scope, deps),
+    tools: createFactoryMcpTools(scope, deps, { persistedSession: persisted }),
   });
 
   const { req, res } = toReqRes(c.req.raw);
@@ -244,7 +249,7 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
       }
     })
     .finally(() => void server.close());
-  const response = await toFetchResponse(res);
+  const response = propagateClientDisconnect(await toFetchResponse(res), res);
   if (res.writableEnded) await done;
   return response;
 }
