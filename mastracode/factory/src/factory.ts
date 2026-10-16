@@ -1477,8 +1477,8 @@ export class MastraFactory {
                 publicOrigin,
                 authorizationServers:
                   (this.#config.mcp && this.#config.mcp.authorizationServers) ??
-                  (process.env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER
-                    ? [process.env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER]
+                  (process.env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER?.trim()
+                    ? [process.env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER.trim()]
                     : []),
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
