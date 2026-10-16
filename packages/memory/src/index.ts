@@ -2196,7 +2196,7 @@ ${workingMemory}`;
       // When lastObservedAt is NULL (no observations yet), load ALL messages
       // so the threshold check can fire on the full context.
       const dateFilter = omRecord.lastObservedAt
-        ? { dateRange: { start: new Date(new Date(omRecord.lastObservedAt).getTime() + 1) } }
+        ? { dateRange: { start: new Date(omRecord.lastObservedAt) } }
         : undefined;
 
       const boundary = omRecord.lastObservedAt ? new Date(omRecord.lastObservedAt).toISOString() : '';
