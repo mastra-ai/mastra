@@ -855,31 +855,79 @@ describe('MastraFactory.prepare', () => {
     ).rejects.toThrow('security state could not be restored before prompt creation');
   });
 
-  it('offers plan review to unbound user sessions, not to channel runs or runs whose binding cannot be looked up', async () => {
-    const config = await prepareFactory({ storage: fakeStorage() });
+  it('offers plan review only to unbound user sessions, outside channel runs and runs whose binding cannot be looked up', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage });
     (config.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
-    const context = new RequestContext();
-    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-    context.set('controller', {
-      resourceId: 'user-session-1',
-      threadId: 'user-session-1',
-      getState: () => ({
-        factoryProjectId: '11111111-2222-4333-8444-555555555555',
-        factoryOrgId: 'org-1',
-        projectRepositoryId: 'repo-1',
-      }),
-      setState: async () => {},
+    await storage.init();
+    const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+    const project = await storage
+      .getDomain<FactoryProjectsStorage>('projects')
+      .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
     });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    const branches = {
+      'user-session-1': 'user/session-user-session-1',
+      'workspace-1': 'feature/login',
+      'slack-1': 'slack/C123',
+    };
+    for (const [sessionId, branch] of Object.entries(branches)) {
+      await sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch,
+        baseBranch: 'main',
+      });
+    }
+    const promptContext = (sessionId: keyof typeof branches) => {
+      const context = new RequestContext();
+      context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      context.set('controller', {
+        resourceId: sessionId,
+        threadId: sessionId,
+        getState: () => ({ factoryProjectId: project.id, factoryOrgId: 'org-1' }),
+        setState: async () => {},
+      });
+      return context;
+    };
     const hostInstructions = config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>;
 
-    await expect(hostInstructions({ requestContext: context })).resolves.toBe(PLAN_REVIEW_INSTRUCTIONS);
+    await expect(hostInstructions({ requestContext: promptContext('user-session-1') })).resolves.toBe(
+      PLAN_REVIEW_INSTRUCTIONS,
+    );
+    await expect(hostInstructions({ requestContext: promptContext('workspace-1') })).resolves.toBeUndefined();
+    await expect(hostInstructions({ requestContext: promptContext('slack-1') })).resolves.toBeUndefined();
 
-    context.set('channel', { platform: 'slack' });
-    await expect(hostInstructions({ requestContext: context })).resolves.toBeUndefined();
+    const channelRun = promptContext('user-session-1');
+    channelRun.set('channel', { platform: 'slack' });
+    await expect(hostInstructions({ requestContext: channelRun })).resolves.toBeUndefined();
 
-    context.set('channel', undefined);
-    context.set('user', { workosId: 'user-1' });
-    await expect(hostInstructions({ requestContext: context })).resolves.toBeUndefined();
+    const runWithoutOrg = promptContext('user-session-1');
+    runWithoutOrg.set('user', { workosId: 'user-1' });
+    await expect(hostInstructions({ requestContext: runWithoutOrg })).resolves.toBeUndefined();
   });
 
   it('heals a review binding that kept factoryProjectId but lost untrustedCheckout', async () => {

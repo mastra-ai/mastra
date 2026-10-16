@@ -4,15 +4,16 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import { resolveFactorySessionAddress } from '../rules/binding-context.js';
-import type { FactorySessionSourceLookup } from '../rules/binding-context.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { SourceControlSessionLookup } from './factory-session.js';
 import { PLAN_REVIEW_INSTRUCTIONS } from './plan-review-instructions.js';
+import { USER_SESSION_BRANCH_PREFIX } from './user-session-branch.js';
 
 type SessionController = AgentControllerRequestContext<MastraCodeState>;
 
 interface FactoryHostInstructionsDeps {
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'get'>;
-  readySourceControlSessions: () => FactorySessionSourceLookup | undefined;
+  readySourceControlSessions: () => Pick<SourceControlSessionLookup, 'getBySessionId'> | undefined;
 }
 
 // The SDK reads repository AGENTS.md right after this, so trust is healed first.
@@ -21,8 +22,9 @@ export function createFactoryHostInstructions(deps: FactoryHostInstructionsDeps)
     const controller = requestContext.get('controller') as SessionController | undefined;
     if (!controller?.threadId || !controller.resourceId) return undefined;
     const binding = await restoreTrustStateBeforePrompt(controller, requestContext, deps);
-    const planReviewAvailable = binding === 'unbound' && !requestContext.get('channel');
-    return planReviewAvailable ? PLAN_REVIEW_INSTRUCTIONS : undefined;
+    if (binding !== 'unbound' || requestContext.get('channel')) return undefined;
+    const session = await deps.readySourceControlSessions()?.getBySessionId(controller.resourceId);
+    return session?.branch.startsWith(USER_SESSION_BRANCH_PREFIX) ? PLAN_REVIEW_INSTRUCTIONS : undefined;
   };
 }
 
