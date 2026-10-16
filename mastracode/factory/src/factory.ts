@@ -71,6 +71,8 @@ import { PlatformIncidentioIntegration } from './integrations/platform/incidenti
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
+import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
+import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
@@ -143,6 +145,7 @@ import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/wor
 import { timedPhase } from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
+import type { FactoryToolDependencies } from './tools/index.js';
 import {
   createSessionApprovalNotifier,
   createSessionRunEndReporter,
@@ -212,6 +215,13 @@ export interface MastraFactoryConfig {
    * serves the UI).
    */
   publicUrl?: string;
+  /**
+   * The Factory MCP server at `/web/factory/projects/:projectId/mcp`, which lets
+   * MCP clients such as ChatGPT use the Factory tools as the signed-in user.
+   * On by default with Mastra Platform auth; other providers need
+   * `authorizationServers` set. Pass `false` to turn it off.
+   */
+  mcp?: false | FactoryMcpConfig;
   /**
    * Allowed cross-origin SPA origins. The SPA may be served from a separate
    * static host, so credentialed requests must be explicitly allowed.
@@ -523,6 +533,9 @@ export class MastraFactory {
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
+    const mcpConfig = this.#config.mcp;
+    const mcpAuthorizationServers =
+      mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.
@@ -878,6 +891,21 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
+    const factoryToolDeps: FactoryToolDependencies = {
+      workItems: workItemsStorage,
+      comments: workItemCommentsStorage,
+      feed: commentsDomain,
+      audit: auditStorage,
+      boards: this.#boards,
+      transitionService,
+      auditRecorder: auditDomain,
+      sessions: sourceControlSessions,
+      sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
+      intake: intakeStorage,
+      startCoordinator: () => this.#startCoordinator,
+      messaging: factoryMessaging,
+    };
     // Proactive environment builds exist only when the sandbox can build
     // templates on its own; the workflow is registered on the host's Mastra
     // and the runner reaches the booted instance through the controller.
@@ -1387,20 +1415,7 @@ export class MastraFactory {
                         'factory-tools',
                         createFactoryTools({
                           scope,
-                          deps: {
-                            workItems: workItemsStorage,
-                            comments: workItemCommentsStorage,
-                            feed: commentsDomain,
-                            audit: auditStorage,
-                            boards: this.#boards,
-                            transitionService,
-                            auditRecorder: auditDomain,
-                            sessions: sourceControlSessions,
-                            sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
-                            intake: intakeStorage,
-                            startCoordinator: () => this.#startCoordinator,
-                            messaging: factoryMessaging,
-                          },
+                          deps: factoryToolDeps,
                         }),
                       );
                     }
@@ -1462,6 +1477,16 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
+          ...(auth && mcpAuthorizationServers.length > 0
+            ? buildFactoryMcpRoutes({
+                auth: routeAuth,
+                publicOrigin,
+                authorizationServers: mcpAuthorizationServers,
+                projects: factoryProjectsStorage,
+                sourceControls: sourceControlHandles,
+                tools: factoryToolDeps,
+              })
+            : []),
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
