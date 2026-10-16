@@ -76,10 +76,18 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
       abortSignal: options.abortSignal,
     });
 
+    let ended = false;
     for await (const action of streamActions(result.fullStream, { threadId, resourceId, runId, modelId, generateId })) {
       if (isPersistable(action)) pending.push(action);
       yield action;
+      if (action.type === 'run-end' || action.type === 'run-aborted') ended = true;
       if (action.type === 'turn-end') await flush();
+    }
+    // A provider error ends the stream without a finish part; every run still closes.
+    if (!ended) {
+      const runEnd: PersistableAction = { ...stamp(), type: 'run-end', finishReason: 'error', usage: {} };
+      pending.push(runEnd);
+      yield runEnd;
     }
   } finally {
     await flush();

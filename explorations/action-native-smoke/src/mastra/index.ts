@@ -33,5 +33,19 @@ export const mastra = new Mastra({
       tools: { weather, deleteFile },
       memory: new Memory({ storage }),
     }),
+    brokenAgent: new Agent({
+      id: 'broken-agent',
+      name: 'Broken Agent',
+      instructions: 'You are concise.',
+      model: 'openai/gpt-does-not-exist',
+      memory: new Memory({ storage }),
+    }),
+    reasoningAgent: new Agent({
+      id: 'reasoning-agent',
+      name: 'Reasoning Agent',
+      instructions: 'You are concise.',
+      model: 'openai/o4-mini',
+      memory: new Memory({ storage }),
+    }),
   },
 });
