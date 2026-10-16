@@ -202,10 +202,9 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
       expect((turn.chunkPayloads[3] as { result?: unknown }).result, `${engine}: tool result`).toEqual({ done: 1 });
     }
 
-    // How often the predicate is consulted differs across engines: plain and durable ask once,
-    // while evented may ask more because its worker re-runs the step and re-reads the decision.
     expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
     expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
-    expect(calls.get('evented')!.length, 'evented: the predicate was consulted').toBeGreaterThanOrEqual(1);
+    // COR-1466: evented retries a throwing loop condition up to its delivery-attempt limit.
+    expect(calls.get('evented')!.length, 'evented: the predicate was consulted three times').toBe(3);
   });
 });
