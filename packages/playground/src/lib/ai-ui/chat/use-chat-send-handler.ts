@@ -13,10 +13,15 @@ import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import {
+  getAgentRunVersionSelectorErrorCode,
+  isAgentRunAuthorizationError,
+} from '@/domains/agents/utils/agent-run-version-selector-error';
+import {
   buildMaxStepsStreamErrorMessage,
   buildStreamErrorMessage,
   isMaxStepsFinishChunk,
 } from '@/services/stream-error-message';
+import type { AgentRunVersionSelectorErrorCode } from '@/types';
 
 /**
  * The OM/error stream chunks this hook reacts to are not part of the typed
@@ -96,6 +101,8 @@ interface UseChatSendHandlerArgs {
   resetObservationalMemoryStreamState: () => void;
   /** Signal the memory timeline panel to refetch (mirrors left OM sidebar freshness). */
   signalTimelineRefresh: () => void;
+  onRunVersionSelectorError?: (code: AgentRunVersionSelectorErrorCode) => void;
+  onRunAuthorizationError?: () => void;
 }
 
 const buildRequestContext = (deps: SendDeps) => {
@@ -153,6 +160,8 @@ export const useChatSendHandler = ({
   handleActivation,
   resetObservationalMemoryStreamState,
   signalTimelineRefresh,
+  onRunVersionSelectorError,
+  onRunAuthorizationError,
 }: UseChatSendHandlerArgs) => {
   const baseClient = useMastraClient();
   const queryClient = useQueryClient();
@@ -225,6 +234,9 @@ export const useChatSendHandler = ({
     (handled: HandledStreamChunk | undefined) => {
       if (handled?.type === 'error') {
         setStreamErrors(prev => [...prev, buildStreamErrorMessage(handled)]);
+        const selectorErrorCode = getAgentRunVersionSelectorErrorCode(handled.payload?.error);
+        if (selectorErrorCode) onRunVersionSelectorError?.(selectorErrorCode);
+        if (isAgentRunAuthorizationError(handled.payload?.error)) onRunAuthorizationError?.();
       }
       if (handled?.type === 'data-om-observation-start') {
         handleObservationStart(handled.data?.operationType);
@@ -250,6 +262,8 @@ export const useChatSendHandler = ({
       handleActivation,
       handleObservationStart,
       handleProgressUpdate,
+      onRunAuthorizationError,
+      onRunVersionSelectorError,
       refreshObservationalMemory,
       refreshWorkingMemory,
       setStreamErrors,
@@ -351,6 +365,9 @@ export const useChatSendHandler = ({
         if (error.name === 'AbortError') {
           return true;
         }
+        const selectorErrorCode = getAgentRunVersionSelectorErrorCode(error);
+        if (selectorErrorCode) onRunVersionSelectorError?.(selectorErrorCode);
+        if (isAgentRunAuthorizationError(error)) onRunAuthorizationError?.();
         setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
         resetObservationalMemoryStreamState();
         return delivered || mayHaveBeenStored(error);
@@ -362,6 +379,8 @@ export const useChatSendHandler = ({
       completeObservationalMemoryBuffering,
       handleHandledChunk,
       isRunningStream,
+      onRunAuthorizationError,
+      onRunVersionSelectorError,
       refreshThreadList,
       refreshTimelinePanel,
       refreshWorkingMemory,

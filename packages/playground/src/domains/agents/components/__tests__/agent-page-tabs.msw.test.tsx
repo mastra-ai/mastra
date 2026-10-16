@@ -9,6 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentLayout } from '../../agent-layout';
+import { readOnlyAuthCapabilities, storedAgentReaderAuthCapabilities } from './fixtures/auth';
 import { systemPackages } from './fixtures/channels';
 import { agentsResponse, v2Agent } from './fixtures/composer-model-settings';
 import { server } from '@/test/msw-server';
@@ -19,8 +20,15 @@ vi.mock('@mastra/playground-ui/utils/toast', () => ({
 
 const BASE_URL = 'http://localhost:4111';
 
-const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-  <a {...props}>{children}</a>
+const StubLink = ({
+  children,
+  to,
+  href,
+  ...props
+}: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }) => (
+  <a {...props} href={to ?? href}>
+    {children}
+  </a>
 );
 
 const navigateSpy = vi.fn();
@@ -46,10 +54,10 @@ const noopPaths = {
   datasetLink: () => '',
   datasetItemLink: () => '',
   experimentLink: () => '',
-  cmsAgentEditLink: () => '',
+  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
 } as never;
 
-function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
+function renderLayout(initialEntry = '/agents/agent-1/threads/new') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -79,12 +87,12 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
   return { ...view, queryClient };
 }
 
-function commonHandlers(packagesResponse = systemPackages) {
+function commonHandlers(packagesResponse = systemPackages, authResponse = storedAgentReaderAuthCapabilities) {
   return [
     http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(agentsResponse)),
     http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
     http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesResponse)),
-    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authResponse)),
     http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
   ];
 }
@@ -95,6 +103,28 @@ afterEach(() => {
 });
 
 describe('AgentLayout tool tabs', () => {
+  describe('when CMS is available and stored-agent read access is allowed', () => {
+    it('links the shared agent chrome to the full configuration screen', async () => {
+      server.use(...commonHandlers(enabledPackages, storedAgentReaderAuthCapabilities));
+
+      renderLayout('/agents/agent-1/editor');
+
+      const fullConfiguration = await screen.findByRole('link', { name: 'Full configuration' });
+      expect(fullConfiguration.getAttribute('href')).toBe('/cms/agents/agent-1/edit');
+    });
+  });
+
+  describe('when CMS is available but stored-agent read access is denied', () => {
+    it('does not expose the full configuration link', async () => {
+      server.use(...commonHandlers(enabledPackages, readOnlyAuthCapabilities));
+
+      renderLayout('/agents/agent-1/editor');
+
+      expect(await screen.findByRole('tab', { name: /editor/i })).not.toBeNull();
+      await waitFor(() => expect(screen.queryByRole('link', { name: 'Full configuration' })).toBeNull());
+    });
+  });
+
   describe('when the editor is unavailable', () => {
     it('replaces the Editor tab with a disabled icon button', async () => {
       server.use(...commonHandlers());

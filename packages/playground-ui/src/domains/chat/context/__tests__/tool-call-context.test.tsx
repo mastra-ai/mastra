@@ -16,6 +16,7 @@ const baseValue: ToolCallContextValue = {
   approveNetworkToolcall: vi.fn(),
   declineNetworkToolcall: vi.fn(),
   isRunning: false,
+  isContinuationBlocked: false,
   toolCallApprovals: { 'call-1': { status: 'approved' } },
   networkToolCallApprovals: {},
 };

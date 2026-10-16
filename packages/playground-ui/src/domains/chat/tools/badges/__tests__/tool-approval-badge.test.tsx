@@ -93,6 +93,26 @@ describe('ToolApprovalBadge', () => {
     });
   });
 
+  describe('when continuation is blocked by an immutable version conflict', () => {
+    it.each([
+      ['stream', {}],
+      ['generate', { isGenerateMode: true }],
+      ['network', { isNetwork: true }],
+    ] as const)('disables both %s decisions', (_mode, request) => {
+      const callbacks = renderApproval(request, { isContinuationBlocked: true });
+
+      const buttons = queryDecisionButtons();
+      expect(buttons).toHaveLength(2);
+      for (const button of buttons) {
+        expect(button.disabled).toBe(true);
+        fireEvent.click(button);
+      }
+      for (const callback of Object.values(callbacks)) {
+        expect(callback).not.toHaveBeenCalled();
+      }
+    });
+  });
+
   describe('once decided', () => {
     it.each(['approved', 'declined'] as const)('keeps %s in the header when the details collapse', status => {
       renderApproval({}, { toolCallApprovals: { 'call-1': { status } } });

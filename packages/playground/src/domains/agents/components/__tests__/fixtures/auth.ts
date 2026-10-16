@@ -16,3 +16,11 @@ export const readOnlyAuthCapabilities = {
     permissions: [],
   },
 } satisfies AuthCapabilities;
+
+export const storedAgentReaderAuthCapabilities = {
+  ...readOnlyAuthCapabilities,
+  access: {
+    roles: ['viewer'],
+    permissions: ['stored-agents:read:agent-1'],
+  },
+} satisfies AuthCapabilities;
