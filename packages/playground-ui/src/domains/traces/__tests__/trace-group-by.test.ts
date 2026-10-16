@@ -4,16 +4,19 @@ import type { TraceGroupByDimension, TraceGroupRow, TraceGrouping } from '../tra
 import {
   applyTraceGroupDrillDown,
   buildTraceGroupByRequest,
+  buildTraceGroupEntityIdFallbackRequest,
   DEFAULT_TRACE_GROUP_SORT,
   formatTraceGroupMeasure,
   formatTraceGroupValue,
   getOfferedTraceGroupByDimensions,
   getTraceGroupDrillDown,
   getTraceGroupValue,
+  mergeTraceGroupEntityIdFallback,
   parseTraceGroupBy,
   parseTraceGroupHaving,
   parseTraceGroupSort,
   serializeTraceGroupSort,
+  supportsTraceGroupEntityIdFallback,
   writeTraceGrouping,
 } from '../trace-group-by';
 import { buildTraceQueryRequest } from '../trace-query-filters';
@@ -321,6 +324,116 @@ describe('formatTraceGroupMeasure', () => {
     expect(formatTraceGroupMeasure(row({ 'cost.sum': null }, { coverage: 1, unit: 'mixed' }), 'cost.sum')).toEqual({
       text: '—',
       tooltip: 'Costs use more than one currency',
+    });
+  });
+});
+
+describe('entityId fallback', () => {
+  const timeRange = { from: new Date('2026-10-01T00:00:00Z'), to: new Date('2026-10-02T00:00:00Z') };
+  const environmentFilter = { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } } as const;
+  const request = buildTraceGroupByRequest(
+    { timeRange, where: environmentFilter },
+    { groupBy: ['entityName', 'status'], having: [] },
+    DEFAULT_TRACE_GROUP_SORT,
+  );
+  const group = (
+    dimensions: Record<string, string | null>,
+    count: number,
+    cost: number | null = null,
+  ): TraceGroupRow => ({
+    dimensions,
+    measures: { count, 'cost.sum': cost },
+  });
+
+  describe('when the server reports an entityId dimension', () => {
+    it('enables the fallback', () => {
+      expect(supportsTraceGroupEntityIdFallback(discovery(['entityName', 'entityId']))).toBe(true);
+      expect(supportsTraceGroupEntityIdFallback(discovery(['entityName']))).toBe(false);
+      expect(supportsTraceGroupEntityIdFallback(undefined)).toBe(false);
+    });
+  });
+
+  describe('when the grouped response has a group with no entityName', () => {
+    const response = {
+      rows: [
+        group({ entityName: 'Code Agent', status: 'success' }, 5),
+        group({ entityName: null, status: 'success' }, 4),
+      ],
+      truncated: false,
+    };
+
+    it('regroups only the unnamed traces by entityId, keeping the other dimensions and filters', () => {
+      expect(buildTraceGroupEntityIdFallbackRequest(request, response)).toEqual({
+        ...request,
+        where: { op: 'and', args: [environmentFilter, { op: 'notExists', path: 'entityName' }] },
+        groupBy: ['entityId', 'status'],
+      });
+    });
+
+    it('filters on the unnamed traces alone when the list has no filters', () => {
+      const unfiltered = { ...request, where: undefined };
+      expect(buildTraceGroupEntityIdFallbackRequest(unfiltered, response)?.where).toEqual({
+        op: 'notExists',
+        path: 'entityName',
+      });
+    });
+  });
+
+  describe('when every group has an entityName, or grouping is not by entityName', () => {
+    it('sends no follow-up request', () => {
+      const named = { rows: [group({ entityName: 'Code Agent', status: 'success' }, 5)], truncated: false };
+      expect(buildTraceGroupEntityIdFallbackRequest(request, named)).toBeUndefined();
+      const byStatus = { ...request, groupBy: ['status'] };
+      const unnamed = { rows: [group({ status: 'success' }, 5)], truncated: false };
+      expect(buildTraceGroupEntityIdFallbackRequest(byStatus, unnamed)).toBeUndefined();
+      expect(buildTraceGroupEntityIdFallbackRequest(request, undefined)).toBeUndefined();
+    });
+  });
+
+  describe('when merging the split into the grouped response', () => {
+    const response = {
+      rows: [group({ entityName: 'Code Agent' }, 5, 2), group({ entityName: null }, 7, null)],
+      truncated: false,
+    };
+    const fallback = {
+      rows: [group({ entityId: 'mastracode-outcome' }, 6), group({ entityId: 'mastracode-efficiency' }, 1, 3)],
+      truncated: false,
+    };
+
+    it('replaces the unnamed group with one group per entityId, in the view order', () => {
+      const merged = mergeTraceGroupEntityIdFallback(response, fallback, DEFAULT_TRACE_GROUP_SORT);
+      expect(merged.rows.map(entry => getTraceGroupValue(entry, 'entityName'))).toEqual([
+        'mastracode-outcome',
+        'Code Agent',
+        'mastracode-efficiency',
+      ]);
+      expect(merged.truncated).toBe(false);
+    });
+
+    it('sorts groups without the measure last in either direction', () => {
+      for (const direction of ['asc', 'desc'] as const) {
+        const merged = mergeTraceGroupEntityIdFallback(response, fallback, { measure: 'cost.sum', direction });
+        expect(merged.rows.map(entry => getTraceGroupValue(entry, 'entityName')).at(-1)).toBe('mastracode-outcome');
+      }
+    });
+
+    it('drills into an entityId group with the entity ID filter', () => {
+      const merged = mergeTraceGroupEntityIdFallback(response, fallback, DEFAULT_TRACE_GROUP_SORT);
+      const [first] = merged.rows;
+      if (!first) throw new Error('expected a merged group');
+      expect(getTraceGroupDrillDown(['entityName'], first)).toEqual({
+        filters: [{ param: 'filterEntityId', value: 'mastracode-outcome', operatorId: 'is' }],
+      });
+    });
+
+    it('reports truncation when the split pushes groups past the limit', () => {
+      const many = {
+        rows: Array.from({ length: 50 }, (_, index) => group({ entityId: `scorer-${index}` }, 1)),
+        truncated: false,
+      };
+      const merged = mergeTraceGroupEntityIdFallback(response, many, DEFAULT_TRACE_GROUP_SORT);
+      expect(merged.rows).toHaveLength(50);
+      expect(merged.truncated).toBe(true);
     });
   });
 });

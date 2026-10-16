@@ -19,8 +19,22 @@ import { DataList, DataListSkeletonRows } from '@/ds/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt/Txt';
 
+// Fixed tracks like the trace list's, so columns pack to the left instead of spreading across the panel.
+const MEASURE_COLUMN_WIDTHS: Record<TraceGroupByMeasure, string> = {
+  count: '7rem',
+  errorRate: '7rem',
+  'duration.p50': '8rem',
+  'duration.p95': '8rem',
+  'tokens.input.sum': '9rem',
+  'tokens.output.sum': '9rem',
+  'cost.sum': '8rem',
+};
+
 const columnsFor = (dimensionCount: number) =>
-  `repeat(${dimensionCount}, minmax(10rem, 2fr)) repeat(${TRACE_GROUP_BY_MEASURES.length}, minmax(6rem, 1fr))`;
+  [
+    ...Array.from({ length: dimensionCount }, () => 'minmax(10rem, 16rem)'),
+    ...TRACE_GROUP_BY_MEASURES.map(measure => MEASURE_COLUMN_WIDTHS[measure]),
+  ].join(' ');
 
 export interface TracesGroupedViewProps {
   /** Grouped dimensions, in order: one label column each. */
@@ -42,7 +56,7 @@ const sortPhrase = (measure: TraceGroupByMeasure) =>
 function MeasureCell({ row, measure }: { row: TraceGroupRow; measure: TraceGroupByMeasure }) {
   const { text, tooltip } = formatTraceGroupMeasure(row, measure);
   return (
-    <DataList.NumberCell highlight={measure === 'count'}>
+    <DataList.NumberCell highlight={measure === 'count'} className="justify-items-start text-left">
       {tooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -81,8 +95,6 @@ export function TracesGroupedView({
               sortKey={measure}
               sort={sort.measure === measure ? sort.direction : undefined}
               onSortChange={(direction, key) => onSortChange({ measure: key, direction })}
-              align="end"
-              className="justify-end text-right"
             >
               {TRACE_GROUP_BY_MEASURE_LABELS[measure]}
             </DataList.SortableTopCell>
@@ -110,7 +122,7 @@ export function TracesGroupedView({
                 ))}
               </>
             );
-            const key = JSON.stringify(values);
+            const key = JSON.stringify(row.dimensions);
             return drillDown ? (
               <DataList.RowButton
                 key={key}

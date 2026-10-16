@@ -1840,7 +1840,7 @@ describe('Traces page group by', () => {
       await typeField('Group by');
       fireEvent.click(await screen.findByRole('option', { name: 'Group by' }));
 
-      expect(await screen.findByRole('option', { name: 'Agent / workflow' })).not.toBeNull();
+      expect(await screen.findByRole('option', { name: 'Entity' })).not.toBeNull();
       expect(screen.getByRole('option', { name: 'Status' })).not.toBeNull();
       expect(screen.queryByRole('option', { name: 'Environment' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Project' })).toBeNull();
@@ -1853,7 +1853,7 @@ describe('Traces page group by', () => {
       await waitFor(() => expect(onListRequest).toHaveBeenCalled());
       const listBody = onListRequest.mock.lastCall![0];
 
-      await groupBy('Agent / workflow');
+      await groupBy('Entity');
 
       const support = await screen.findByRole('button', { name: 'Show traces for support-agent' });
       const billing = screen.getByRole('button', { name: 'Show traces for billing-agent' });

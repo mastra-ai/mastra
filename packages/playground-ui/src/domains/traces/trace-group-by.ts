@@ -30,7 +30,7 @@ export type TraceGroupByExtraDimension = 'projectId';
 export type TraceGroupByDimension = (typeof TRACE_GROUP_BY_DIMENSIONS)[number] | TraceGroupByExtraDimension;
 
 export const TRACE_GROUP_BY_DIMENSION_LABELS: Record<TraceGroupByDimension, string> = {
-  entityName: 'Agent / workflow',
+  entityName: 'Entity',
   status: 'Status',
   environment: 'Environment',
   entityType: 'Entity type',
@@ -189,9 +189,58 @@ export function buildTraceGroupByRequest(
 
 export type TraceGroupRow = AggregateTracesResponse['rows'][number];
 
-/** The group's value for a dimension; undefined when the traces don't set it. */
+/**
+ * The group's value for a dimension; undefined when the traces don't set it. Traces without an `entityName` (e.g.
+ * scorer runs recorded before scorers set one) are labelled by `entityId` when the entityId fallback split them out.
+ */
 export const getTraceGroupValue = (row: TraceGroupRow, dimension: TraceGroupByDimension): string | undefined =>
-  row.dimensions?.[dimension] || undefined;
+  row.dimensions?.[dimension] || (dimension === 'entityName' ? row.dimensions?.entityId : undefined) || undefined;
+
+/** Whether the server can group by `entityId`, which the entityId fallback needs. */
+export const supportsTraceGroupEntityIdFallback = (discovery: TraceAggregateDiscovery | undefined): boolean =>
+  discovery?.dimensions.some(dimension => dimension.path === 'entityId') ?? false;
+
+const UNNAMED = { op: 'notExists', path: 'entityName' } as const;
+
+/**
+ * When grouping by `entityName` returned a group of traces with no name, the request that splits those traces by
+ * `entityId` instead. It only runs when such a group exists and reads only the unnamed traces.
+ */
+export function buildTraceGroupEntityIdFallbackRequest(
+  request: AggregateTracesArgs,
+  response: AggregateTracesResponse | undefined,
+): AggregateTracesArgs | undefined {
+  if (!request.groupBy?.includes('entityName')) return undefined;
+  if (!response?.rows.some(row => !row.dimensions?.entityName)) return undefined;
+  return {
+    ...request,
+    where: request.where ? { op: 'and', args: [request.where, UNNAMED] } : UNNAMED,
+    groupBy: request.groupBy.map(dimension => (dimension === 'entityName' ? 'entityId' : dimension)),
+  };
+}
+
+const compareMeasure = (a: TraceGroupRow, b: TraceGroupRow, { measure, direction }: TraceGroupSort) => {
+  const left = a.measures?.[measure];
+  const right = b.measures?.[measure];
+  // Like the server, groups without a value sort last in either direction.
+  if (left == null || right == null) return left == null ? (right == null ? 0 : 1) : -1;
+  return direction === 'asc' ? left - right : right - left;
+};
+
+/** Replace the unnamed groups with their per-`entityId` split, re-sorted and cut to the view's limit. */
+export function mergeTraceGroupEntityIdFallback(
+  response: AggregateTracesResponse,
+  fallback: AggregateTracesResponse,
+  sort: TraceGroupSort,
+): AggregateTracesResponse {
+  const rows = [...response.rows.filter(row => row.dimensions?.entityName), ...fallback.rows].sort((a, b) =>
+    compareMeasure(a, b, sort),
+  );
+  return {
+    rows: rows.slice(0, TRACE_GROUP_BY_LIMIT),
+    truncated: response.truncated || fallback.truncated || rows.length > TRACE_GROUP_BY_LIMIT,
+  };
+}
 
 const STATUS_LABELS: Record<string, string> = { success: 'Success', error: 'Error' };
 
@@ -246,7 +295,13 @@ export function getTraceGroupDrillDown(
 ): TraceGroupDrillDown | undefined {
   const drillDown: TraceGroupDrillDown = { filters: [] };
   for (const dimension of groupBy) {
-    const step = getTraceDimensionDrillDown(dimension, getTraceGroupValue(row, dimension));
+    const entityId = dimension === 'entityName' && !row.dimensions?.entityName ? row.dimensions?.entityId : undefined;
+    const step = entityId
+      ? ({
+          kind: 'filter',
+          filter: { param: TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.entityId, value: entityId, operatorId: 'is' },
+        } as const)
+      : getTraceDimensionDrillDown(dimension, getTraceGroupValue(row, dimension));
     if (!step) return undefined;
     if (step.kind === 'project') drillDown.projectId = step.projectId;
     else drillDown.filters.push(step.filter);

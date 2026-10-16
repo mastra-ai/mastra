@@ -43,8 +43,10 @@ let lastError: Error | null = null;
 let lastGroups: ReturnType<typeof useTraceGroupBy> | undefined;
 const onProjectDrillDown = vi.fn<(projectId: string) => void>();
 
+type HarnessProps = { enabled?: boolean; entityIdFallback?: boolean };
+
 /** The grouped view as a page wires it: Group by chips in a FilterBar above the grouped table. */
-function Harness({ enabled = true }: { enabled?: boolean }) {
+function Harness({ enabled = true, entityIdFallback = false }: HarnessProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const dimensions = enabled ? DIMENSIONS : [];
   const groups = useTraceGroupBy({
@@ -53,6 +55,7 @@ function Harness({ enabled = true }: { enabled?: boolean }) {
     dimensions,
     query: () => buildTraceQueryRequest({ tokens: [{ fieldId: 'environment', value: 'production' }], now: NOW }),
     enabled,
+    entityIdFallback,
   });
   lastError = groups.error;
   lastGroups = groups;
@@ -92,7 +95,7 @@ function Harness({ enabled = true }: { enabled?: boolean }) {
   );
 }
 
-const renderHarness = (search = '', props: { enabled?: boolean } = {}) =>
+const renderHarness = (search = '', props: HarnessProps = {}) =>
   renderWithProviders(
     <MemoryRouter initialEntries={[`/traces${search}`]}>
       <Harness {...props} />
@@ -138,7 +141,7 @@ describe('Traces group by', () => {
     renderHarness();
 
     await startFilter('Group by');
-    fireEvent.click(await screen.findByRole('option', { name: 'Agent / workflow' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Entity' }));
     fireEvent.click(screen.getByRole('option', { name: 'Environment' }));
     fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
 
@@ -152,9 +155,9 @@ describe('Traces group by', () => {
       limit: 50,
     });
     // One label column per dimension, and the chip summarises both.
-    expect(screen.getByText('Agent / workflow')).not.toBeNull();
+    expect(screen.getByText('Entity')).not.toBeNull();
     expect(screen.getByText('Environment')).not.toBeNull();
-    expect(screen.getByRole('combobox', { name: 'Value: Agent / workflow, Environment' })).not.toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Value: Entity, Environment' })).not.toBeNull();
   });
 
   describe('while a regrouped request is loading', () => {
@@ -329,5 +332,46 @@ describe('Traces group by', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onAggregate).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Remove Group by filter' })).toBeNull();
+  });
+
+  describe('when traces have no entity name', () => {
+    const splitByEntityId: AggregateTracesResponse = {
+      rows: [{ dimensions: { entityId: 'mastracode-outcome' }, measures: { count: 1, errorRate: 0 } }],
+      truncated: false,
+    };
+    const serveWithSplit = () =>
+      serveAggregate(body => (body.groupBy?.includes('entityId') ? splitByEntityId : groupedByEntityName));
+
+    it('splits the unnamed group by entity ID and drills into it by ID', async () => {
+      serveWithSplit();
+      renderHarness('?groupBy=entityName', { entityIdFallback: true });
+
+      const row = await screen.findByRole('button', { name: 'Show traces for mastracode-outcome' });
+      expect(screen.queryByText('(not set)')).toBeNull();
+      const groups = screen
+        .getAllByRole('button', { name: /^Show traces for / })
+        .map(button => button.getAttribute('aria-label'));
+      expect(groups).toEqual(
+        [...groupedByEntityName.rows.flatMap(entry => entry.dimensions?.entityName ?? []), 'mastracode-outcome'].map(
+          name => `Show traces for ${name}`,
+        ),
+      );
+      expect(onAggregate).toHaveBeenCalledTimes(2);
+      expect(onAggregate.mock.calls[1]?.[0]).toMatchObject({
+        groupBy: ['entityId'],
+        where: { op: 'and', args: [onAggregate.mock.calls[0]?.[0].where, { op: 'notExists', path: 'entityName' }] },
+      });
+      fireEvent.click(row);
+      await waitFor(() => expect(locationParams().get('filterEntityId')).toBe('mastracode-outcome'));
+      expect(locationParams().get('groupBy')).toBeNull();
+    });
+
+    it('keeps one "(not set)" group when the server cannot group by entity ID', async () => {
+      serveWithSplit();
+      renderHarness('?groupBy=entityName');
+
+      expect(await screen.findByText('(not set)')).not.toBeNull();
+      expect(onAggregate).toHaveBeenCalledTimes(1);
+    });
   });
 });

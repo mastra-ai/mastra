@@ -5,6 +5,8 @@ import {
   TRACE_GROUP_SORT_PARAM,
   applyTraceGroupDrillDown,
   buildTraceGroupByRequest,
+  buildTraceGroupEntityIdFallbackRequest,
+  mergeTraceGroupEntityIdFallback,
   DEFAULT_TRACE_GROUP_SORT,
   parseTraceGroupBy,
   parseTraceGroupHaving,
@@ -26,6 +28,11 @@ export interface UseTraceGroupByArgs {
   query: (now: Date) => Pick<QueryTracesInput, 'timeRange' | 'where'>;
   /** False until `useTraceAggregateAvailable()` reports the server can group. */
   enabled: boolean;
+  /**
+   * Split the traces with no `entityName` by `entityId` (`supportsTraceGroupEntityIdFallback(discovery)`). Off
+   * leaves them in one "(not set)" group.
+   */
+  entityIdFallback?: boolean;
 }
 
 const isSameDimensions = (a: readonly TraceGroupByDimension[], b: readonly TraceGroupByDimension[]) =>
@@ -37,15 +44,23 @@ const isSameDimensions = (a: readonly TraceGroupByDimension[], b: readonly Trace
  * The time window is fixed when the view opens and moves only when the grouping changes or on `refresh()`:
  * grouped requests over large tenants take seconds, so the view doesn't poll.
  */
-export function useTraceGroupBy({ searchParams, setSearchParams, dimensions, query, enabled }: UseTraceGroupByArgs) {
+export function useTraceGroupBy({
+  searchParams,
+  setSearchParams,
+  dimensions,
+  query,
+  enabled,
+  entityIdFallback = false,
+}: UseTraceGroupByArgs) {
   const groupBy = enabled ? parseTraceGroupBy(searchParams, dimensions) : [];
   const grouping: TraceGrouping = { groupBy, having: groupBy.length > 0 ? parseTraceGroupHaving(searchParams) : [] };
   const grouped = groupBy.length > 0;
   const sort = parseTraceGroupSort(searchParams);
   const [now, setNow] = useState(() => new Date());
 
+  const request = buildTraceGroupByRequest(query(now), grouping, sort);
   const result = useTraceAggregate({
-    request: buildTraceGroupByRequest(query(now), grouping, sort),
+    request,
     enabled: grouped,
     queryOptions: {
       // Keep the previous rows while the sort or filters change, but not across dimensions: their rows
@@ -61,6 +76,24 @@ export function useTraceGroupBy({ searchParams, setSearchParams, dimensions, que
           : undefined,
     },
   });
+
+  // Runs only once the grouped response has an unnamed group, and reads only those traces.
+  const fallbackRequest = entityIdFallback ? buildTraceGroupEntityIdFallbackRequest(request, result.data) : undefined;
+  const fallback = useTraceAggregate({
+    request: fallbackRequest ?? request,
+    enabled: grouped && fallbackRequest !== undefined && !result.isPlaceholderData,
+    // Keep the previous split while it refetches. While disabled this query shares the main request's key, so only
+    // keep a previous result that is a split (no named groups); the main rows would be merged in twice.
+    queryOptions: {
+      placeholderData: previous => (previous?.rows.every(row => !row.dimensions?.entityName) ? previous : undefined),
+    },
+  });
+  // If the split fails, keep the "(not set)" group rather than failing the view.
+  const data =
+    result.data && fallbackRequest && fallback.data
+      ? mergeTraceGroupEntityIdFallback(result.data, fallback.data, sort)
+      : result.data;
+  const fallbackPending = fallbackRequest !== undefined && fallback.isLoading;
 
   /**
    * Change the grouped view. `writeOther` adds the page's own URL changes (e.g. its filters) to the same update,
@@ -113,10 +146,10 @@ export function useTraceGroupBy({ searchParams, setSearchParams, dimensions, que
     setSort,
     applyFilterDrillDown,
     refresh,
-    rows: result.data?.rows ?? [],
-    truncated: result.data?.truncated ?? false,
-    isLoading: result.isLoading,
-    isFetching: result.isFetching,
+    rows: data?.rows ?? [],
+    truncated: data?.truncated ?? false,
+    isLoading: result.isLoading || fallbackPending,
+    isFetching: result.isFetching || fallback.isFetching,
     error: result.error,
   };
 }

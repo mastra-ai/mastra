@@ -46,7 +46,10 @@ import {
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
-import { getOfferedTraceGroupByDimensions } from '@mastra/playground-ui/domains/traces/trace-group-by';
+import {
+  getOfferedTraceGroupByDimensions,
+  supportsTraceGroupEntityIdFallback,
+} from '@mastra/playground-ui/domains/traces/trace-group-by';
 import {
   createTraceGroupByFilterBarFields,
   splitTraceGroupingFromFilterBar,
@@ -269,6 +272,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     dimensions: groupByDimensions,
     query: buildListQuery,
     enabled: withGroupBy,
+    entityIdFallback: supportsTraceGroupEntityIdFallback(aggregateDiscovery),
   });
 
   const traceFilterBarFields = useMemo(

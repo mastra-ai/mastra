@@ -21,7 +21,7 @@ describe('createTraceGroupByFilterBarFields', () => {
     const [groupBy] = createTraceGroupByFilterBarFields({ dimensions: ['entityName', 'status'], grouped: false });
     expect(groupBy).toMatchObject({ id: 'groupBy', label: 'Group by', operators: ['in'], strict: true, hidden: false });
     expect(groupBy?.suggestions).toEqual([
-      { value: 'entityName', label: 'Agent / workflow' },
+      { value: 'entityName', label: 'Entity' },
       { value: 'status', label: 'Status' },
     ]);
   });

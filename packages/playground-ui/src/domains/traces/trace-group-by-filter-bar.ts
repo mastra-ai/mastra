@@ -10,7 +10,7 @@ import type { TraceGroupByDimension, TraceGroupByMeasure, TraceGroupHaving, Trac
 import type { FilterBarField, FilterBarItem, FilterBarNode } from '@/ds/components/FilterBar/types';
 import { isFilterBarGroup } from '@/ds/components/FilterBar/types';
 
-/** FilterBar field of the Group by chip: `Group by  Agent / workflow, Environment`. */
+/** FilterBar field of the Group by chip: `Group by  Entity, Environment`. */
 export const TRACE_GROUP_BY_FIELD_ID = 'groupBy';
 
 const HAVING_FIELD_PREFIX = 'groupHaving.';
