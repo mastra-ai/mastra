@@ -619,6 +619,7 @@ function buildWhereClause(
   if (ts?.start) bindScalar('timestamp', ts.start, ts.startExclusive ? '>' : '>=');
   if (ts?.end) bindScalar('timestamp', ts.end, ts.endExclusive ? '<' : '<=');
   if (Array.isArray(filters.traceIds)) bindIn('traceId', filters.traceIds);
+  if (Array.isArray(filters.experimentIds)) bindIn('experimentId', filters.experimentIds);
 
   // Scalar filters mapped 1:1 to columns
   const scalarKeys = [

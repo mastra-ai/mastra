@@ -3329,6 +3329,52 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       });
 
+      describe('when a batch of experiment IDs is filtered', () => {
+        it('returns token totals and cost for each selected experiment', async () => {
+          const tokenMetric = (
+            metricId: string,
+            experimentId: string,
+            name: string,
+            value: number,
+            estimatedCost: number,
+          ) => ({
+            metricId,
+            timestamp: new Date('2026-01-01T03:00:00Z'),
+            name,
+            value,
+            experimentId,
+            estimatedCost,
+            costUnit: 'usd',
+            labels: {},
+          });
+          await storage.batchCreateMetrics({
+            metrics: [
+              tokenMetric('exp-a-in', 'exp-a', 'mastra_model_total_input_tokens', 100, 0.25),
+              tokenMetric('exp-a-out', 'exp-a', 'mastra_model_total_output_tokens', 40, 0.5),
+              tokenMetric('exp-b-in', 'exp-b', 'mastra_model_total_input_tokens', 300, 0.75),
+              tokenMetric('exp-c-in', 'exp-c', 'mastra_model_total_input_tokens', 700, 1.25),
+            ],
+          });
+
+          const result = await storage.getMetricBreakdown({
+            name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+            groupBy: ['experimentId', 'name'],
+            aggregation: 'sum',
+            filters: { experimentIds: ['exp-a', 'exp-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.experimentId, group.dimensions.name, group.value, group.estimatedCost])
+              .sort((left, right) => `${left[0]}:${left[1]}`.localeCompare(`${right[0]}:${right[1]}`)),
+          ).toEqual([
+            ['exp-a', 'mastra_model_total_input_tokens', 100, 0.25],
+            ['exp-a', 'mastra_model_total_output_tokens', 40, 0.5],
+            ['exp-c', 'mastra_model_total_input_tokens', 700, 1.25],
+          ]);
+        });
+      });
+
       it('getMetricBreakdown honors limit and ascending order direction', async () => {
         const result = await storage.getMetricBreakdown({
           name: ['mastra_agent_duration_ms'],

@@ -2005,6 +2005,7 @@ export class MastraClient extends BaseResource {
     if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
+    for (const id of params?.datasetIds ?? []) searchParams.append('datasetIds', id);
     if (params?.orderBy) {
       searchParams.set('orderBy[field]', params.orderBy.field);
       searchParams.set('orderBy[direction]', params.orderBy.direction);

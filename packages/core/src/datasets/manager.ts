@@ -186,7 +186,8 @@ export class DatasetsManager {
    */
   async list(args?: {
     page?: number;
-    perPage?: number;
+    /** Datasets per page, or `false` to return every match on one page. */
+    perPage?: number | false;
     filters?: {
       organizationId?: string;
       projectId?: string;
@@ -198,6 +199,8 @@ export class DatasetsManager {
        * Filter to datasets whose `targetIds` intersect this list (any overlap matches).
        */
       targetIds?: string[];
+      /** Only return datasets with these IDs. An empty array matches no datasets. */
+      datasetIds?: string[];
       /** Substring match on dataset `name`, case-insensitive. */
       name?: string;
     };

@@ -1029,6 +1029,17 @@ describe('MastraClient', () => {
       );
     });
 
+    it('serializes datasetIds as repeated query params for dataset listings', async () => {
+      mockSuccess();
+
+      await client.listDatasets({ datasetIds: ['ds-1', 'ds 2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets?datasetIds=ds-1&datasetIds=ds+2',
+        expect.any(Object),
+      );
+    });
+
     it('serializes orderBy as bracket-notation params for dataset and experiment listings', async () => {
       mockSuccess();
       await client.listDatasets({ orderBy: { field: 'name', direction: 'ASC' } });
