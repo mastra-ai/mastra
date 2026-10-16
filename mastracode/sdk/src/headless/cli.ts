@@ -7,6 +7,7 @@
  * result to an exit code, and owns teardown + `process.exit`.
  */
 import { existsSync } from 'node:fs';
+import type { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 
 import { createMastraCode } from '../index.js';
@@ -152,6 +153,22 @@ Examples:
   mastracode -c --prompt "Continue where you left off"
   echo "Summarize the repo" | mastracode --prompt -
 `);
+}
+
+/**
+ * Wait until everything written to `stream` has been handed to the OS, since
+ * `process.exit()` drops writes a pipe has not accepted yet. Resolves `false`
+ * if the stream fails or closes first; never rejects or hangs on a gone reader.
+ */
+export function flushWritable(stream: Writable): Promise<boolean> {
+  if (stream.destroyed || stream.errored) return Promise.resolve(false);
+  if (stream.writableLength === 0) return Promise.resolve(true);
+  return new Promise(resolve => {
+    // Left attached: a stream can emit `error` after failing pending callbacks.
+    stream.once('error', () => resolve(false));
+    stream.once('close', () => resolve(false));
+    stream.write('', error => resolve(!error));
+  });
 }
 
 /**
@@ -340,5 +357,9 @@ export async function runMCCli(
     });
   }
 
+  // Let piped output (the final result line in particular) reach the reader
+  // before exiting. Output that never arrived must not count as success.
+  const [stdoutFlushed] = await Promise.all([flushWritable(process.stdout), flushWritable(process.stderr)]);
+  if (!stdoutFlushed && exitCode === 0) exitCode = 1;
   process.exit(exitCode);
 }
