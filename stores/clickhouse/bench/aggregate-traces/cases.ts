@@ -10,12 +10,9 @@ import {
   planTraceQuery,
 } from '@mastra/core/storage';
 
-import { compileClickHouseTraceAggregate } from '../../src/storage/domains/observability/v-next/trace-aggregate';
-import {
-  compileClickHouseTraceQuery,
-  compileClickHouseTraceRootPayloads,
-} from '../../src/storage/domains/observability/v-next/trace-query';
-import type { CompiledClickHouseTraceQuery } from '../../src/storage/domains/observability/v-next/trace-query';
+import { compileClickHouseTraceAggregate } from './compiler-2026-10-06/trace-aggregate';
+import { compileClickHouseTraceQuery, compileClickHouseTraceRootPayloads } from './compiler-2026-10-06/trace-query';
+import type { CompiledClickHouseTraceQuery } from './compiler-2026-10-06/trace-query';
 import { applyVariant, injectProjectScope, scopePayloadQuery } from './scope';
 import type { Relation, Variant } from './scope';
 

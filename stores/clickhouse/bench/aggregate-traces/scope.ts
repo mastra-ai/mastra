@@ -6,7 +6,7 @@
  */
 import { TRACE_AGGREGATE_COST_METRIC_NAMES, TRACE_AGGREGATE_USAGE_METRIC_NAMES } from '@mastra/core/storage';
 
-import type { CompiledClickHouseTraceQuery } from '../../src/storage/domains/observability/v-next/trace-query';
+import type { CompiledClickHouseTraceQuery } from './compiler-2026-10-06/trace-query';
 
 export const PROJECT_PARAM = 'bench_project_id';
 export const ORG_PARAM = 'bench_org_id';

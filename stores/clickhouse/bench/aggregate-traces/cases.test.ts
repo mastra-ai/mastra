@@ -1,8 +1,8 @@
 import { parseTraceAggregateRequest, planTraceAggregate } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { compileClickHouseTraceAggregate } from '../../src/storage/domains/observability/v-next/trace-aggregate';
 import { anchorTo, CASES, compileCase, compilePayloadStage, DOC_LITERALS, timeRangeFor } from './cases';
+import { compileClickHouseTraceAggregate } from './compiler-2026-10-06/trace-aggregate';
 import { stageQuery } from './floor';
 import { applyVariant, injectProjectScope, PROJECT_PARAM, RewriteError } from './scope';
 

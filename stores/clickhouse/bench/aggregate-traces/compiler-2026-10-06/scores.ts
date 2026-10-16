@@ -1,0 +1,685 @@
+import type { ClickHouseClient } from '@clickhouse/client';
+import { listScoresArgsSchema } from '@mastra/core/storage';
+import type {
+  AggregationInterval,
+  AggregationType,
+  BatchCreateScoresArgs,
+  CreateScoreArgs,
+  DeleteScoresArgs,
+  ListScoresArgs,
+  ListScoresResponse,
+  ScoreRecord,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
+} from '@mastra/core/storage';
+import { parseFieldKey } from '@mastra/core/utils';
+
+import { isReplicationConfigured } from '../../../src/storage/db/replication';
+import type { ClickhouseReplicationConfig } from '../../../src/storage/db/replication';
+import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_CURRENT, TABLE_SCORE_EVENTS_DELTA } from './ddl';
+import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
+import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
+import type { FilterResult } from './filters';
+import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+const SCORE_TYPED_COLUMNS = new Set([
+  'timestamp',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'scoreTraceId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'scorerId',
+  'scorerVersion',
+  'scoreSource',
+  'score',
+  'reason',
+]);
+
+const GROUP_BY_EXCLUDED = new Set(['metadata', 'scope', 'tags']);
+
+function getAggregationSql(aggregation: AggregationType, measure = 'score'): string {
+  switch (aggregation) {
+    case 'sum':
+      return `sum(${measure})`;
+    case 'avg':
+      return `avg(${measure})`;
+    case 'min':
+      return `min(${measure})`;
+    case 'max':
+      return `max(${measure})`;
+    case 'count':
+      return `toFloat64(count(${measure}))`;
+    case 'last':
+      return `argMax(${measure}, timestamp)`;
+    case 'count_distinct':
+      return `toFloat64(uniq(${measure}))`;
+    default:
+      return `sum(${measure})`;
+  }
+}
+
+function getIntervalSql(interval: AggregationInterval): string {
+  switch (interval) {
+    case '1m':
+      return 'INTERVAL 1 MINUTE';
+    case '5m':
+      return 'INTERVAL 5 MINUTE';
+    case '15m':
+      return 'INTERVAL 15 MINUTE';
+    case '1h':
+      return 'INTERVAL 1 HOUR';
+    case '1d':
+      return 'INTERVAL 1 DAY';
+    default:
+      return 'INTERVAL 1 HOUR';
+  }
+}
+
+function mergeFilters(...parts: FilterResult[]): FilterResult {
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = {};
+  for (const part of parts) {
+    conditions.push(...part.conditions);
+    Object.assign(params, part.params);
+  }
+  return { conditions, params };
+}
+
+function toWhereClause(filter: FilterResult): string {
+  return filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+}
+
+export function currentScoresRelation(sourcePredicate?: string): string {
+  const whereClause = sourcePredicate ? `WHERE ${sourcePredicate}` : '';
+  return `(
+    SELECT *
+    FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL
+    ${whereClause}
+  )`;
+}
+
+/**
+ * Current-state scores narrowed before FINAL merges. `score_events_current` is
+ * keyed by scoreId, so a traceId filter only applies after FINAL has merged
+ * the whole table. When the (unaliased) filter pins traceId, the matching
+ * scoreIds are first read from the history table, whose sort key starts with
+ * traceId. Every current row was written to history, so the candidate set is a
+ * superset; callers still apply the same filter to the current version.
+ *
+ * Time ranges alone are not narrowed this way: scoreIds are hash-distributed,
+ * so the ids from any real time window touch nearly every granule of the
+ * current table and the extra history scan costs more than it saves.
+ */
+function prunedCurrentScoresRelation(historyFilter: FilterResult): string {
+  const pinsTrace = historyFilter.conditions.some(condition => condition.startsWith('traceId '));
+  if (!pinsTrace) return currentScoresRelation();
+  return currentScoresRelation(
+    `scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS} WHERE ${historyFilter.conditions.join(' AND ')})`,
+  );
+}
+
+function buildScoreIdentityFilter(args: Pick<GetScoreAggregateArgs, 'scorerId' | 'scoreSource'>): FilterResult {
+  const conditions: string[] = ['scorerId = {olapScorerId:String}'];
+  const params: Record<string, unknown> = { olapScorerId: args.scorerId };
+
+  if (args.scoreSource !== undefined) {
+    conditions.push('scoreSource = {olapScoreSource:String}');
+    params.olapScoreSource = args.scoreSource;
+  }
+
+  return { conditions, params };
+}
+
+function resolveScoreGroupBy(groupBy: string[]): { key: string; selectSql: string; groupSql: string }[] {
+  return groupBy.map((key, index) => {
+    const column = parseFieldKey(key);
+    if (!SCORE_TYPED_COLUMNS.has(column) || GROUP_BY_EXCLUDED.has(column)) {
+      throw new Error(`Invalid groupBy column(s): ${key}`);
+    }
+    const alias = `group_by_${index}`;
+    return { key, selectSql: `${column} AS ${alias}`, groupSql: alias };
+  });
+}
+
+function toSeriesName(values: unknown[]): string {
+  return values.map(v => (v == null ? '' : String(v))).join('|');
+}
+
+async function queryJson<T>(client: ClickHouseClient, query: string, params: Record<string, unknown>): Promise<T[]> {
+  return (await (
+    await client.query({
+      query,
+      query_params: params,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as T[];
+}
+
+// ============================================================================
+// Write
+// ============================================================================
+
+async function scoreRowsWithWriteVersions(client: ClickHouseClient, scores: BatchCreateScoresArgs['scores']) {
+  const scoreIds = [...new Set(scores.flatMap(score => (score.scoreId ? [score.scoreId] : [])))];
+  const existingVersions: { scoreId: string; writeVersion: string }[] = [];
+  const lookupBatchSize = 1_000;
+
+  for (let offset = 0; offset < scoreIds.length; offset += lookupBatchSize) {
+    existingVersions.push(
+      ...(await queryJson<{ scoreId: string; writeVersion: string }>(
+        client,
+        `SELECT scoreId, toString(max(writeVersion)) AS writeVersion
+         FROM ${TABLE_SCORE_EVENTS}
+         WHERE scoreId IN ({scoreIds:Array(String)})
+         GROUP BY scoreId`,
+        { scoreIds: scoreIds.slice(offset, offset + lookupBatchSize) },
+      )),
+    );
+  }
+
+  const versions = new Map(existingVersions.map(row => [row.scoreId, BigInt(row.writeVersion)]));
+  return scores.map(score => {
+    const writeVersion = score.scoreId ? (versions.get(score.scoreId) ?? 0n) + 1n : 1n;
+    if (score.scoreId) versions.set(score.scoreId, writeVersion);
+    return { ...scoreRecordToRow(score), writeVersion: writeVersion.toString() };
+  });
+}
+
+export async function createScore(client: ClickHouseClient, args: CreateScoreArgs): Promise<void> {
+  await batchCreateScores(client, { scores: [args.score] });
+}
+
+export async function batchCreateScores(client: ClickHouseClient, args: BatchCreateScoresArgs): Promise<void> {
+  if (args.scores.length === 0) return;
+
+  await client.insert({
+    table: TABLE_SCORE_EVENTS,
+    values: await scoreRowsWithWriteVersions(client, args.scores),
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_INSERT_SETTINGS,
+  });
+}
+
+// ============================================================================
+// Delete
+// ============================================================================
+
+/**
+ * Delete score events by scoreId via lightweight DELETE. Optional
+ * `organizationId` and `resourceId` values are ANDed into the predicate to
+ * restrict deletion to records with matching scope fields.
+ *
+ * A durable deletion request is recorded before the lightweight delete and
+ * marked applied once the delete succeeds. If the delete fails, the request
+ * stays unapplied; retry by calling this function again. The delete is
+ * immediately visible to subsequent reads; physical purge depends on the
+ * table's configured retention TTL. The delta table is intentionally not
+ * touched and expires through its fixed two-day TTL.
+ */
+export async function deleteScores(
+  client: ClickHouseClient,
+  args: DeleteScoresArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
+  if (args.scoreIds.length === 0) return;
+
+  const request = await recordDeletionRequest(client, {
+    requestId: globalThis.crypto.randomUUID(),
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    signal: 'scores',
+    predicateType: 'itemIds',
+    predicateValues: [...args.scoreIds],
+    requestedAt: new Date().toISOString(),
+    replication,
+  });
+
+  const params: Record<string, string> = {};
+  const idPlaceholders: string[] = [];
+  for (let i = 0; i < args.scoreIds.length; i++) {
+    const name = `sid_${i}`;
+    params[name] = args.scoreIds[i]!;
+    idPlaceholders.push(`{${name}:String}`);
+  }
+
+  const conditions = [`scoreId IN (${idPlaceholders.join(', ')})`];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = {delOrganizationId:String}');
+    params.delOrganizationId = args.organizationId;
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = {delResourceId:String}');
+    params.delResourceId = args.resourceId;
+  }
+
+  const clickhouse_settings = { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' };
+  for (const table of [TABLE_SCORE_EVENTS_CURRENT, TABLE_SCORE_EVENTS]) {
+    await client.command({
+      query: `DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`,
+      query_params: params,
+      clickhouse_settings,
+    });
+  }
+
+  await markDeletionRequestApplied(client, request, replication);
+}
+
+// ============================================================================
+// List
+// ============================================================================
+
+export async function listScores(
+  client: ClickHouseClient,
+  args: ListScoresArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListScoresResponse> {
+  const parsed = listScoresArgsSchema.parse(args);
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
+  const filter = buildScoresFilterConditions(parsed.filters, 's');
+  const pagination = buildPaginationClause(parsed.pagination);
+  const orderBy = buildSignalOrderByClause(['timestamp', 'score'], parsed.orderBy, 's');
+  const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingSupported(strategy);
+
+    const streamHeadCursor = await getStreamHeadCursor(client);
+    if (parsed.after === undefined) {
+      return {
+        scores: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursor = validateCursorId(parsed.after);
+    const rows = await queryScoresAfterCursor(client, whereClause, filter.params, parsed.limit, afterCursor);
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      scores: visibleRows.map(rowToScoreRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      deltaCursor: visibleRows.length > 0 ? buildScoresCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
+    };
+  }
+
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
+  const scoresRelation = prunedCurrentScoresRelation(buildScoresFilterConditions(parsed.filters));
+  const countResult = await queryJson<{ total?: number }>(
+    client,
+    `SELECT count() AS total FROM ${scoresRelation} AS s ${whereClause}`,
+    filter.params,
+  );
+
+  const rows = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${scoresRelation} AS s ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    { ...filter.params, limit: pagination.limit, offset: pagination.offset },
+  );
+
+  const total = Number(countResult[0]?.total ?? 0);
+
+  return {
+    pagination: {
+      total,
+      page: pagination.page,
+      perPage: pagination.perPage,
+      hasMore: (pagination.page + 1) * pagination.perPage < total,
+    },
+    scores: rows.map(rowToScoreRecord),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
+  };
+}
+
+type ScoreDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  traceId: string | null;
+  timestamp: string;
+  scoreId: string;
+};
+
+/**
+ * Delta reads join the delta stream to the current-state table by scoreId, so
+ * a poll or replay always returns the latest write of a score (a rewrite may
+ * change traceId or timestamp, which the delta row does not track).
+ *
+ * A score's first delta row is its only cursor: rows after `afterCursor` are
+ * dropped when the same scoreId already has a row at or before it, and
+ * `LIMIT 1 BY` keeps the lowest cursor within the page. Duplicate delta rows
+ * (a concurrent-insert race past the MV check) therefore never surface, in
+ * this poll or a later one.
+ */
+async function queryScoresAfterCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  cursorId: string,
+): Promise<ScoreDeltaRow[]> {
+  // The current-state table drives the scan and is narrowed to the polled
+  // scoreIds by its sort key before FINAL merges, so a poll never merges the
+  // whole table. Only the small delta slice is built into the hash table.
+  return await queryJson<ScoreDeltaRow>(
+    client,
+    `
+      SELECT
+        s.* EXCEPT(traceId, timestamp, scoreId),
+        s.traceId AS traceId,
+        s.timestamp AS timestamp,
+        s.scoreId AS scoreId,
+        toString(d.cursorId) AS cursorId
+      FROM ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+      INNER JOIN (
+        SELECT cursorId, scoreId
+        FROM ${TABLE_SCORE_EVENTS_DELTA}
+        WHERE cursorId > {afterCursor:UInt64}
+          AND scoreId NOT IN (
+            SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+            WHERE cursorId <= {afterCursor:UInt64}
+              AND scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})
+          )
+      ) d
+        ON s.scoreId = d.scoreId
+      ${appendWhere(whereClause, `s.scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})`)}
+      ORDER BY d.cursorId ASC
+      LIMIT 1 BY s.scoreId
+      LIMIT {fetchLimit:UInt32}
+    `,
+    { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
+  );
+}
+
+/**
+ * Newest delta cursor whose current score matches the filters. Without
+ * filters this is the stream head; with filters, FINAL only merges the
+ * scoreIds still in the delta table.
+ */
+async function getDeltaCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_SCORE_EVENTS_DELTA} d
+      WHERE d.scoreId IN (
+        SELECT s.scoreId
+        FROM ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ${appendWhere(whereClause, `s.scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA})`)}
+      )
+    `,
+    params,
+  );
+
+  const cursorId = rows[0]?.cursorId ?? null;
+  if (cursorId) {
+    return cursorId;
+  }
+
+  return getStreamHeadCursor(client);
+}
+
+async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_SCORE_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+function buildScoresCursor(row: ScoreDeltaRow): string {
+  return row.cursorId ?? '0';
+}
+
+export async function getScoreById(client: ClickHouseClient, scoreId: string): Promise<ScoreRecord | null> {
+  const rows = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${currentScoresRelation('scoreId = {scoreId:String}')} LIMIT 1`,
+    { scoreId },
+  );
+
+  return rows[0] ? rowToScoreRecord(rows[0]) : null;
+}
+
+// ============================================================================
+// OLAP Queries
+// ============================================================================
+
+export async function getScoreAggregate(
+  client: ClickHouseClient,
+  args: GetScoreAggregateArgs,
+): Promise<GetScoreAggregateResponse> {
+  // ClickHouse returns type defaults (0 / nan) for aggregates over an empty set; other stores return NULL.
+  const aggSql = `if(count() = 0, NULL, ${getAggregationSql(args.aggregation)})`;
+  const identity = buildScoreIdentityFilter(args);
+  const signalFilter = buildScoresFilterConditions(args.filters);
+  const combined = mergeFilters(identity, signalFilter);
+  const whereClause = toWhereClause(combined);
+
+  const sql = `SELECT ${aggSql} AS value FROM ${prunedCurrentScoresRelation(combined)} ${whereClause}`;
+  const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+  const value = result[0]?.value == null ? null : Number(result[0]?.value);
+
+  if (args.comparePeriod && args.filters?.timestamp) {
+    const ts = args.filters.timestamp;
+    if (ts.start && ts.end) {
+      const duration = ts.end.getTime() - ts.start.getTime();
+      let prevStart: Date;
+      let prevEnd: Date;
+
+      switch (args.comparePeriod) {
+        case 'previous_period':
+          prevStart = new Date(ts.start.getTime() - duration);
+          prevEnd = new Date(ts.end.getTime() - duration);
+          break;
+        case 'previous_day':
+          prevStart = new Date(ts.start.getTime() - 86400000);
+          prevEnd = new Date(ts.end.getTime() - 86400000);
+          break;
+        case 'previous_week':
+          prevStart = new Date(ts.start.getTime() - 604800000);
+          prevEnd = new Date(ts.end.getTime() - 604800000);
+          break;
+        default:
+          prevStart = new Date(ts.start.getTime() - duration);
+          prevEnd = new Date(ts.end.getTime() - duration);
+      }
+
+      const prevFilters = {
+        ...(args.filters ?? {}),
+        timestamp: { start: prevStart, end: prevEnd, startExclusive: ts.startExclusive, endExclusive: ts.endExclusive },
+      };
+      const prevSignalFilter = buildScoresFilterConditions(prevFilters);
+      const prevCombined = mergeFilters(identity, prevSignalFilter);
+      const prevWhereClause = toWhereClause(prevCombined);
+
+      const prevResult = await queryJson<Record<string, unknown>>(
+        client,
+        `SELECT ${aggSql} AS value FROM ${prunedCurrentScoresRelation(prevCombined)} ${prevWhereClause}`,
+        prevCombined.params,
+      );
+      const previousValue = prevResult[0]?.value == null ? null : Number(prevResult[0]?.value);
+
+      let changePercent: number | null = null;
+      if (previousValue !== null && previousValue !== 0 && value !== null) {
+        changePercent = ((value - previousValue) / Math.abs(previousValue)) * 100;
+      }
+
+      return { value, previousValue, changePercent };
+    }
+  }
+
+  return { value };
+}
+
+export async function getScoreBreakdown(
+  client: ClickHouseClient,
+  args: GetScoreBreakdownArgs,
+): Promise<GetScoreBreakdownResponse> {
+  const aggSql = getAggregationSql(args.aggregation);
+  const identity = buildScoreIdentityFilter(args);
+  const signalFilter = buildScoresFilterConditions(args.filters);
+  const combined = mergeFilters(identity, signalFilter);
+  const whereClause = toWhereClause(combined);
+  const resolved = resolveScoreGroupBy(args.groupBy);
+
+  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${prunedCurrentScoresRelation(combined)} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
+  const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+
+  return {
+    groups: rows.map(row => ({
+      dimensions: Object.fromEntries(
+        resolved.map((entry, index) => {
+          const v = row[`group_by_${index}`];
+          return [entry.key, v == null ? null : String(v)];
+        }),
+      ),
+      value: Number(row.value ?? 0),
+    })),
+  };
+}
+
+export async function getScoreTimeSeries(
+  client: ClickHouseClient,
+  args: GetScoreTimeSeriesArgs,
+): Promise<GetScoreTimeSeriesResponse> {
+  const aggSql = getAggregationSql(args.aggregation);
+  const intervalSql = getIntervalSql(args.interval);
+  const identity = buildScoreIdentityFilter(args);
+  const signalFilter = buildScoresFilterConditions(args.filters);
+  const combined = mergeFilters(identity, signalFilter);
+  const whereClause = toWhereClause(combined);
+
+  if (args.groupBy && args.groupBy.length > 0) {
+    const resolved = resolveScoreGroupBy(args.groupBy);
+    const sql = `
+      SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
+             ${resolved.map(e => e.selectSql).join(', ')},
+             ${aggSql} AS value
+      FROM ${prunedCurrentScoresRelation(combined)} ${whereClause}
+      GROUP BY bucket, ${resolved.map(e => e.groupSql).join(', ')}
+      ORDER BY bucket
+    `;
+    const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+    const seriesMap = new Map<string, { name: string; points: { timestamp: Date; value: number }[] }>();
+
+    for (const row of rows) {
+      const groupValues = resolved.map((_, index) => row[`group_by_${index}`]);
+      const key = JSON.stringify(groupValues);
+      if (!seriesMap.has(key)) {
+        seriesMap.set(key, { name: toSeriesName(groupValues), points: [] });
+      }
+      seriesMap.get(key)!.points.push({
+        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+        value: Number(row.value ?? 0),
+      });
+    }
+
+    return { series: Array.from(seriesMap.values()) };
+  }
+
+  const sql = `
+    SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
+           ${aggSql} AS value
+    FROM ${prunedCurrentScoresRelation(combined)} ${whereClause}
+    GROUP BY bucket
+    ORDER BY bucket
+  `;
+  const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+
+  return {
+    series: [
+      {
+        name: args.scoreSource ? `${args.scorerId}|${args.scoreSource}` : args.scorerId,
+        points: rows.map(row => ({
+          timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+          value: Number(row.value ?? 0),
+        })),
+      },
+    ],
+  };
+}
+
+export async function getScorePercentiles(
+  client: ClickHouseClient,
+  args: GetScorePercentilesArgs,
+): Promise<GetScorePercentilesResponse> {
+  const intervalSql = getIntervalSql(args.interval);
+  const identity = buildScoreIdentityFilter(args);
+  const signalFilter = buildScoresFilterConditions(args.filters);
+  const combined = mergeFilters(identity, signalFilter);
+  const whereClause = toWhereClause(combined);
+
+  if (!Array.isArray(args.percentiles) || args.percentiles.length === 0) {
+    throw new Error('Percentiles must include at least one value between 0 and 1.');
+  }
+
+  for (const p of args.percentiles) {
+    if (!Number.isFinite(p) || p < 0 || p > 1) {
+      throw new Error(`Percentile value must be a finite number between 0 and 1, got ${p}`);
+    }
+  }
+
+  // One scan for every requested level instead of one query per percentile.
+  const sql = `
+    SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
+           quantiles(${args.percentiles.join(', ')})(score) AS pvalues
+    FROM ${prunedCurrentScoresRelation(combined)}
+    ${whereClause}
+    GROUP BY bucket
+    ORDER BY bucket
+  `;
+  const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+
+  const series = args.percentiles.map((percentile, index) => ({
+    percentile,
+    points: rows.map(row => ({
+      timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+      value: Number((row.pvalues as unknown[] | undefined)?.[index] ?? 0),
+    })),
+  }));
+
+  return { series };
+}
