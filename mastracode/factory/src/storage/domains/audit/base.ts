@@ -39,10 +39,6 @@ export interface AuditActorProfileInput {
 
 export const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
 
-export function auditAgentName(modeId: string): string {
-  return `${modeId} agent`;
-}
-
 export function auditActorProfile(
   user: { name?: string; email?: string; avatarUrl?: string } | undefined,
 ): AuditActorProfileInput | undefined {

@@ -16,10 +16,10 @@ export type AvatarProps = {
 
 export function AvatarNamed({ src, name, size, interactive = false, color, textColor }: AvatarProps) {
   const contextSize = useContext(AvatarSizeContext);
-  const [didError, setDidError] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string>();
   const resolvedSize = size ?? contextSize ?? 'sm';
   const initial = name.trim()[0]?.toUpperCase() ?? 'A';
-  const showImage = Boolean(src) && !didError;
+  const showImage = Boolean(src) && failedSrc !== src;
   const showFallbackTint = !showImage && Boolean(color);
 
   return (
@@ -36,7 +36,7 @@ export function AvatarNamed({ src, name, size, interactive = false, color, textC
       style={showFallbackTint ? { backgroundColor: color } : undefined}
     >
       {showImage ? (
-        <img src={src} alt={name} className="size-full object-cover" onError={() => setDidError(true)} />
+        <img src={src} alt={name} className="size-full object-cover" onError={() => setFailedSrc(src)} />
       ) : (
         <Txt
           variant={resolvedSize === 'xs' ? 'meta' : 'body'}

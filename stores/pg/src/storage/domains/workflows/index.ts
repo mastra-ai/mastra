@@ -519,28 +519,13 @@ export class WorkflowsPG extends WorkflowsStorage {
           [workflowName, runId],
         );
 
-        let snapshot: WorkflowRunState;
         if (!existingSnapshotResult) {
-          // Create new snapshot if none exists
-          snapshot = {
-            context: {},
-            activePaths: [],
-            timestamp: Date.now(),
-            suspendedPaths: {},
-            activeStepsPath: {},
-            resumeLabels: {},
-            serializedStepGraph: [],
-            status: 'pending',
-            value: {},
-            waitingPaths: {},
-            runId: runId,
-            requestContext: {},
-          } as WorkflowRunState;
-        } else {
-          // Parse existing snapshot
-          const existingSnapshot = existingSnapshotResult.snapshot;
-          snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+          return {};
         }
+
+        const existingSnapshot = existingSnapshotResult.snapshot;
+        const snapshot: WorkflowRunState =
+          typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
 
         // Merge the new step result using element-wise array merging
         // (critical for concurrent foreach iteration results)

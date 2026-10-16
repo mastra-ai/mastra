@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
-import { createSpanQueryTests } from '@internal/storage-test-utils';
+import { createPreviewTests, createSpanQueryTests } from '@internal/storage-test-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { planSpanQuery, TraceQueryExecutionError, TraceQueryResourceLimitError } from '@mastra/core/storage';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { TABLE_SPAN_EVENTS } from './ddl';
+import { CH_INSERT_SETTINGS, spanRecordToRow } from './helpers';
 import { ObservabilityStorageClickhouseVNext } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -27,6 +29,17 @@ afterAll(async () => {
   await admin.close();
 });
 createSpanQueryTests(() => storage, { completionOnly: true });
+createPreviewTests(() => storage, {
+  // The row as the writer stored it before the preview columns existed.
+  writeSpanWithoutPreviews: async span => {
+    await client.insert({
+      table: TABLE_SPAN_EVENTS,
+      values: [{ ...spanRecordToRow(span), inputPreview: null, outputPreview: null, errorPreview: null }],
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_INSERT_SETTINGS,
+    });
+  },
+});
 
 it('wraps unexpected database errors with span-query context', async () => {
   const cause = new Error('Connection refused');

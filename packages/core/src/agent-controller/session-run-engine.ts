@@ -336,6 +336,13 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
+  private stampResponseModel(message: MastraDBMessage, stepStart: StreamChunkPayload): void {
+    const modelId = getString(stepStart.modelId);
+    if (!modelId) return;
+    const provider = getString(stepStart.provider);
+    message.content.metadata = { ...message.content.metadata, modelId, ...(provider ? { provider } : {}) };
+  }
+
   private startCurrentMessage(state: StreamState): boolean {
     if (state.messageStarted) return false;
     this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
@@ -612,6 +619,7 @@ export class SessionRunEngine {
   ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
+      this.#session.__captureRunThreadOwnerId(chunk.runId, requestContext);
     }
 
     if (isSpanChunk(chunk)) {
@@ -670,8 +678,13 @@ export class SessionRunEngine {
         // the next, so every id after the first marks that boundary — rotate
         // with it, or the persisted tail comes back as a duplicate on reload.
         // An emitted id never changes, and an id binds to one message only.
-        const messageId = getString(getPayload(chunk).messageId);
-        if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        const payload = getPayload(chunk);
+        const messageId = getString(payload.messageId);
+        if (!messageId) break;
+        if (state.offeredResponseIds.has(messageId)) {
+          if (messageId === state.currentMessage.id) this.stampResponseModel(state.currentMessage, payload);
+          break;
+        }
         // A resumed tool can finish before the first model step starts. Seal
         // that tool-only prelude without changing its already observable id.
         if (
@@ -688,6 +701,7 @@ export class SessionRunEngine {
         if (!this.isCurrentMessageObserved(state)) {
           state.currentMessage.id = messageId;
         }
+        this.stampResponseModel(state.currentMessage, payload);
         break;
       }
 
@@ -1711,10 +1725,14 @@ export class SessionRunEngine {
     suspended,
     error,
     aborted,
+    resourceId,
+    threadId,
   }: {
     suspended?: boolean;
     error?: boolean;
     aborted?: boolean;
+    resourceId?: string;
+    threadId?: string;
   }): Promise<void> {
     const reason = error
       ? 'error'
@@ -1723,6 +1741,21 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
+    // A follower Session mirrors suspensions from runs it does not own. Once
+    // such a run completes (it was resumed elsewhere), its parked calls were
+    // answered, so drop them without a cancellation event. Error and tripwire
+    // finishes retract in their chunk handlers; lease loss keeps them parked.
+    const runId = this.#session.run.getRunId();
+    if (reason === 'complete' && resourceId && threadId && runId) {
+      for (const s of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
+        this.#session.displayState.deletePendingSuspension({
+          resourceId: s.resourceId,
+          threadId: s.threadId,
+          runId: s.runId,
+          toolCallId: s.toolCallId,
+        });
+      }
+    }
     await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
   }
@@ -1854,6 +1887,8 @@ export class SessionRunEngine {
               suspended,
               error: isError,
               aborted,
+              resourceId: currentRun.resourceId,
+              threadId: currentRun.threadId,
             });
             currentRun = undefined;
             if (aborted) {
@@ -1885,7 +1920,11 @@ export class SessionRunEngine {
       // Graceful stream close without explicit terminal chunk.
       if (currentRun && this.#session.stream.isCurrent({ subscription })) {
         const streamResult = this.finishStreamState(currentRun);
-        await this.finishSubscribedStreamRun({ suspended: streamResult.suspended });
+        await this.finishSubscribedStreamRun({
+          suspended: streamResult.suspended,
+          resourceId: currentRun.resourceId,
+          threadId: currentRun.threadId,
+        });
         currentRun = undefined;
       }
 

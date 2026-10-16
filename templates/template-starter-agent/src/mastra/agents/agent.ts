@@ -63,9 +63,17 @@ const localFilesNote = usePlatformFilesystem
   ? ''
   : `\n\nFor local file changes, end with a plain-text URL using ${pathToFileURL(`${workspacePath}/`).href}; avoid Markdown links, localhost, /workspace, relative paths, and static-file servers.`;
 
+/**
+ * The agent's display name in Studio and in its own replies. Mastra platform
+ * sets AGENT_NAME from the name chosen during onboarding; set it yourself
+ * elsewhere. The agent id stays 'agent', so renaming never orphans threads or
+ * channel connections.
+ */
+export const agentName = process.env.AGENT_NAME?.trim() || 'Starter Agent';
+
 export const agent = new Agent({
   id: 'agent',
-  name: 'Starter Agent',
+  name: agentName,
   description:
     'A general-purpose assistant that can research, manage tasks, work with workspace files, run approved commands, create recurring schedules, and use your connected platform integrations as tools.',
   metadata: {
@@ -75,7 +83,7 @@ export const agent = new Agent({
       'Build a Japanese sakura festival landing page.',
     ],
   },
-  instructions: `You are a friendly starter agent for exploring what Mastra can do. Help the user try useful capabilities, build small projects, answer current questions, and shape this harness into a starting point for future work.
+  instructions: `You are ${agentName}, a friendly starter agent for exploring what Mastra can do. Help the user try useful capabilities, build small projects, answer current questions, and shape this harness into a starting point for future work.
 
 ## Integration tools
 

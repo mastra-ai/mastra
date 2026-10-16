@@ -1,9 +1,5 @@
-import {
-  getAvailableThinkingLevelsForModel,
-  resolveDefaultThinkingLevel,
-  runThinkingLevel,
-} from '@mastra/code-sdk/thinking';
-import type { ThinkingDefaults, ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
+import { getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 
@@ -33,42 +29,36 @@ export function thinkingLevelOptionsForModel(
   }));
 }
 
-export type ThinkingLevelOrigin = 'session' | ThinkingLevelSource;
+export type ThinkingLevelOrigin = 'session' | 'factory';
+
+export const FACTORY_THINKING_SOURCE_LABEL = 'Factory default';
 
 export interface EffectiveThinkingLevel {
   level: ThinkingLevelSetting;
   origin: ThinkingLevelOrigin;
 }
 
-export function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | undefined): string {
-  return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
-}
-
 function chosenThinkingLevel(
   override: ThinkingLevelSetting | undefined,
-  defaults: ThinkingDefaults | undefined,
-  modeId: string | undefined,
+  factoryDefault: ThinkingLevelSetting | undefined,
 ): EffectiveThinkingLevel | undefined {
   if (override) return { level: override, origin: 'session' };
-  if (!defaults) return undefined;
-  const { level, source } = resolveDefaultThinkingLevel(defaults, modeId);
-  return { level, origin: source };
+  if (!factoryDefault) return undefined;
+  return { level: factoryDefault, origin: 'factory' };
 }
 
 export function resolveEffectiveThinkingLevel({
   modelId,
   reasoningOptions,
   override,
-  defaults,
-  modeId,
+  factoryDefault,
 }: {
   modelId: string | undefined;
   reasoningOptions: readonly ModelReasoningOption[] | undefined;
   override: ThinkingLevelSetting | undefined;
-  defaults: ThinkingDefaults | undefined;
-  modeId: string | undefined;
+  factoryDefault: ThinkingLevelSetting | undefined;
 }): EffectiveThinkingLevel | undefined {
-  const chosen = chosenThinkingLevel(override, defaults, modeId);
+  const chosen = chosenThinkingLevel(override, factoryDefault);
   if (!chosen || !modelId) return chosen;
   return { ...chosen, level: runThinkingLevel(modelId, chosen.level, reasoningOptions) };
 }

@@ -247,10 +247,10 @@ export const VOLATILE_PAYLOAD_KEYS = new Set([
  * an application error whose `code` differs still compares as different.
  *
  * `dropStack` is set only where the payload is known to be a failure — the
- * `error` chunk, where the engines hand the error on as data. There the error's
- * `stack` embeds the absolute checkout path and so differs on every machine.
- * Anywhere else a key called `stack` is the application's, and dropping it by
- * name would hide a real difference between two engines.
+ * `error` and `tool-error` chunks, where the engines hand the error on as data.
+ * There the error's `stack` embeds the absolute checkout path and so differs on
+ * every machine. Anywhere else a key called `stack` is the application's, and
+ * dropping it by name would hide a real difference between two engines.
  */
 export function normalizePayload(value: unknown, ancestors: readonly object[] = [], dropStack = false): unknown {
   if (value === null) return null;
@@ -282,6 +282,17 @@ export function normalizePayload(value: unknown, ancestors: readonly object[] = 
     if (normalized !== undefined) out[key] = normalized;
   }
   return out;
+}
+
+export function normalizeChunkPayload(type: string, payload: unknown): unknown {
+  if (type === 'error') return normalizePayload(payload, [], true);
+
+  const normalized = normalizePayload(payload);
+  if (type !== 'tool-error' || normalized === null || typeof normalized !== 'object') return normalized;
+
+  const error = (normalized as Record<string, unknown>).error;
+  if (error !== null && typeof error === 'object') delete (error as Record<string, unknown>).stack;
+  return normalized;
 }
 
 function sortByCallId<T extends { toolCallId: string; toolName: string }>(arr: T[]): T[] {
@@ -352,9 +363,9 @@ async function drainInto(acc: TurnChunks, output: MastraModelOutput<any>): Promi
           object: chunk.object,
         });
       } else {
-        // An `error` chunk's payload is the failure itself, so its `stack` goes:
+        // Failure chunk payloads carry the error itself, so their `stack` goes:
         // see `normalizePayload`.
-        acc.chunkPayloads.push(normalizePayload(chunk.payload, [], chunk.type === 'error'));
+        acc.chunkPayloads.push(normalizeChunkPayload(chunk.type, chunk.payload));
       }
       if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
       if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
@@ -749,6 +760,21 @@ export interface EngineDifference {
   expect?: (plain: EngineObservation) => EngineObservation;
 }
 
+export const FAILED_STEP_WARNINGS_DIFFERENCE: EngineDifference = {
+  reason: "COR-1390: wrapped engines omit the failed step's warnings from the step-finish payload.",
+  expect: plain => {
+    const expected = structuredClone(plain);
+    for (const turn of expected.turns) {
+      turn.chunkTypes.forEach((type, index) => {
+        if (type !== 'step-finish') return;
+        const payload = turn.chunkPayloads[index] as { stepResult?: { reason?: unknown; warnings?: unknown } };
+        if (payload.stepResult?.reason === 'error') delete payload.stepResult.warnings;
+      });
+    }
+    return expected;
+  },
+};
+
 export interface EngineHandle {
   engine: ParityEngine;
   /** The plain Agent this engine wraps (or runs, for `plain`). */
@@ -1057,20 +1083,29 @@ interface KnownChunkDifference {
    * of the finish chunk's compared key list. Only the `finish` entry has them.
    */
   missingKeys?: readonly string[];
+  /** Whether this declaration applies to this plain chunk occurrence. */
+  appliesTo?: (plainPayload: unknown) => boolean;
 }
 
 const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
   {
     ticket: 'COR-1390',
     reason:
-      'Durable and evented omit the finish envelope keys plain emits, and structure `output`/`stepResult` differently ' +
+      'Durable and evented omit the finish envelope keys plain emits, and structure `output` differently ' +
       '(plain keeps `steps[].content`/`response`; they emit slimmer steps plus `warnings`/`totalUsage`).',
     chunkType: 'finish',
     // Which of these plain emits depends on the scenario (`response` and
     // `messageId` only appear with memory), so the check below only requires
     // plain to emit some of them and a wrapped engine to emit none.
     missingKeys: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response'],
-    paths: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response', 'output', 'stepResult'],
+    paths: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response', 'output'],
+  },
+  {
+    ticket: 'COR-1390',
+    reason: 'Durable and evented structure the successful finish step result differently from plain.',
+    chunkType: 'finish',
+    paths: ['stepResult'],
+    appliesTo: plainPayload => getAtPath(plainPayload, 'stepResult.reason') !== 'error',
   },
   {
     ticket: 'COR-1390',
@@ -1096,8 +1131,11 @@ const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
     paths: [
       'type',
       '_durableStepContent',
+      '_durableResponseMessages',
       'processorRetryCount',
       'metadata.modelMetadata',
+      'metadata.modelProvider',
+      'metadata.modelVersion',
       // `messages` is a closed envelope — `{ all, user, nonUser }`, the shape
       // `LLMIterationData.messages` declares and its zod schema enforces
       // (loop/workflows/schema.ts) — so declaring the parent cannot hide a
@@ -1109,6 +1147,7 @@ const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
       'messages.all',
       'messages.user',
       'messages.nonUser',
+      'output.object',
       'output.text',
       'output.steps',
       'output.toolCalls',
@@ -1240,9 +1279,12 @@ function withoutKnownEngineDifferences(
 export function staleKnownDifferences(engine: string, plain: EngineObservation, actual: EngineObservation): string[] {
   const failures: string[] = [];
   for (const declared of KNOWN_CHUNK_DIFFERENCES) {
-    const plainHasChunks = plain.turns.some(turn => indexesOfType(turn, declared.chunkType).length > 0);
-    let sawDifference = false;
-    let plainEmitsMissingKey = false;
+    const pairs: Array<{
+      turn: number;
+      plainPayload: unknown;
+      wrappedPayload: unknown;
+      wrappedRecord?: Record<string, unknown>;
+    }> = [];
 
     plain.turns.forEach((turn, i) => {
       const wrapped = actual.turns[i];
@@ -1253,47 +1295,74 @@ export function staleKnownDifferences(engine: string, plain: EngineObservation, 
         if (wrappedIndex === undefined) return;
         const plainPayload = turn.chunkPayloads[plainIndex];
         const wrappedPayload = wrapped.chunkPayloads[wrappedIndex];
-
-        for (const path of declared.paths) {
-          const plainValue = getAtPath(plainPayload, path);
-          const wrappedValue = getAtPath(wrappedPayload, path);
-          // Two empty values are no difference to declare, and none to fix:
-          // e.g. a message list the run never filled in on either engine.
-          if (isDeepStrictEqual(plainValue, wrappedValue) && (isEmptyValue(plainValue) || isEmptyValue(wrappedValue))) {
-            continue;
-          }
-          if (isDeepStrictEqual(plainValue, wrappedValue)) {
-            failures.push(
-              `${engine}: turns[${i}] ${declared.chunkType} payload '${path}' no longer differs from plain; ` +
-                `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
-            );
-          } else {
-            sawDifference = true;
-          }
-        }
-        for (const key of declared.missingKeys ?? []) {
-          if (key in (plainPayload as Record<string, unknown>)) plainEmitsMissingKey = true;
-          if (key in (wrappedPayload as Record<string, unknown>)) {
-            failures.push(
-              `${engine}: turns[${i}] ${declared.chunkType} payload now includes '${key}'; ` +
-                `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
-            );
-          }
-        }
+        if (declared.appliesTo && !declared.appliesTo(plainPayload)) return;
+        pairs.push({
+          turn: i,
+          plainPayload,
+          wrappedPayload,
+          wrappedRecord:
+            wrappedPayload !== null && typeof wrappedPayload === 'object'
+              ? (wrappedPayload as Record<string, unknown>)
+              : undefined,
+        });
       });
     });
 
-    if (plainHasChunks && !sawDifference) {
-      failures.push(
-        `${engine}: the declared ${declared.chunkType} chunk difference no longer reproduces; ` +
-          `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
-      );
-    }
-    if (declared.missingKeys && plainHasChunks && !plainEmitsMissingKey) {
-      failures.push(
-        `${engine}: plain's ${declared.chunkType} payload no longer includes any of ` +
-          `${declared.missingKeys.join(', ')}; update KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
-      );
+    for (const pair of pairs) {
+      const pathValues = declared.paths.map(path => ({
+        path,
+        plain: getAtPath(pair.plainPayload, path),
+        wrapped: getAtPath(pair.wrappedPayload, path),
+      }));
+      const missingKeys = (declared.missingKeys ?? []).map(key => {
+        const plainRecord =
+          pair.plainPayload !== null && typeof pair.plainPayload === 'object'
+            ? (pair.plainPayload as Record<string, unknown>)
+            : undefined;
+        return {
+          key,
+          plainHas: plainRecord ? key in plainRecord : false,
+          plainValue: plainRecord?.[key],
+          wrappedHas: pair.wrappedRecord ? key in pair.wrappedRecord : false,
+        };
+      });
+      const hasObservedDifference =
+        pathValues.some(
+          values =>
+            !isDeepStrictEqual(values.plain, values.wrapped) &&
+            (!isEmptyValue(values.plain) || !isEmptyValue(values.wrapped)),
+        ) ||
+        missingKeys.some(
+          values => values.wrappedHas || (values.plainHas && !isEmptyValue(values.plainValue) && !values.wrappedHas),
+        );
+      const hasPopulatedField = pathValues.some(values => !isEmptyValue(values.plain) || !isEmptyValue(values.wrapped));
+      const applicable = hasObservedDifference || hasPopulatedField || missingKeys.some(values => values.wrappedHas);
+      if (!applicable) continue;
+
+      for (const { path, plain: plainValue, wrapped: wrappedValue } of pathValues) {
+        if (!isDeepStrictEqual(plainValue, wrappedValue)) continue;
+        if (isEmptyValue(plainValue) || isEmptyValue(wrappedValue)) continue;
+        failures.push(
+          `${engine}: turns[${pair.turn}] ${declared.chunkType} payload '${path}' no longer differs from plain; ` +
+            `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
+        );
+      }
+
+      for (const { key, wrappedHas } of missingKeys) {
+        if (wrappedHas) {
+          failures.push(
+            `${engine}: turns[${pair.turn}] ${declared.chunkType} payload now includes '${key}'; ` +
+              `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
+          );
+        }
+      }
+
+      if (!hasObservedDifference) {
+        failures.push(
+          `${engine}: the declared ${declared.chunkType} chunk difference no longer reproduces; ` +
+            `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
+        );
+      }
     }
   }
 

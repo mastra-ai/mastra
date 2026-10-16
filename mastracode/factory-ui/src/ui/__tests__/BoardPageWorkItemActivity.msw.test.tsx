@@ -278,9 +278,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
 }
 
@@ -359,7 +357,7 @@ describe('Board work-item activity', () => {
     await user.type(filterInput(), 'octo');
     expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('button', { name: /^Done/ }));
+    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
 
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get('teammate')).toBe('github:octocat');
@@ -472,7 +470,7 @@ describe('Board work-item activity', () => {
     await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
     await user.type(filterInput(), 'Linear Ada');
     await user.click(await screen.findByRole('option', { name: /Linear Ada/i }));
-    await user.click(screen.getByRole('button', { name: /^Done/ }));
+    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
 
     expect(screen.getByText('Linear planning item')).toBeInTheDocument();
   });
@@ -488,7 +486,9 @@ describe('Board work-item activity', () => {
     const { client } = renderBoard('work', '?teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByText('No work items match filters')).toBeInTheDocument();
+    expect(
+      await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters'),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(/visible board tasks in Intake/)).not.toBeInTheDocument();
   });
 
@@ -528,7 +528,7 @@ describe('Board work-item activity', () => {
     await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('button', { name: /^Done/ }));
+    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
@@ -548,7 +548,7 @@ describe('Board work-item activity', () => {
     await user.click(screen.getByRole('combobox', { name: /^Value: .*octocat/ }));
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
     await user.click(screen.getByRole('option', { name: /Ada Lovelace/ }));
-    await user.click(screen.getByRole('button', { name: /^Done/ }));
+    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
@@ -567,7 +567,9 @@ describe('Board work-item activity', () => {
     const { client } = renderBoard('review', '?teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByText('No change requests match filters')).toBeInTheDocument();
+    expect(
+      await within(screen.getByTestId('board-column-review')).findByText('No change requests match filters'),
+    ).toBeInTheDocument();
   });
 
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {
@@ -583,5 +585,22 @@ describe('Board work-item activity', () => {
     expect(screen.getByLabelText('Open pull request')).toBeInTheDocument();
     expect(screen.getByLabelText('Closed pull request')).toBeInTheDocument();
     expect(screen.getByLabelText('Merged pull request')).toBeInTheDocument();
+  });
+
+  it('shows the recorded review verdict on review list rows', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            { ...reviewItem, sessions: {}, metadata: { ...reviewItem.metadata, reviewVerdict: 'request changes' } },
+          ],
+        }),
+      ),
+    );
+    renderBoard('review');
+
+    const row = await screen.findByRole('article', { name: reviewItem.title });
+    expect(within(row).getByText('Changes requested')).toBeVisible();
   });
 });

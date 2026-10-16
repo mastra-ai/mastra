@@ -604,7 +604,7 @@ getToolInfo(toolId: string): ToolInfo | undefined
 
 ### `executeTool()`
 
-Runs a tool without a protocol client, which is how the Mastra REST route `POST /api/mcp/:serverId/tools/:toolId/execute` and Studio invoke tools.
+Runs a tool without a protocol client, which is how the Mastra REST route `POST /api/mcp/:serverId/tools/:toolId/execute` and Studio invoke tools. See [authentication for registered MCP routes](/docs/guides/mcp-authentication-authorization#routes-mastra-registers-for-an-mcp-server) and the [MCP routes reference](/reference/server/routes#mcp).
 
 ```typescript oxfmt:false
 async executeTool(

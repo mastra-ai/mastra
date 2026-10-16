@@ -792,7 +792,8 @@ describe('Traces page columns menu', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-      fireEvent.click(await screen.findByRole('combobox', { name: 'Metadata key' }));
+      // A field opens on mousedown (a real press), which fireEvent.click doesn't send.
+      fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Metadata key' }));
       fireEvent.click(await screen.findByRole('option', { name: 'region' }));
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
 
@@ -820,7 +821,8 @@ describe('Traces page columns menu', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-      fireEvent.click(await screen.findByRole('combobox', { name: 'Metadata key' }));
+      // A field opens on mousedown (a real press), which fireEvent.click doesn't send.
+      fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Metadata key' }));
 
       expect(await screen.findAllByRole('option', { name: 'tenant' })).toHaveLength(1);
       expect(screen.queryByRole('option', { name: 'tenant.id' })).toBeNull();

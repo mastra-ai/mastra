@@ -110,12 +110,21 @@ describe('Datasets page', () => {
   });
 
   describe('when there are no datasets', () => {
-    it('still shows the New dataset link in the header slot', async () => {
-      useDatasets([]);
+    beforeEach(() => useDatasets([]));
+
+    it('hides the New dataset link from the header slot', async () => {
       renderPage();
 
-      const link = await screen.findByRole('link', { name: 'New dataset' });
-      expect(link.getAttribute('href')).toBe('/datasets/new');
+      await screen.findByText('No Datasets yet');
+      expect(screen.queryByRole('link', { name: 'New dataset' })).toBeNull();
+    });
+
+    it('navigates to the create page from the New dataset empty-state button', async () => {
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'New dataset' }));
+
+      expect(await screen.findByText('Create dataset page')).not.toBeNull();
     });
   });
 });

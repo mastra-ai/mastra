@@ -430,4 +430,44 @@ describe('Agent Type Tests', () => {
       assertType<string>(config.name!);
     });
   });
+
+  describe('agent scopes', () => {
+    it('accepts scopes on every entry point and on the Agent config', () => {
+      type Stream = AgentExecutionOptions<undefined>;
+      type Generate = PublicAgentExecutionOptions<undefined>;
+      type Network = NonNullable<Parameters<Agent['network']>[1]>;
+      type SendMessage = Parameters<Agent['sendMessage']>[1];
+      type QueueMessage = Parameters<Agent['queueMessage']>[1];
+      type SendSignal = Parameters<Agent['sendSignal']>[1];
+
+      expectTypeOf<Stream['scopes']>().toEqualTypeOf<string[] | undefined>();
+      expectTypeOf<Generate['scopes']>().toEqualTypeOf<string[] | undefined>();
+      expectTypeOf<Network['scopes']>().toEqualTypeOf<string[] | undefined>();
+      expectTypeOf<SendMessage['scopes']>().toEqualTypeOf<string[] | undefined>();
+      expectTypeOf<QueueMessage['scopes']>().toEqualTypeOf<string[] | undefined>();
+      expectTypeOf<SendSignal['scopes']>().toEqualTypeOf<string[] | undefined>();
+
+      assertType<AgentConfig>({
+        id: 'a',
+        name: 'a',
+        instructions: 'i',
+        model: 'openai/gpt-4o',
+        scopes: ['org:acme'],
+      });
+      assertType<AgentConfig>({
+        id: 'a',
+        name: 'a',
+        instructions: 'i',
+        model: 'openai/gpt-4o',
+        scopes: ({ requestContext }) => [`org:${String(requestContext.get('org'))}`],
+      });
+    });
+
+    it('keeps resourceId and threadId required when a signal starts a run', () => {
+      type SendSignal = Parameters<Agent['sendSignal']>[1];
+      // @ts-expect-error resourceId/threadId stay required without runId
+      assertType<SendSignal>({ scopes: ['resource:u1', 'thread:t1'] });
+      assertType<SendSignal>({ resourceId: 'u1', threadId: 't1', scopes: ['resource:u1', 'thread:t1'] });
+    });
+  });
 });

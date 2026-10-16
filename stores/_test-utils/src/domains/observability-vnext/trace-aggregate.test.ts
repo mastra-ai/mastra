@@ -348,8 +348,8 @@ describe('trace-aggregate token and cost conformance cases', () => {
   });
 
   it('counts exactly the traces evaluateTraceQuery returns for the token fixture', () => {
-    // Trace queries are capped at 31 days; August holds every token trace but `early-1` and
-    // `tenant-check`, and the resumed trace counts once.
+    // August holds every token trace but `early-1` and `tenant-check`, and the resumed trace
+    // counts once.
     const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
     const traces = evaluateTraceQuery(
       TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,

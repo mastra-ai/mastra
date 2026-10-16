@@ -112,7 +112,7 @@
       }
     },
     {
-      "hash": "35b9e3cd48071fb2",
+      "hash": "237c6209c578eef6",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -139,7 +139,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_XtPfC2ni3lmdr3vvF86txmjU",
-              "output": "{\"temperature\":70,\"feelsLike\":65,\"humidity\":50,\"windSpeed\":10,\"windGust\":15,\"conditions\":\"sunny\",\"location\":\"Toronto\"}"
+              "output": "{\"conditions\":\"sunny\",\"feelsLike\":65,\"humidity\":50,\"location\":\"Toronto\",\"temperature\":70,\"windGust\":15,\"windSpeed\":10}"
             }
           ],
           "tools": [
@@ -226,7 +226,7 @@
       }
     },
     {
-      "hash": "66c2852616ab5c9c",
+      "hash": "19779379c93d186b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -253,7 +253,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_XtPfC2ni3lmdr3vvF86txmjU",
-              "output": "{\"temperature\":70,\"feelsLike\":65,\"humidity\":50,\"windSpeed\":10,\"windGust\":15,\"conditions\":\"sunny\",\"location\":\"Toronto\"}"
+              "output": "{\"conditions\":\"sunny\",\"feelsLike\":65,\"humidity\":50,\"location\":\"Toronto\",\"temperature\":70,\"windGust\":15,\"windSpeed\":10}"
             },
             {
               "type": "item_reference",

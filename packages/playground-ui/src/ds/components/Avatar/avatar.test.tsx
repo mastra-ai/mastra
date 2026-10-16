@@ -19,6 +19,13 @@ describe('Avatar', () => {
       fireEvent.error(screen.getByRole('img', { name: 'justin' }));
       expect(screen.getByText('J')).toBeDefined();
     });
+
+    it('shows a new image after the previous one failed', () => {
+      const { rerender } = render(<Avatar name="justin" src="/missing.png" />);
+      fireEvent.error(screen.getByRole('img', { name: 'justin' }));
+      rerender(<Avatar name="justin" src="/justin.png" />);
+      expect(screen.getByRole('img', { name: 'justin' }).getAttribute('src')).toBe('/justin.png');
+    });
   });
 
   describe('composed from parts', () => {
@@ -65,6 +72,20 @@ describe('Avatar', () => {
       );
       expect(sizes).toEqual(['lg', 'lg']);
       expect(screen.getByText('+3').getAttribute('data-size')).toBe('lg');
+    });
+
+    it('stacks the first avatar on top and scales the overlap with the size', () => {
+      render(
+        <Avatar.Group size="lg" aria-label="Reviewers">
+          <Avatar name="Abhi" />
+          <Avatar name="Jane" />
+          <Avatar.GroupCount>+3</Avatar.GroupCount>
+        </Avatar.Group>,
+      );
+      const group = screen.getByLabelText('Reviewers');
+      const items = Array.from(group.querySelectorAll<HTMLElement>('[data-slot=avatar-group-item]'));
+      expect(items.map(item => item.style.zIndex)).toEqual(['3', '2', '1']);
+      expect(group.classList.contains('[--avatar-group-size:var(--spacing-avatar-lg)]')).toBe(true);
     });
   });
 });

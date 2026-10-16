@@ -99,6 +99,26 @@ describe('evented concurrent resume', () => {
     }
   });
 
+  it('rejects resuming a finished run with WORKFLOW_RUN_NOT_SUSPENDED', async () => {
+    const { approval, downstreamExecute, mastra, workflow } = createApprovalWorkflow();
+
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: { item: 'widget' } })).status).toBe('suspended');
+      expect((await run.resume({ step: approval, resumeData: { approvedBy: 'first' } })).status).toBe('success');
+
+      await expect(run.resume({ step: approval, resumeData: { approvedBy: 'second' } })).rejects.toMatchObject({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        message: 'This workflow run was not suspended',
+        details: { workflowId: workflow.id, runId: run.runId, status: 'success' },
+      });
+      expect(downstreamExecute).toHaveBeenCalledTimes(1);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('releases the resume claim when execution fails before dispatch', async () => {
     const { approval, downstreamExecute, mastra, storage, workflow } = createApprovalWorkflow();
 
