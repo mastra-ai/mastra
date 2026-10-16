@@ -21,6 +21,7 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -28,7 +29,7 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -777,14 +778,19 @@ export class MastraFactory {
     if (storage.isDomainReady('source-control') && storage.isDomainReady('work-items')) {
       await timedPhase('prepare.migrate.sessionResources', async () => {
         try {
-          const memory = await storage.getMastraStorage().getStore('memory');
+          const mastraStorage = storage.getMastraStorage();
+          const memory = await mastraStorage.getStore('memory');
           if (!memory) return;
+          // The sessions' own Memory, so a moved thread takes its observation vectors along.
+          const sessionMemory = getDynamicMemory(mastraStorage, vector);
           await migrateSessionResources({
             sessions: sourceControlStorage,
             workItems: workItemsStorage,
             ...(storage.isDomainReady('integrations') ? { integrations: integrationStorage } : {}),
             memory,
+            threads: sessionMemory({ requestContext: new RequestContext() }),
           });
+          await sessionMemory.settled();
         } catch (error) {
           // Unmoved sessions keep working under their own id; the next start retries.
           console.warn(
