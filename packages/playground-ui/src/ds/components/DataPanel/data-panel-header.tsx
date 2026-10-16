@@ -3,11 +3,13 @@ import { cn } from '@/lib/utils';
 export interface DataPanelHeaderProps {
   className?: string;
   children: React.ReactNode;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-export function DataPanelHeader({ className, children }: DataPanelHeaderProps) {
+export function DataPanelHeader({ className, children, ref }: DataPanelHeaderProps) {
   return (
     <div
+      ref={ref}
       className={cn(
         // Same box as the app `Header`. Leading `CloseButton`, then the heading
         // (+ inline metadata via `HeaderContent`), then `HeaderActions` pushed to the right edge.
