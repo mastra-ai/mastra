@@ -225,11 +225,22 @@ const steerBodySchema = z.object({
   requestContext: bodyRequestContextSchema,
   files: messageFilesSchema,
 });
-const toolApprovalBodySchema = z.object({
-  toolCallId: z.string(),
-  approved: z.boolean(),
-  requestContext: bodyRequestContextSchema,
-});
+const toolApprovalBodySchema = z
+  .object({
+    toolCallId: z.string(),
+    approved: z.boolean(),
+    /**
+     * Grants the gated tool's category to the thread that owns the call, then
+     * approves — the same "always allow" the in-process TUI offers. Requires
+     * `approved: true`.
+     */
+    alwaysAllowCategory: z.boolean().optional(),
+    requestContext: bodyRequestContextSchema,
+  })
+  .refine(body => !body.alwaysAllowCategory || body.approved, {
+    message: 'alwaysAllowCategory requires approved: true',
+    path: ['alwaysAllowCategory'],
+  });
 const toolSuspensionBodySchema = z.object({
   toolCallId: z.string().min(1),
   runId: z.string().min(1).optional(),
@@ -745,7 +756,16 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, approved, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    toolCallId,
+    approved,
+    alwaysAllowCategory,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -758,7 +778,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       if (gated || !toolCallId) {
         const result = session.respondToToolApproval({
           toolCallId,
-          decision: approved ? 'approve' : 'decline',
+          decision: !approved ? 'decline' : alwaysAllowCategory ? 'always_allow_category' : 'approve',
           requestContext,
         });
         if (!result.accepted) return { ok: false, reason: result.reason };
@@ -776,7 +796,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
         if (!session.claimToolResponse(toolCallId)) return { ok: false, reason: 'not_pending' as const };
         ackBackgroundSessionWork({
           work: session
-            .respondToPersistedToolApproval({ toolCallId, approved, requestContext })
+            .respondToPersistedToolApproval({ toolCallId, approved, alwaysAllowCategory, requestContext })
             .finally(() => session.releaseToolResponse(toolCallId)),
           session,
           mastra,

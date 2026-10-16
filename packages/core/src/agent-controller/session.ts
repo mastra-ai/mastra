@@ -4724,10 +4724,13 @@ export class Session<TState = unknown> {
   async respondToPersistedToolApproval({
     toolCallId,
     approved,
+    alwaysAllowCategory,
     requestContext,
   }: {
     toolCallId: string;
     approved: boolean;
+    /** Also grant the tool's category to the run's thread, like a parked "always allow". */
+    alwaysAllowCategory?: boolean;
     requestContext?: RequestContext;
   }): Promise<void> {
     const threadId = this.thread.getId();
@@ -4739,6 +4742,11 @@ export class Session<TState = unknown> {
     );
     if (!run) throw new Error(`No suspended run is waiting on tool call ${toolCallId}`);
     const identity = { toolCallId, requestContext, runId: run.runId, threadId, resourceId };
+    if (approved && alwaysAllowCategory) {
+      const toolName = run.toolCalls.find(call => call.toolCallId === toolCallId)?.toolName;
+      const category = toolName ? this.#resolveCategory?.(toolName) : undefined;
+      if (category) this.grantCategory(category, threadId);
+    }
     if (approved) await this.approveToolCall(identity);
     else await this.declineToolCall(identity);
   }
