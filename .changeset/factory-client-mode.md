@@ -1,6 +1,5 @@
 ---
 'mastracode': minor
-'@mastra/code-sdk': minor
 ---
 
 Added Factory mode to Mastra Code. The TUI can now run as a thin client for a Factory session, so the agent, tools, models, modes, and provider credentials all come from the Factory.
