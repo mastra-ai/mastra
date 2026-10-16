@@ -191,13 +191,20 @@ export async function loginToPlatform(options: PlatformLoginOptions = {}): Promi
         res.writeHead(400, { 'Content-Type': 'text/html' }).end(CALLBACK_HTML(false));
         return;
       }
+      let user: PlatformCredentials['user'];
+      try {
+        user = JSON.parse(decodeURIComponent(userParam));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'text/html' }).end(CALLBACK_HTML(false));
+        return;
+      }
       const refresh = url.searchParams.get('refresh_token');
       res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' }).end(CALLBACK_HTML(true));
       finish(() =>
         resolve({
           token,
           ...(refresh ? { refreshToken: refresh } : {}),
-          user: JSON.parse(decodeURIComponent(userParam)),
+          user,
           organizationId: orgId,
         }),
       );
@@ -258,8 +265,14 @@ export const FACTORY_DOMAIN = 'factory.mastra.cloud';
  */
 export function resolveFactoryUrl(env: PlatformEnvironment): string | null {
   if (env.customServerUrl) {
-    const url = env.customServerUrl;
-    return (/^https?:\/\//.test(url) ? url : `https://${url}`).replace(/\/+$/, '');
+    // The Platform session token is sent to this URL, so only accept HTTPS.
+    try {
+      const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(env.customServerUrl) ? env.customServerUrl : `https://${env.customServerUrl}`);
+      if (url.protocol !== 'https:') return null;
+      return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+    } catch {
+      return null;
+    }
   }
   if (!env.instanceUrl) return null;
   return `https://${env.slug}.${FACTORY_DOMAIN}`;

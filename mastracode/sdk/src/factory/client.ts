@@ -38,12 +38,11 @@ export function factoryHeaders({ session }: FactoryAddress): Record<string, stri
 }
 
 async function factoryFetch<T>(address: FactoryAddress, path: string, init?: { method?: string; body?: unknown }) {
-  const res = await fetch(`${address.url.replace(/\/$/, '')}${path}`, {
+  const res = await refreshingFetch(address)(`${address.url.replace(/\/$/, '')}${path}`, {
     method: init?.method ?? 'GET',
     headers: {
       Accept: 'application/json',
       ...(init?.body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...factoryHeaders(address),
     },
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   });

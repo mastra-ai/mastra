@@ -31,6 +31,18 @@ describe('resolveFactoryUrl', () => {
   });
 });
 
+describe('resolveFactoryUrl custom servers', () => {
+  it('keeps the base path and adds https to a bare host', () => {
+    expect(resolveFactoryUrl(env({ customServerUrl: 'my.host/factory/' }))).toBe('https://my.host/factory');
+  });
+
+  it('rejects non-HTTPS and malformed custom server URLs', () => {
+    expect(resolveFactoryUrl(env({ customServerUrl: 'http://my.host' }))).toBeNull();
+    expect(resolveFactoryUrl(env({ customServerUrl: 'ftp://my.host' }))).toBeNull();
+    expect(resolveFactoryUrl(env({ customServerUrl: 'https://' }))).toBeNull();
+  });
+});
+
 describe('loginToPlatform', () => {
   it('completes the browser callback and saves credentials', async () => {
     const credentialsPath = join(await mkdtemp(join(tmpdir(), 'mc-platform-')), 'credentials.json');
