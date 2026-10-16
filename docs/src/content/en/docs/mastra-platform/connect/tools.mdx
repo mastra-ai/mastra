@@ -76,7 +76,31 @@ Find tool keys in the [provider toolsets reference](/reference/connect/providers
 
 ## Filter tools per request
 
-The `providers` option selects which providers the resolver can load. To vary the available tools by request, use the agent's `tools` function with [request context](/docs/server/request-context):
+To vary provider options by request, pass `tools()` a callback instead of an options object. The callback receives the [request context](/docs/server/request-context) and returns the options for that request:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: 'You help the team track work in Linear.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: tools(ctx => ({
+    providers: {
+      linear:
+        ctx?.requestContext?.get('role') === 'viewer'
+          ? { allowTools: ['linear_list_*'] }
+          : { requireApproval: ['linear_delete_*'] },
+    },
+  })),
+})
+```
+
+This example gives viewers only the Linear read tools and gates deletions behind [approval](/docs/agents/human-in-the-loop) for other roles. Set the role in trusted server-side code based on the authenticated user. The resolver caches one toolset per distinct options value, so requests that produce the same options share a cached snapshot. Derive options from a small, closed set of inputs such as roles, not from unbounded per-request data.
+
+To post-process the resolved tool record instead (for example, to filter on something other than tool keys), hoist the resolver and wrap it in the agent's `tools` function:
 
 ```typescript title="src/mastra/agents/ops.ts"
 import { Agent } from '@mastra/core/agent'
@@ -100,8 +124,6 @@ export const opsAgent = new Agent({
   },
 })
 ```
-
-This example gives viewers only `linear_list_issues` and gives other roles the resolved Linear tools. Set the role in trusted server-side code based on the authenticated user. The resolver caches its toolset, while the callback filters it for each request.
 
 ## Require approval for sensitive tools
 

@@ -190,9 +190,14 @@ export const LIST_DATASETS_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage, targetType, targetIds, orderBy } = params;
-      const filters = targetType || targetIds ? { targetType, targetIds } : undefined;
-      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10, filters, orderBy });
+      const { page, perPage, targetType, targetIds, datasetIds, orderBy } = params;
+      const filters = targetType || targetIds || datasetIds ? { targetType, targetIds, datasetIds } : undefined;
+      // An ID lookup is already bounded by the schema's ID limit, so it returns every match on one page.
+      const result = await mastra.datasets.list(
+        datasetIds
+          ? { page: 0, perPage: false, filters, orderBy }
+          : { page: page ?? 0, perPage: perPage ?? 10, filters, orderBy },
+      );
       return {
         datasets: result.datasets as any,
         pagination: result.pagination,

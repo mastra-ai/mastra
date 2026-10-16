@@ -40,19 +40,12 @@
  * error chunk moves back before `step-finish`.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import type { PublicStructuredOutputOptions } from '../../types';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
 import type { EngineDifference, EngineTurnOptions, ParityEngine, ParitySnapshot } from './parity-harness';
 import { chunksOfType, expectEngineParity, textOnlyTape } from './parity-harness';
 
@@ -266,119 +259,55 @@ const STRICT_CHUNK_TYPES: Record<ParityEngine, string[]> = {
   evented: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'finish', 'error'],
 };
 
-interface StrictCaseState {
-  /** Chunk types the public stream yielded, in order. */
-  chunkTypes: string[];
-  /** Error chunk payloads the stream yielded. */
-  errorPayloads: unknown[];
-  /** The `responseFormat` the model was sent (the harness's F15 guard). */
-  responseFormat: unknown;
-  /** Model calls the run made. */
-  requests: number;
-  threw?: string;
-  /** Set when `getFullOutput()` rejected — the harness's `fullOutputError`. */
-  fullOutputError?: string;
-  /** The parsed structured output, when the run parsed one — the harness's `object`. */
-  fullOutputObject: unknown;
+function moveErrorLast(turn: ParitySnapshot): ParitySnapshot {
+  const index = turn.chunkTypes.indexOf('error');
+  if (index < 0) return turn;
+  const move = <T>(values: T[]): T[] => {
+    const copy = [...values];
+    const [value] = copy.splice(index, 1);
+    copy.push(value!);
+    return copy;
+  };
+  const chunkTypes = move(turn.chunkTypes);
+  const chunkPayloads = move(turn.chunkPayloads);
+  const stepFinishIndex = chunkTypes.indexOf('step-finish');
+  const stepFinishPayload = chunkPayloads[stepFinishIndex] as { stepResult?: { reason?: string } } | undefined;
+  if (stepFinishPayload?.stepResult) stepFinishPayload.stepResult.reason = 'stop';
+  return {
+    ...turn,
+    chunks: move(turn.chunks),
+    chunkTypes,
+    chunkPayloads,
+    finishReason: 'stop',
+    finishChunk: { ...turn.finishChunk, reason: 'stop' },
+  };
 }
 
-/**
- * Drives one engine through the `strict` variant, mirroring what the parity helper does per engine
- * (wrapper, host, one streamed turn), because the helper's own `error` chunk declaration goes stale on
- * any failure that is not a live-`Error` model failure (see the header; COR-1429).
- */
-async function runStrictDirect(engine: ParityEngine): Promise<StrictCaseState> {
-  const requests: unknown[] = [];
-  const model = new MockLanguageModelV2({
-    doStream: async (options: unknown) => {
-      requests.push(options);
-      return {
-        stream: convertArrayToReadableStream(textOnlyTape(BAD) as never[]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      };
-    },
-  });
-  const state: StrictCaseState = {
-    chunkTypes: [],
-    errorPayloads: [],
-    responseFormat: null,
-    requests: 0,
-    fullOutputObject: null,
-  };
-  const agent = new Agent({
-    id: AGENT_ID,
-    name: 'T47 Agent',
-    instructions: 'Answer with the structured shape.',
-    model: model as LanguageModelV2,
-    memory: new MockMemory(),
-  });
-  const pubsub = new EventEmitterPubSub();
-  const runner =
-    engine === 'plain'
-      ? agent
-      : engine === 'durable'
-        ? createDurableAgent({ agent, pubsub })
-        : createEventedAgent({ agent });
-  const host = new Mastra({
-    agents: { [AGENT_ID]: runner } as never,
-    storage: new InMemoryStore(),
-    logger: false,
-  });
+const STRICT_ORDER: EngineDifference = {
+  reason: 'COR-1390: wrapped engines emit the structured-output error chunk after step-finish and finish.',
+  expect: plain => ({ ...plain, turns: plain.turns.map(moveErrorLast) }),
+};
 
-  const options = {
-    maxSteps: MAX_STEPS,
-    runId: `t47-run-strict-${engine}`,
-    memory: { thread: THREAD, resource: RESOURCE },
-    structuredOutput: { schema: FLAT, errorStrategy: 'strict' as const },
-  };
-
-  let cleanup: (() => Promise<void>) | undefined;
-  let output:
-    | {
-        fullStream: AsyncIterable<{ type: string; payload?: unknown }>;
-        getFullOutput: () => Promise<unknown>;
-      }
-    | undefined;
-  try {
-    if (engine === 'plain') {
-      output = (await agent.stream('go', options)) as never;
-    } else {
-      const result = await (
-        runner as unknown as {
-          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
-        }
-      ).stream('go', options);
-      output = result.output;
-      cleanup = result.cleanup;
-    }
-  } catch (error) {
-    state.threw = String((error as Error)?.message ?? error).slice(0, 200);
-  }
-  if (output) {
-    try {
-      for await (const chunk of output.fullStream) {
-        state.chunkTypes.push(chunk.type);
-        if (chunk.type === 'error') state.errorPayloads.push(chunk.payload);
-      }
-    } catch (error) {
-      state.threw = state.threw ?? String((error as Error)?.message ?? error).slice(0, 200);
-    }
-    try {
-      const full = (await output.getFullOutput()) as { object?: unknown };
-      state.fullOutputObject = full.object;
-    } catch (error) {
-      state.fullOutputError = String((error as Error)?.message ?? error).slice(0, 200);
-    }
-  }
-  state.requests = requests.length;
-  state.responseFormat = (requests[0] as { responseFormat?: unknown } | undefined)?.responseFormat ?? null;
-  // Pair the teardown so a throwing cleanup cannot leave this run's host alive.
-  try {
-    if (cleanup) await cleanup();
-  } finally {
-    await host.shutdown();
-  }
-  return state;
+async function runStrict() {
+  return expectEngineParity({
+    model: { tapes: [textOnlyTape(BAD)] },
+    buildAgent: ({ model }) =>
+      new Agent({
+        id: AGENT_ID,
+        name: 'T47 Agent',
+        instructions: 'Answer with the structured shape.',
+        model,
+        memory: new MockMemory(),
+      }),
+    input: 'go',
+    options: {
+      maxSteps: MAX_STEPS,
+      runId: 't47-run-strict',
+      memory: { thread: THREAD, resource: RESOURCE },
+      structuredOutput: { schema: FLAT, errorStrategy: 'strict' },
+    } as EngineTurnOptions & { structuredOutput: PublicStructuredOutputOptions<any> },
+    differences: { durable: STRICT_ORDER, evented: STRICT_ORDER },
+  });
 }
 
 describe('T47 structured output errors (plain, durable, evented)', () => {
@@ -436,36 +365,29 @@ describe('T47 structured output errors (plain, durable, evented)', () => {
     });
   }
 
-  /* ----------------------------------------------------------------------------------------------
-   * `strict`, driven per engine
-   * -------------------------------------------------------------------------------------------- */
-
   it('strict surfaces the validation failure on every engine without throwing', async () => {
-    const states = new Map<ParityEngine, StrictCaseState>();
-    for (const engine of ENGINES) states.set(engine, await runStrictDirect(engine));
-    const plain = states.get('plain')!;
+    const results = await runStrict();
+    const plain = results.plain!.turns[0]!;
+    const plainErrorIndex = plain.chunkTypes.indexOf('error');
+    const plainError = plain.chunkPayloads[plainErrorIndex];
 
     for (const engine of ENGINES) {
-      const state = states.get(engine)!;
+      const observation = results[engine]!;
+      const turn = observation.turns[0]!;
+      const errorIndex = turn.chunkTypes.indexOf('error');
+      const request = observation.requests[0];
+      if (!request) throw new Error(`T47 strict: ${engine} sent no model request`);
 
-      // Every engine answers the bad JSON with a structured-output validation failure, not a throw:
-      // the harness's `failed` on this variant means an error chunk, a throw, or a rejecting
-      // `getFullOutput()`, and all three are asserted here rather than collapsed into one boolean.
-      expect(state.threw, `${engine}: stream threw`).toBeUndefined();
-      expect(state.errorPayloads, `${engine}: error chunks`).toHaveLength(1);
-      expect(state.fullOutputError, `${engine}: full output error`).toContain(STRICT_ERROR_MESSAGE);
-      // The harness's `state.object === null`: the bad answer is never parsed into an object.
-      expect(state.fullOutputObject ?? null, `${engine}: parsed object`).toBeNull();
-      expect(state.requests, `${engine}: model calls`).toBe(1);
+      expect(turn.chunkTypes, `${engine}: chunk types in order`).toEqual(STRICT_CHUNK_TYPES[engine]);
+      expect(chunksOfType(turn, 'error'), `${engine}: error chunks`).toBe(1);
+      expect(turn.chunkPayloads[errorIndex], `${engine}: error payload`).toEqual(plainError);
+      expect(turn.error?.message, `${engine}: full output error`).toContain(STRICT_ERROR_MESSAGE);
+      expect(turn.fullOutput.object ?? null, `${engine}: parsed object`).toBeNull();
+      expect(observation.requests, `${engine}: model calls`).toHaveLength(1);
 
-      // F15 guard, unconditional in the harness: JSON response format with a normalised schema.
-      const format = requestFormat(state.responseFormat);
+      const format = requestFormat(request.responseFormat);
       expect(format.rfType, `${engine}: response format type`).toBe('json');
       expect(format.schemaKind, `${engine}: response format schema`).toBe('json-schema');
-
-      // The same failure, byte for byte; only its position in the stream differs (COR-1390).
-      expect(state.errorPayloads[0], `${engine}: error payload`).toEqual(plain.errorPayloads[0]);
-      expect(state.chunkTypes, `${engine}: chunk types in order`).toEqual(STRICT_CHUNK_TYPES[engine]);
     }
   });
 });

@@ -569,16 +569,24 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
           // Scope decides whose credentials every session bills against, so only
-          // admins may switch a shared Factory onto owners' personal keys.
+          // admins may switch a shared Factory onto owners' personal keys. The
+          // thinking default sets the reasoning spend of every run that has not
+          // picked its own, so it is admin-only too.
+          const adminField =
+            parsedBody.data.modelScope !== undefined
+              ? 'model scope'
+              : parsedBody.data.defaultThinkingLevel !== undefined
+                ? 'thinking default'
+                : undefined;
           if (
-            parsedBody.data.modelScope !== undefined &&
+            adminField &&
             this.deps.auth.enabled() &&
             !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))
           ) {
             return context.json(
               {
                 error: 'forbidden',
-                message: 'Organization administrator access is required to change the model scope.',
+                message: `Organization administrator access is required to change the ${adminField}.`,
               },
               403,
             );
