@@ -576,6 +576,15 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       const filterParts: string[] = [];
       const filterArgs: any[] = [];
+      if (args.filters?.datasetIds !== undefined) {
+        // An empty list matches no datasets; `IN ()` is invalid SQL.
+        filterParts.push(
+          args.filters.datasetIds.length > 0
+            ? `\`id\` IN (${args.filters.datasetIds.map(() => '?').join(',')})`
+            : '1 = 0',
+        );
+        filterArgs.push(...args.filters.datasetIds);
+      }
       if (args.filters?.organizationId !== undefined) {
         filterParts.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
         filterArgs.push(args.filters.organizationId);
