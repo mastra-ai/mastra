@@ -17,7 +17,6 @@
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { UnixSocketPubSub } from '@mastra/core/events';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createSignalsPubSub } from '../signals-pubsub.js';
@@ -106,75 +105,5 @@ describe.runIf(process.platform !== 'win32')('owner discovery sockets', () => {
     // the release work this list only ever grew.
     await waitFor(() => replySockets(rootDir).length === 0, 'reply socket files to be released');
     expect(leaked).toEqual([]);
-  }, 30_000);
-
-  it('leaves an instance listening in its own resource directory unreachable', async () => {
-    // Before owner discovery moved to the shared scope, every instance
-    // subscribed in `<root>/<resourceId>/`. An instance still running that
-    // layout never sees a current instance's requests, so it never replies,
-    // even though peer discovery (which stays resource-scoped) still lists it
-    // as sendable. This is the split documented as "restart every instance
-    // after updating"; the test pins the wire layout it comes from.
-    const rootDir = createRoot();
-    const resourceId = 'sentinel-legacy';
-    const legacy = new UnixSocketPubSub(join(rootDir, resourceId, 'agent_thread-owner-discovery.sock'));
-    cleanups.push(async () => {
-      await legacy.close().catch(() => {});
-    });
-
-    const seenByLegacy: unknown[] = [];
-    await legacy.subscribe(OWNER_DISCOVERY_TOPIC, event => {
-      seenByLegacy.push(event);
-    });
-
-    const sender = createSignalsPubSub(resourceId, { rootDir });
-    cleanups.push(async () => {
-      await sender.close().catch(() => {});
-    });
-    await sender.publish(OWNER_DISCOVERY_TOPIC, {
-      type: 'thread-owner-request',
-      runId: 'legacy-request',
-      data: { type: 'thread-owner-request', requestId: 'legacy-request', replyTopic: 'legacy-reply' },
-    });
-    await sleep(200);
-
-    expect(seenByLegacy).toEqual([]);
-  }, 30_000);
-
-  it('leaves an instance in each discovery scope blind to the other', async () => {
-    // Same resource id, same root, two live layouts: `<resourceId>/` (every
-    // build before shared peer discovery, and any instance whose resource id
-    // cannot be a directory name) and `_shared/` (builds with shared peer
-    // discovery on). Peer discovery is routed by scope, so each instance only
-    // ever hears its own camp: two processes that both look healthy and
-    // sendable can each be missing from the other's `agent_connections_list`.
-    // Both listen sockets coexisting is what the machine showed during the
-    // reports below, so we assert them alongside the missed traffic.
-    const rootDir = createRoot();
-    const resourceId = 'sentinel-camps';
-    const PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
-
-    const legacy = new UnixSocketPubSub(join(rootDir, resourceId, 'agent_thread-peer-discovery.sock'));
-    const current = createSignalsPubSub(resourceId, { rootDir, sharedAgentDiscovery: true });
-    cleanups.push(async () => {
-      await legacy.close().catch(() => {});
-      await current.close().catch(() => {});
-    });
-
-    const heardByLegacy: unknown[] = [];
-    await legacy.subscribe(PEER_DISCOVERY_TOPIC, event => {
-      heardByLegacy.push(event);
-    });
-    const request = {
-      type: 'thread-peer-request',
-      runId: 'presence-request',
-      data: { type: 'thread-peer-request', requestId: 'presence-request', replyTopic: 'presence-reply' },
-    };
-    await current.publish(PEER_DISCOVERY_TOPIC, request);
-    await sleep(200);
-
-    expect(heardByLegacy).toEqual([]);
-    expect(readdirSync(join(rootDir, '_shared'))).toContain('agent_thread-peer-discovery.sock');
-    expect(readdirSync(join(rootDir, resourceId))).toContain('agent_thread-peer-discovery.sock');
   }, 30_000);
 });

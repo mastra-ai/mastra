@@ -12,20 +12,23 @@ import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const OWNER_DISCOVERY_PREFIX = 'agent.thread-owner-discovery';
 
-function createOwnerModel(responseText: string) {
+function createOwnerModel(responseText: string, onStream?: (responseText: string) => void) {
   return new MockLanguageModelV2({
-    doStream: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: responseText },
-        { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-      ]),
-    }),
+    doStream: async () => {
+      onStream?.(responseText);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: responseText },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+      };
+    },
   });
 }
 
@@ -66,18 +69,27 @@ class TestPubSub extends PubSub {
   async flush(): Promise<void> {}
 }
 
-function createAgent(id: string, pubsub: TestPubSub) {
+function createAgent(id: string, pubsub: TestPubSub, streams?: string[]) {
   return new Agent({
     id,
     name: id,
     instructions: 'Test',
-    model: createOwnerModel(`${id} ran`),
+    model: createOwnerModel(`${id} ran`, text => streams?.push(text)),
     pubsub,
   });
 }
 
 const target = { resourceId: 'claimed-owner-resource', threadId: 'claimed-owner-thread' };
 const requiredOwnerWake = { ...target, ifIdle: { behavior: 'wake' as const, requireClaimedOwner: true } };
+
+/** Waits for a condition a run reaches asynchronously, so assertions do not race it. */
+async function waitFor(condition: () => boolean, description: string, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${description}`);
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+}
 
 describe('claimed-owner wake conditions', () => {
   it('keeps an earlier thread reachable after the session moves to a new one', async () => {
@@ -153,11 +165,20 @@ describe('claimed-owner wake conditions', () => {
     const ownerRuntime = new AgentThreadStreamRuntime();
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'claimed-owner-storage', domains: { notifications } });
-    const owner = createAgent('owner', pubsub);
-    const sender = createAgent('sender', pubsub);
+    const ownerRuns: string[] = [];
+    const senderRuns: string[] = [];
+    const owner = createAgent('owner', pubsub, ownerRuns);
+    const sender = createAgent('sender', pubsub, senderRuns);
     const mastra = new Mastra({ agents: { sender }, storage, logger: false });
 
-    const claim = await ownerRuntime.claimThreadOwnership(owner, target, pubsub);
+    // The claim carries the owner's own stream options, which is what its
+    // session uses to drive a woken run to completion. Without them the run
+    // starts but is never drained, so the owner's model is never called.
+    const claim = await ownerRuntime.claimThreadOwnership(
+      owner,
+      { ...target, streamOptions: { untilIdle: true } },
+      pubsub,
+    );
     pubsub.ownerAnswersDiscovery = false;
 
     const result = await sender.sendNotificationSignal(
@@ -190,6 +211,58 @@ describe('claimed-owner wake conditions', () => {
     });
     expect(dispatchResult.delivered).toHaveLength(1);
     expect(dispatchResult.failed).toEqual([]);
+
+    // The retry has to reach the process that claims the thread. A retry that
+    // rebuilds the target without the claimed-owner requirement would take the
+    // execution lease here instead and run the peer's thread in this process,
+    // with this process's agent, workspace, and stream options.
+    await waitFor(() => ownerRuns.length > 0, 'the claiming owner to run the woken turn');
+    expect(ownerRuns).toEqual(['owner ran']);
+    // The dispatching process must not have run the turn itself. Its model
+    // streams during the dispatch call, so an empty record here is a real
+    // negative rather than a race the assertion lost.
+    expect(senderRuns).toEqual([]);
+
+    claim.unsubscribe();
+  }, 30_000);
+
+  it('keeps the record pending and counts the attempt while the owner stays silent', async () => {
+    const pubsub = new TestPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'claimed-owner-silent-storage', domains: { notifications } });
+    const owner = createAgent('owner', pubsub);
+    const sender = createAgent('sender', pubsub);
+    const mastra = new Mastra({ agents: { sender }, storage, logger: false });
+
+    const claim = await ownerRuntime.claimThreadOwnership(owner, target, pubsub);
+    pubsub.ownerAnswersDiscovery = false;
+
+    const result = await sender.sendNotificationSignal(
+      { source: 'agent-connection', kind: 'peer-signal', priority: 'high', summary: 'still quiet' },
+      requiredOwnerWake,
+    );
+    expect(result.record).toMatchObject({ status: 'pending', deliveryAttempts: 1 });
+
+    const dispatchResult = await dispatchDueNotifications({
+      mastra,
+      storage: notifications,
+      now: new Date(Date.now() + 60_000),
+    });
+    expect(dispatchResult.delivered).toEqual([]);
+    expect(dispatchResult.failed.map(entry => entry.error)).toEqual([
+      expect.stringContaining('No claimed thread owner responded'),
+    ]);
+
+    // A retry that cannot reach the owner is an attempt, not a delivery, and
+    // the record stays readable in the recipient's inbox until the attempt cap
+    // is reached.
+    const record = await notifications.getNotification({ threadId: target.threadId, id: result.record.id });
+    expect(record).toMatchObject({
+      status: 'pending',
+      deliveryAttempts: 2,
+      lastDeliveryError: expect.stringContaining('No claimed thread owner responded'),
+    });
 
     claim.unsubscribe();
   }, 30_000);
