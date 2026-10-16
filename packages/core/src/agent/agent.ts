@@ -72,6 +72,7 @@ import {
   resolveNotificationDeliveryDecision,
   type NotificationDeliveryPolicyInput,
 } from '../notifications/delivery-policy';
+import { applyNotificationRoutingRequirement } from '../notifications/routing';
 import {
   createNotificationSignal,
   createNotificationSummarySignal,
@@ -9864,6 +9865,11 @@ export class Agent<
     }
 
     const records = [];
+    // A delayed delivery rebuilds its target from the record, so the routing
+    // requirement the caller asked for has to travel with it. Without it the
+    // retry would fall back to running the thread wherever the dispatch happens
+    // rather than on the process that claims it.
+    const routingRequirement = { requireClaimedOwner: target.ifIdle?.requireClaimedOwner === true };
     for (const notification of inputs) {
       records.push(
         await notifications.createNotification({
@@ -9871,6 +9877,7 @@ export class Agent<
           agentId: this.id,
           resourceId: target.resourceId,
           threadId: target.threadId,
+          metadata: applyNotificationRoutingRequirement(notification.metadata, routingRequirement),
         }),
       );
     }
