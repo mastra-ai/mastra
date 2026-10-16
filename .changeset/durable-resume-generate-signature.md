@@ -3,7 +3,7 @@
 '@mastra/inngest': patch
 ---
 
-Durable agents (`createDurableAgent`, `createInngestAgent`) now accept `resumeGenerate(resumeData, { runId, toolCallId, ...options })`, the same signature as `Agent.resumeGenerate`. Before this change, code that held an `Agent` and resumed a durable agent this way failed, for example with `SQLite3 can only bind numbers, strings, bigints, buffers, and null` on LibSQL.
+You can now resume durable agents (`createDurableAgent`, `createInngestAgent`) with the same `resumeGenerate(resumeData, { runId })` call you use with `Agent`.
 
 ```ts
 // Before (durable-only order, still supported but deprecated)
