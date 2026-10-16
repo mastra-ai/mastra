@@ -1,6 +1,5 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
-  SpanQueryCostMetric,
   SpanQueryIdentity,
   SpanQueryPayload,
   SpanQuerySelectedRow,
@@ -13,6 +12,15 @@ import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './previe
 import { compileSpanQueryPredicate } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
+const missingFields = new Set([
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'executionSource',
+]);
 const identities = identityFields.join(', ');
 const fields = [
   ...identityFields,
@@ -23,11 +31,23 @@ const fields = [
   'entityId',
   'entityName',
   'entityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
   'parentEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
   'rootEntityVersionId',
+  'threadId',
   'runId',
   'sessionId',
   'userId',
+  'requestId',
+  'serviceName',
+  'experimentId',
+  'environment',
+  'executionSource',
 ];
 
 function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string {
@@ -86,10 +106,8 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
       ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
     GROUP BY ${identities}
   ), ranked AS (
-    SELECT ${fields.map(field => `e.${field}`).join(', ')},
+    SELECT ${fields.map(field => (missingFields.has(field) ? `CAST(NULL AS VARCHAR) AS ${field}` : `e.${field}`)).join(', ')},
       min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${identityFields.map(field => `e.${field}`).join(', ')}) AS startedAt, e.endedAt, e.cursorId,
-      CASE WHEN json_type(e.attributes, '$.model') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.model') END AS model,
-      CASE WHEN json_type(e.attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.provider') END AS provider,
       date_diff('millisecond', min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${identityFields.map(field => `e.${field}`).join(', ')}), e.endedAt) AS durationMs,
       CASE WHEN e.error IS NULL THEN 'success' ELSE 'error' END AS status,
       CASE WHEN e.error IS NULL THEN NULL ELSE 'error' END AS error,
@@ -97,7 +115,7 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
         ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END, e.cursorId DESC NULLS LAST, e.endedAt DESC) AS rank
     FROM span_events e INNER JOIN candidates c ON ${join}
   )
-  SELECT ${[...identityFields, 'parentSpanId', 'name', 'spanType', 'entityType', 'entityId', 'entityName', 'model', 'provider', 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId'].map(field => `s.${field}`).join(', ')}
+  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId'].map(field => `s.${field}`).join(', ')}
   FROM ranked s WHERE rank = 1 AND endedAt IS NOT NULL AND startedAt >= CAST(? AS TIMESTAMP) AND startedAt < CAST(? AS TIMESTAMP) AND (${predicate.sql}) AND ${after.sql}
   ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
   LIMIT ?`;
@@ -110,13 +128,15 @@ const previewPayloads = [
   ['errorPreview', 'error'],
 ] as const;
 
-type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt'> & {
+type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | 'provider'> & {
   startedAt: Date;
   endedAt: Date;
   cursorId: number | null;
 };
 
 export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPlan) {
+  if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY)
+    throw new Error('querySpans requires an updated @mastra/core span-query contract');
   const deadline = performance.now() + coreStorage.TRACE_QUERY_DEFAULT_TIMEOUT_MS;
   const query = async <T>(sql: string, values: unknown[]) => {
     const remaining = Math.floor(deadline - performance.now());
@@ -138,7 +158,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     endedAt: endedAt.toISOString(),
   }));
   const page = rows.slice(0, plan.limit);
-  if (!page.length) return coreStorage.buildSpanQueryResponse(plan, selected, [], []);
+  if (!page.length) return coreStorage.buildSpanQueryResponse(plan, [], []);
   const payloadValues: unknown[] = [];
   const payloadWhere = page
     .map(row => {
@@ -149,8 +169,12 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     .join(' OR ');
   // Stored previews of the selected event row. A row written before previews were stored has NULL
   // previews, so its payload is read instead (only for that row) and previewed the same way.
-  const previewRows = await query<SpanQueryIdentity & Record<(typeof previewPayloads)[number][0], string | null>>(
+  const previewRows = await query<
+    SpanQueryIdentity & Record<(typeof previewPayloads)[number][0] | 'model' | 'provider', string | null>
+  >(
     `SELECT DISTINCT ${identities},
+    CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END AS model,
+    CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END AS provider,
     ${previewPayloads
       .map(
         ([preview, payload]) =>
@@ -176,16 +200,11 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     }
     return payload;
   });
-  const metricValues: unknown[] = [];
-  const metricWhere = keys(page, metricValues);
-  const metrics = await query<SpanQueryCostMetric>(
-    `SELECT ${identities}, name, estimatedCost, costUnit,
-    json_extract_string(costMetadata, '$.allocation') AS allocation,
-    COALESCE(json_exists(costMetadata, '$.error'), false) AS costError
-    FROM metric_events WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
-    LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
-    metricValues,
-  );
-  if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS) throw new coreStorage.TraceQueryResourceLimitError();
-  return buildSpanQueryResponse(plan, selected, payloads, metrics);
+  const metadata = new Map(previewRows.map(row => [coreStorage.spanQueryIdentityKey(row), row]));
+  const hydrated = selected.map(row => ({
+    ...row,
+    model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
+    provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
+  }));
+  return buildSpanQueryResponse(plan, hydrated, payloads);
 }

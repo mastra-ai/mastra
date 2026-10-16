@@ -156,7 +156,10 @@ import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
 
-const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
+const spanQueryFeatures =
+  typeof coreStorage.planSpanQuery === 'function' && coreStorage.SPAN_QUERY_FIELD_REGISTRY !== undefined
+    ? (['span-query'] as const)
+    : ([] as const);
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';

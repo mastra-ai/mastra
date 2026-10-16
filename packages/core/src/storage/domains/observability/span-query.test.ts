@@ -39,15 +39,29 @@ const row: SpanQueryRow = {
   entityType: 'tool',
   entityId: 'search-products',
   entityName: null,
+  entityVersionId: null,
+  parentEntityType: null,
+  parentEntityId: null,
+  parentEntityName: null,
+  parentEntityVersionId: null,
+  rootEntityType: null,
+  rootEntityId: null,
+  rootEntityName: null,
+  rootEntityVersionId: null,
+  threadId: null,
+  runId: null,
+  sessionId: null,
+  userId: null,
+  requestId: null,
+  serviceName: null,
+  experimentId: null,
+  environment: null,
+  executionSource: null,
   model: null,
   provider: null,
   inputPreview: 'hello',
-  inputTruncated: false,
   outputPreview: null,
-  outputTruncated: false,
   errorPreview: null,
-  errorTruncated: false,
-  cost: { state: 'unavailable' },
 };
 
 describe('span query model cost', () => {
@@ -149,11 +163,55 @@ describe('span query contract', () => {
     }
   });
 
-  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans))('shares the existing span rule for %s', field => {
-    const predicate = { op: 'exists', path: field };
-    const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
-    if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
-    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
+  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans).filter(field => !['model', 'provider'].includes(field)))(
+    'shares the existing span rule for %s',
+    field => {
+      const predicate = { op: 'exists', path: field };
+      const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
+      if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
+      expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
+    },
+  );
+
+  it.each(['model', 'provider'])('rejects direct %s filters while retaining nested trace support', field => {
+    const predicate = { op: 'eq', left: { path: field }, right: { literal: 'example' } };
+    expect(() => planSpanQuery({ timeRange, where: predicate })).toThrow();
+    expect(() =>
+      planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } })),
+    ).not.toThrow();
+  });
+
+  it.each([
+    'traceId',
+    'spanId',
+    'parentSpanId',
+    'threadId',
+    'resourceId',
+    'requestId',
+    'serviceName',
+    'experimentId',
+    'environment',
+    'executionSource',
+    'parentEntityType',
+    'parentEntityId',
+    'parentEntityName',
+    'rootEntityType',
+    'rootEntityId',
+    'rootEntityName',
+  ])('accepts dedicated string filters for %s', field => {
+    for (const op of ['eq', 'ne'])
+      expect(
+        planSpanQuery({ timeRange, where: { op, left: { path: field }, right: { literal: 'example' } } }).where,
+      ).toMatchObject({ field, operator: op });
+    for (const op of ['in', 'notIn'])
+      expect(planSpanQuery({ timeRange, where: { op, value: { path: field }, set: ['example'] } }).where).toMatchObject(
+        { field, operator: op },
+      );
+    for (const op of ['exists', 'notExists'])
+      expect(planSpanQuery({ timeRange, where: { op, path: field } }).where).toMatchObject({ field, operator: op });
+    expect(() =>
+      planSpanQuery({ timeRange, where: { op: 'matches', left: { path: field }, right: { literal: 'example' } } }),
+    ).toThrow();
   });
 
   it('normalizes equivalent requests and keeps trusted scope separate from a conflicting predicate', () => {

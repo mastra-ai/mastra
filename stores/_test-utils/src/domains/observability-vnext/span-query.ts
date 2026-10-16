@@ -7,7 +7,7 @@ import { makeSpan } from './data';
 /** The same list contract must hold for every storage implementation. */
 export function createSpanQueryTests(
   getStorage: () => ObservabilityStorage,
-  options: { completionOnly?: boolean; eventSourced?: boolean } = {},
+  options: { completionOnly?: boolean; eventSourced?: boolean; immutableStartedAt?: boolean } = {},
 ) {
   describe('querySpans conformance', () => {
     const start = new Date();
@@ -52,12 +52,8 @@ export function createSpanQueryTests(
         durationMs: 1000,
         status: 'success',
         inputPreview: `${'x'.repeat(PREVIEW_MAX_LENGTH)}…`,
-        inputTruncated: true,
         outputPreview: null,
-        outputTruncated: false,
         errorPreview: null,
-        errorTruncated: false,
-        cost: { state: 'missing' },
       });
       expect((await getStorage().getSpan({ traceId: 'trace-root', spanId: 'tool' }))?.span.input).toBe(input);
     });
@@ -140,7 +136,8 @@ export function createSpanQueryTests(
       expect((await query()).spans.map(row => row.name)).toEqual(['new']);
     });
 
-    it('applies the time window to reconstructed current records', async () => {
+    // Some stores require all copies of an identity to have the same start time.
+    it.skipIf(options.immutableStartedAt)('applies the time window to reconstructed current records', async () => {
       const earlier = new Date(start.getTime() - 60_000);
       const later = new Date(Date.parse(timeRange.to) + 60_000);
       await getStorage().batchCreateSpans({ records: [span('moved-in', { startedAt: earlier }), span('moved-out')] });
@@ -152,6 +149,24 @@ export function createSpanQueryTests(
       });
       // Event-sourced stores retain the earliest start event. Record stores use the current completed row.
       expect((await query()).spans.map(row => row.spanId)).toEqual(options.eventSourced ? ['moved-out'] : ['moved-in']);
+    });
+
+    it('uses a half-open start window and the latest copy even when it ends after the window', async () => {
+      const before = new Date(start.getTime() - 1);
+      const after = new Date(Date.parse(timeRange.to) + 60_000);
+      await getStorage().batchCreateSpans({
+        records: [span('inside', { name: 'old' }), span('before', { startedAt: before })],
+      });
+      await getStorage().batchCreateSpans({
+        records: [
+          span('inside', { name: 'latest', endedAt: after }),
+          span('before', { startedAt: before, endedAt: after }),
+          span('at-end', { startedAt: new Date(timeRange.to), endedAt: after }),
+        ],
+      });
+      const result = await query();
+      expect(result.spans.map(row => row.spanId)).toEqual(['inside']);
+      expect(result.spans[0]).toMatchObject({ name: 'latest', endedAt: after.toISOString() });
     });
 
     it('reuses boolean, numeric, and literal filter semantics', async () => {
@@ -168,11 +183,12 @@ export function createSpanQueryTests(
           args: [
             { op: 'eq', left: { path: 'name' }, right: { literal: name } },
             { op: 'gte', left: { path: 'durationMs' }, right: { literal: 1000 } },
-            { op: 'eq', left: { path: 'model' }, right: { literal: 'test-model' } },
+            { op: 'eq', left: { path: 'spanId' }, right: { literal: 'match' } },
           ],
         },
       });
       expect(result.spans.map(row => row.spanId)).toEqual(['match']);
+      expect(result.spans[0]).toMatchObject({ model: 'test-model', provider: 'test-provider' });
     });
 
     it('preserves error presence through current-record selection and boolean filters', async () => {
@@ -189,73 +205,57 @@ export function createSpanQueryTests(
       expect(result.spans.map(row => [row.spanId, row.status])).toEqual([['failed', 'error']]);
     });
 
-    it('includes cost metrics after the span search window', async () => {
-      const completedAt = new Date(Date.parse(timeRange.to) + 24 * 60 * 60 * 1000);
-      await getStorage().batchCreateSpans({ records: [span('late-cost', { ...scope, endedAt: completedAt })] });
-      await getStorage().batchCreateMetrics({
-        metrics: [
-          {
-            ...scope,
-            metricId: 'late-cost',
-            traceId: 'trace-late-cost',
-            spanId: 'late-cost',
-            timestamp: completedAt,
-            name: 'mastra_model_total_input_tokens',
-            value: 10,
-            labels: {},
-            estimatedCost: 0.01,
-            costUnit: 'usd',
-            costMetadata: { allocation: 'query_total' },
-          },
-        ],
+    it('filters and returns dedicated context and lineage fields', async () => {
+      const context = {
+        threadId: 'thread',
+        requestId: 'request',
+        serviceName: 'service',
+        experimentId: 'experiment',
+        environment: 'production',
+        runId: 'run',
+        sessionId: 'session',
+        userId: 'user',
+        entityVersionId: 'version',
+        parentEntityVersionId: 'parent-version',
+        rootEntityVersionId: 'root-version',
+      };
+      const lineage = {
+        parentEntityType: 'agent',
+        parentEntityId: 'parent',
+        parentEntityName: 'Parent',
+        rootEntityType: 'agent',
+        rootEntityId: 'root',
+        rootEntityName: 'Root',
+      };
+      await getStorage().batchCreateSpans({
+        records: [span('context', { ...scope, ...context, ...lineage }), span('other')],
       });
-      const result = await query({}, scope);
-      expect(result.spans).toHaveLength(1);
-      expect(result.spans[0]).toMatchObject({
-        spanId: 'late-cost',
-        cost: { state: 'available', amount: 0.01, currency: 'usd' },
-      });
+      const expected = options.eventSourced ? context : { ...context, ...lineage };
+      for (const [field, value] of Object.entries(expected)) {
+        const result = await query({ where: { op: 'eq', left: { path: field }, right: { literal: value } } });
+        expect(result.spans.map(row => row.spanId)).toEqual(['context']);
+        expect(result.spans[0]).toMatchObject(expected);
+      }
     });
 
-    it('deduplicates retried metrics and does not double-count token details', async () => {
-      await getStorage().batchCreateSpans({ records: [span('priced', scope), span('free'), span('unpriced')] });
-      const metrics = [
-        { metricId: 'input', spanId: 'priced', estimatedCost: 0.01, name: 'mastra_model_total_input_tokens', ...scope },
-        {
-          metricId: 'output',
-          spanId: 'priced',
-          estimatedCost: 0.02,
-          name: 'mastra_model_total_output_tokens',
-          ...scope,
-        },
-        { metricId: 'detail', spanId: 'priced', estimatedCost: 0.01, name: 'mastra_model_input_text_tokens', ...scope },
-        {
-          metricId: 'free',
-          spanId: 'free',
-          estimatedCost: 0,
-          name: 'mastra_model_total_input_tokens',
-          costMetadata: { allocation: 'query_total' },
-        },
-        { metricId: 'unpriced', spanId: 'unpriced', estimatedCost: null, name: 'mastra_model_total_input_tokens' },
-      ].map(metric => ({
-        ...metric,
-        traceId: `trace-${metric.spanId}`,
-        timestamp: start,
-        value: 10,
-        labels: {},
-        costUnit: 'usd',
-      }));
-      await getStorage().batchCreateMetrics({ metrics });
-      await getStorage().batchCreateMetrics({ metrics });
-      await getStorage().batchCreateMetrics({
-        metrics: [{ ...metrics[0]!, metricId: 'other-tenant', organizationId: 'org-b', estimatedCost: 999 }],
+    it('keeps name matching limited to whole normalized words and phrases', async () => {
+      await getStorage().batchCreateSpans({
+        records: [span('match', { name: 'Agent: Model Response' }), span('other', { name: 'Model Responses' })],
       });
-      const costs = Object.fromEntries((await query()).spans.map(row => [row.spanId, row.cost]));
-      expect(costs).toEqual({
-        priced: { state: 'available', amount: 0.03, currency: 'usd' },
-        free: { state: 'available', amount: 0, currency: 'usd' },
-        unpriced: { state: 'unavailable' },
-      });
+      for (const [op, expected] of [
+        ['matches', 'match'],
+        ['notMatches', 'other'],
+      ] as const) {
+        const result = await query({ where: { op, left: { path: 'name' }, right: { literal: 'MODEL response' } } });
+        expect(result.spans.map(row => row.spanId)).toEqual([expected]);
+      }
+    });
+
+    it('does not return cost or legacy truncation flags', async () => {
+      await getStorage().batchCreateSpans({ records: [span('summary')] });
+      const row = (await query()).spans[0]!;
+      for (const field of ['cost', 'inputTruncated', 'outputTruncated', 'errorTruncated'])
+        expect(row).not.toHaveProperty(field);
     });
   });
 }

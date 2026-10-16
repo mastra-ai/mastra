@@ -90,15 +90,29 @@ describe('QUERY_SPANS', () => {
           entityType: 'tool',
           entityId: 'weather-tool',
           entityName: 'weather-tool',
+          entityVersionId: null,
+          parentEntityType: null,
+          parentEntityId: null,
+          parentEntityName: null,
+          parentEntityVersionId: null,
+          rootEntityType: null,
+          rootEntityId: null,
+          rootEntityName: null,
+          rootEntityVersionId: null,
+          threadId: null,
+          runId: null,
+          sessionId: null,
+          userId: null,
+          requestId: null,
+          serviceName: null,
+          experimentId: null,
+          environment: null,
+          executionSource: null,
           model: null,
           provider: null,
           inputPreview: '{"city":"Paris"}',
-          inputTruncated: false,
           outputPreview: null,
-          outputTruncated: false,
           errorPreview: 'Weather service unavailable',
-          errorTruncated: false,
-          cost: { state: 'missing' },
         },
       ],
       page: { next: null },
@@ -362,8 +376,11 @@ describe('QUERY_SPANS', () => {
     }
     const responses = operation.responses;
     const successSchema = JSON.stringify(responses['200']);
-    for (const field of ['spans', 'spanId', 'inputPreview', 'outputPreview', 'cost', 'next']) {
+    for (const field of ['spans', 'spanId', 'inputPreview', 'outputPreview', 'threadId', 'parentEntityId', 'next']) {
       expect(successSchema).toContain(field);
+    }
+    for (const field of ['cost', 'inputTruncated', 'outputTruncated', 'errorTruncated']) {
+      expect(successSchema).not.toContain(`"${field}"`);
     }
     expect(responses['422'].content['application/json'].schema.properties.code.const).toBe('TRACE_QUERY_INVALID');
     expect(responses['501'].content['application/json'].schema.properties.code.const).toBe('SPAN_QUERY_UNSUPPORTED');

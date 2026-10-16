@@ -185,7 +185,10 @@ import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
-const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
+const spanQueryFeatures =
+  typeof coreStorage.planSpanQuery === 'function' && coreStorage.SPAN_QUERY_FIELD_REGISTRY !== undefined
+    ? (['span-query'] as const)
+    : ([] as const);
 
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';

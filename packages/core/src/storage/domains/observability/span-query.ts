@@ -99,15 +99,29 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
     entityType: z.string().nullable(),
     entityId: z.string().nullable(),
     entityName: z.string().nullable(),
+    entityVersionId: z.string().nullable(),
+    parentEntityType: z.string().nullable(),
+    parentEntityId: z.string().nullable(),
+    parentEntityName: z.string().nullable(),
+    parentEntityVersionId: z.string().nullable(),
+    rootEntityType: z.string().nullable(),
+    rootEntityId: z.string().nullable(),
+    rootEntityName: z.string().nullable(),
+    rootEntityVersionId: z.string().nullable(),
+    threadId: z.string().nullable(),
+    runId: z.string().nullable(),
+    sessionId: z.string().nullable(),
+    userId: z.string().nullable(),
+    requestId: z.string().nullable(),
+    serviceName: z.string().nullable(),
+    experimentId: z.string().nullable(),
+    environment: z.string().nullable(),
+    executionSource: z.string().nullable(),
     model: z.string().nullable(),
     provider: z.string().nullable(),
     inputPreview: previewSchema,
-    inputTruncated: z.boolean(),
     outputPreview: previewSchema,
-    outputTruncated: z.boolean(),
     errorPreview: previewSchema,
-    errorTruncated: z.boolean(),
-    cost: spanQueryCostSchema,
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);
@@ -119,15 +133,6 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
         path: ['durationMs'],
         message: 'Duration must match the completed span timestamps',
       });
-    }
-    for (const field of ['input', 'output', 'error'] as const) {
-      if (row[`${field}Preview`] === null && row[`${field}Truncated`]) {
-        context.addIssue({
-          code: 'custom',
-          path: [`${field}Truncated`],
-          message: 'An absent preview cannot be truncated',
-        });
-      }
     }
   });
 
@@ -288,7 +293,7 @@ export const SPAN_QUERY_MAX_COST_METRICS = 50_000;
  * A provider-supplied query_total carrier replaces both directional totals.
  * Missing means no token metrics have arrived; partial/unpriced/ambiguous cost is unavailable.
  */
-export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryRow['cost'] {
+export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): z.infer<typeof spanQueryCostSchema> {
   if (!metrics.length) return { state: 'missing' };
   const names = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
   const totals = metrics.filter(metric => names.includes(metric.name));
@@ -321,10 +326,7 @@ export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryR
 }
 
 /** @internal Selected page metadata; adapters normalize dates to ISO strings. */
-export type SpanQuerySelectedRow = Omit<
-  SpanQueryRow,
-  'inputPreview' | 'inputTruncated' | 'outputPreview' | 'outputTruncated' | 'errorPreview' | 'errorTruncated' | 'cost'
->;
+export type SpanQuerySelectedRow = Omit<SpanQueryRow, 'inputPreview' | 'outputPreview' | 'errorPreview'>;
 
 /**
  * @internal Previews built by `buildPreview`: the stored preview columns, or for rows written
@@ -341,16 +343,8 @@ export function buildSpanQueryResponse(
   plan: TrustedSpanQueryPlan,
   selected: SpanQuerySelectedRow[],
   payloads: SpanQueryPayload[],
-  metrics: SpanQueryCostMetric[],
 ): SpanQueryResponse {
   const byIdentity = new Map(payloads.map(payload => [spanQueryIdentityKey(payload), payload]));
-  const costs = new Map<string, SpanQueryCostMetric[]>();
-  for (const metric of metrics) {
-    const key = spanQueryIdentityKey(metric);
-    const group = costs.get(key) ?? [];
-    group.push(metric);
-    costs.set(key, group);
-  }
   const visible = selected.slice(0, plan.limit);
   const last = visible.at(-1);
   return spanQueryResponseSchema.parse({
@@ -363,12 +357,8 @@ export function buildSpanQueryResponse(
       return {
         ...row,
         inputPreview: input.value,
-        inputTruncated: input.truncated,
         outputPreview: output.value,
-        outputTruncated: output.truncated,
         errorPreview: error.value,
-        errorTruncated: error.truncated,
-        cost: resolveSpanQueryCost(costs.get(key) ?? []),
       };
     }),
     page: {

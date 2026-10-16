@@ -622,6 +622,45 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
   },
 } as const satisfies Record<TraceQueryPredicateScope, Record<string, FieldRule>>;
 
+/** Direct span queries have a separate policy from trace queries' related span predicates. */
+export const SPAN_QUERY_FIELD_REGISTRY = {
+  name: textField(true),
+  spanType: stringField(true),
+  status: stringField(true),
+  error: presenceField(),
+  startedAt: orderedField('timestamp'),
+  endedAt: orderedField('timestamp'),
+  durationMs: orderedField('number'),
+  traceId: stringField(false),
+  spanId: stringField(false),
+  parentSpanId: stringField(false),
+  threadId: stringField(false),
+  organizationId: stringField(false),
+  resourceId: stringField(false),
+  runId: stringField(false),
+  sessionId: stringField(false),
+  userId: stringField(false),
+  requestId: stringField(false),
+  serviceName: stringField(true),
+  experimentId: stringField(false),
+  environment: stringField(true),
+  executionSource: stringField(true),
+  entityType: stringField(true),
+  entityId: stringField(false),
+  entityName: stringField(true),
+  entityVersionId: stringField(false),
+  parentEntityType: stringField(true),
+  parentEntityId: stringField(false),
+  parentEntityName: stringField(true),
+  parentEntityVersionId: stringField(false),
+  rootEntityType: stringField(true),
+  rootEntityId: stringField(false),
+  rootEntityName: stringField(true),
+  rootEntityVersionId: stringField(false),
+} as const satisfies Record<string, FieldRule>;
+
+export type SpanQueryField = keyof typeof SPAN_QUERY_FIELD_REGISTRY;
+
 const METADATA_FIELD_RULE: FieldRule = {
   valueKind: 'string',
   operators: TRACE_QUERY_STRING_OPERATORS,
@@ -634,6 +673,7 @@ export type TraceQuerySpanField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['spa
 export type TraceQueryScoreField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['scores'];
 export type TraceQueryFeedbackField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['feedback'];
 export type TraceQueryCanonicalField =
+  | SpanQueryField
   | TraceQueryField
   | TraceQuerySpanField
   | TraceQueryScoreField
@@ -872,7 +912,7 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
   return timeoutMs;
 }
 
-type PredicateContext = TraceQueryPredicateScope;
+type PredicateContext = TraceQueryPredicateScope | 'spanQuery';
 
 interface PlannerState {
   nodes: number;
@@ -1393,14 +1433,14 @@ export function planTraceQuerySelectionPredicate(
   return planPredicate(where, 'trace', path, 1, state);
 }
 
-/** @internal Plans a span-row predicate using the same rules as `spans.some` / `spans.none`. */
+/** @internal Plans a direct span-row predicate without changing related trace predicates. */
 export function planSpanQuerySelectionPredicate(
   where: TraceQueryScalarPredicate,
   issues: TraceQueryIssue[],
 ): TrustedTraceQueryScalarPredicate | undefined {
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   // Scalar grammar cannot produce a related-record predicate.
-  return planPredicate(where, 'spans', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
+  return planPredicate(where, 'spanQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
 function planPredicate(
@@ -1589,6 +1629,7 @@ function planPredicate(
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
+  if (context === 'spanQuery') return SPAN_QUERY_FIELD_REGISTRY;
   return TRACE_QUERY_FIELD_REGISTRY[context];
 }
 

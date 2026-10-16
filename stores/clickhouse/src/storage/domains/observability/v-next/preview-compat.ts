@@ -37,8 +37,8 @@ export function readPreview(preview: unknown, payload?: unknown, jsonEncoded = f
 /** Older response builders may shorten previews or turn empty strings into null. */
 export function buildSpanQueryResponse(...args: Parameters<typeof coreStorage.buildSpanQueryResponse>) {
   if (canGeneratePreviews) return coreStorage.buildSpanQueryResponse(...args);
-  const [plan, selected, payloads, metrics] = args;
-  const response = coreStorage.buildSpanQueryResponse(plan, selected, [], metrics);
+  const [plan, selected, payloads] = args;
+  const response = coreStorage.buildSpanQueryResponse(plan, selected, []);
   const byIdentity = new Map(payloads.map(payload => [coreStorage.spanQueryIdentityKey(payload), payload]));
   for (const span of response.spans) {
     const payload = byIdentity.get(coreStorage.spanQueryIdentityKey(span));
