@@ -74,6 +74,13 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsAtomicWorkingMemoryMerge?: boolean = false;
 
+  /**
+   * Whether this adapter's OM operation claims (`claimObservationalMemoryOperation` and friends) are
+   * stored in the database, so every process sharing it sees them. When false, claims are only
+   * visible within one process and OM is safe for a single process only.
+   */
+  readonly supportsDistributedObservationalMemoryOperations?: boolean = false;
+
   private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
 
   constructor() {

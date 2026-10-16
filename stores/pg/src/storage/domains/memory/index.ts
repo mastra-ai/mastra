@@ -36,6 +36,14 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+const OM_OPERATION_CLAIMS_TABLE = 'mastra_om_operation_claims' as const;
+const OM_OPERATION_CLAIMS_SCHEMA: Record<string, StorageColumn> = {
+  recordId: { type: 'text', nullable: false },
+  operation: { type: 'text', nullable: false },
+  owner: { type: 'text', nullable: false },
+  expiresAt: { type: 'bigint', nullable: false },
+};
+const OM_OPERATION_CLAIMS_PRIMARY_KEY = ['recordId', 'operation'];
 /**
  * Newest generation first. Databases written before generation creation was
  * serialized can hold several rows with the same generation; the earliest-created
@@ -112,6 +120,10 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  ObservationalMemoryOperationClaimInput,
+  ObservationalMemoryOperationClaimResult,
+  ObservationalMemoryOperationRef,
+  StorageColumn,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -219,6 +231,16 @@ export class MemoryPG extends MemoryStorage {
   readonly supportsObservationalMemory = true;
   override readonly supportsAtomicWorkingMemoryMerge = true;
   readonly supportsObservationalMemoryHistorySearch = true;
+  override readonly supportsDistributedObservationalMemoryOperations = true;
+
+  /**
+   * Claims this process holds, mirrored in memory. Claims register here synchronously (OM requires a
+   * claim to be visible before its caller's next await) and are then written to the claims table for
+   * other processes. Claims are counted per owner; the row lives while the count is above zero.
+   */
+  #localClaims = new Map<string, { owner: string; count: number }>();
+  /** Serializes the claims-table writes per operation so a release cannot overtake a later claim. */
+  #claimWrites = new Map<string, Promise<unknown>>();
 
   /**
    * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
@@ -301,6 +323,11 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({
       tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
       schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
+    await this.#db.createTable({
+      tableName: OM_OPERATION_CLAIMS_TABLE as TABLE_NAMES,
+      schema: OM_OPERATION_CLAIMS_SCHEMA,
+      compositePrimaryKey: OM_OPERATION_CLAIMS_PRIMARY_KEY,
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -405,6 +432,16 @@ export class MemoryPG extends MemoryStorage {
       }),
     );
 
+    statements.push(
+      generateTableSQL({
+        tableName: OM_OPERATION_CLAIMS_TABLE as TABLE_NAMES,
+        schema: OM_OPERATION_CLAIMS_SCHEMA,
+        schemaName,
+        compositePrimaryKey: OM_OPERATION_CLAIMS_PRIMARY_KEY,
+        includeAllConstraints: true,
+      }),
+    );
+
     return statements;
   }
 
@@ -457,6 +494,145 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.clearTable({ tableName: TABLE_THREADS });
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
     await this.#db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
+    await this.#db.clearTable({ tableName: OM_OPERATION_CLAIMS_TABLE as TABLE_NAMES });
+    this.#localClaims.clear();
+  }
+
+  // OM operation claims always use the primary client, like run fences.
+
+  #omOperationClaimsTable(): string {
+    return getTableName({ indexName: OM_OPERATION_CLAIMS_TABLE, schemaName: getSchemaName(this.#schema) });
+  }
+
+  #claimKey({ recordId, operation }: ObservationalMemoryOperationRef): string {
+    return `${recordId}:${operation}`;
+  }
+
+  #serializeClaimWrite<T>(key: string, write: () => Promise<T>): Promise<T> {
+    const result = (this.#claimWrites.get(key) ?? Promise.resolve()).then(write, write);
+    const settled = result.catch(() => {});
+    this.#claimWrites.set(key, settled);
+    void settled.then(() => {
+      if (this.#claimWrites.get(key) === settled) this.#claimWrites.delete(key);
+    });
+    return result;
+  }
+
+  #claimError(operation: string, ref: ObservationalMemoryOperationRef, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('PG', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { recordId: ref.recordId, operation: ref.operation },
+      },
+      error,
+    );
+  }
+
+  override async claimObservationalMemoryOperation(
+    input: ObservationalMemoryOperationClaimInput,
+  ): Promise<ObservationalMemoryOperationClaimResult> {
+    const key = this.#claimKey(input);
+    const local = this.#localClaims.get(key);
+    if (local && local.owner !== input.owner) return { claimed: false, owner: local.owner };
+    // Registered before the first await.
+    if (local) local.count++;
+    else this.#localClaims.set(key, { owner: input.owner, count: 1 });
+
+    try {
+      const owner = await this.#serializeClaimWrite(key, async () => {
+        // A second attempt covers the holder releasing between the refused insert and the read.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const claimed = await this.#db.client.oneOrNone(
+            `INSERT INTO ${this.#omOperationClaimsTable()} AS c ("recordId", operation, owner, "expiresAt")
+           VALUES ($1, $2, $3, ${DB_NOW_MS} + $4)
+           ON CONFLICT ("recordId", operation) DO UPDATE
+             SET owner = EXCLUDED.owner, "expiresAt" = EXCLUDED."expiresAt"
+           WHERE c.owner = EXCLUDED.owner OR c."expiresAt" <= ${DB_NOW_MS}
+           RETURNING owner`,
+            [input.recordId, input.operation, input.owner, Math.round(input.ttlMs)],
+          );
+          if (claimed) return input.owner;
+          const holder = await this.#db.client.oneOrNone<{ owner: string }>(
+            `SELECT owner FROM ${this.#omOperationClaimsTable()}
+             WHERE "recordId" = $1 AND operation = $2 AND "expiresAt" > ${DB_NOW_MS}`,
+            [input.recordId, input.operation],
+          );
+          if (holder) return holder.owner;
+        }
+        return undefined;
+      });
+      if (owner === input.owner) return { claimed: true };
+      this.#dropLocalClaim(key, input.owner);
+      return { claimed: false, owner };
+    } catch (error) {
+      this.#dropLocalClaim(key, input.owner);
+      throw this.#claimError('CLAIM_OM_OPERATION', input, error);
+    }
+  }
+
+  #dropLocalClaim(key: string, owner: string): boolean {
+    const local = this.#localClaims.get(key);
+    if (!local || local.owner !== owner) return false;
+    if (local.count <= 1) {
+      this.#localClaims.delete(key);
+      return true;
+    }
+    local.count--;
+    return false;
+  }
+
+  override async renewObservationalMemoryOperation(input: ObservationalMemoryOperationClaimInput): Promise<boolean> {
+    try {
+      const renewed = await this.#serializeClaimWrite(this.#claimKey(input), () =>
+        this.#db.client.oneOrNone(
+          `UPDATE ${this.#omOperationClaimsTable()}
+           SET "expiresAt" = ${DB_NOW_MS} + $4
+           WHERE "recordId" = $1 AND operation = $2 AND owner = $3 AND "expiresAt" > ${DB_NOW_MS}
+           RETURNING owner`,
+          [input.recordId, input.operation, input.owner, Math.round(input.ttlMs)],
+        ),
+      );
+      return renewed !== null;
+    } catch (error) {
+      throw this.#claimError('RENEW_OM_OPERATION', input, error);
+    }
+  }
+
+  override async releaseObservationalMemoryOperation(
+    input: ObservationalMemoryOperationRef & { owner: string },
+  ): Promise<void> {
+    const key = this.#claimKey(input);
+    // Only the last of this owner's counted claims removes the row.
+    if (!this.#dropLocalClaim(key, input.owner)) return;
+    try {
+      await this.#serializeClaimWrite(key, () =>
+        this.#db.client.none(
+          `DELETE FROM ${this.#omOperationClaimsTable()} WHERE "recordId" = $1 AND operation = $2 AND owner = $3`,
+          [input.recordId, input.operation, input.owner],
+        ),
+      );
+    } catch (error) {
+      throw this.#claimError('RELEASE_OM_OPERATION', input, error);
+    }
+  }
+
+  override async getObservationalMemoryOperationOwner(
+    ref: ObservationalMemoryOperationRef,
+  ): Promise<string | undefined> {
+    const local = this.#localClaims.get(this.#claimKey(ref));
+    if (local) return local.owner;
+    try {
+      const row = await this.#db.client.oneOrNone<{ owner: string }>(
+        `SELECT owner FROM ${this.#omOperationClaimsTable()}
+         WHERE "recordId" = $1 AND operation = $2 AND "expiresAt" > ${DB_NOW_MS}`,
+        [ref.recordId, ref.operation],
+      );
+      return row?.owner;
+    } catch (error) {
+      throw this.#claimError('GET_OM_OPERATION_OWNER', ref, error);
+    }
   }
 
   // Fence reads and writes always go to the primary client: a replica's stale
