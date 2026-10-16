@@ -92,6 +92,27 @@ const SPAN_FIELDS = {
   organizationId: { sql: 's.organizationId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
+// Direct querySpans policy is separate from trace-related span predicates.
+const SPAN_QUERY_FIELDS = {
+  ...SPAN_FIELDS,
+  traceId: { sql: 's.traceId', parameterType: 'String' },
+  spanId: { sql: 's.spanId', parameterType: 'String' },
+  parentSpanId: { sql: 's.parentSpanId', parameterType: 'String' },
+  threadId: { sql: 's.threadId', parameterType: 'String' },
+  resourceId: { sql: 's.resourceId', parameterType: 'String' },
+  requestId: { sql: 's.requestId', parameterType: 'String' },
+  serviceName: { sql: 's.serviceName', parameterType: 'String' },
+  experimentId: { sql: 's.experimentId', parameterType: 'String' },
+  environment: { sql: 's.environment', parameterType: 'String' },
+  executionSource: { sql: 's.executionSource', parameterType: 'String' },
+  parentEntityType: { sql: 's.parentEntityType', parameterType: 'String' },
+  parentEntityId: { sql: 's.parentEntityId', parameterType: 'String' },
+  parentEntityName: { sql: 's.parentEntityName', parameterType: 'String' },
+  rootEntityType: { sql: 's.rootEntityType', parameterType: 'String' },
+  rootEntityId: { sql: 's.rootEntityId', parameterType: 'String' },
+  rootEntityName: { sql: 's.rootEntityName', parameterType: 'String' },
+} as const;
+
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'String' },
   scorerVersion: { sql: 's.scorerVersion', parameterType: 'String' },
@@ -1254,9 +1275,9 @@ export async function queryThreads(
   });
 }
 
-/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+/** Compile a direct span-query filter using its dedicated field mapping. */
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
   const parameters = new ParameterBuilder();
-  const sql = compileScalarPredicate(predicate, SPAN_FIELDS, parameters);
+  const sql = compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, parameters);
   return { sql, params: parameters.params };
 }

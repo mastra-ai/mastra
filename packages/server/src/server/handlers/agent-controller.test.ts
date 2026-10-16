@@ -28,6 +28,7 @@ import {
   SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE,
   LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE,
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
+  TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE,
   STEER_AGENT_CONTROLLER_SESSION_ROUTE,
   FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE,
   AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE,
@@ -446,6 +447,143 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('transfers thread ownership to the authenticated user from the request context', async () => {
+      const session = await getRouteSession('user-transfer');
+      const requestContext = makeRequestContext();
+
+      const res = await TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-transfer',
+        threadId: session.thread.getId(),
+        requestContext,
+      } as any);
+
+      expect(res).toEqual({ ok: true, ownerId: 'user-123' });
+      await expect(session.thread.getOwner()).resolves.toBe('user-123');
+    });
+
+    it('acknowledges a transfer to the current owner without emitting an ownership change', async () => {
+      const session = await getRouteSession('user-transfer-noop');
+      const threadId = session.thread.getId()!;
+      await session.thread.transferOwnership({ toOwnerId: 'user-123' });
+      const events: unknown[] = [];
+      session.subscribe(event => {
+        if (event.type === 'thread_owner_changed') events.push(event);
+      });
+
+      const res = await TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-transfer-noop',
+        threadId,
+        requestContext: makeRequestContext(),
+      } as any);
+
+      expect(res).toEqual({ ok: true, ownerId: 'user-123' });
+      expect(events).toEqual([]);
+      await expect(session.thread.getOwner()).resolves.toBe('user-123');
+    });
+
+    it('returns 404 for an unknown thread', async () => {
+      await getRouteSession('user-transfer-missing');
+
+      await expect(
+        TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-transfer-missing',
+          threadId: 'no-such-thread',
+          requestContext: makeRequestContext(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('returns 404 for a thread that belongs to another resource and leaves its owner unchanged', async () => {
+      const victim = await getRouteSession('user-transfer-victim');
+      const victimThreadId = victim.thread.getId()!;
+      const ownerBefore = await victim.thread.getOwner();
+
+      await expect(
+        TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-transfer-attacker',
+          threadId: victimThreadId,
+          requestContext: makeRequestContext(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(victim.thread.getOwner()).resolves.toBe(ownerBefore);
+    });
+
+    it('requires memory write FGA permission on the thread before transferring', async () => {
+      const session = await getRouteSession('user-transfer-fga');
+      const threadId = session.thread.getId()!;
+      const ownerBefore = await session.thread.getOwner();
+      const require = vi.fn().mockRejectedValue(new HTTPException(403, { message: 'denied' }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const requestContext = makeRequestContext();
+      const user = { id: 'user-123' };
+      requestContext.set('user', user);
+
+      await expect(
+        TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-transfer-fga',
+          threadId,
+          requestContext,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: threadId },
+        permission: 'memory:write',
+        context: expect.objectContaining({ resourceId: 'user-transfer-fga' }),
+      });
+      await expect(session.thread.getOwner()).resolves.toBe(ownerBefore);
+    });
+
+    it('transfers a non-active thread without changing the active thread', async () => {
+      const session = await getRouteSession('user-transfer-other');
+      const targetThreadId = session.thread.getId()!;
+      await session.thread.create({ title: 'Active' });
+      const activeThreadId = session.thread.getId()!;
+      const activeOwnerBefore = await session.thread.getOwner({ threadId: activeThreadId });
+      expect(activeThreadId).not.toBe(targetThreadId);
+
+      const res = await TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-transfer-other',
+        threadId: targetThreadId,
+        requestContext: makeRequestContext(),
+      } as any);
+
+      expect(res).toEqual({ ok: true, ownerId: 'user-123' });
+      expect(session.thread.getId()).toBe(activeThreadId);
+      await expect(session.thread.getOwner({ threadId: targetThreadId })).resolves.toBe('user-123');
+      await expect(session.thread.getOwner({ threadId: activeThreadId })).resolves.toBe(activeOwnerBefore);
+      expect(activeOwnerBefore).not.toBe('user-123');
+    });
+
+    it('rejects ownership transfer without an authenticated user id', async () => {
+      const session = await getRouteSession('user-transfer-anon');
+      const spy = vi.spyOn(session.thread, 'transferOwnership');
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_KEY, { name: 'Missing id' });
+
+      await expect(
+        TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-transfer-anon',
+          threadId: session.thread.getId(),
+          requestContext,
+        } as any),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(spy).not.toHaveBeenCalled();
     });
 
     it('forwards requestContext to session.thread.switch when renaming another thread', async () => {

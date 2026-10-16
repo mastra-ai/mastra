@@ -117,6 +117,7 @@ import type {
   WorkflowConfig,
   WorkflowEngineType,
   WorkflowOptions,
+  WorkflowStateTracingContext,
   WorkflowResult,
   WorkflowType,
   WorkflowRunState,
@@ -1863,6 +1864,23 @@ export class Workflow<
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
+
+  /**
+   * @internal For run-scoped agent loops only. Overrides the parent saved on
+   * suspension without changing live tracing. Ordinary workflows derive it
+   * from their execution span instead.
+   */
+  __setResumeTracingContext(context: WorkflowStateTracingContext | undefined): void {
+    this.executionEngine.options = { ...this.executionEngine.options, resumeTracingContext: context };
+  }
+
+  /**
+   * @internal Currently set by normal agent loops. Evented persistence also
+   * honors it for engine parity: changing engines must not change the saved parent.
+   */
+  __getResumeTracingContext(): WorkflowStateTracingContext | undefined {
+    return this.executionEngine.options.resumeTracingContext;
+  }
   protected executionGraph: ExecutionGraph;
   #options: Omit<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'> &
     Required<Pick<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'>>;

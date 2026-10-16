@@ -11,6 +11,7 @@ import { getFactorySessionKind, getSessionOwnerDetails, getUserSessionLabel } fr
 import type { SessionOwnerDetails, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
+import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
@@ -60,6 +61,7 @@ export interface SessionListRow {
   status: SessionActivityStatus;
   owner: SessionOwnerDetails;
   ownedByViewer: boolean;
+  canRegenerateTitle: boolean;
   itemLabel?: string;
   itemTitle?: string;
   threadId?: string;
@@ -105,7 +107,7 @@ function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInf
 
 function factorySessionName(session: FactoryUserSession, item: WorkItem | undefined): string {
   if (session.title !== undefined) return session.title;
-  if (session.branch.startsWith('slack/') && item?.title !== undefined) return item.title;
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && item?.title !== undefined) return item.title;
   return session.branch;
 }
 
@@ -157,6 +159,7 @@ export function buildFactorySessionRow({
   viewer,
 }: FactorySessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
+  const ownedByViewer = isOwnedByViewer(session, viewer);
   return {
     session,
     origin: 'factory',
@@ -173,7 +176,8 @@ export function buildFactorySessionRow({
       settled: isSettled(item, boards, pullRequest),
     }),
     owner: getSessionOwnerDetails(session, viewer),
-    ownedByViewer: isOwnedByViewer(session, viewer),
+    ownedByViewer,
+    canRegenerateTitle: ownedByViewer && session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX),
     itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
     itemTitle: item?.title,
     threadId,
@@ -202,6 +206,7 @@ export function buildUserSessionRow({
   viewer,
 }: UserSessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
+  const ownedByViewer = isOwnedByViewer(session, viewer);
   return {
     session,
     origin: 'user',
@@ -218,7 +223,8 @@ export function buildUserSessionRow({
       settled: false,
     }),
     owner: getSessionOwnerDetails(session, viewer),
-    ownedByViewer: isOwnedByViewer(session, viewer),
+    ownedByViewer,
+    canRegenerateTitle: ownedByViewer,
     pinned,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,

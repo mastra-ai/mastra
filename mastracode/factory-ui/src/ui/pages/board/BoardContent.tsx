@@ -12,6 +12,7 @@ import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
+import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
 import { BoardStageCreateButton } from '../../domains/factory/components/BoardStageCreateButton';
 import { BoardViewControls } from '../../domains/factory/components/BoardViewControls';
 import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
@@ -43,7 +44,7 @@ import { relatedWorkItemIndex } from '../../domains/factory/services/relationshi
 import { workItemHumanActorIds } from '../../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../../domains/workspaces/services/github';
 
-import { ColumnReveal } from '../../domains/factory/components/ColumnReveal';
+import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
 import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
@@ -228,8 +229,10 @@ export function BoardContent({
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
+  const hasIntakeSource = intake.available.length > 0;
 
   const stageViews = stages.map(stage => {
+    const isInitialPhase = stage.id === definition.initialPhase;
     const loading = loadingStages.has(stage.id);
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
@@ -239,9 +242,11 @@ export function BoardContent({
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
       !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+    const canConnectSource = isInitialPhase && !hasIntakeSource;
+    const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
       builtin &&
-      stage.id !== definition.initialPhase &&
+      !isInitialPhase &&
       !loading &&
       !composerOpen &&
       !feedFailed &&
@@ -269,14 +274,26 @@ export function BoardContent({
       cards: (
         <BoardStageCards
           stage={stage}
+          isInitialPhase={isInitialPhase}
           layout={layout}
           kind={kind}
           loading={loading}
           taskCount={taskCount}
           feed={columnFeed}
           intakeSource={intake.active}
+          hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
-          alreadyMaterialized={stage.id === definition.initialPhase ? intake.alreadyMaterialized : 0}
+          alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
+          emptyStateActions={
+            showEmptyStateActions && (
+              <BoardEmptyStateActions
+                factoryId={factoryProjectId}
+                connectSource={canConnectSource}
+                onCreate={canCreate ? () => composer.open(stage.id) : undefined}
+                onClearFilters={filtersExcludeAll ? view.clearFilters : undefined}
+              />
+            )
+          }
           composer={
             composerOpen && (
               <InlineWorkItemComposer
@@ -288,12 +305,13 @@ export function BoardContent({
             )
           }
         >
-          <ColumnReveal
+          <VirtualBoardItems
             items={stageWorkItems}
-            pinned={item => item.id === targetItemId}
+            itemKey={item => item.id}
+            layout={layout}
+            pinnedKey={targetItemId}
             renderItem={item => (
               <WorkItemCard
-                key={`${item.id}:${stage.id}`}
                 layout={layout}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}
@@ -390,6 +408,8 @@ export function BoardContent({
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
                   autoApprovePlans={factory.autoApprovePlans ?? false}
+                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
+                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
                 />
               )
             }

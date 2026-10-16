@@ -155,6 +155,7 @@ export class MastraLLMVNext extends MastraBase {
     goal,
     onIterationComplete,
     workspace,
+    agentRunSpan,
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -225,7 +226,7 @@ export class MastraLLMVNext extends MastraBase {
     // Create model span tracker that will be shared across all LLM execution steps.
     // The agentic loop calls setInferenceContext + startInference per-step so the
     // MODEL_INFERENCE span reflects the post-processor tool set / parameters.
-    const modelSpanTracker = modelSpan?.createTracker();
+    const modelSpanTracker = modelSpan?.createTracker({ agentRunSpan });
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {

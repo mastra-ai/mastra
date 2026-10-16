@@ -689,6 +689,9 @@ interface AgentRunAttributes {
 
   /** Maximum steps allowed */
   maxSteps?: number
+
+  /** When the run's model streamed its first chunk, copied from the agent's own first generation */
+  completionStartTime?: Date
 }
 ```
 
@@ -786,6 +789,9 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+
+  /** When the step's first inference streamed its first chunk */
+  completionStartTime?: Date
 }
 ```
 
