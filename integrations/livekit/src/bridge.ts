@@ -271,7 +271,7 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
     return new ReadableStream<VoiceReplyChunk>({
       start: async controller => {
         try {
-          const result = await agent.stream(ctx.messages, mergedOptions);
+          const result = await agent.streamMessageList(ctx.messages, mergedOptions);
           for await (const chunk of result.fullStream) {
             if (cancelled) break;
             if (chunk.type === 'text-delta') {

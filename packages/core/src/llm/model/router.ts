@@ -390,6 +390,22 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return rest;
   }
 
+  /**
+   * Resolve the underlying provider model with its true specification version.
+   * `doStream`/`doGenerate` report v2 but emit V3/V4-shaped parts, which AI SDK v7
+   * would misread; action-native runs hand this model to `streamText` directly.
+   */
+  async resolveProviderModel(): Promise<GatewayLanguageModel> {
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
+    const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+    return this.resolveLanguageModel({
+      apiKey: auth.apiKey ?? '',
+      auth,
+      headers: mergeHeaders(this.config.headers, auth.headers),
+      ...resolved,
+    });
+  }
+
   async doGenerate(options: LanguageModelV2CallOptions): Promise<StreamResult> {
     const resolved = this.#manager.resolveModelId(this.config.routerId);
     let auth: GatewayAuthResult;
