@@ -1,8 +1,5 @@
 import { Agent } from '@mastra/core/agent';
 import type {
-  AiMessageType,
-  AgentGenerateOptions,
-  AgentStreamOptions,
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
   ToolsInput,
@@ -10,14 +7,13 @@ import type {
   PublicStructuredOutputOptions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type { CoreMessage } from '@mastra/core/llm';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraModelOutput, FullOutput } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
-import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
+import type { AgentBuilderConfig } from '../types';
 
 // =============================================================================
 // Template Merge Workflow Implementation
@@ -94,77 +90,6 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
     super(agentConfig);
     this.builderConfig = config;
   }
-
-  /**
-   * Enhanced generate method with AgentBuilder-specific configuration
-   * Overrides the base Agent generate method to provide additional project context
-   */
-  generateLegacy: Agent['generateLegacy'] = async (
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
-    generateOptions: (GenerateAgentOptions & AgentGenerateOptions<any, any>) | undefined = {},
-  ): Promise<any> => {
-    const { maxSteps, ...baseOptions } = generateOptions;
-
-    const originalInstructions = await this.getInstructions({ requestContext: generateOptions?.requestContext });
-    const additionalInstructions = baseOptions.instructions;
-
-    let enhancedInstructions = originalInstructions as string;
-    if (additionalInstructions) {
-      enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
-    }
-
-    const enhancedContext = [...(baseOptions.context || [])];
-
-    const enhancedOptions = {
-      ...baseOptions,
-      maxSteps: maxSteps || 100, // Higher default for code generation
-      temperature: 0.3, // Lower temperature for more consistent code generation
-      instructions: enhancedInstructions,
-      context: enhancedContext,
-    } satisfies AgentGenerateOptions<any, any>;
-
-    this.logger.debug('Starting generation with enhanced context', {
-      agent: this.name,
-      projectPath: this.builderConfig.projectPath,
-    });
-
-    return super.generateLegacy(messages, enhancedOptions);
-  };
-
-  /**
-   * Enhanced stream method with AgentBuilder-specific configuration
-   * Overrides the base Agent stream method to provide additional project context
-   */
-  streamLegacy: Agent['streamLegacy'] = async (
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
-    streamOptions: (GenerateAgentOptions & AgentStreamOptions<any, any>) | undefined = {},
-  ): Promise<any> => {
-    const { maxSteps, ...baseOptions } = streamOptions;
-
-    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
-    const additionalInstructions = baseOptions.instructions;
-
-    let enhancedInstructions = originalInstructions as string;
-    if (additionalInstructions) {
-      enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
-    }
-    const enhancedContext = [...(baseOptions.context || [])];
-
-    const enhancedOptions = {
-      ...baseOptions,
-      maxSteps: maxSteps || 100, // Higher default for code generation
-      temperature: 0.3, // Lower temperature for more consistent code generation
-      instructions: enhancedInstructions,
-      context: enhancedContext,
-    };
-
-    this.logger.debug('Starting streaming with enhanced context', {
-      agent: this.name,
-      projectPath: this.builderConfig.projectPath,
-    });
-
-    return super.streamLegacy(messages, enhancedOptions);
-  };
 
   /**
    * Enhanced stream method with AgentBuilder-specific configuration

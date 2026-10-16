@@ -2,9 +2,8 @@ import { ReadableStream } from 'node:stream/web';
 
 import type { ModelInfo, SessionUpdate } from '@agentclientprotocol/sdk';
 import type {
-  AgentGenerateOptions,
+  AgentExecutionOptions,
   AgentInstructions,
-  AgentStreamOptions,
   MastraLanguageModel,
   SubAgent,
   SubAgentGenerateResult,
@@ -95,7 +94,7 @@ export class AcpAgent<
     return this.connection.setModel(modelId);
   }
 
-  async generate(messages: MessageListInput, options?: AgentGenerateOptions): Promise<SubAgentGenerateResult> {
+  async generate(messages: MessageListInput, options?: AgentExecutionOptions): Promise<SubAgentGenerateResult> {
     const prompt = this.getPrompt(messages, options?.instructions);
     const text = await this.connection.prompt(
       prompt,
@@ -122,7 +121,7 @@ export class AcpAgent<
     throw new Error('AcpAgent does not support resuming suspended stream calls');
   }
 
-  async stream(messages: MessageListInput, options?: AgentStreamOptions): Promise<SubAgentStreamResult> {
+  async stream(messages: MessageListInput, options?: AgentExecutionOptions): Promise<SubAgentStreamResult> {
     const runId = options?.runId ?? globalThis.crypto.randomUUID();
     const prompt = this.getPrompt(messages, options?.instructions);
     const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;

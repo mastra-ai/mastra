@@ -217,7 +217,6 @@ Use the following basic examples to guide your implementation.
 ### Weather Agent
 \`\`\`
 // ./src/agents/weather-agent.ts
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
@@ -227,7 +226,7 @@ export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \${instructions},
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   tools: { weatherTool },
   memory: new Memory({
     storage: new LibSQLStore({

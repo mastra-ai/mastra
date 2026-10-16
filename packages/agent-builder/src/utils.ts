@@ -5,7 +5,7 @@ import { copyFile, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, basename, extname, resolve, join } from 'node:path';
 import { promisify } from 'node:util';
-import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { UNIT_KINDS } from './types';
@@ -412,7 +412,7 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
 }
 
 // Type guard to check if object is a valid language model (V1, V2, or V3)
-export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel | MastraLegacyLanguageModel => {
+export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
   return model && typeof model === 'object' && typeof model.modelId === 'string';
 };
 
@@ -615,45 +615,9 @@ export const createModelInstance = async (
   provider: string,
   modelId: string,
   version: 'v1' | 'v2' = 'v2',
-): Promise<MastraLanguageModel | MastraLegacyLanguageModel | ModelRouterLanguageModel | null> => {
+): Promise<MastraLanguageModel | ModelRouterLanguageModel | null> => {
   try {
-    // Dynamic imports to avoid issues if packages aren't available
-    const providerMap = {
-      v1: {
-        openai: async () => {
-          const { openai } = await import('@ai-sdk/openai');
-          return openai(modelId);
-        },
-        anthropic: async () => {
-          const { anthropic } = await import('@ai-sdk/anthropic');
-          return anthropic(modelId);
-        },
-        groq: async () => {
-          const { groq } = await import('@ai-sdk/groq');
-          return groq(modelId);
-        },
-        xai: async () => {
-          const { xai } = await import('@ai-sdk/xai');
-          return xai(modelId);
-        },
-        google: async () => {
-          const { google } = await import('@ai-sdk/google');
-          return google(modelId);
-        },
-      },
-    };
-
-    const providerFn =
-      version === `v1`
-        ? providerMap[version][provider as keyof (typeof providerMap)[typeof version]]
-        : () => new ModelRouterLanguageModel(`${provider}/${modelId}`);
-
-    if (!providerFn) {
-      console.error(`Unsupported provider: ${provider}`);
-      return null;
-    }
-
-    const modelInstance = await providerFn();
+    const modelInstance = new ModelRouterLanguageModel(`${provider}/${modelId}`);
     console.info(`Created ${provider} model instance (${version}): ${modelId}`);
     return modelInstance;
   } catch (error) {
@@ -669,9 +633,9 @@ export const resolveModel = async ({
   projectPath,
 }: {
   requestContext: RequestContext;
-  defaultModel?: MastraLanguageModel | MastraLegacyLanguageModel | string;
+  defaultModel?: MastraLanguageModel | string;
   projectPath?: string;
-}): Promise<MastraLanguageModel | MastraLegacyLanguageModel> => {
+}): Promise<MastraLanguageModel> => {
   // First try to get model from request context
   const modelFromContext = requestContext.get('model');
   if (modelFromContext) {
