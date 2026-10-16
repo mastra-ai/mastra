@@ -416,6 +416,7 @@ describe('approval', () => {
         'factory_signal_session',
         'factory_message_origin',
         'factory_start_session',
+        'factory_answer_approval',
       ].sort(),
     );
   });

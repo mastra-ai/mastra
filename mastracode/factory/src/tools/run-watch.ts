@@ -19,6 +19,12 @@ export interface RunReportSession {
 /** Reports one run's end; `since` is when the run's window opened. Should not throw. */
 export type SessionRunEndReport = (outcome: FactoryRunOutcome, since: Date) => Promise<void>;
 
+/** Told when the run holds a tool call for approval; the run stays open meanwhile. */
+export type SessionApprovalReport = (request: { toolName: string; toolCallId: string; args: unknown }) => Promise<void>;
+
+/** How much of a run's error message a `failed` report quotes. */
+const ERROR_MESSAGE_LENGTH = 400;
+
 /**
  * Report every run end of a session, however the run started: the board, a
  * typed message, a wake, or a run after a restart. Attached to each Factory
@@ -26,9 +32,18 @@ export type SessionRunEndReport = (outcome: FactoryRunOutcome, since: Date) => P
  * stopped or steered says nothing, and its window carries into the next run,
  * so reports the agent made in it still count.
  */
-export function observeSessionRunReports(session: RunReportSession, report: SessionRunEndReport): () => void {
+export function observeSessionRunReports(
+  session: RunReportSession,
+  report: SessionRunEndReport,
+  { onApprovalRequested }: { onApprovalRequested?: SessionApprovalReport } = {},
+): () => void {
   let parked: ParkedTool | undefined;
+  let lastError: string | undefined;
   let since = new Date();
+  const settle = (work: Promise<void>) =>
+    void work.catch(error => {
+      console.warn('[Factory reports] Unable to report on a session run.', error);
+    });
   return session.subscribe(event => {
     if (event.type === 'tool_suspended' || event.type === 'tool_approval_required') {
       parked = {
@@ -36,6 +51,14 @@ export function observeSessionRunReports(session: RunReportSession, report: Sess
         toolCallId: event.toolCallId,
         approval: event.type === 'tool_approval_required',
       };
+      // An approval gate holds the run open, so it is announced now, not at the run's end.
+      if (event.type === 'tool_approval_required' && onApprovalRequested) {
+        settle(onApprovalRequested({ toolName: event.toolName, toolCallId: event.toolCallId, args: event.args }));
+      }
+      return;
+    }
+    if (event.type === 'error') {
+      lastError = event.error?.message;
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
@@ -43,16 +66,15 @@ export function observeSessionRunReports(session: RunReportSession, report: Sess
       return;
     }
     if (event.type !== 'agent_end') return;
-    const outcome = runOutcome(event.reason, parked);
+    const outcome = runOutcome(event.reason, parked, lastError);
     parked = undefined;
+    lastError = undefined;
     if (!outcome) return;
     // Move the window now, so a run that starts before this report settles is judged on its own;
     // reports made up to the end, including its last millisecond, belong to the run that ended.
     const runSince = since;
     since = new Date(Date.now() + 1);
-    void report(outcome, runSince).catch(error => {
-      console.warn('[Factory reports] Unable to report a run end.', error);
-    });
+    settle(report(outcome, runSince));
   });
 }
 
@@ -91,10 +113,18 @@ export function heartbeatOpenRunUntilEnd(
 export function runOutcome(
   reason: RunEndReason,
   parked: Pick<ParkedTool, 'toolName' | 'approval'> | undefined,
+  errorMessage?: string,
 ): FactoryRunOutcome | null {
   switch (reason) {
-    case 'error':
-      return { status: 'failed', reason: 'the run ended in error.' };
+    case 'error': {
+      const message = errorMessage?.trim();
+      return {
+        status: 'failed',
+        reason: message
+          ? `the run ended in error: ${message.slice(0, ERROR_MESSAGE_LENGTH)}`
+          : 'the run ended in error.',
+      };
+    }
     case 'aborted':
       return null;
     case 'suspended':

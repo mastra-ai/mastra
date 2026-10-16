@@ -1,4 +1,6 @@
 import type { IntegrationTools } from '../integrations/base.js';
+import { createFactoryApprovalTools } from './approval-tools.js';
+import type { FactoryApprovalToolDependencies } from './approval-tools.js';
 import { createFactoryMessagingTools } from './messaging-tools.js';
 import type { FactoryMessagingToolDependencies } from './messaging-tools.js';
 import { createFactoryReadTools } from './read-tools.js';
@@ -17,7 +19,8 @@ export type { FactoryToolScope } from './scope.js';
 export type FactoryToolDependencies = FactoryReadToolDependencies &
   FactoryWorkItemToolDependencies &
   FactoryMessagingToolDependencies &
-  FactorySessionToolDependencies;
+  FactorySessionToolDependencies &
+  FactoryApprovalToolDependencies;
 
 export interface CreateFactoryToolsOptions {
   scope: FactoryToolScope;
@@ -40,5 +43,10 @@ export function createFactoryTools({ scope, deps }: CreateFactoryToolsOptions): 
   if (scope.kind !== 'user') return messagingTools;
   const readTools = { ...createFactoryReadTools(scope, deps), ...messagingTools };
   if (!scope.interactive) return readTools;
-  return { ...readTools, ...createFactoryWorkItemTools(scope, deps), ...createFactorySessionTools(scope, deps) };
+  return {
+    ...readTools,
+    ...createFactoryWorkItemTools(scope, deps),
+    ...createFactorySessionTools(scope, deps),
+    ...createFactoryApprovalTools(scope, deps),
+  };
 }
