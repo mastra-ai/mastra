@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import { describe, it, expect } from 'vitest';
 import { createStartRouteHandler } from '../index';
 import type { StartRouteHandlers, StartHandlerContext } from '../index';
@@ -89,5 +90,68 @@ describe('TanStack Start Adapter', () => {
     });
 
     expect(handlers.GET).toBeTypeOf('function');
+  });
+});
+
+describe('TanStack Start Adapter initialization', () => {
+  function createMastraWithHealthRoute(createHandlerImpl: () => Promise<void>) {
+    const state = { calls: 0 };
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          registerApiRoute('/health', {
+            method: 'GET',
+            requiresAuth: false,
+            createHandler: async () => {
+              state.calls++;
+              await createHandlerImpl();
+              return c => c.json({ ok: true });
+            },
+          }),
+        ],
+      },
+    });
+    return { mastra, state };
+  }
+
+  it('retries initialization on the next request after a failed init', async () => {
+    let attempt = 0;
+    const { mastra, state } = createMastraWithHealthRoute(async () => {
+      attempt++;
+      if (attempt === 1) throw new Error('database not ready');
+    });
+    const handlers = createStartRouteHandler({ mastra });
+
+    await expect(handlers.GET(makeContext('GET', '/health'))).rejects.toThrow('database not ready');
+
+    const response = await handlers.GET(makeContext('GET', '/health'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(state.calls).toBe(2);
+  });
+
+  it('shares a single in-flight initialization between concurrent requests', async () => {
+    const { mastra, state } = createMastraWithHealthRoute(async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+    const handlers = createStartRouteHandler({ mastra });
+
+    const responses = await Promise.all([
+      handlers.GET(makeContext('GET', '/health')),
+      handlers.GET(makeContext('GET', '/health')),
+    ]);
+
+    expect(responses.map(r => r.status)).toEqual([200, 200]);
+    expect(state.calls).toBe(1);
+  });
+
+  it('keeps a successful initialization cached', async () => {
+    const { mastra, state } = createMastraWithHealthRoute(async () => {});
+    const handlers = createStartRouteHandler({ mastra });
+
+    expect((await handlers.GET(makeContext('GET', '/health'))).status).toBe(200);
+    expect((await handlers.GET(makeContext('GET', '/health'))).status).toBe(200);
+    expect(state.calls).toBe(1);
   });
 });

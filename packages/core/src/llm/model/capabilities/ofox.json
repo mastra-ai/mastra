@@ -3,6 +3,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
@@ -39,6 +40,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "minimax/minimax-m3",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
@@ -229,6 +231,7 @@
     "z-ai/glm-5v-turbo"
   ],
   "structuredOutput": [
+    "anthropic/claude-haiku-5.5",
     "bailian/qwen3-coder-next",
     "bailian/qwen3.5-122b-a10b",
     "bailian/qwen3.5-27b",
@@ -259,6 +262,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
@@ -497,6 +501,15 @@
       }
     ],
     "anthropic/claude-opus-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-haiku-5.5": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -842,6 +855,12 @@
         "type": "budget_tokens",
         "min": 512,
         "max": 24576
+      }
+    ],
+    "google/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [

@@ -207,7 +207,7 @@
       }
     },
     {
-      "hash": "35ac247df51a5faf",
+      "hash": "98a1ff7b11debfcc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -236,7 +236,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_3S4rDSvMuTKeFUOhcwZzzzuv",
-              "output": "{\"id\":\"user-dero\",\"email\":\"dero@example.com\"}"
+              "output": "{\"email\":\"dero@example.com\",\"id\":\"user-dero\"}"
             }
           ],
           "tools": [
@@ -482,7 +482,7 @@
       }
     },
     {
-      "hash": "d6e1c60929690b29",
+      "hash": "ef683964dcac15ce",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -511,7 +511,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_3S4rDSvMuTKeFUOhcwZzzzuv",
-              "output": "{\"id\":\"user-dero\",\"email\":\"dero@example.com\"}"
+              "output": "{\"email\":\"dero@example.com\",\"id\":\"user-dero\"}"
             },
             {
               "type": "item_reference",
@@ -746,7 +746,7 @@
       }
     },
     {
-      "hash": "ec8c3eacf81c3681",
+      "hash": "0ef76e87e625fabe",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -775,7 +775,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_3S4rDSvMuTKeFUOhcwZzzzuv",
-              "output": "{\"id\":\"user-dero\",\"email\":\"dero@example.com\"}"
+              "output": "{\"email\":\"dero@example.com\",\"id\":\"user-dero\"}"
             },
             {
               "type": "item_reference",
@@ -794,7 +794,7 @@
               "type": "function_call",
               "call_id": "call_IGnXurdG5uqiERkf0H1S5mJ2",
               "name": "research",
-              "arguments": "{\"topic\":\"machine learning\",\"_background\":{\"enabled\":true,\"disposition\":\"awaited\",\"timeoutMs\":5000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"awaited\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":5000},\"topic\":\"machine learning\"}"
             },
             {
               "type": "function_call_output",
@@ -1115,7 +1115,7 @@
       }
     },
     {
-      "hash": "62c175f61e828d53",
+      "hash": "ece35ea0e8a4949e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1148,7 +1148,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_3S4rDSvMuTKeFUOhcwZzzzuv",
-              "output": "{\"id\":\"user-dero\",\"email\":\"dero@example.com\"}"
+              "output": "{\"email\":\"dero@example.com\",\"id\":\"user-dero\"}"
             },
             {
               "type": "item_reference",
@@ -1167,7 +1167,7 @@
               "type": "function_call",
               "call_id": "call_IGnXurdG5uqiERkf0H1S5mJ2",
               "name": "research",
-              "arguments": "{\"topic\":\"machine learning\",\"_background\":{\"enabled\":true,\"disposition\":\"awaited\",\"timeoutMs\":5000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"awaited\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":5000},\"topic\":\"machine learning\"}"
             },
             {
               "type": "function_call_output",

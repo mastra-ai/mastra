@@ -185,7 +185,6 @@ describe('useAgentControllerConnection', () => {
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
         HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
       ),
-      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/modes`, () => HttpResponse.json({ modes: [] })),
       http.get(sessionUrl, () =>
         HttpResponse.json({
           controllerId,
@@ -607,7 +606,6 @@ describe('useAgentControllerConnection', () => {
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
         HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
       ),
-      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/modes`, () => HttpResponse.json({ modes: [] })),
       http.get(sessionUrl, () => {
         onReadState();
         return HttpResponse.json({

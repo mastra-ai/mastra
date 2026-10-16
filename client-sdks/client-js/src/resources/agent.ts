@@ -43,6 +43,7 @@ import type {
   SendAgentMessageParams,
   SendAgentSignalParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SubscribeAgentThreadParams,
   AbortAgentThreadParams,
   CancelQueuedAgentMessagesParams,
@@ -61,7 +62,13 @@ import type {
   ToolInvocationUIPartWithMeta,
 } from '../types';
 
-import { mergeAbortSignals, parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import {
+  isTerminalReconnectError,
+  mergeAbortSignals,
+  parseClientRequestContext,
+  requestContextQueryString,
+  toQueryParams,
+} from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
@@ -629,6 +636,10 @@ export class Agent extends BaseResource {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
+  queueSignal(params: QueueAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/queue-signal'>> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-signal`, params);
+  }
+
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
@@ -946,8 +957,10 @@ export class Agent extends BaseResource {
               response = await requestSubscription();
               break;
             } catch (error) {
-              if (isClosed() || attempts >= reconnectOptions.maxRetries) {
-                if (isClosed()) return;
+              if (isClosed()) return;
+              // Auth denials and other client errors won't resolve by resubscribing;
+              // 408/429 stay retryable.
+              if (isTerminalReconnectError(error) || attempts >= reconnectOptions.maxRetries) {
                 throw error;
               }
             }
@@ -1629,7 +1642,8 @@ export class Agent extends BaseResource {
         const toolInvocations = message.toolInvocations;
 
         if (toolInvocations == null) {
-          throw new Error('tool_result must be preceded by a tool_call');
+          // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+          return;
         }
 
         // find if there is any tool invocation with the same toolCallId
@@ -1637,7 +1651,7 @@ export class Agent extends BaseResource {
         const toolInvocationIndex = toolInvocations.findIndex(invocation => invocation.toolCallId === value.toolCallId);
 
         if (toolInvocationIndex === -1) {
-          throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+          return;
         }
 
         const invocation = {
@@ -2108,7 +2122,8 @@ export class Agent extends BaseResource {
             const toolInvocations = message.toolInvocations;
 
             if (toolInvocations == null) {
-              throw new Error('tool_result must be preceded by a tool_call');
+              // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+              break;
             }
 
             // find if there is any tool invocation with the same toolCallId
@@ -2118,7 +2133,7 @@ export class Agent extends BaseResource {
             );
 
             if (toolInvocationIndex === -1) {
-              throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+              break;
             }
 
             const invocation = {
@@ -3275,6 +3290,10 @@ export class Agent extends BaseResource {
    * Only supported when the target agent is a durable agent (createDurableAgent).
    * The server rebuilds the runtime state from the persisted snapshot, replays
    * past chunks, and continues the loop to completion.
+   *
+   * Responds with 409 when the run is not orphaned: another execution still
+   * owns it (retry once its lease lapses), it is already being recovered, or it
+   * is suspended (use `resumeStream` instead). To follow a live run, use `observe`.
    */
   async recover(params: RecoverParams): Promise<
     Response & {

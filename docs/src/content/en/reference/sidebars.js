@@ -64,7 +64,6 @@ const sidebars = {
         { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getSkill', label: '.getSkill()' },
-        { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
@@ -501,15 +500,15 @@ const sidebars = {
           label: 'Tracing',
           items: [
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
-            {
-              type: 'doc',
-              id: 'observability/tracing/trace-query',
-              label: 'Advanced trace queries',
-            },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
             { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
             { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
             { type: 'doc', id: 'observability/tracing/spans', label: 'Spans' },
+            {
+              type: 'doc',
+              id: 'observability/tracing/trace-query',
+              label: 'Trace queries',
+            },
             {
               type: 'category',
               label: 'Bridges',
@@ -896,6 +895,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/factory-sandbox', label: 'FactorySandbox' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },

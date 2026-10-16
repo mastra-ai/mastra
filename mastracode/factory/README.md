@@ -117,7 +117,27 @@ const intakeRule = context =>
 
 **Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate custom-board handler.
 
-There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
+There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
+
+### Closing cards when their source closes
+
+When a tracked GitHub, GitLab, Linear, or Jira issue or incident.io follow-up is closed, the stock integration rules move its card to a terminal phase of the board the card is on. The board declares which phases with `sourceClosed`: `completed` receives sources that were completed, and `canceled` receives sources that were canceled, not planned, or closed as duplicates. GitLab reports no close reason, so its closures always use `completed`. Both entries must name terminal phases.
+
+```typescript
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+    dropped: { title: 'Dropped', kind: 'terminal' },
+  },
+});
+```
+
+Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`.
 
 ### Board tool-result rules
 
@@ -147,6 +167,57 @@ const releaseBoard = defineBoard({
 The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
 
 Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+
+### Board event rules
+
+A board can declare how its own cards react to GitHub, GitLab, Linear, Jira, and incident.io events. Declare handlers under `events`, keyed by integration and then by event name:
+
+```ts
+import { defineBoard } from '@mastra/factory';
+
+const deliveryBoard = defineBoard({
+  id: 'delivery',
+  title: 'Delivery',
+  initialPhase: 'triage',
+  phases: {/* ... */},
+  events: {
+    github: {
+      pullRequestMerged: context => ({
+        type: 'sendMessage',
+        idempotencyKey: `${context.ingress.id}:verify-merge`,
+        role: 'work',
+        message: `Pull request #${context.pullRequest?.number} merged. Verify the work is complete.`,
+      }),
+      pullRequestCommentCreated: null,
+    },
+    linear: {
+      issueClosed: context =>
+        context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+          ? {
+              type: 'transition',
+              idempotencyKey: `${context.ingress.id}:canceled`,
+              board: 'delivery',
+              stage: 'canceled',
+            }
+          : undefined,
+    },
+  },
+});
+```
+
+A board handler runs only for events bound to a card on that board. Events without a card yet — issue intake and filing a pull request's own Review card — always use the integration's handlers.
+
+For each event, Factory picks the handler in this order:
+
+1. A handler the deployment set explicitly in the integration's `rules` (for example `new PlatformGithubIntegration({ rules })`). Existing integration-level handlers keep working unchanged.
+2. The card's board handler. `null` switches the event off for cards on that board only; cards on other boards are unaffected.
+3. The integration default.
+
+A board handler that returns a decision replaces the default for that card. One that returns nothing lets the default run, so card-independent defaults such as dismissing stale Factory reviews still apply. The stock Work and Review behavior stays in the integration defaults and never acts on cards on other boards, so a custom board needs no board guards and no delegation to stock handlers.
+
+Every integration rule context bound to a card carries `phase`: `{ id, kind, role?, outcomes }`, describing what the card's current phase means on its board. `outcomes` lists the outcome names the phase declares. `phase` is absent when the card sits in more than one stage or its board does not declare the phase.
+
+Unknown integrations, unknown event names, and handler values other than a function or `null` are rejected by `defineBoard` with a `BoardDefinitionError`.
 
 ### Config version
 
@@ -229,9 +300,9 @@ const releaseBoard = defineBoard({
 
 Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with roles `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with role `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
-Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, the closed-PR and issue sweeps, and supervisor findings all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
-Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, the supervisor neither revokes nor starts a seat for it, and a rule-started run from rest with no lane for its role is rejected.
+Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
 **Migration:** Existing `defineBoard()` calls must add `kind` to every phase and `role` to working phases.
 
@@ -245,7 +316,7 @@ phases: {
 }
 ```
 
-**Remaining limitations:** The `held-waiting` supervisor finding stays Work-specific. Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline. Built-in board replacement and customization remain unsupported.
+**Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline. Built-in board replacement and customization remain unsupported.
 
 ### Execute a custom board
 

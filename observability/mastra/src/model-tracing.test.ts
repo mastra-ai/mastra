@@ -2,9 +2,10 @@ import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
 import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { DefaultObservabilityInstance } from './instances';
+import { PricingRegistry } from './metrics/pricing-registry';
 import { ModelSpanTracker } from './model-tracing';
 
 /**
@@ -2124,6 +2125,38 @@ describe('ModelSpanTracker', () => {
       expect(inferenceSpan!.attributes?.toolChoice).toEqual('required');
     });
 
+    it('startInference(payload) records the prompt the call received as the span input', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+      const inputMessages = [
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: [{ type: 'text', text: 'Weather in Paris?' }] },
+      ];
+
+      tracker.startStep();
+      tracker.startInference({ inputMessages, messageId: 'msg-1' });
+
+      const chunks = [
+        { type: 'text-delta', payload: { text: 'ok' } },
+        {
+          type: 'step-finish',
+          payload: { output: {}, stepResult: { reason: 'stop', warnings: [] }, metadata: {} },
+        },
+      ];
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan!.input).toEqual([
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: 'Weather in Paris?' },
+      ]);
+    });
+
     it('MODEL_INFERENCE.startTime excludes work between startStep and startInference', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
@@ -2275,6 +2308,12 @@ describe('ModelSpanTracker', () => {
       });
 
       it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
+        onTestFinished(() => vi.restoreAllMocks());
+        vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(
+          PricingRegistry.fromModelsDev({
+            vercel: { models: { 'claude-haiku-4-5': { cost: { input: 1, output: 5 } } } },
+          }),
+        );
         const span = endGeneration({
           attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
           usage: { inputTokens: 100, outputTokens: 50 },

@@ -7,13 +7,14 @@
  */
 export { AgentController } from './agent-controller';
 export {
+  getSuspensionAddressKey,
   Session,
   MODEL_PERSISTENCE_VERSION,
   MODEL_PERSISTENCE_VERSION_KEY,
   migratePersistedModelSelection,
 } from './session';
 export { SessionStartupCancelledError, isSessionStartupCancelledError } from './errors';
-export type { ReservedThreadMetadataKey, SessionBeforeAgentEndListener } from './session';
+export type { ReservedThreadMetadataKey, SessionBeforeAgentEndListener, SuspensionAddress } from './session';
 export type { MessageAuthor } from './message-author';
 export {
   askUserTool,

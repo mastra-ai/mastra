@@ -157,6 +157,12 @@ export interface MastraTUIBaseOptions {
   initialModelOverride?: boolean;
 
   /**
+   * Pack id from `--pack`: applied to the session (and the thread startup
+   * resumes) after initial thread selection, the way /models → Activate does.
+   */
+  initialPackId?: string;
+
+  /**
    * When set, don't send `initialMessage` if startup resumes a thread that
    * already has messages (`--tui-initial-prompt`); show this notice instead. By
    * default the message is always sent.
@@ -273,8 +279,7 @@ export interface TUIState {
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
-  quietMode: boolean;
-  quietModeMaxToolPreviewLines: number;
+  previewLines: number;
   /** Active goal judge status-line override while evaluating the last turn. */
   activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
   /** OM role model shown in the status line, resolved once per observing/reflecting phase. */
@@ -369,7 +374,6 @@ export interface TUIState {
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
-  activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
   activeActivationData?: OMMarkerData;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
@@ -480,8 +484,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,
-    quietMode: false,
-    quietModeMaxToolPreviewLines: 2,
+    previewLines: 2,
 
     // Thread / conversation
     pendingNewThread: false,

@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
+import { Hand, Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -66,18 +66,42 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-export function CardStatus({ status }: { status: BoardCardStatus }) {
-  if (status.kind === 'idle') return null;
+export function CommentCount({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <Txt
+      as="span"
+      variant="meta"
+      tone="faint"
+      className="flex shrink-0 items-center gap-1"
+      aria-label={`${count} ${count === 1 ? 'comment' : 'comments'}`}
+    >
+      <MessageSquare size={11} aria-hidden />
+      {count}
+    </Txt>
+  );
+}
 
-  // A parked run is the one idle state the card cannot whisper: it needs the
-  // user, so it stays lit without a hover. Releasing it is the actions row's job.
-  if (status.kind === 'waiting') {
-    return (
-      <Badge size="xs" variant="orange" icon={<Sparkles aria-hidden />} role="status" aria-live="polite">
-        Suggested: {status.label}
-      </Badge>
-    );
-  }
+export function ExternalAuthorBadge({ className }: { className?: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Badge size="xs" tabIndex={0} className={cn('relative z-10', className)}>
+            External
+          </Badge>
+        }
+      />
+      <TooltipContent side="bottom" className="max-w-64">
+        From someone without write access — never starts a run on its own, even with auto-start runs on.
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function CardStatus({ status }: { status: BoardCardStatus }) {
+  // A parked run is surfaced by the highlighted "Start suggested run" action, not a status badge.
+  if (status.kind === 'idle' || status.kind === 'waiting') return null;
 
   if (status.kind === 'held') {
     return (

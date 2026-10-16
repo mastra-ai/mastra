@@ -186,6 +186,20 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/queue-signal": {
+    "method": "POST",
+    "path": "/agents/:agentId/queue-signal",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/signals": {
     "method": "POST",
     "path": "/agents/:agentId/signals",
@@ -941,6 +955,7 @@ export const API_ROUTE_METADATA = {
       "foreachIdx",
       "format",
       "input",
+      "parentWorkflow",
       "perStep",
       "requestContext",
       "resumeData",
@@ -5434,6 +5449,23 @@ export const API_ROUTE_METADATA = {
       "listProperty": "counts"
     }
   },
+  "GET /experiments/:experimentId": {
+    "method": "GET",
+    "path": "/experiments/:experimentId",
+    "pathParams": [
+      "experimentId"
+    ],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "DELETE /experiments/:experimentId": {
     "method": "DELETE",
     "path": "/experiments/:experimentId",
@@ -5669,10 +5701,7 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [],
-    "bodyParams": [
-      "experimentIdA",
-      "experimentIdB"
-    ],
+    "bodyParams": [],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -6583,6 +6612,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "files",
       "message",
       "requestContext"
     ],
@@ -6603,6 +6633,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "files",
       "message",
       "requestContext"
     ],
@@ -6663,6 +6694,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "requestContext",
       "resumeData",
+      "runId",
       "toolCallId"
     ],
     "hasQuery": true,

@@ -23,3 +23,8 @@ export const emptyScores: ListScoresResponseNew = {
   scores: [],
   pagination: { total: 0, page: 0, perPage: 100, hasMore: false },
 };
+
+export const environments: Awaited<ReturnType<MastraClient['getEnvironments']>> = {
+  environments: ['production', 'staging'],
+};
+export const tags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: ['beta', 'support'] };

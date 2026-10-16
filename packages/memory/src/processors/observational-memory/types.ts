@@ -196,6 +196,19 @@ export interface ObservationConfig {
   bufferOnIdle?: boolean;
 
   /**
+   * Observe pending messages and retry once when the model provider rejects a request for
+   * exceeding its context window.
+   *
+   * A provider can count more tokens than OM's estimate (attachments, formatting, a smaller model
+   * window), so a request can overflow before the observation threshold is reached. With this
+   * enabled, OM activates buffered observations, observes everything still pending regardless of
+   * the threshold, and retries the request with the smaller context.
+   *
+   * @default true
+   */
+  observeOnContextOverflow?: boolean;
+
+  /**
    * Controls how many raw message tokens to retain after activation.
    *
    * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
@@ -229,18 +242,20 @@ export interface ObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which buffered activation is allowed to overshoot the
-   * retention target. Crossing `blockAfter` does not trigger a blocking observation;
-   * a synchronous observation runs when `messageTokens` is reached and activating
-   * buffered chunks does not bring pending tokens back under it.
+   * Token threshold above which a blocking synchronous observation is allowed.
+   * Between `messageTokens` and `blockAfter`, only async buffering/activation is
+   * used: reaching the observation threshold without an activatable buffered chunk
+   * triggers background buffering instead of a blocking observation. At or above
+   * `blockAfter`, a synchronous observation runs if pending tokens still reach it
+   * after buffered activation. Buffered activation is also allowed to overshoot
+   * the retention target past this threshold.
    *
    * Accepts either:
-   * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
-   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
+   * - A multiplier (1 ≤ value < 100): multiplied by the record's effective `messageTokens`
+   *   (per-record overrides included). e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
    * - An absolute token count (≥ 100): must be greater than `messageTokens`.
    *
-   * Only relevant when `bufferTokens` is set.
-   * If not set, synchronous observation is never used when async buffering is enabled.
+   * Only relevant when `bufferTokens` is set. Defaults to 1.2 when async buffering is enabled.
    */
   blockAfter?: number;
 
@@ -1224,6 +1239,8 @@ export interface ResolvedObservationConfig {
   bufferTokens?: number;
   /** Whether to buffer unobserved messages at the end of an idle turn */
   bufferOnIdle: boolean;
+  /** Whether to observe pending messages and retry when the provider rejects a request for exceeding its context window */
+  observeOnContextOverflow: boolean;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */

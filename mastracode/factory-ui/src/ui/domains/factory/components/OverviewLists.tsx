@@ -2,7 +2,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Bot, Brain, CircleAlert, Hourglass, MessageSquare, Sparkles, User, Zap } from 'lucide-react';
+import { Bot, CircleAlert, Hourglass, MessageSquare, Sparkles, User, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -227,7 +227,6 @@ const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon
   mention: { Glyph: MessageSquare, tone: 'text-badge-blue-indicator', label: 'Mention' },
   'automation-failed': { Glyph: CircleAlert, tone: 'text-destructive-foreground', label: 'Failed run' },
   'automation-proposed': { Glyph: Sparkles, tone: 'text-warning-foreground', label: 'Suggested run' },
-  'supervisor-finding': { Glyph: Brain, tone: 'text-badge-green-indicator', label: 'Supervisor finding' },
   activity: { Glyph: MessageSquare, tone: 'text-muted-foreground', label: 'Comment' },
   'agent-waiting': { Glyph: Hourglass, tone: 'text-warning-foreground', label: 'Agent waiting' },
 };

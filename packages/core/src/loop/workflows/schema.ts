@@ -27,6 +27,8 @@ export interface LLMIterationStepResult {
   reason: LanguageModelV2FinishReason | 'tripwire' | 'retry' | 'abort';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
+  /** Private continuation: the physical attempt did not complete a logical step. */
+  signalPreempted?: boolean;
   logprobs?: LanguageModelV1LogProbs;
   totalUsage: LanguageModelUsage;
   headers?: Record<string, string>;
@@ -115,6 +117,7 @@ export const llmIterationStepResultSchema = z.object({
   reason: z.string(),
   warnings: z.array(z.any()),
   isContinued: z.boolean(),
+  signalPreempted: z.boolean().optional(),
   logprobs: z.any().optional(),
   totalUsage: languageModelUsageSchema.optional(),
   headers: z.record(z.string(), z.string()).optional(),

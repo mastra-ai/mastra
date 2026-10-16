@@ -173,8 +173,8 @@ test.describe('CMS edit scorer page', () => {
 
       await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
       await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(description);
-      await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-      await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+      await expect(page.getByRole('combobox').nth(1)).toHaveValue('OpenAI');
+      await expect(page.getByRole('combobox').nth(2)).toHaveValue('gpt-4o-mini');
       await expect(page.getByPlaceholder('Min')).toHaveValue('1');
       await expect(page.getByPlaceholder('Max')).toHaveValue('5');
       await expect(page.getByRole('radio', { name: 'Ratio' })).toBeChecked();
@@ -229,8 +229,8 @@ test.describe('CMS edit scorer page', () => {
 
       await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(updatedName);
       await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(updatedDescription);
-      await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-      await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+      await expect(page.getByRole('combobox').nth(1)).toHaveValue('OpenAI');
+      await expect(page.getByRole('combobox').nth(2)).toHaveValue('gpt-4o-mini');
       await expect(page.getByPlaceholder('Min')).toHaveValue('2');
       await expect(page.getByPlaceholder('Max')).toHaveValue('8');
       await expect(page.getByRole('radio', { name: 'Ratio' })).toBeChecked();
@@ -267,8 +267,8 @@ test.describe('CMS edit scorer page', () => {
       // Unchanged fields should remain the same
       await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
       await expect(page.getByPlaceholder('Min')).toHaveValue('0');
-      await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-      await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+      await expect(page.getByRole('combobox').nth(1)).toHaveValue('OpenAI');
+      await expect(page.getByRole('combobox').nth(2)).toHaveValue('gpt-4o-mini');
     });
 
     test('data persists after page reload on edit page', async ({ page }) => {
