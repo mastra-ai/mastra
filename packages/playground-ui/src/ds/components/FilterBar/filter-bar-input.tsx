@@ -376,8 +376,8 @@ function FilterBarInputImpl({
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup // Match the pill, with the DS Combobox's 11rem floor and a cap for pills stretched across a bar or popover.
-              className={cn(comboboxStyles.popup, 'w-[min(var(--anchor-width),20rem)] min-w-44')}
+            <ComboboxPrimitive.Popup // Match the pill, with the DS Combobox's 11rem floor (replaces the menu's anchor-width minimum).
+              className={cn(comboboxStyles.popup, 'w-(--anchor-width) min-w-44')}
               data-slot="filter-bar-editor"
             >
               {step === 'field' && (
