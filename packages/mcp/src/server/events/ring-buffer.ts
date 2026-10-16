@@ -54,6 +54,11 @@ export class EventRingBuffer {
     return this.cursorFor(this.seq);
   }
 
+  /** Sequence number of the latest pushed event (0 before the first). */
+  get lastSeq(): number {
+    return this.seq;
+  }
+
   push(occurrence: StoredOccurrence): BufferedEvent {
     const seq = ++this.seq;
     const parsed = Date.parse(occurrence.timestamp);
@@ -109,7 +114,8 @@ export class EventRingBuffer {
     return { from: this.cursorFor(after), events, cursor: this.cursorFor(scanned), truncated, hasMore };
   }
 
-  private cursorFor(seq: number): string {
+  /** Cursor for the position after event `seq` (`seq - 1` is the position before it). */
+  cursorFor(seq: number): string {
     return Buffer.from(`${this.bootId}:${seq}`).toString('base64url');
   }
 

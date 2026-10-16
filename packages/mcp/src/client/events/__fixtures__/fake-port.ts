@@ -5,8 +5,11 @@ import type {
   PollEventsRequestParams,
   PollEventsResult,
   StreamEventsRequestParams,
+  SubscribeEventsRequestParams,
+  SubscribeEventsResult,
+  UnsubscribeEventsRequestParams,
 } from '../../../shared/events';
-import type { EventStreamSink, EventsPort } from '../types';
+import type { EventStreamSink, EventsPort, EventsWebhookSetup } from '../types';
 
 /** One `events/stream` opened against the fake port, driven by the test. */
 export class FakeStream {
@@ -88,14 +91,44 @@ export class FakeStream {
 }
 
 type PollStep = PollEventsResult | Error;
+type SubscribeStep = SubscribeEventsResult | Error;
 
 /** An {@link EventsPort} whose poll responses and push streams are scripted by the test. */
 export class FakePort implements EventsPort {
   readonly pollCalls: PollEventsRequestParams[] = [];
   readonly streams: FakeStream[] = [];
+  readonly subscribeCalls: SubscribeEventsRequestParams[] = [];
+  readonly unsubscribeCalls: UnsubscribeEventsRequestParams[] = [];
   private readonly pollSteps: PollStep[] = [];
+  private readonly subscribeSteps: SubscribeStep[] = [];
   readonly ensureConnected = vi.fn(async () => {});
   readonly log = vi.fn();
+  webhookSetup?: EventsWebhookSetup;
+  unsubscribeError?: Error;
+
+  webhook(): EventsWebhookSetup | undefined {
+    return this.webhookSetup;
+  }
+
+  queueSubscribe(...steps: SubscribeStep[]): this {
+    this.subscribeSteps.push(...steps);
+    return this;
+  }
+
+  subscribe(params: SubscribeEventsRequestParams, signal: AbortSignal): Promise<SubscribeEventsResult> {
+    this.subscribeCalls.push(params);
+    const step = this.subscribeSteps.shift();
+    if (step instanceof Error) return Promise.reject(step);
+    if (step) return Promise.resolve(step);
+    return new Promise((_, reject) =>
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+    );
+  }
+
+  async unsubscribe(params: UnsubscribeEventsRequestParams): Promise<void> {
+    this.unsubscribeCalls.push(params);
+    if (this.unsubscribeError) throw this.unsubscribeError;
+  }
 
   queuePoll(...steps: PollStep[]): this {
     this.pollSteps.push(...steps);

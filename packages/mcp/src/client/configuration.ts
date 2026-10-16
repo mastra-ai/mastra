@@ -12,7 +12,14 @@ import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
 import type { MCPDiscoveryErrorDetails } from './error-utils';
-import type { MCPEventDescriptor, MCPEventSubscribeOptions, MCPEventSubscription } from './events';
+import type {
+  MCPClientWebhookOptions,
+  MCPEventDescriptor,
+  MCPEventSubscribeOptions,
+  MCPEventSubscription,
+} from './events';
+import type { EventsWebhookSetup } from './events/types';
+import { WebhookReceiver } from './events/webhook-receiver';
 import { loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
@@ -71,6 +78,13 @@ export interface MCPClientOptions {
    * Per-server `clientInfo` overrides it field-wise. Defaults to the server key and `'1.0.0'`.
    */
   clientInfo?: MCPClientInfo;
+  /**
+   * Webhook delivery for MCP Events. Servers that offer webhook delivery POST occurrences to
+   * `webhook.url`, which must route to {@link MCPClient.events}`.handleWebhook()`.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  webhook?: MCPClientWebhookOptions;
 }
 
 /**
@@ -104,6 +118,7 @@ export class MCPClient extends MastraBase {
   private id: string;
   private defaultTimeout: number;
   private defaultClientInfo?: MCPClientInfo;
+  private webhook?: EventsWebhookSetup;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
@@ -149,6 +164,7 @@ export class MCPClient extends MastraBase {
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.defaultClientInfo = args.clientInfo && { ...args.clientInfo };
     this.serverConfigs = args.servers;
+    this.webhook = args.webhook && { options: { ...args.webhook }, receiver: new WebhookReceiver() };
     this.id = args.id ?? this.makeId();
 
     if (args.id) {
@@ -233,7 +249,8 @@ To fix this you have three different options:
 
   /**
    * Provides access to MCP Events (SEP-3415) on configured servers: list event types and
-   * subscribe to their occurrences over poll or push delivery.
+   * subscribe to their occurrences over webhook (when `webhook` is configured), push or poll
+   * delivery.
    *
    * @experimental SEP-3415 is a draft; this API may change.
    *
@@ -285,6 +302,15 @@ To fix this you have three different options:
         wrap('MCP_CLIENT_SUBSCRIBE_EVENT_FAILED', { serverName, eventName }, async () =>
           (await this.getConnectedClientForServer(serverName)).events.subscribe(eventName, args, options),
         ),
+      /**
+       * Handles a webhook delivery POSTed to `webhook.url`: verifies the signature, answers the
+       * server's verification handshake, and routes occurrences to their subscription. Mount it
+       * on the route that `webhook.url` points at. Returns 404 when `webhook` is not configured.
+       *
+       * @experimental SEP-3415 is a draft; this API may change.
+       */
+      handleWebhook: async (request: Request): Promise<Response> =>
+        this.webhook ? this.webhook.receiver.handle(request) : new Response(null, { status: 404 }),
     };
   }
 
@@ -1562,6 +1588,7 @@ To fix this you have three different options:
         name: config.clientInfo?.name ?? this.defaultClientInfo?.name,
         version: config.clientInfo?.version ?? this.defaultClientInfo?.version,
       },
+      webhook: this.webhook,
     });
 
     mcpClient.__setLogger(this.logger);

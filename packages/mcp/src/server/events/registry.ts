@@ -60,12 +60,13 @@ export class ServerEventRegistry {
   readonly openStreams = new Set<EventStream>();
   private readonly events = new Map<string, RegisteredEvent>();
 
-  constructor(definitions: Record<string, MCPServerEventDefinition> | undefined) {
+  /** `webhook`: the server serves webhook delivery, which emit-fed types (no `poll` source) then advertise. */
+  constructor(definitions: Record<string, MCPServerEventDefinition> | undefined, options: { webhook?: boolean } = {}) {
     for (const [name, definition] of Object.entries(definitions ?? {})) {
       this.events.set(name, {
         name,
         definition,
-        delivery: deriveDelivery(name, definition),
+        delivery: deriveDelivery(name, definition, options.webhook && !definition.poll ? ['webhook'] : []),
         inputSchema: definition.inputSchema ? toStandardSchema(definition.inputSchema) : undefined,
         payloadSchema: definition.payloadSchema ? toStandardSchema(definition.payloadSchema) : undefined,
         buffer: !definition.poll
