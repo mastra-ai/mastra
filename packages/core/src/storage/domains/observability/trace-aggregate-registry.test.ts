@@ -28,6 +28,7 @@ import {
 const TRACE_DIMENSIONS = [
   'entityType',
   'entityName',
+  'entityId',
   'environment',
   'status',
   'serviceName',

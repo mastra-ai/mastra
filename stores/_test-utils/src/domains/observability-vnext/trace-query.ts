@@ -3076,6 +3076,8 @@ export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: Tra
       return root.entityType;
     case 'entityName':
       return root.entityName;
+    case 'entityId':
+      return root.entityId;
     case 'environment':
       return root.environment;
     case 'threadId':
