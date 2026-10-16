@@ -67,8 +67,8 @@ describe('AgentController Resource', () => {
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions');
     expect(init.method).toBe('POST');
-    // Without a resourceId the session works on the resource named by its id.
-    expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1', sessionId: 'user-1' });
+    // Without a resourceId the server resumes the session on the resource it already has.
+    expect(JSON.parse(init.body as string)).toEqual({ sessionId: 'user-1' });
   });
 
   it('creates a session on a shared resource and binds an exact thread', async () => {
