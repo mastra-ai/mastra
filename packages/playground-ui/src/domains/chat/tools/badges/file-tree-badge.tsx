@@ -44,7 +44,6 @@ export const FileTreeBadge = ({
   metadata,
   toolCallId,
   toolApprovalMetadata,
-  isNetwork,
   toolCalled: toolCalledProp,
   dataParts,
   status = 'idle',
@@ -66,7 +65,6 @@ export const FileTreeBadge = ({
         toolCallId,
         toolApprovalMetadata,
         toolName,
-        isNetwork,
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="file-tree-badge"

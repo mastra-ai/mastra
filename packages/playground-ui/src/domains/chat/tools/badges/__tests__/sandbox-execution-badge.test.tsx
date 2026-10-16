@@ -24,11 +24,8 @@ const renderBadge = (props: Partial<SandboxExecutionBadgeProps> = {}) =>
           declineToolcall={vi.fn()}
           approveToolcallGenerate={vi.fn()}
           declineToolcallGenerate={vi.fn()}
-          approveNetworkToolcall={vi.fn()}
-          declineNetworkToolcall={vi.fn()}
           isRunning={false}
           toolCallApprovals={{}}
-          networkToolCallApprovals={{}}
         >
           <SandboxExecutionBadge
             toolName="execute_command"

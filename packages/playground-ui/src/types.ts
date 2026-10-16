@@ -9,12 +9,6 @@ export interface AssistantMessage {
   id: string;
   formattedMessageId: string;
   finalStepId: string;
-  routingDecision?: {
-    resourceId: string;
-    resourceType: string;
-    selectionReason: string;
-    prompt: string;
-  };
   finalResponse: string;
   taskCompleteDecision?: {
     isComplete: boolean;
@@ -44,7 +38,6 @@ export interface ModelSettings {
   providerOptions?: LLMStepResult['providerMetadata'];
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
-  chatWithNetwork?: boolean;
   requireToolApproval?: boolean;
 }
 

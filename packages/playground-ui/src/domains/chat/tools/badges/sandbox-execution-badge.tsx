@@ -56,7 +56,6 @@ export const SandboxExecutionBadge = ({
   metadata,
   toolCallId,
   toolApprovalMetadata,
-  isNetwork,
   toolCalled: toolCalledProp,
   dataParts,
   status = 'idle',
@@ -97,7 +96,6 @@ export const SandboxExecutionBadge = ({
         toolCallId,
         toolApprovalMetadata,
         toolName,
-        isNetwork,
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="sandbox-execution-badge"

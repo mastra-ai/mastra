@@ -24,7 +24,7 @@ Want to see more examples? Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.a
 
 ## Getting started
 
-Use Mastra and AI SDK UI together by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. This includes chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
+Use Mastra and AI SDK UI together by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. This includes chat and workflow route handlers, along with utilities and exported types for UI integrations.
 
 `@mastra/ai-sdk` integrates with AI SDK UI's three main hooks: [`useChat()`](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot), [`useCompletion()`](https://ai-sdk.dev/docs/ai-sdk-ui/completion), and [`useObject()`](https://ai-sdk.dev/docs/ai-sdk-ui/object-generation).
 
@@ -55,7 +55,7 @@ Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) is an example of this setup.
 
 :::
 
-You can use [`chatRoute()`](/reference/ai-sdk/chat-route), [`workflowRoute()`](/reference/ai-sdk/workflow-route), and [`networkRoute()`](/reference/ai-sdk/network-route) to create API routes that stream Mastra content in AI SDK-compatible format. Once implemented, you can use these API routes in [`useChat()`](#usechat).
+You can use [`chatRoute()`](/reference/ai-sdk/chat-route) and [`workflowRoute()`](/reference/ai-sdk/workflow-route) to create API routes that stream Mastra content in AI SDK-compatible format. Once implemented, you can use these API routes in [`useChat()`](#usechat).
 
 <Tabs>
   <TabItem value="chatRoute" label="chatRoute()">
@@ -109,39 +109,17 @@ You can use [`chatRoute()`](/reference/ai-sdk/chat-route), [`workflowRoute()`](/
 
     :::
   </TabItem>
-
-  <TabItem value="networkRoute" label="networkRoute()">
-    This example shows how to set up a network route at the `/network` endpoint that uses an agent with the ID `weatherAgent`.
-
-    ```typescript title="src/mastra/index.ts"
-    import { Mastra } from '@mastra/core'
-    import { networkRoute } from '@mastra/ai-sdk'
-
-    export const mastra = new Mastra({
-      server: {
-        apiRoutes: [
-          networkRoute({
-            path: '/network',
-            agent: 'weatherAgent',
-          }),
-        ],
-      },
-    })
-    ```
-
-    You can also use dynamic network routing, see the [`networkRoute()` reference documentation](/reference/ai-sdk/network-route) for more details.
-  </TabItem>
 </Tabs>
 
 ### Framework-agnostic
 
-If you don't want to run Mastra's server and instead use frameworks like Next.js or Express, you can use the [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream), [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream), and [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream) functions in your own API route handlers.
+If you don't want to run Mastra's server and instead use frameworks like Next.js or Express, you can use the [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) and [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream) functions in your own API route handlers.
 
 They return a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
 :::tip AI SDK version compatibility
 
-The framework-agnostic handlers default to AI SDK v5 for backward compatibility. Pass the version that matches your installed AI SDK, such as `version: 'v7'` for AI SDK v7. For best TypeScript inference with `handleChatStream()` and `handleNetworkStream()`, pass `messages` as `UIMessage[]` from your installed `ai` version.
+The framework-agnostic handlers default to AI SDK v5 for backward compatibility. Pass the version that matches your installed AI SDK, such as `version: 'v7'` for AI SDK v7. For best TypeScript inference with `handleChatStream()`, pass `messages` as `UIMessage[]` from your installed `ai` version.
 
 :::
 
@@ -182,26 +160,6 @@ The examples below show you how to use them with Next.js App Router.
       const stream = await handleWorkflowStream({
         mastra,
         workflowId: 'weatherWorkflow',
-        params,
-      })
-      return createUIMessageStreamResponse({ stream })
-    }
-    ```
-  </TabItem>
-
-  <TabItem value="handleNetworkStream" label="handleNetworkStream()">
-    This example shows how to set up a network route at the `/network` endpoint that uses an agent with the ID `routingAgent`.
-
-    ```typescript title="app/network/route.ts"
-    import { handleNetworkStream } from '@mastra/ai-sdk'
-    import { createUIMessageStreamResponse } from 'ai'
-    import { mastra } from '@/src/mastra'
-
-    export async function POST(req: Request) {
-      const params = await req.json()
-      const stream = await handleNetworkStream({
-        mastra,
-        agentId: 'routingAgent',
         params,
       })
       return createUIMessageStreamResponse({ stream })
@@ -453,13 +411,12 @@ Choose a backend implementation:
 
 ## Custom UI
 
-Custom UI (also known as Generative UI) allows you to render custom React components based on data streamed from Mastra. Instead of displaying raw text or JSON, you can create visual components for tool outputs and workflow progress, including agent network execution and custom events.
+Custom UI (also known as Generative UI) allows you to render custom React components based on data streamed from Mastra. Instead of displaying raw text or JSON, you can create visual components for tool outputs and workflow progress, and custom events.
 
 Use Custom UI when you want to:
 
 - Render tool outputs as visual components (e.g., a weather card instead of JSON)
 - Display workflow step progress with status indicators
-- Visualize agent network execution with step-by-step updates
 - Show progress indicators or status updates during long-running operations
 
 ### Data part types
@@ -471,11 +428,9 @@ Mastra streams data to the frontend as "parts" within messages. Each part has a 
 | `tool-{toolKey}` | AI SDK built-in | Tool invocation with states: `input-available`, `output-available`, `output-error` |
 | `data-workflow` | `workflowRoute()` | Workflow execution state snapshots with step status and final outputs |
 | `data-workflow-step` | `workflowRoute()` | Workflow step delta with the full payload for the changed step |
-| `data-network` | `networkRoute()` | Agent network execution with ordered steps and outputs |
 | `data-tool-agent` | Nested agent in tool | Compact nested-agent snapshot while the current step is still running |
 | `data-tool-agent-step` | Nested agent in tool | Full nested-agent step payload emitted when a nested step finishes |
 | `data-tool-workflow` | Nested workflow in tool | Workflow output streamed from within a tool's `execute()` |
-| `data-tool-network` | Nested network in tool | Network output streamed from within a tool's `execute()` |
 | `data-{custom}` | `writer.custom()` | Custom events for progress indicators, status updates, etc. |
 
 ### Rendering tool outputs
@@ -762,111 +717,6 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
 
 For more details on workflow streaming, see [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads).
 
-### Rendering network data
-
-When using `networkRoute()` or `handleNetworkStream()`, Mastra emits `data-network` parts that contain the agent network's execution state, including which agents were called and their outputs.
-
-<Tabs>
-  <TabItem value="backend" label="Backend">
-    Register agents with Mastra and expose the routing agent via `networkRoute()` to stream network execution events to the frontend.
-
-    ```typescript title="src/mastra/index.ts"
-    import { Mastra } from '@mastra/core'
-    import { networkRoute } from '@mastra/ai-sdk'
-
-    export const mastra = new Mastra({
-      agents: { routingAgent, researchAgent, weatherAgent },
-      server: {
-        apiRoutes: [
-          networkRoute({
-            path: '/network',
-            agent: 'routingAgent',
-          }),
-        ],
-      },
-    })
-    ```
-  </TabItem>
-
-  <TabItem value="frontend" label="Frontend">
-    Check for `data-network` parts and render each agent's execution step using the `NetworkDataPart` type for type safety.
-
-    ```typescript title="src/components/network-chat.tsx" {3,5,42-44} oxfmt:false
-    import { useChat } from '@ai-sdk/react'
-    import { DefaultChatTransport } from 'ai'
-    import type { NetworkDataPart } from '@mastra/ai-sdk'
-
-    type NetworkData = NetworkDataPart['data']
-
-    function AgentStep({ step }: { step: NetworkData['steps'][number] }) {
-      return (
-        <div className="agent-step">
-          <div className="step-header">
-            <span className="agent-name">{step.name}</span>
-            <span className={`status status-${step.status}`}>{step.status}</span>
-          </div>
-          {step.input && (
-            <div className="step-input">
-              <strong>Input:</strong>
-              <pre>{JSON.stringify(step.input, null, 2)}</pre>
-            </div>
-          )}
-          {step.output && (
-            <div className="step-output">
-              <strong>Output:</strong>
-              <pre>
-                {typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-      )
-    }
-
-    export function NetworkChat() {
-      const { messages, sendMessage, status } = useChat({
-        transport: new DefaultChatTransport({
-          api: 'http://localhost:4111/network',
-        }),
-      })
-
-      return (
-        <div>
-          {messages.map(message => (
-            <div key={message.id}>
-              {message.parts.map((part, index) => {
-                if (part.type === 'data-network') {
-                  const networkData = part.data as NetworkData
-
-                  return (
-                    <div key={index} className="network-execution">
-                      <div className="network-header">
-                        <h3>Agent Network: {networkData.name}</h3>
-                        <span className={`status status-${networkData.status}`}>
-                          {networkData.status}
-                        </span>
-                      </div>
-                      <div className="network-steps">
-                        {networkData.steps.map((step, stepIndex) => (
-                          <AgentStep key={stepIndex} step={step} />
-                        ))}
-                      </div>
-                    </div>
-                  )
-                }
-                return null
-              })}
-            </div>
-          ))}
-        </div>
-      )
-    }
-    ```
-  </TabItem>
-</Tabs>
-
-For more details on agent networks, see [Agent Networks](/docs/agents/networks).
-
 ### Custom events
 
 Use `writer.custom()` within a tool's `execute()` function to emit custom data parts. This is useful for progress indicators, status updates, or any custom UI updates during tool execution.
@@ -1006,7 +856,6 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 - [Generative UIs](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces.tsx): Custom components for tool outputs
 - [Workflows](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow.tsx): Workflow step visualization
-- [Agent Networks](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/network.tsx): Network execution display
 - [Custom Events](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces-with-custom-events.tsx): Progress indicators with custom events
 
 ## Recipes
@@ -1681,9 +1530,9 @@ The UI Dojo example uses a `stage` field in the event data to identify which bra
 
 See the [branching-workflow.ts](https://github.com/mastra-ai/ui-dojo/blob/main/src/mastra/workflows/branching-workflow.ts) (backend) and [workflow-custom-events.tsx](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-custom-events.tsx) (frontend) in UI Dojo.
 
-### Progress indicators in agent networks
+### Progress indicators in supervisor agents
 
-When using agent networks, you can emit custom progress events from tools used by subagents to show which agent is currently active.
+When using [supervisor agents](/docs/subagents), you can emit custom progress events from tools used by subagents to show which agent is currently active.
 
 The UI Dojo example includes a `stage` field in the event data to identify which subagent is running (e.g., `"report-generation"`, `"report-review"`). The frontend groups events by this field and displays the latest status for each.
 

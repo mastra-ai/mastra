@@ -175,8 +175,8 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   /**
    * Things you can evaluate
    */
-  entityType: { type: 'text', nullable: true }, // WORKFLOW, AGENT, TOOL, STEP, NETWORK
-  entity: { type: 'jsonb', nullable: true }, // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entityType: { type: 'text', nullable: true }, // WORKFLOW, AGENT, TOOL, STEP
+  entity: { type: 'jsonb', nullable: true }, // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP
   entityId: { type: 'text', nullable: true },
   source: { type: 'text' },
   resourceId: { type: 'text', nullable: true },

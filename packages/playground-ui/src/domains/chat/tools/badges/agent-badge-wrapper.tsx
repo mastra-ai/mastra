@@ -39,7 +39,6 @@ export const AgentBadgeWrapper = ({
   toolCallId,
   toolApprovalMetadata,
   toolName,
-  isNetwork,
   suspendPayload,
   toolCalled,
   isComplete,
@@ -98,7 +97,6 @@ export const AgentBadgeWrapper = ({
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}
       toolName={toolName}
-      isNetwork={isNetwork}
       suspendPayload={suspendPayload}
       toolCalled={toolCalled}
       isComplete={isComplete}

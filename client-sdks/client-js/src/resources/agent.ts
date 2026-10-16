@@ -32,7 +32,6 @@ import type {
   UpdateModelParams,
   UpdateModelInModelListParams,
   ReorderModelListParams,
-  NetworkStreamParams,
   StreamParamsBaseWithoutMessages,
   CloneAgentParams,
   StoredAgentResponse,
@@ -71,7 +70,7 @@ import {
 } from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
-import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -2619,168 +2618,6 @@ export class Agent extends BaseResource {
     }
 
     return response;
-  }
-
-  async network<OUTPUT>(
-    messages: MessageListInput,
-    params: Omit<NetworkStreamParams<OUTPUT>, 'messages'>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  > {
-    const processedParams = {
-      ...params,
-      messages,
-      requestContext: parseClientRequestContext(params.requestContext),
-      structuredOutput: params.structuredOutput
-        ? {
-            ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema),
-          }
-        : undefined,
-    };
-
-    const response: Response = await this.request(`/agents/${this.agentId}/network`, {
-      method: 'POST',
-      body: processedParams,
-      stream: true,
-    });
-
-    if (!response.body) {
-      throw new Error('No response body');
-    }
-
-    const streamResponse = new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    }) as Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    };
-
-    streamResponse.processDataStream = async ({
-      onChunk,
-    }: {
-      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-    }) => {
-      await processMastraNetworkStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
-      });
-    };
-
-    return streamResponse;
-  }
-
-  async approveNetworkToolCall(params: {
-    runId: string;
-    model?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  > {
-    const { requestContext, ...rest } = params;
-    const response: Response = await this.request(`/agents/${this.agentId}/approve-network-tool-call`, {
-      method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
-      stream: true,
-    });
-
-    if (!response.body) {
-      throw new Error('No response body');
-    }
-
-    const streamResponse = new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    }) as Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    };
-
-    streamResponse.processDataStream = async ({
-      onChunk,
-    }: {
-      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-    }) => {
-      await processMastraNetworkStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
-      });
-    };
-
-    return streamResponse;
-  }
-
-  async declineNetworkToolCall(params: {
-    runId: string;
-    model?: string;
-    /** Optional explanation surfaced in place of the default decline message. */
-    reason?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  > {
-    const { requestContext, ...rest } = params;
-    const response: Response = await this.request(`/agents/${this.agentId}/decline-network-tool-call`, {
-      method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
-      stream: true,
-    });
-
-    if (!response.body) {
-      throw new Error('No response body');
-    }
-
-    const streamResponse = new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    }) as Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-      }) => Promise<void>;
-    };
-
-    streamResponse.processDataStream = async ({
-      onChunk,
-    }: {
-      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
-    }) => {
-      await processMastraNetworkStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onChunk,
-      });
-    };
-
-    return streamResponse;
   }
 
   async stream<OUTPUT extends {}>(

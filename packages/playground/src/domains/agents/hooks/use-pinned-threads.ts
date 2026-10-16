@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 
 const pinnedIdsSchema = z.array(z.string());
 
-export const usePinnedThreads = (resourceType: 'agent' | 'network', resourceId: string) => {
+export const usePinnedThreads = (resourceType: 'agent', resourceId: string) => {
   const [pinnedIds, setPinnedIds] = useLocalStorageState<string[]>({
     initialKey: `mastra:pinned-threads:${resourceType}:${resourceId}`,
     schema: pinnedIdsSchema,

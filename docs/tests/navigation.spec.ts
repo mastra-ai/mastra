@@ -689,18 +689,17 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
     const containerCount = await tabContainers.count()
     expect(containerCount, 'Expected multiple tab groups').toBeGreaterThanOrEqual(2)
 
-    // Test the chatRoute/workflowRoute/networkRoute tab group (second .tabs-container)
+    // Test the chatRoute/workflowRoute tab group (second .tabs-container)
     const tabGroup = tabContainers.nth(1)
     await tabGroup.scrollIntoViewIfNeeded()
 
     const tabs = tabGroup.locator('[role="tab"]')
     const tabCount = await tabs.count()
-    expect(tabCount, 'Tab group should have 3 tabs').toBe(3)
+    expect(tabCount, 'Tab group should have 2 tabs').toBe(2)
 
     // Verify tab labels
     await expect(tabs.nth(0)).toContainText('chatRoute()')
     await expect(tabs.nth(1)).toContainText('workflowRoute()')
-    await expect(tabs.nth(2)).toContainText('networkRoute()')
 
     // First tab should be active by default
     const firstTab = tabs.first()
@@ -719,18 +718,11 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
     await expect(firstTab).toHaveAttribute('aria-selected', 'false')
     await expect(firstTab).not.toHaveClass(/tabs__item--active/)
 
-    // Click the third tab
-    const thirdTab = tabs.nth(2)
-    await thirdTab.click()
-    await expect(thirdTab).toHaveAttribute('aria-selected', 'true')
-    await expect(thirdTab).toHaveClass(/tabs__item--active/)
-    await expect(secondTab).toHaveAttribute('aria-selected', 'false')
-
     // Click back to first tab
     await firstTab.click()
     await expect(firstTab).toHaveAttribute('aria-selected', 'true')
     await expect(firstTab).toHaveClass(/tabs__item--active/)
-    await expect(thirdTab).toHaveAttribute('aria-selected', 'false')
+    await expect(secondTab).toHaveAttribute('aria-selected', 'false')
 
     expect(getErrors(), 'JS errors while interacting with tabs').toEqual([])
   })
@@ -741,7 +733,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
     await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
-    // Use the chatRoute/workflowRoute/networkRoute tab group (second .tabs-container)
+    // Use the chatRoute/workflowRoute tab group (second .tabs-container)
     // In Docusaurus, the tab panels are INSIDE the tabs-container:
     //   div.tabs-container > ul[role=tablist] + div.margin-top--md > div[role=tabpanel]*
     const tabGroup = page.locator('.tabs-container').nth(1)
@@ -750,24 +742,16 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
     const tabs = tabGroup.locator('[role="tab"]')
     const panels = tabGroup.locator('[role="tabpanel"]')
     const panelCount = await panels.count()
-    expect(panelCount, 'Expected 3 tab panels (chatRoute, workflowRoute, networkRoute)').toBe(3)
+    expect(panelCount, 'Expected 2 tab panels (chatRoute, workflowRoute)').toBe(2)
 
     // With the first tab selected, first panel should be visible, others hidden
     await expect(panels.nth(0)).toBeVisible()
     await expect(panels.nth(1)).toBeHidden()
-    await expect(panels.nth(2)).toBeHidden()
 
     // Click the second tab
     await tabs.nth(1).click()
     await expect(panels.nth(0)).toBeHidden()
     await expect(panels.nth(1)).toBeVisible()
-    await expect(panels.nth(2)).toBeHidden()
-
-    // Click the third tab
-    await tabs.nth(2).click()
-    await expect(panels.nth(0)).toBeHidden()
-    await expect(panels.nth(1)).toBeHidden()
-    await expect(panels.nth(2)).toBeVisible()
 
     expect(getErrors(), 'JS errors while switching tab panels').toEqual([])
   })

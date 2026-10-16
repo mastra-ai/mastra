@@ -13,8 +13,6 @@ const fields = (toolName: string, extra: Partial<ToolPartFields> = {}): ToolPart
   ...extra,
 });
 
-const network = (from: string): MessageMetadata => ({ mode: 'network', from });
-
 const approval = (toolCallId: string) => ({ toolCallId, toolName: 'view', args: {} });
 
 describe('isHiddenTool', () => {
@@ -64,14 +62,12 @@ describe('toolCardKind', () => {
       expect(toolCardKind(fields('run', { output: 'Started Background Task #3' }), {})).toBe('background');
     });
 
-    it('detects an agent by name prefix or network origin', () => {
+    it('detects an agent by name prefix', () => {
       expect(toolCardKind(fields('agent-writer'), {})).toBe('agent');
-      expect(toolCardKind(fields('writer'), { metadata: network('AGENT') })).toBe('agent');
     });
 
-    it('detects a workflow by name prefix or network origin', () => {
+    it('detects a workflow by name prefix', () => {
       expect(toolCardKind(fields('workflow-deploy'), {})).toBe('workflow');
-      expect(toolCardKind(fields('deploy'), { metadata: network('WORKFLOW') })).toBe('workflow');
     });
   });
 
@@ -176,38 +172,6 @@ describe('toolInteraction', () => {
         toolInteraction({ requireApprovalMetadata: { view: approval('outer-call') } }, 'agent-child', 'outer-call')
           .approval,
       ).toEqual(approval('outer-call'));
-    });
-  });
-
-  describe('when network metadata keys approvals by tool name', () => {
-    it('accepts an approval belonging to this call', () => {
-      expect(
-        toolInteraction({ mode: 'network', requireApprovalMetadata: { view: approval('call-1') } }, 'view', 'call-1')
-          .approval,
-      ).toEqual(approval('call-1'));
-    });
-
-    it('ignores an approval belonging to another call', () => {
-      expect(
-        toolInteraction(
-          { mode: 'network', requireApprovalMetadata: { view: approval('other-call') } },
-          'view',
-          'call-1',
-        ).approval,
-      ).toBeUndefined();
-    });
-
-    it('falls back to the call ID when the name entry belongs to another call', () => {
-      expect(
-        toolInteraction(
-          {
-            mode: 'network',
-            requireApprovalMetadata: { view: approval('other-call'), 'call-1': approval('call-1') },
-          },
-          'view',
-          'call-1',
-        ).approval,
-      ).toEqual(approval('call-1'));
     });
   });
 

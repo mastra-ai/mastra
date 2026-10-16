@@ -99,8 +99,6 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         generateMessageId: capabilities.generateMessageId,
         logger: capabilities.logger,
         filterIncompleteToolCalls: memoryConfig?.filterIncompleteToolCalls,
-        // @ts-expect-error Flag for agent network messages
-        _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
 
       // Create processorStates map - persists across loop iterations within this agent turn

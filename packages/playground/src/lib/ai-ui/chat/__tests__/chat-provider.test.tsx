@@ -636,10 +636,7 @@ describe('ChatProvider', () => {
     expect(seen.hasCancel).toBe(true);
   });
 
-  it.each([
-    ['generate', { chatWithGenerate: true }],
-    ['network', { chatWithNetwork: true }],
-  ] as const)(
+  it.each([['generate', { chatWithGenerate: true }]] as const)(
     'disables mid-stream sends for %s transport even when thread signals are enabled',
     async (_mode, modelSettings) => {
       delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;

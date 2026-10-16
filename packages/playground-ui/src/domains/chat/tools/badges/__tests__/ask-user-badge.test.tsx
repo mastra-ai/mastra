@@ -24,11 +24,8 @@ const renderBadge = (
         declineToolcall={vi.fn()}
         approveToolcallGenerate={vi.fn()}
         declineToolcallGenerate={vi.fn()}
-        approveNetworkToolcall={vi.fn()}
-        declineNetworkToolcall={vi.fn()}
         isRunning={overrides.isRunning ?? false}
         toolCallApprovals={overrides.toolCallApprovals ?? {}}
-        networkToolCallApprovals={{}}
       >
         <AskUserBadge {...props} />
       </ToolCallProvider>

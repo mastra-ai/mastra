@@ -915,14 +915,13 @@ describe('OpenAISchemaCompatLayer', () => {
   });
 
   // =============================================================================
-  // Agent network structured output flow simulation
+  // Structured output flow simulation with falsy modelId
   //
-  // When modelId is falsy (e.g., agent networks), the compat layer must still run.
+  // When modelId is falsy (e.g., an inherited model), the compat layer must still run.
   // execute.ts enables strictJsonSchema independently, so unprocessed schemas get rejected.
   // =============================================================================
 
-  describe('agent network defaultCompletionSchema with falsy modelId', () => {
-    // Exact schema from packages/core/src/loop/network/validation.ts:370-377
+  describe('completion schema with falsy modelId', () => {
     const defaultCompletionSchemaNetwork = z.object({
       isComplete: z.boolean().describe('Whether the task is complete'),
       completionReason: z.string().describe('Explanation of why the task is or is not complete'),
@@ -986,7 +985,7 @@ describe('OpenAISchemaCompatLayer', () => {
     });
 
     it('undefined modelId → compat layer still runs → schema is strict-mode compliant', () => {
-      // Agent network with OpenAI, modelId is falsy.
+      // OpenAI model with a falsy modelId.
       const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
         defaultCompletionSchemaNetwork,
         'openai.responses',

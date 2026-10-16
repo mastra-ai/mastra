@@ -12,25 +12,16 @@ function approvalTree(request: Partial<ToolApprovalRequest> = {}, overrides: Par
     declineToolcall: vi.fn(),
     approveToolcallGenerate: vi.fn(),
     declineToolcallGenerate: vi.fn(),
-    approveNetworkToolcall: vi.fn(),
-    declineNetworkToolcall: vi.fn(),
   };
   const approval = {
     toolCallId: 'call-1',
     toolName: 'write_file',
     toolCalled: false,
     toolApprovalMetadata: { toolCallId: 'call-1', toolName: 'write_file', args: {}, runId: 'run-1' },
-    isNetwork: false,
     ...request,
   };
   const tree = (
-    <ToolCallProvider
-      {...callbacks}
-      isRunning={false}
-      toolCallApprovals={{}}
-      networkToolCallApprovals={{}}
-      {...overrides}
-    >
+    <ToolCallProvider {...callbacks} isRunning={false} toolCallApprovals={{}} {...overrides}>
       <ToolApprovalBadge approval={approval} title="Write file" initialCollapsed data-testid="activity">
         <p>Review the requested change</p>
       </ToolApprovalBadge>
@@ -56,7 +47,6 @@ describe('ToolApprovalBadge', () => {
     it.each([
       ['stream', {}, 'approveToolcall', 'declineToolcall', ['call-1']],
       ['generate', { isGenerateMode: true }, 'approveToolcallGenerate', 'declineToolcallGenerate', ['call-1']],
-      ['network', { isNetwork: true }, 'approveNetworkToolcall', 'declineNetworkToolcall', ['write_file', 'run-1']],
     ] as const)('routes both decisions through the %s callbacks', (_mode, request, approve, decline, expected) => {
       const callbacks = renderApproval(request);
 
@@ -113,36 +103,6 @@ describe('ToolApprovalBadge', () => {
     });
   });
 
-  describe('when a network repeats the same tool in different runs', () => {
-    it('keeps the new run actionable despite the older decision', () => {
-      const callbacks = renderApproval(
-        { isNetwork: true },
-        { networkToolCallApprovals: { 'run-0-write_file': { status: 'declined' } } },
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: 'Approve write_file' }));
-
-      expect(callbacks.approveNetworkToolcall).toHaveBeenCalledExactlyOnceWith('write_file', 'run-1');
-    });
-
-    it('shows the decision belonging to this run', () => {
-      renderApproval({ isNetwork: true }, { networkToolCallApprovals: { 'run-1-write_file': { status: 'approved' } } });
-
-      expect(queryDecisionButtons()).toHaveLength(0);
-      expect(screen.getByRole('status').textContent).toBe('Approved');
-    });
-
-    it('preserves tool-name approval keys for metadata without a run ID', () => {
-      renderApproval(
-        { isNetwork: true, toolApprovalMetadata: { toolCallId: 'call-1', toolName: 'write_file', args: {} } },
-        { networkToolCallApprovals: { write_file: { status: 'declined' } } },
-      );
-
-      expect(queryDecisionButtons()).toHaveLength(0);
-      expect(screen.getByRole('status').textContent).toBe('Declined');
-    });
-  });
-
   describe('when approval is no longer needed', () => {
     it('hides the request once the tool ran without a recorded decision', () => {
       renderApproval({ toolCalled: true });
@@ -160,7 +120,6 @@ describe('ToolApprovalBadge', () => {
             toolName: 'read_file',
             toolCalled: true,
             toolApprovalMetadata: undefined,
-            isNetwork: false,
           }}
         />,
       );

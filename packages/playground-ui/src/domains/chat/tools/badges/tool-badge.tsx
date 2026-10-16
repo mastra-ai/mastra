@@ -1,6 +1,5 @@
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
-import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
@@ -46,7 +45,6 @@ export const ToolBadge = ({
   toolCallId,
   toolApprovalMetadata,
   suspendPayload,
-  isNetwork,
   toolCalled: toolCalledProp,
   withoutArgs,
   status = 'idle',
@@ -55,11 +53,6 @@ export const ToolBadge = ({
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
   const resultPretty =
     result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
-
-  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
-  const selectionReason =
-    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
   const needsApproval = awaitsToolApproval({ toolApprovalMetadata, toolCalled });
@@ -82,7 +75,6 @@ export const ToolBadge = ({
         toolCallId,
         toolApprovalMetadata,
         toolName,
-        isNetwork,
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="tool-badge"
@@ -92,14 +84,7 @@ export const ToolBadge = ({
       description={description}
       status={status}
       extraInfo={
-        metadata?.mode === 'network' ? (
-          <NetworkChoiceMetadataDialogTrigger
-            selectionReason={selectionReason || ''}
-            input={agentNetworkInput as string | Record<string, unknown> | undefined}
-          />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
-        ) : null
+        bgEntry?.taskId && bgEntry?.startedAt ? <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} /> : null
       }
       initialCollapsed={!(toolApprovalMetadata ?? suspendPayload)}
     >

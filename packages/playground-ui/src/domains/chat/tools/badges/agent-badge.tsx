@@ -3,7 +3,6 @@ import Markdown from 'react-markdown';
 import { ToolCard } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
-import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
@@ -51,7 +50,6 @@ export const AgentBadge = ({
   toolCallId,
   toolApprovalMetadata,
   toolName,
-  isNetwork,
   suspendPayload,
   toolCalled: toolCalledProp,
   isComplete = false,
@@ -61,15 +59,8 @@ export const AgentBadge = ({
   onLoadPrevious,
   isLoadingPrevious = false,
 }: AgentBadgeProps) => {
-  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
-  const selectionReason =
-    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
-
   const parentSuspendedTools =
-    metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
-      ? metadata?.suspendedTools
-      : undefined;
+    metadata?.mode === 'stream' || metadata?.mode === 'generate' ? metadata?.suspendedTools : undefined;
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -86,10 +77,6 @@ export const AgentBadge = ({
     });
 
   let toolCalled = isComplete && allChildToolsComplete;
-
-  if (isNetwork) {
-    toolCalled = toolCalledProp ?? allChildToolsComplete;
-  }
 
   const isError = status === 'error';
   const shouldCollapseContent = isComplete && !isError && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
@@ -117,7 +104,6 @@ export const AgentBadge = ({
         toolCallId,
         toolApprovalMetadata,
         toolName,
-        isNetwork,
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="agent-badge"
@@ -126,14 +112,7 @@ export const AgentBadge = ({
       status={status}
       initialCollapsed={shouldCollapseContent}
       extraInfo={
-        metadata?.mode === 'network' ? (
-          <NetworkChoiceMetadataDialogTrigger
-            selectionReason={selectionReason ?? ''}
-            input={agentNetworkInput as string | Record<string, unknown> | undefined}
-          />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
-        ) : null
+        bgEntry?.taskId && bgEntry?.startedAt ? <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} /> : null
       }
     >
       {hasBody && (
@@ -173,7 +152,6 @@ export const AgentBadge = ({
                   toolCallId={message.toolCallId}
                   metadata={{
                     mode: 'stream',
-                    requireApprovalMetadata: isNetwork ? metadata?.requireApprovalMetadata : undefined,
                     suspendedTools: parentSuspendedTools,
                   }}
                 />

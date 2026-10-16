@@ -319,7 +319,6 @@ export class MessageList {
   private unavailableAttachmentUpdates = new Map<string, Set<string>>();
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
-  private _agentNetworkAppend = false;
   private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
 
@@ -354,8 +353,6 @@ export class MessageList {
     generateMessageId,
     logger,
     filterIncompleteToolCalls,
-    // @ts-expect-error Flag for agent network messages
-    _agentNetworkAppend,
   }: {
     threadId?: string;
     resourceId?: string;
@@ -369,7 +366,6 @@ export class MessageList {
     this.generateMessageId = generateMessageId;
     this.logger = logger;
     this.filterIncompleteToolCalls = filterIncompleteToolCalls ?? true;
-    this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
   /**
@@ -578,7 +574,6 @@ export class MessageList {
       systemMessages: this.systemMessages,
       taggedSystemMessages: this.taggedSystemMessages,
       memoryInfo: this.memoryInfo,
-      agentNetworkAppend: this._agentNetworkAppend,
     });
     const lastStepBoundary = this.#locateLastStepBoundary();
     const prunedResponseMessageIds = this.#getPrunedResponseMessageIds();
@@ -625,7 +620,6 @@ export class MessageList {
     this.systemMessages = data.systemMessages;
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
-    this._agentNetworkAppend = data.agentNetworkAppend;
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
     }
@@ -2500,13 +2494,12 @@ export class MessageList {
     // An incoming message whose id belongs to an earlier message must update that message
     // in place; merging it into the latest one would re-save earlier turns' parts.
     const replacesEarlierMessage = !!replacementTarget && replacementTarget !== latestMessage;
-    const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
       options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
       !replacesEarlierMessage &&
-      MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
+      MessageMerger.shouldMerge(latestMessage, messageV2, messageSource);
 
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger
@@ -2591,16 +2584,8 @@ export class MessageList {
           }
           this.appendMessage(messageV2);
         } else {
-          const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting =
-            options.merge !== false &&
-            MessageMerger.shouldMerge(
-              existingMessage,
-              messageV2,
-              messageSource,
-              isExistingFromMemory,
-              this._agentNetworkAppend,
-            );
+            options.merge !== false && MessageMerger.shouldMerge(existingMessage, messageV2, messageSource);
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
             this.updateLastCreatedAt(existingMessage);

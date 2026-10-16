@@ -14,11 +14,8 @@ const renderWithProviders = (node: ReactNode) =>
         declineToolcall={vi.fn()}
         approveToolcallGenerate={vi.fn()}
         declineToolcallGenerate={vi.fn()}
-        approveNetworkToolcall={vi.fn()}
-        declineNetworkToolcall={vi.fn()}
         isRunning={false}
         toolCallApprovals={{}}
-        networkToolCallApprovals={{}}
       >
         {node}
       </ToolCallProvider>
@@ -37,7 +34,6 @@ describe('ToolBadge', () => {
         toolOutput={[]}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 
@@ -58,7 +54,6 @@ describe('ToolBadge', () => {
         toolOutput={[]}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 
@@ -82,7 +77,6 @@ describe('ToolBadge', () => {
         toolOutput={[]}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />
     );
 
@@ -108,7 +102,6 @@ describe('ToolBadge', () => {
         toolOutput={[]}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 
@@ -130,7 +123,6 @@ describe('ToolBadge', () => {
         toolOutput={[]}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 
@@ -154,7 +146,6 @@ describe('ToolBadge edit body', () => {
           toolOutput={[]}
           toolCallId="call-edit"
           toolApprovalMetadata={undefined}
-          isNetwork={false}
         />,
       );
 
@@ -181,7 +172,6 @@ describe('ToolBadge edit body', () => {
           toolOutput={[]}
           toolCallId="call-command"
           toolApprovalMetadata={undefined}
-          isNetwork={false}
         />,
       );
 
@@ -204,7 +194,6 @@ describe('ToolBadge edit body', () => {
         toolOutput={[]}
         toolCallId="call-3"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 

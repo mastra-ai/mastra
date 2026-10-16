@@ -3,7 +3,6 @@ import { Icon, type IconSize } from './Icon';
 import {
   AgentIcon,
   AgentCoinIcon,
-  AgentNetworkCoinIcon,
   AiIcon,
   ApiIcon,
   BranchIcon,
@@ -59,7 +58,6 @@ type Story = StoryObj<typeof Icon>;
 const icons = [
   { name: 'AgentIcon', component: AgentIcon },
   { name: 'AgentCoinIcon', component: AgentCoinIcon },
-  { name: 'AgentNetworkCoinIcon', component: AgentNetworkCoinIcon },
   { name: 'AiIcon', component: AiIcon },
   { name: 'ApiIcon', component: ApiIcon },
   { name: 'BranchIcon', component: BranchIcon },
@@ -193,12 +191,6 @@ export const AgentIcons: Story = {
           <AgentCoinIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">AgentCoin</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <AgentNetworkCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">AgentNetworkCoin</span>
       </div>
     </div>
   ),

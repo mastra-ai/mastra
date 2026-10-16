@@ -6,7 +6,6 @@ import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-
 import type { MessageMetadata } from '@/domains/chat';
 
 import { LoadingBadge } from '@/domains/chat/components/loading-badge';
-import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
@@ -46,7 +45,6 @@ export const WorkflowBadge = ({
   toolApprovalMetadata,
   suspendPayload,
   toolName,
-  isNetwork,
   toolCalled,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
@@ -55,11 +53,6 @@ export const WorkflowBadge = ({
     requestContext: useEntityRequestContext('workflow', workflowId)[0],
     queryOptions: { enabled: Boolean(workflowId) },
   });
-  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
-  const selectionReason =
-    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
-
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
       ? metadata.backgroundTasks[toolCallId]
@@ -90,7 +83,6 @@ export const WorkflowBadge = ({
         toolCallId,
         toolApprovalMetadata,
         toolName,
-        isNetwork,
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="workflow-badge"
@@ -98,14 +90,7 @@ export const WorkflowBadge = ({
       title={workflow.name}
       initialCollapsed={false}
       extraInfo={
-        metadata?.mode === 'network' ? (
-          <NetworkChoiceMetadataDialogTrigger
-            selectionReason={selectionReason ?? ''}
-            input={agentNetworkInput as string | Record<string, unknown> | undefined}
-          />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
-        ) : null
+        bgEntry?.taskId && bgEntry?.startedAt ? <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} /> : null
       }
     >
       {hasBody && (

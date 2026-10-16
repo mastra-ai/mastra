@@ -4,7 +4,7 @@ import type { AgentMemoryOption, ToolsInput } from '../../agent/types';
 import { createScorer } from '../../evals';
 import type { ScorerJudgeConfig } from '../../evals';
 import type { MastraModelConfig } from '../../llm';
-import type { StreamCompletionContext } from '../../loop/network/validation';
+import type { StreamCompletionContext } from '../../loop/shared/completion';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { RequestContext } from '../../request-context';

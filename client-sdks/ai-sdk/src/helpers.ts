@@ -67,7 +67,6 @@ export type ToolAgentChunkType = {
   ancestry: ToolOutputAncestryEntry[];
 };
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
-export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
 type ConvertMastraChunkToAISDKOptions<OUTPUT> = {
   chunk: ChunkType<OUTPUT>;
@@ -694,7 +693,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   | InferUIMessageChunkV6<UIMessageV6>
   | ToolAgentChunkType
   | ToolWorkflowChunkType
-  | ToolNetworkChunkType
   | undefined {
   const partType = part?.type;
 
@@ -887,12 +885,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       } else if (output.from === 'WORKFLOW') {
         return {
           type: 'tool-workflow',
-          toolCallId: part.toolCallId,
-          payload: output,
-        };
-      } else if (output.from === 'NETWORK') {
-        return {
-          type: 'tool-network',
           toolCallId: part.toolCallId,
           payload: output,
         };

@@ -21,7 +21,7 @@ Use `RequestContext` when a primitive's behavior should change based on runtime 
 
 ## Setting values
 
-Pass `requestContext` into an agent, network, workflow, or tool call to make values available to all underlying primitives during execution. Use `.set()` to define values before making the call.
+Pass `requestContext` into an agent, workflow, or tool call to make values available to all underlying primitives during execution. Use `.set()` to define values before making the call.
 
 The `.set()` method takes two arguments:
 
@@ -40,11 +40,6 @@ requestContext.set('user-tier', 'enterprise')
 
 const agent = mastra.getAgent('weatherAgent')
 await agent.generate("What's the weather in London?", {
-  requestContext,
-})
-
-const routingAgent = mastra.getAgent('routingAgent')
-routingAgent.network("What's the weather in London?", {
   requestContext,
 })
 

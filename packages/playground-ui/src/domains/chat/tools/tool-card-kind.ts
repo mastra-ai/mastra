@@ -40,14 +40,11 @@ const SANDBOX_TOOLS = new Set<string>([
 
 const hasSubmitPlanToolId = (value: unknown): boolean => isRecord(value) && value.toolId === SUBMIT_PLAN_TOOL_ID;
 
-const isNetworkFrom = (metadata: MessageMetadata | undefined, from: string): boolean =>
-  metadata?.mode === 'network' && metadata.from === from;
-
 export const isAgentCall = (metadata: MessageMetadata | undefined, toolName: string): boolean =>
-  isNetworkFrom(metadata, 'AGENT') || toolName.startsWith('agent-');
+  toolName.startsWith('agent-');
 
 export const isWorkflowCall = (metadata: MessageMetadata | undefined, toolName: string): boolean =>
-  isNetworkFrom(metadata, 'WORKFLOW') || toolName.startsWith('workflow-');
+  toolName.startsWith('workflow-');
 
 export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
@@ -70,15 +67,9 @@ export function toolInteraction(
 ): ToolInteraction {
   const approvals = metadata?.requireApprovalMetadata;
   const suspensions = metadata?.suspendedTools;
-  const namedApproval = approvals?.[toolName];
   return {
     approval:
-      metadata?.mode === 'network'
-        ? namedApproval?.toolCallId === toolCallId
-          ? namedApproval
-          : approvals?.[toolCallId]
-        : (approvals?.[toolCallId] ??
-          Object.values(approvals ?? {}).find(approval => approval.toolCallId === toolCallId)),
+      approvals?.[toolCallId] ?? Object.values(approvals ?? {}).find(approval => approval.toolCallId === toolCallId),
     suspended: suspensions?.[toolName] ?? suspensions?.[toolCallId],
   };
 }

@@ -1686,7 +1686,7 @@ describe('accumulateChunk - finish / abort finalization', () => {
 });
 
 // =============================================================================
-// PASSTHROUGH (workflow / nested-execution / routing / network)
+// PASSTHROUGH (workflow / nested-execution)
 // =============================================================================
 
 describe('accumulateChunk - passthrough chunk families', () => {
@@ -1715,24 +1715,11 @@ describe('accumulateChunk - passthrough chunk families', () => {
     'tool-execution-approval',
     'tool-execution-suspended',
     'tool-execution-abort',
-    // routing-agent
-    'routing-agent-start',
-    'routing-agent-text-delta',
-    'routing-agent-text-start',
-    'routing-agent-end',
-    'routing-agent-abort',
     // workflow-execution
     'workflow-execution-start',
     'workflow-execution-end',
     'workflow-execution-suspended',
     'workflow-execution-abort',
-    // network
-    'network-execution-event-step-finish',
-    'network-execution-event-finish',
-    'network-validation-start',
-    'network-validation-end',
-    'network-object',
-    'network-object-result',
     // template-literal passthroughs
     'agent-execution-event-foo',
     'workflow-execution-event-bar',

@@ -64,7 +64,7 @@ export const CLIENT_MESSAGE_ID_KEY = 'clientMessageId';
 
 export type MastraDBMessageMetadata = {
   /** Which run mode produced this message. */
-  mode?: 'generate' | 'stream' | 'network';
+  mode?: 'generate' | 'stream';
   /** Execution that produced or resumed this message; not inferred from history order. */
   runId?: string;
   /** Client-generated correlation id (see {@link CLIENT_MESSAGE_ID_KEY}). */
@@ -89,7 +89,7 @@ export type MastraDBMessageMetadata = {
   backgroundTasks?: Record<string, BackgroundTaskEntry>;
   /** Number of background tasks currently executing for this message. */
   runningBackgroundTasksCount?: number;
-  /** Task-completion result returned by the run (network mode). */
+  /** Task-completion result returned by the run. */
   completionResult?: CompletionResult;
   /**
    * Task-completion verdict from the supervisor `isTaskComplete` path. Shares
@@ -99,28 +99,6 @@ export type MastraDBMessageMetadata = {
   isTaskCompleteResult?: CompletionResult;
   /** Signal-echo dedupe: signalId of the user message echoed back. */
   signalEchoIds?: string[];
-  /** Network-mode bookkeeping. */
-  from?: 'AGENT' | 'WORKFLOW' | 'TOOL';
-  selectionReason?: string;
-  agentInput?: string | object | Array<object>;
-  hasMoreMessages?: boolean;
-  /**
-   * Structured decision emitted by the routing agent. Parsed from the
-   * routing-agent text stream when it forms a balanced JSON object so the
-   * raw payload never reaches the rendered thread.
-   */
-  routingDecision?: Record<string, unknown>;
-  /**
-   * Raw routing-agent text used when the stream did not parse as JSON. Kept
-   * out of the visible parts but exposed for downstream UI (badge tooltips,
-   * metadata dialogs, debugging).
-   */
-  routingDecisionText?: string;
-  /**
-   * Internal buffer for partial routing-agent text deltas. Cleared once the
-   * buffer parses as JSON and is promoted to `routingDecision`.
-   */
-  routingDecisionBuffer?: string;
 };
 
 /**

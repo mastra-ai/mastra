@@ -49,7 +49,6 @@ import type {
 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
-import { networkLoop } from '../loop/network';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 import type { AgentLoopResumeClaim } from '../loop/types';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
@@ -128,7 +127,7 @@ import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skill
 import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
-import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
+import type { ChunkType, MastraOnFinishCallback } from '../stream';
 import { usesOpenAIStrictJsonSchema } from '../stream/aisdk/v5/execute';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -171,8 +170,6 @@ import type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
   InnerAgentExecutionOptions,
-  MultiPrimitiveExecutionOptions,
-  NetworkOptions,
   DelegationConfig,
   DelegationStartContext,
   DelegationStartResult,
@@ -848,7 +845,6 @@ export class Agent<
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
-  #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
@@ -903,9 +899,6 @@ export class Agent<
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
-
-  // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
-  private _agentNetworkAppend = false;
 
   /**
    * Creates a new Agent instance with the specified configuration.
@@ -990,7 +983,6 @@ export class Agent<
     this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
-    this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config.transform ?? (config as any).toolPayloadProjection,
     );
@@ -1228,9 +1220,6 @@ export class Agent<
           : signalOutputProcessors;
       }
     }
-
-    // @ts-expect-error Flag for agent network messages
-    this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   getMastraInstance() {
@@ -2536,7 +2525,7 @@ export class Agent<
 
   /**
    * Returns only the user-configured input processors, excluding memory-derived processors.
-   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   * Useful for scenarios where memory processors should not be applied.
    *
    * Unlike `listInputProcessors()` which includes both memory and configured processors,
    * this method returns only what was explicitly configured via the `inputProcessors` option.
@@ -2556,7 +2545,7 @@ export class Agent<
 
   /**
    * Returns only the user-configured output processors, excluding memory-derived processors.
-   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   * Useful for scenarios where memory processors should not be applied.
    *
    * Unlike `listOutputProcessors()` which includes both memory and configured processors,
    * this method returns only what was explicitly configured via the `outputProcessors` option.
@@ -3300,7 +3289,6 @@ export class Agent<
         convertInstructionsToString: this.#convertInstructionsToString.bind(this),
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
-        _agentNetworkAppend: this._agentNetworkAppend,
         listResolvedOutputProcessors: this.listResolvedOutputProcessors.bind(this),
         __runOutputProcessors: this.__runOutputProcessors.bind(this),
         runScorers: this.#runScorers.bind(this),
@@ -3421,50 +3409,6 @@ export class Agent<
             agentName: this.name,
           },
           text: `[Agent:${this.name}] - Function-based default options returned empty value`,
-        });
-        this.logger.trackException(mastraError);
-        throw mastraError;
-      }
-
-      return options;
-    });
-  }
-
-  /**
-   * Gets the default NetworkOptions for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling `network()` without explicit options.
-   *
-   * @returns NetworkOptions containing maxSteps, completion (CompletionConfig), and other network settings
-   *
-   * @example
-   * ```typescript
-   * const options = await agent.getDefaultNetworkOptions();
-   * console.log(options.maxSteps); // 20
-   * console.log(options.completion?.scorers); // [testsScorer, buildScorer]
-   * ```
-   */
-  public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
-    if (typeof this.#defaultNetworkOptions !== 'function') {
-      return this.#defaultNetworkOptions;
-    }
-
-    const result = this.#defaultNetworkOptions({
-      requestContext: requestContext as RequestContext<TRequestContext>,
-      mastra: this.#mastra,
-    });
-
-    return resolveMaybePromise(result, options => {
-      if (!options) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_DEFAULT_NETWORK_OPTIONS_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Function-based default network options returned empty value`,
         });
         this.logger.trackException(mastraError);
         throw mastraError;
@@ -4160,7 +4104,6 @@ export class Agent<
     }
 
     fork.source = this.source;
-    fork._agentNetworkAppend = this._agentNetworkAppend;
 
     return fork;
   }
@@ -4453,11 +4396,6 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
-    if (this._agentNetworkAppend) {
-      this.logger.debug('Skipping memory tools (agent network context)', { agent: this.name, runId });
-      return convertedMemoryTools;
-    }
-
     // Get memory tools if available
     const memory = await this.getMemory({ requestContext });
 
@@ -4530,11 +4468,6 @@ export class Agent<
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
-
-    if (this._agentNetworkAppend) {
-      this.logger.debug('Skipping workspace tools (agent network context)', { agent: this.name, runId });
-      return convertedWorkspaceTools;
-    }
 
     // Get workspace tools if available
     const workspace = await this.getWorkspace({ requestContext });
@@ -4626,10 +4559,6 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
 
-    if (this._agentNetworkAppend) {
-      return convertedSkillTools;
-    }
-
     const workspace = await this.getWorkspace({ requestContext });
 
     // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
@@ -4708,10 +4637,6 @@ export class Agent<
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedBrowserTools: Record<string, CoreTool> = {};
-
-    if (this._agentNetworkAppend) {
-      return convertedBrowserTools;
-    }
 
     // Check if browser is configured
     if (!this.#browser) {
@@ -8137,41 +8062,6 @@ export class Agent<
     return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
-  /**
-   * The scopes a suspended network run held. Its run-scoped request context (persisted with the
-   * network workflow snapshot) carries the non-identity scopes; its input carries the thread and
-   * resource. Returns undefined when no snapshot is stored.
-   */
-  async #getNetworkSnapshotScopes(runId: string): Promise<AgentScopesSnapshot | undefined> {
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: 'agent-loop-main-workflow', runId });
-    if (!snapshot) return undefined;
-    const scopes = snapshot.requestContext?.[MASTRA_SCOPES_KEY];
-    if (scopes !== undefined && (!Array.isArray(scopes) || scopes.some(scope => typeof scope !== 'string'))) {
-      // A malformed persisted set must not be coerced to "no scopes": that would both
-      // drop the run's scopes and falsely reject re-supplied ones as additions.
-      throw new MastraError({
-        id: 'AGENT_SCOPES_INVALID',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.SYSTEM,
-        // Corrupted persisted state is a system fault, not a caller error: no
-        // `details.status`, so server handlers surface it as HTTP 500.
-        text: `Agent "${this.name}" resume(${runId}): persisted network run scopes are malformed; expected an array of strings.`,
-        details: { agentName: this.name, runId },
-      });
-    }
-    const input = snapshot.context?.input as { threadId?: string; threadResourceId?: string } | undefined;
-    return {
-      resourceId: input?.threadResourceId,
-      threadId: input?.threadId,
-      // `network()` records the run's scope set unconditionally ([] included), so a recorded
-      // empty set is authoritative: a resume may not add scopes. An ABSENT key marks a run
-      // suspended before the scopes upgrade — it adopts the supplied scopes, the same trust
-      // posture as a fresh run (identity stays pinned by the snapshot's resource/thread above).
-      scopes: Array.isArray(scopes) ? scopes : undefined,
-    };
-  }
-
   /** The full scope set a suspended run resolved, persisted beside its stream state. */
   #getSnapshotScopes(existingSnapshot: WorkflowRunState | null | undefined): string[] | undefined {
     for (const key in existingSnapshot?.context) {
@@ -8180,8 +8070,7 @@ export class Agent<
       if (persisted === undefined) continue;
       // Corrupted persisted state is a system fault, not a client error: coercing it to
       // "no scopes" would silently drop the run's scope set and misreport a re-supplied
-      // scope as AGENT_SCOPES_CONFLICT. Mirrors the durable resume and network snapshot
-      // rehydration guards.
+      // scope as AGENT_SCOPES_CONFLICT. Mirrors the durable resume rehydration guard.
       if (!Array.isArray(persisted)) {
         throw new MastraError({
           id: 'AGENT_SCOPES_INVALID',
@@ -8667,10 +8556,6 @@ export class Agent<
       getModel: this.getModel.bind(this),
       generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => globalThis.crypto.randomUUID()),
       mastra: this.#mastra,
-      _agentNetworkAppend:
-        '_agentNetworkAppend' in this
-          ? Boolean((this as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend)
-          : undefined,
       convertTools: this.convertTools.bind(this),
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
@@ -9108,228 +8993,6 @@ export class Agent<
           }
         : {}),
     });
-  }
-
-  /**
-   * Executes a network loop where multiple agents can collaborate to handle messages.
-   * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
-   *
-   * @experimental
-   *
-   * @example
-   * ```typescript
-   * const result = await agent.network('Find the weather in Tokyo and plan an activity', {
-   *   memory: {
-   *     thread: 'user-123',
-   *     resource: 'my-app'
-   *   },
-   *   maxSteps: 10
-   * });
-   *
-   * for await (const chunk of result.stream) {
-   *   console.log(chunk);
-   * }
-   * ```
-   */
-  async network(
-    messages: MessageListInput,
-    options?: MultiPrimitiveExecutionOptions<undefined>,
-  ): Promise<MastraAgentNetworkStream<undefined>>;
-  async network<OUTPUT extends {}>(
-    messages: MessageListInput,
-    options?: MultiPrimitiveExecutionOptions<OUTPUT>,
-  ): Promise<MastraAgentNetworkStream<OUTPUT>>;
-  async network<OUTPUT = undefined>(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions<OUTPUT>) {
-    const callerRequestContext = options?.requestContext || new RequestContext();
-
-    // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: callerRequestContext });
-    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
-      {
-        ...defaultNetworkOptions,
-        ...options,
-        requestContext: callerRequestContext,
-        routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
-        completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
-      },
-      { callScopes: options?.scopes, defaultScopes: defaultNetworkOptions?.scopes },
-    );
-    let requestContextToUse = mergedOptions.requestContext;
-    // Persist the run's scope set unconditionally — [] included — so a resume can tell
-    // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
-    // snapshot (key absent, supplied scopes are adopted). The derived run context omits
-    // the key when the run has no non-identity scopes, so stamp a marked empty set on a
-    // copy (never the caller's context) before the workflow run snapshots it. Mirrors
-    // prepareForDurableExecution's persisted-entries stamp.
-    if (!Array.isArray(requestContextToUse.get(MASTRA_SCOPES_KEY))) {
-      const stamped = new RequestContext(Array.from(requestContextToUse.entries())) as typeof requestContextToUse;
-      setRunAgentScopes(stamped, []);
-      requestContextToUse = stamped;
-    }
-
-    const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
-
-    // Reserved keys from requestContext take precedence for security (see resolveAgentScopes).
-    // This allows middleware to securely set resourceId/threadId based on authenticated user,
-    // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const { threadId, resourceId } = resolvedScopes;
-
-    return await networkLoop<OUTPUT>({
-      networkName: this.name,
-      requestContext: requestContextToUse,
-      runId,
-      routingAgent: this,
-      routingAgentOptions: {
-        model: mergedOptions?.model,
-        modelSettings: mergedOptions?.modelSettings,
-        memory: mergedOptions?.memory,
-      },
-      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
-      maxIterations: mergedOptions?.maxSteps || 1,
-      messages,
-      threadId,
-      resourceId,
-      validation: mergedOptions?.completion,
-      routing: mergedOptions?.routing,
-      onIterationComplete: mergedOptions?.onIterationComplete,
-      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
-      mastra: this.#mastra,
-      structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
-      onStepFinish: mergedOptions?.onStepFinish as NetworkOptions<OUTPUT>['onStepFinish'],
-      onError: mergedOptions?.onError,
-      onAbort: mergedOptions?.onAbort,
-      abortSignal: mergedOptions?.abortSignal,
-    });
-  }
-
-  /**
-   * Resumes a suspended network loop where multiple agents can collaborate to handle messages.
-   * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
-   *
-   * @experimental
-   *
-   * @example
-   * ```typescript
-   * const result = await agent.resumeNetwork({ approved: true }, {
-   *   runId: 'previous-run-id',
-   *   memory: {
-   *     thread: 'user-123',
-   *     resource: 'my-app'
-   *   },
-   *   maxSteps: 10
-   * });
-   *
-   * for await (const chunk of result.stream) {
-   *   console.log(chunk);
-   * }
-   * ```
-   */
-  async resumeNetwork(resumeData: any, options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    const runId = options.runId;
-    const callerRequestContext = options?.requestContext || new RequestContext();
-
-    // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: callerRequestContext });
-    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
-      {
-        ...defaultNetworkOptions,
-        ...options,
-        requestContext: callerRequestContext,
-        routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
-        completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
-      },
-      {
-        callScopes: options?.scopes,
-        defaultScopes: defaultNetworkOptions?.scopes,
-        // Without a stored snapshot at all there is nothing to resume against, so a resume
-        // may not add scopes. Key-absent-on-snapshot (pre-upgrade) adopts — see
-        // #getNetworkSnapshotScopes.
-        snapshot: (await this.#getNetworkSnapshotScopes(runId)) ?? { scopes: [] },
-      },
-    );
-    const requestContextToUse = mergedOptions.requestContext;
-
-    // The snapshot is used only to check re-supplied scopes. Identity comes from scopes when
-    // present, else from the reserved keys then memory, as before scopes existed.
-    const hasScopeIdentity = (type: 'resource' | 'thread') =>
-      resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === type);
-    const threadId = hasScopeIdentity('thread')
-      ? resolvedScopes.threadId
-      : (requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
-        (typeof mergedOptions?.memory?.thread === 'string'
-          ? mergedOptions.memory.thread
-          : mergedOptions?.memory?.thread?.id);
-    const resourceId = hasScopeIdentity('resource')
-      ? resolvedScopes.resourceId
-      : (requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) || mergedOptions?.memory?.resource;
-
-    return await networkLoop({
-      networkName: this.name,
-      requestContext: requestContextToUse,
-      runId,
-      routingAgent: this,
-      routingAgentOptions: {
-        model: mergedOptions?.model,
-        modelSettings: mergedOptions?.modelSettings,
-        memory: mergedOptions?.memory,
-      },
-      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
-      maxIterations: mergedOptions?.maxSteps || 1,
-      messages: [],
-      threadId,
-      resourceId,
-      resumeData,
-      validation: mergedOptions?.completion,
-      routing: mergedOptions?.routing,
-      onIterationComplete: mergedOptions?.onIterationComplete,
-      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
-      mastra: this.#mastra,
-      onStepFinish: mergedOptions?.onStepFinish,
-      onError: mergedOptions?.onError,
-      onAbort: mergedOptions?.onAbort,
-      abortSignal: mergedOptions?.abortSignal,
-    });
-  }
-
-  /**
-   * Approves a pending network tool call and resumes execution.
-   * Used when `tool.requireApproval` is enabled to allow the agent to proceed with a tool call.
-   *
-   * @example
-   * ```typescript
-   * const stream = await agent.approveNetworkToolCall({
-   *   runId: 'pending-run-id'
-   * });
-   *
-   * for await (const chunk of stream) {
-   *   console.log(chunk);
-   * }
-   * ```
-   */
-  async approveNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: true }, options);
-  }
-
-  /**
-   * Declines a pending network tool call and resumes execution.
-   * Used when `tool.requireApproval` is enabled to allow the agent to proceed with a tool call.
-   *
-   * @example
-   * ```typescript
-   * const stream = await agent.declineNetworkToolCall({
-   *   runId: 'pending-run-id'
-   * });
-   *
-   * for await (const chunk of stream) {
-   *   console.log(chunk);
-   * }
-   * ```
-   */
-  async declineNetworkToolCall(
-    options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string; reason?: string },
-  ) {
-    const { reason, ...resumeOptions } = options;
-    return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
   async generate<

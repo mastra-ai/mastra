@@ -295,14 +295,12 @@ export class MessageStateManager {
     systemMessages: CoreSystemMessage[];
     taggedSystemMessages: Record<string, CoreSystemMessage[]>;
     memoryInfo: MemoryInfo | null;
-    agentNetworkAppend: boolean;
   }): SerializedMessageListState {
     return {
       messages: serializeMessages(data.messages),
       systemMessages: data.systemMessages,
       taggedSystemMessages: data.taggedSystemMessages,
       memoryInfo: data.memoryInfo,
-      _agentNetworkAppend: data.agentNetworkAppend,
       ...this.serializeSourceTracking(),
     };
   }
@@ -315,7 +313,6 @@ export class MessageStateManager {
     systemMessages: CoreSystemMessage[];
     taggedSystemMessages: Record<string, CoreSystemMessage[]>;
     memoryInfo: MemoryInfo | null;
-    agentNetworkAppend: boolean;
   } {
     const messages = deserializeMessages(state.messages);
 
@@ -338,7 +335,6 @@ export class MessageStateManager {
       systemMessages: state.systemMessages,
       taggedSystemMessages: state.taggedSystemMessages,
       memoryInfo: state.memoryInfo,
-      agentNetworkAppend: state._agentNetworkAppend,
     };
   }
 }
@@ -351,7 +347,6 @@ export interface SerializedMessageListState {
   systemMessages: CoreSystemMessage[];
   taggedSystemMessages: Record<string, CoreSystemMessage[]>;
   memoryInfo: MemoryInfo | null;
-  _agentNetworkAppend: boolean;
   memoryMessages: string[];
   newUserMessages: string[];
   newResponseMessages: string[];

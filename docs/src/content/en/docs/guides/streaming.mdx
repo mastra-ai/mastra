@@ -88,7 +88,7 @@ import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 const initialMessages = toAISdkMessages([{ role: 'user', content: 'Hello' }], { version: 'v7' })
 ```
 
-For route handlers, see [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui), which covers `handleChatStream()`, `handleWorkflowStream()`, and `handleNetworkStream()`. Pass the version that matches your installed AI SDK to these handlers too. See the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) and [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) references for all options.
+For route handlers, see [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui), which covers `handleChatStream()` and `handleWorkflowStream()`. Pass the version that matches your installed AI SDK to these handlers too. See the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) and [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) references for all options.
 
 ## Streaming with workflows
 

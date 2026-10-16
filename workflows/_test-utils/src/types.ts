@@ -129,7 +129,7 @@ export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutp
   /**
    * Sub-agents forwarded to the underlying Agent (`agents: {}`), turning it
    * into a supervisor that can delegate via `agent-<key>` tool calls.
-   * Network-domain tests use this; legs must thread it into their Agent
+   * Delegation-domain tests use this; legs must thread it into their Agent
    * construction.
    */
   agents?: Record<string, any>;
@@ -199,8 +199,8 @@ export type DurableAgentTestDomain =
   | 'recovery'
   // FGA / actor-identity domain (actor threading, agents:execute enforcement)
   | 'fga'
-  // Network-equivalent delegation domain (supervisor → sub-agent routing)
-  | 'network'
+  // Delegation domain (supervisor → sub-agent routing)
+  | 'delegation'
   // agentId propagation into tool execution context
   | 'agentIdContext'
   // requestContextSchema validation at the stream() boundary

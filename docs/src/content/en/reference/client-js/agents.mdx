@@ -520,20 +520,6 @@ const result = await agent.executeTool('tool-id', {
 })
 ```
 
-### `network()`
-
-Stream responses from an agent network for multi-agent interactions:
-
-```typescript
-const response = await agent.network('Research this topic and write a summary')
-
-response.processDataStream({
-  onChunk: async chunk => {
-    console.log(chunk)
-  },
-})
-```
-
 ### `listSuspendedRuns()`
 
 List suspended runs for the agent from storage: runs waiting on a tool-call approval or on a tool that suspended. Discovery is backed by storage, so it works after a server restart and across server instances. Pass the returned `runId` to `approveToolCall()`, `declineToolCall()`, or `resumeStream()`.

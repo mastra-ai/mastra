@@ -28,11 +28,8 @@ const Providers = ({ children }: { children: ReactNode }) => {
             declineToolcall={() => {}}
             approveToolcallGenerate={() => {}}
             declineToolcallGenerate={() => {}}
-            approveNetworkToolcall={() => {}}
-            declineNetworkToolcall={() => {}}
             isRunning={false}
             toolCallApprovals={{}}
-            networkToolCallApprovals={{}}
           >
             {children}
           </ToolCallProvider>
@@ -66,7 +63,6 @@ describe('WorkflowBadge', () => {
         toolName={`workflow-${WORKFLOW_ID}`}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
         result={{ runId: RUN_ID, status: 'success' }}
       />,
       { wrapper: Providers },
@@ -87,7 +83,6 @@ describe('WorkflowBadge', () => {
         toolName={`workflow-${WORKFLOW_ID}`}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
         result={undefined}
       />,
       { wrapper: Providers },

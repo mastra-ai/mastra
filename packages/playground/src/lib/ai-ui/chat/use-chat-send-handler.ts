@@ -62,7 +62,6 @@ interface SendDeps {
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
-  chatWithNetwork?: boolean;
   chatWithGenerate?: boolean;
   maxSteps?: number;
   isOMEnabled: boolean;
@@ -76,7 +75,6 @@ interface UseChatSendHandlerArgs {
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
   model?: string;
-  chatWithNetwork?: boolean;
   chatWithGenerate?: boolean;
   maxSteps?: number;
   isOMEnabled: boolean;
@@ -134,7 +132,6 @@ export const useChatSendHandler = ({
   threadId,
   modelSettingsArgs,
   model,
-  chatWithNetwork,
   chatWithGenerate,
   maxSteps,
   isOMEnabled,
@@ -163,7 +160,6 @@ export const useChatSendHandler = ({
     threadId,
     modelSettingsArgs,
     model,
-    chatWithNetwork,
     chatWithGenerate,
     maxSteps,
     isOMEnabled,
@@ -175,7 +171,6 @@ export const useChatSendHandler = ({
     threadId,
     modelSettingsArgs,
     model,
-    chatWithNetwork,
     chatWithGenerate,
     maxSteps,
     isOMEnabled,
@@ -270,29 +265,7 @@ export const useChatSendHandler = ({
       let delivered = false;
 
       try {
-        if (deps.chatWithNetwork) {
-          await sendMessage({
-            message,
-            mode: 'network',
-            coreUserMessages: attachments,
-            requestContext: requestContextInstance,
-            threadId: deps.threadId,
-            modelSettings: deps.modelSettingsArgs,
-            model: deps.model,
-            signal: controller.signal,
-            tracingOptions: deps.tracingOptions,
-            onNetworkChunk: async (chunk: any) => {
-              delivered = true;
-              if (didUpdateWorkingMemory(chunk)) {
-                void refreshWorkingMemory?.();
-              }
-              if (chunk.type === 'network-execution-event-step-finish') {
-                void refreshThreadList?.();
-              }
-              handleHandledChunk(asHandledStreamChunk(chunk));
-            },
-          });
-        } else if (deps.chatWithGenerate) {
+        if (deps.chatWithGenerate) {
           await sendMessage({
             message,
             mode: 'generate',

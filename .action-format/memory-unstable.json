@@ -1,0 +1,9 @@
+[
+ "src/processors/observational-memory/__tests__/subconscious-remind-owner.test.ts > Subconscious remind thread ownership > accepts ask_memory after a passive reminder with a knowledgeResourceId override",
+ "src/processors/observational-memory/__tests__/subconscious-remind-owner.test.ts > Subconscious remind thread ownership > accepts ask_memory after a passive reminder without override",
+ "src/processors/observational-memory/__tests__/subconscious-remind.test.ts > Subconscious remind > creates isolated sidekick memory and propagates the parent runtime",
+ "src/processors/observational-memory/__tests__/subconscious-remind.test.ts > Subconscious remind > emits at most one remembered reactive signal for a relevant cycle",
+ "src/processors/observational-memory/__tests__/subconscious-remind.test.ts > Subconscious remind > reuses durable sidekick history across reconstructed Memory instances",
+ "src/processors/observational-memory/__tests__/subconscious-remind.test.ts > Subconscious remind > shows the reminder agent the recent messages so it can skip what is already visible",
+ "src/processors/observational-memory/__tests__/subconscious-remind.test.ts > Subconscious remind > still reminds about the thread's own older items once they age past the fresh window"
+]

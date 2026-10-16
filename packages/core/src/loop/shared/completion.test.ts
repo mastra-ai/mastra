@@ -1,12 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import type { CompletionContext, CompletionRunResult, StreamCompletionContext } from './validation';
-import {
-  runCompletionScorers,
-  formatCompletionFeedback,
-  runStreamCompletionScorers,
-  formatStreamCompletionFeedback,
-} from './validation';
+import type { CompletionContext, CompletionRunResult, StreamCompletionContext } from './completion';
+import { runCompletionScorers, runStreamCompletionScorers, formatStreamCompletionFeedback } from './completion';
 
 // Helper to create a mock scorer
 function createMockScorer(id: string, score: number, reason?: string, delay = 0) {
@@ -32,7 +27,7 @@ function createMockContext(overrides: Partial<CompletionContext> = {}): Completi
     selectedPrimitive: { id: 'test-agent', type: 'agent' },
     primitivePrompt: 'Do something',
     primitiveResult: 'Done',
-    networkName: 'test-network',
+    agentName: 'test-network',
     runId: 'test-run-id',
     ...overrides,
   };
@@ -440,158 +435,6 @@ describe('runCompletionScorers', () => {
   });
 });
 
-describe('formatCompletionFeedback', () => {
-  it('formats complete result', () => {
-    const result: CompletionRunResult = {
-      complete: true,
-      completionReason: 'All checks passed',
-      scorers: [
-        {
-          score: 1,
-          passed: true,
-          reason: 'Test passed',
-          scorerId: 'test-scorer',
-          scorerName: 'Test Scorer',
-          duration: 100,
-        },
-      ],
-      totalDuration: 150,
-      timedOut: false,
-    };
-
-    const feedback = formatCompletionFeedback(result, false);
-
-    expect(feedback).toContain('#### Completion Check Results');
-    expect(feedback).toContain('✅ COMPLETE');
-    expect(feedback).toContain('Duration: 150ms');
-    expect(feedback).toContain('###### Test Scorer (test-scorer)');
-    expect(feedback).toContain('Score: 1 ✅');
-    expect(feedback).toContain('Reason: Test passed');
-    expect(feedback).not.toContain('timed out');
-  });
-
-  it('formats incomplete result', () => {
-    const result: CompletionRunResult = {
-      complete: false,
-      completionReason: 'Check failed',
-      scorers: [
-        {
-          score: 0,
-          passed: false,
-          reason: 'Test failed',
-          scorerId: 'test-scorer',
-          scorerName: 'Test Scorer',
-          duration: 100,
-        },
-      ],
-      totalDuration: 150,
-      timedOut: false,
-    };
-
-    const feedback = formatCompletionFeedback(result, false);
-
-    expect(feedback).toContain('❌ NOT COMPLETE');
-    expect(feedback).toContain('Score: 0 ❌');
-    expect(feedback).toContain('Reason: Test failed');
-    expect(feedback).toContain('🔄 Will continue working on the task.');
-  });
-
-  it('formats max iterations reached result', () => {
-    const result: CompletionRunResult = {
-      complete: false,
-      completionReason: 'Check failed',
-      scorers: [
-        {
-          score: 0,
-          passed: false,
-          reason: 'Test failed',
-          scorerId: 'test-scorer',
-          scorerName: 'Test Scorer',
-          duration: 100,
-        },
-      ],
-      totalDuration: 150,
-      timedOut: false,
-    };
-
-    const feedback = formatCompletionFeedback(result, true);
-
-    expect(feedback).toContain('❌ NOT COMPLETE');
-    expect(feedback).toContain('Score: 0 ❌');
-    expect(feedback).toContain('Reason: Test failed');
-    expect(feedback).toContain('⚠️ Max iterations reached');
-  });
-
-  it('formats timeout indication', () => {
-    const result: CompletionRunResult = {
-      complete: false,
-      scorers: [],
-      totalDuration: 600000,
-      timedOut: true,
-    };
-
-    const feedback = formatCompletionFeedback(result, false);
-
-    expect(feedback).toContain('⚠️ Scoring timed out');
-  });
-
-  it('formats multiple scorers', () => {
-    const result: CompletionRunResult = {
-      complete: false,
-      scorers: [
-        {
-          score: 1,
-          passed: true,
-          reason: 'First passed',
-          scorerId: 'scorer-1',
-          scorerName: 'Scorer One',
-          duration: 50,
-        },
-        {
-          score: 0,
-          passed: false,
-          reason: 'Second failed',
-          scorerId: 'scorer-2',
-          scorerName: 'Scorer Two',
-          duration: 75,
-        },
-      ],
-      totalDuration: 125,
-      timedOut: false,
-    };
-
-    const feedback = formatCompletionFeedback(result, false);
-
-    expect(feedback).toContain('##### Scorer One (scorer-1)');
-    expect(feedback).toContain('##### Scorer Two (scorer-2)');
-    expect(feedback).toContain('First passed');
-    expect(feedback).toContain('Second failed');
-  });
-
-  it('handles scorer without reason', () => {
-    const result: CompletionRunResult = {
-      complete: true,
-      scorers: [
-        {
-          score: 1,
-          passed: true,
-          scorerId: 'test-scorer',
-          scorerName: 'Test Scorer',
-          duration: 100,
-        },
-      ],
-      totalDuration: 100,
-      timedOut: false,
-    };
-
-    const feedback = formatCompletionFeedback(result, false);
-
-    expect(feedback).toContain('Score: 1 ✅');
-    // Should not have "Reason:" line since no reason provided
-    expect(feedback).not.toContain('Reason:');
-  });
-});
-
 // ============================================================================
 // Stream Completion Scoring Tests
 // ============================================================================
@@ -696,7 +539,7 @@ describe('runStreamCompletionScorers', () => {
             originalTask: 'Custom stream task',
             primitiveResult: 'Stream output text',
             selectedPrimitive: { id: 'stream', type: 'agent' },
-            networkName: 'My Agent',
+            agentName: 'My Agent',
           }),
           output: 'Stream output text',
           requestContext: expect.objectContaining({
@@ -709,7 +552,7 @@ describe('runStreamCompletionScorers', () => {
       );
     });
 
-    it('uses agentId as networkName when agentName is not provided', async () => {
+    it('uses agentId as agentName when agentName is not provided', async () => {
       const scorer = createMockScorer('scorer-1', 1);
       const context = createMockStreamContext({
         agentId: 'my-agent-id',
@@ -721,13 +564,13 @@ describe('runStreamCompletionScorers', () => {
       expect(scorer.run).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
-            networkName: 'my-agent-id',
+            agentName: 'my-agent-id',
           }),
         }),
       );
     });
 
-    it('uses "stream" as default networkName when neither agentId nor agentName provided', async () => {
+    it('uses "stream" as default agentName when neither agentId nor agentName provided', async () => {
       const scorer = createMockScorer('scorer-1', 1);
       const context = createMockStreamContext({
         agentId: undefined,
@@ -739,7 +582,7 @@ describe('runStreamCompletionScorers', () => {
       expect(scorer.run).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
-            networkName: 'stream',
+            agentName: 'stream',
           }),
         }),
       );

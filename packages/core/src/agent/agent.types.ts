@@ -5,7 +5,7 @@ import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig 
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
-import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
+import type { CompletionConfig, CompletionRunResult } from '../loop/shared/completion';
 import type {
   AgentLoopResumeClaim,
   LoopConfig,
@@ -35,7 +35,7 @@ import type {
 } from './types';
 
 // Re-export types for convenience
-export type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
+export type { CompletionConfig, CompletionRunResult } from '../loop/shared/completion';
 
 export type IsTaskCompleteConfig = CompletionConfig;
 
@@ -426,159 +426,6 @@ export interface DelegationConfig {
    */
   hookErrorStrategy?: 'warn' | 'throw';
 }
-/**
- * Configuration for the routing agent's behavior.
- */
-export interface NetworkRoutingConfig {
-  /**
-   * Additional instructions appended to the routing agent's system prompt.
-   *
-   * @example
-   * ```typescript
-   * routing: {
-   *   additionalInstructions: `
-   *     Prefer using the 'coder' agent for implementation tasks.
-   *     Always use the 'reviewer' agent before marking complete.
-   *   `,
-   * }
-   * ```
-   */
-  additionalInstructions?: string;
-
-  /**
-   * Whether to include verbose reasoning about why primitives were/weren't selected.
-   * @default false
-   */
-  verboseIntrospection?: boolean;
-}
-
-/**
- * Full configuration options for agent.network() execution.
- */
-export type NetworkOptions<OUTPUT = undefined> = {
-  /** Model used by the routing agent for this execution */
-  model?: DynamicArgument<MastraModelConfig>;
-
-  /** Memory configuration for conversation persistence and retrieval */
-  memory?: AgentMemoryOption;
-
-  /**
-   * Scopes this run acts with, as `<type>:<value>` addresses such as `org:acme`, `resource:u1`,
-   * or `thread:t1`. Unioned with the Agent's `scopes` and the reserved `mastra__scopes`
-   * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
-   * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
-   * also set, or the call throws. Never accepted from an HTTP request body.
-   */
-  scopes?: string[];
-
-  /** Whether to automatically resume suspended tools */
-  autoResumeSuspendedTools?: boolean;
-
-  /** Unique identifier for this execution run */
-  runId?: string;
-
-  /** Request Context containing dynamic configuration and state */
-  requestContext?: RequestContext<any>;
-
-  /** Maximum number of iterations to run */
-  maxSteps?: number;
-
-  /** Model-specific settings like temperature, maxTokens, topP, etc. */
-  modelSettings?: LoopOptions['modelSettings'];
-
-  /**
-   * Routing configuration - controls how primitives are selected.
-   */
-  routing?: NetworkRoutingConfig;
-
-  /**
-   * Completion configuration - controls when the task is considered done.
-   *
-   * Uses MastraScorers that return 0 (not complete) or 1 (complete).
-   * By default, the LLM evaluates completion.
-   *
-   * @example
-   * ```typescript
-   * import { createScorer } from '@mastra/core/evals';
-   *
-   * const testsScorer = createScorer({
-   *   id: 'tests',
-   *   description: 'Run tests',
-   * }).generateScore(async () => {
-   *   const result = await exec('npm test');
-   *   return result.exitCode === 0 ? 1 : 0;
-   * });
-   *
-   * // Use scorers for completion
-   * completion: {
-   *   scorers: [testsScorer],
-   * }
-   * ```
-   */
-  completion?: CompletionConfig;
-
-  /**
-   * Callback fired after each iteration completes.
-   */
-  onIterationComplete?: (context: {
-    iteration: number;
-    primitiveId: string;
-    primitiveType: 'agent' | 'workflow' | 'tool' | 'none';
-    result: string;
-    isComplete: boolean;
-  }) => void | Promise<void>;
-
-  /**
-   * Structured output configuration for the network's final result.
-   * When provided, the network will generate a structured response matching the schema.
-   *
-   * @example
-   * ```typescript
-   * import { z } from 'zod/v4';
-   *
-   * const resultSchema = z.object({
-   *   summary: z.string(),
-   *   recommendations: z.array(z.string()),
-   *   confidence: z.number(),
-   * });
-   *
-   * const stream = await agent.network(task, {
-   *   structuredOutput: {
-   *     schema: resultSchema,
-   *   },
-   * });
-   *
-   * // Get typed result
-   * const result = await stream.object;
-   * ```
-   */
-  structuredOutput?: PublicStructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
-
-  /** Callback fired after each LLM step within a sub-agent execution */
-  onStepFinish?: LoopConfig<OUTPUT>['onStepFinish'];
-
-  /** Callback fired when an error occurs during sub-agent execution */
-  onError?: LoopConfig<OUTPUT>['onError'];
-
-  /** Callback fired when streaming is aborted */
-  onAbort?: LoopConfig<OUTPUT>['onAbort'];
-
-  /**
-   * Signal to abort the streaming operation
-   */
-  abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
-} & Partial<ObservabilityContext>;
-
-/**
- * @deprecated Use NetworkOptions instead
- */
-export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
-
-/**
- * Public-facing network options that accept PublicSchema types.
- */
-export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
-
 export type AgentExecutionOptionsBase<OUTPUT> = {
   /**
    * Signal chunks to hide from this caller's stream: true hides all recognized signals,

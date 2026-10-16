@@ -13,11 +13,8 @@ const baseValue: ToolCallContextValue = {
   declineToolcall: vi.fn(),
   approveToolcallGenerate: vi.fn(),
   declineToolcallGenerate: vi.fn(),
-  approveNetworkToolcall: vi.fn(),
-  declineNetworkToolcall: vi.fn(),
   isRunning: false,
   toolCallApprovals: { 'call-1': { status: 'approved' } },
-  networkToolCallApprovals: {},
 };
 
 const wrapperFor = (value: ToolCallContextValue) =>

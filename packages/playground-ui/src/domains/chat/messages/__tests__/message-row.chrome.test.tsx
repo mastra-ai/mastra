@@ -35,11 +35,8 @@ const Providers = ({ children, datasetEnabled }: { children: ReactNode; datasetE
       declineToolcall={() => {}}
       approveToolcallGenerate={() => {}}
       declineToolcallGenerate={() => {}}
-      approveNetworkToolcall={() => {}}
-      declineNetworkToolcall={() => {}}
       isRunning={false}
       toolCallApprovals={{}}
-      networkToolCallApprovals={{}}
     >
       {children}
     </ToolCallProvider>

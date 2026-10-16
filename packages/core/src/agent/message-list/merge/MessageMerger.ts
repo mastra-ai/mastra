@@ -30,16 +30,12 @@ export class MessageMerger {
    * @param latestMessage - The most recent message in the list
    * @param incomingMessage - The message being added
    * @param messageSource - The source of the incoming message ('memory', 'input', 'response', 'context')
-   * @param isLatestFromMemory - Whether the latest message is from memory
-   * @param agentNetworkAppend - Whether agent network append mode is enabled
    */
 
   static shouldMerge(
     latestMessage: MastraDBMessage | undefined,
     incomingMessage: MastraDBMessage,
     messageSource: string,
-    isLatestFromMemory: boolean,
-    agentNetworkAppend: boolean = false,
   ): boolean {
     if (!latestMessage) return false;
 
@@ -53,7 +49,7 @@ export class MessageMerger {
       return false;
     }
 
-    // Don't merge completion result message (network uses completionResult, supervisor uses isTaskCompleteResult)
+    // Don't merge completion result message (completion checks use completionResult, supervisor uses isTaskCompleteResult)
     if (
       incomingMessage.content.metadata?.completionResult ||
       latestMessage.content.metadata?.completionResult ||
@@ -77,11 +73,7 @@ export class MessageMerger {
       // If the message is from memory, don't append to the last assistant message
       messageSource !== 'memory';
 
-    // Agent network append flag handling
-    // When enabled, only merge if the latest message is NOT from memory
-    const appendNetworkMessage = agentNetworkAppend ? !isLatestFromMemory : true;
-
-    return shouldAppendToLastAssistantMessage && appendNetworkMessage;
+    return shouldAppendToLastAssistantMessage;
   }
 
   /**

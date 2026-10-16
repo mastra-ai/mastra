@@ -74,18 +74,12 @@ describe('nested sub-agent streaming', () => {
     });
   });
 
-  it('maps nested workflow and network leaves without changing their classification', () => {
+  it('maps nested workflow leaves without changing their classification', () => {
     const workflowChunk = {
       type: 'workflow-step-start',
       runId: 'workflow-run',
       from: ChunkFrom.WORKFLOW,
       payload: { id: 'step-1' },
-    };
-    const networkChunk = {
-      type: 'network-start',
-      runId: 'network-run',
-      from: ChunkFrom.NETWORK,
-      payload: { id: 'network-1' },
     };
 
     expect(
@@ -100,19 +94,6 @@ describe('nested sub-agent streaming', () => {
       type: 'tool-workflow',
       toolCallId: 'call-applicationAgent',
       payload: workflowChunk,
-    });
-    expect(
-      convert(
-        outer(
-          envelope(networkChunk, 'call-candidateNetwork', 'network-candidateNetwork'),
-          'call-applicationAgent',
-          'agent-applicationAgent',
-        ),
-      ),
-    ).toEqual({
-      type: 'tool-network',
-      toolCallId: 'call-applicationAgent',
-      payload: networkChunk,
     });
   });
 

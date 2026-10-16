@@ -17,14 +17,14 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_115 = {
+type InputShared_Auxiliary_113 = {
   workflowId: string;
   runId: string;
   executionPath: number[];
-  parentWorkflow?: InputShared_Auxiliary_115 | undefined;
+  parentWorkflow?: InputShared_Auxiliary_113 | undefined;
 };
 
-type InputShared_Auxiliary_207 =
+type InputShared_Auxiliary_193 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -73,41 +73,41 @@ type InputShared_Auxiliary_207 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_207[];
+      args: InputShared_Auxiliary_193[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_207;
+      arg: InputShared_Auxiliary_193;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_216;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_216;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_216;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_216;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_216;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_216;
           };
     };
 
-type InputShared_Auxiliary_230 =
+type InputShared_Auxiliary_216 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -156,33 +156,33 @@ type InputShared_Auxiliary_230 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_230[];
+      args: InputShared_Auxiliary_216[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_230;
+      arg: InputShared_Auxiliary_216;
     };
 
-type InputShared_Auxiliary_264 =
+type InputShared_Auxiliary_250 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_264[];
+      args: InputShared_Auxiliary_250[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_264;
+      arg: InputShared_Auxiliary_250;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_207;
+            some: InputShared_Auxiliary_193;
           }
         | {
-            none: InputShared_Auxiliary_207;
+            none: InputShared_Auxiliary_193;
           };
     };
 
-type InputShared_Auxiliary_692 =
+type InputShared_Auxiliary_678 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,19 +227,19 @@ type InputShared_Auxiliary_692 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_692[];
+      args: InputShared_Auxiliary_678[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_692;
+      arg: InputShared_Auxiliary_678;
     };
 
-type InputShared_Auxiliary_766 = {
+type InputShared_Auxiliary_752 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_766[] | undefined;
+  children?: InputShared_Auxiliary_752[] | undefined;
 };
 
 type Shared_Auxiliary_764 = {
@@ -1808,7 +1808,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_692[];
+  predicates: InputShared_Auxiliary_678[];
 };
 
 type InputShared_Type_89 = {
@@ -1822,7 +1822,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_692;
+  predicate: InputShared_Auxiliary_678;
 };
 
 type InputShared_Type_90 =
@@ -5961,85 +5961,6 @@ export interface PostAgentsAgentIdDeclineToolCallGenerate_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/approve-network-tool-call
-// ============================================================================
-export type PostAgentsAgentIdApproveNetworkToolCall_PathParams = GetAgentsAgentId_PathParams;
-
-export type PostAgentsAgentIdApproveNetworkToolCall_Body = {
-  runId: string;
-  model?: string | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  format?: string | undefined;
-};
-
-export type PostAgentsAgentIdApproveNetworkToolCall_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostAgentsAgentIdApproveNetworkToolCall_Request = Simplify<
-  (PostAgentsAgentIdApproveNetworkToolCall_PathParams extends never
-    ? {}
-    : { params: PostAgentsAgentIdApproveNetworkToolCall_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostAgentsAgentIdApproveNetworkToolCall_Body extends never
-      ? {}
-      : {} extends PostAgentsAgentIdApproveNetworkToolCall_Body
-        ? { body?: PostAgentsAgentIdApproveNetworkToolCall_Body }
-        : { body: PostAgentsAgentIdApproveNetworkToolCall_Body })
->;
-
-export interface PostAgentsAgentIdApproveNetworkToolCall_RouteContract {
-  pathParams: PostAgentsAgentIdApproveNetworkToolCall_PathParams;
-  queryParams: never;
-  body: PostAgentsAgentIdApproveNetworkToolCall_Body;
-  request: PostAgentsAgentIdApproveNetworkToolCall_Request;
-  response: PostAgentsAgentIdApproveNetworkToolCall_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agents/:agentId/decline-network-tool-call
-// ============================================================================
-export type PostAgentsAgentIdDeclineNetworkToolCall_PathParams = GetAgentsAgentId_PathParams;
-
-export type PostAgentsAgentIdDeclineNetworkToolCall_Body = {
-  runId: string;
-  model?: string | undefined;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  format?: string | undefined;
-  reason?: string | undefined;
-};
-
-export type PostAgentsAgentIdDeclineNetworkToolCall_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostAgentsAgentIdDeclineNetworkToolCall_Request = Simplify<
-  (PostAgentsAgentIdDeclineNetworkToolCall_PathParams extends never
-    ? {}
-    : { params: PostAgentsAgentIdDeclineNetworkToolCall_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostAgentsAgentIdDeclineNetworkToolCall_Body extends never
-      ? {}
-      : {} extends PostAgentsAgentIdDeclineNetworkToolCall_Body
-        ? { body?: PostAgentsAgentIdDeclineNetworkToolCall_Body }
-        : { body: PostAgentsAgentIdDeclineNetworkToolCall_Body })
->;
-
-export interface PostAgentsAgentIdDeclineNetworkToolCall_RouteContract {
-  pathParams: PostAgentsAgentIdDeclineNetworkToolCall_PathParams;
-  queryParams: never;
-  body: PostAgentsAgentIdDeclineNetworkToolCall_Body;
-  request: PostAgentsAgentIdDeclineNetworkToolCall_Request;
-  response: PostAgentsAgentIdDeclineNetworkToolCall_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
 // Route: POST /agents/:agentId/resume-stream-until-idle
 // ============================================================================
 export type PostAgentsAgentIdResumeStreamUntilIdle_PathParams = GetAgentsAgentId_PathParams;
@@ -6140,34 +6061,6 @@ export interface PostAgentsAgentIdResumeStreamUntilIdle_RouteContract {
   body: PostAgentsAgentIdResumeStreamUntilIdle_Body;
   request: PostAgentsAgentIdResumeStreamUntilIdle_Request;
   response: PostAgentsAgentIdResumeStreamUntilIdle_Response;
-  responseType: 'stream';
-}
-
-// ============================================================================
-// Route: POST /agents/:agentId/network
-// ============================================================================
-export type PostAgentsAgentIdNetwork_PathParams = GetAgentsAgentId_PathParams;
-
-export type PostAgentsAgentIdNetwork_Body = PostAgentsAgentIdGenerate_Body;
-
-export type PostAgentsAgentIdNetwork_Response = PostAgentsAgentIdGenerate_Response;
-
-export type PostAgentsAgentIdNetwork_Request = Simplify<
-  (PostAgentsAgentIdNetwork_PathParams extends never ? {} : { params: PostAgentsAgentIdNetwork_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostAgentsAgentIdNetwork_Body extends never
-      ? {}
-      : {} extends PostAgentsAgentIdNetwork_Body
-        ? { body?: PostAgentsAgentIdNetwork_Body }
-        : { body: PostAgentsAgentIdNetwork_Body })
->;
-
-export interface PostAgentsAgentIdNetwork_RouteContract {
-  pathParams: PostAgentsAgentIdNetwork_PathParams;
-  queryParams: never;
-  body: PostAgentsAgentIdNetwork_Body;
-  request: PostAgentsAgentIdNetwork_Request;
-  response: PostAgentsAgentIdNetwork_Response;
   responseType: 'stream';
 }
 
@@ -7928,7 +7821,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams = GetWorkflo
 export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   stepId: string;
   executionPath: number[];
-  parentWorkflow?: InputShared_Auxiliary_115 | undefined;
+  parentWorkflow?: InputShared_Auxiliary_113 | undefined;
   stepResults: {
     [key: string]: unknown;
   };
@@ -9386,303 +9279,6 @@ export interface GetMemorySearch_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /memory/network/status
-// ============================================================================
-export type GetMemoryNetworkStatus_QueryParams = GetMemoryConfig_QueryParams;
-
-export type GetMemoryNetworkStatus_Response = GetMemoryStatus_Response;
-
-export type GetMemoryNetworkStatus_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (GetMemoryNetworkStatus_QueryParams extends never
-      ? {}
-      : {} extends GetMemoryNetworkStatus_QueryParams
-        ? { query?: GetMemoryNetworkStatus_QueryParams }
-        : { query: GetMemoryNetworkStatus_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetMemoryNetworkStatus_RouteContract {
-  pathParams: never;
-  queryParams: GetMemoryNetworkStatus_QueryParams;
-  body: never;
-  request: GetMemoryNetworkStatus_Request;
-  response: GetMemoryNetworkStatus_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /memory/network/threads
-// ============================================================================
-export type GetMemoryNetworkThreads_QueryParams = GetMemoryThreads_QueryParams;
-
-export type GetMemoryNetworkThreads_Response = GetMemoryThreads_Response;
-
-export type GetMemoryNetworkThreads_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (GetMemoryNetworkThreads_QueryParams extends never
-      ? {}
-      : {} extends GetMemoryNetworkThreads_QueryParams
-        ? { query?: GetMemoryNetworkThreads_QueryParams }
-        : { query: GetMemoryNetworkThreads_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetMemoryNetworkThreads_RouteContract {
-  pathParams: never;
-  queryParams: GetMemoryNetworkThreads_QueryParams;
-  body: never;
-  request: GetMemoryNetworkThreads_Request;
-  response: GetMemoryNetworkThreads_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /memory/network/threads/:threadId
-// ============================================================================
-export type GetMemoryNetworkThreadsThreadId_PathParams = GetMemoryThreadsThreadId_PathParams;
-
-export type GetMemoryNetworkThreadsThreadId_QueryParams = GetMemoryThreadsThreadId_QueryParams;
-
-export type GetMemoryNetworkThreadsThreadId_Response = GetMemoryThreadsThreadId_Response;
-
-export type GetMemoryNetworkThreadsThreadId_Request = Simplify<
-  (GetMemoryNetworkThreadsThreadId_PathParams extends never
-    ? {}
-    : { params: GetMemoryNetworkThreadsThreadId_PathParams }) &
-    (GetMemoryNetworkThreadsThreadId_QueryParams extends never
-      ? {}
-      : {} extends GetMemoryNetworkThreadsThreadId_QueryParams
-        ? { query?: GetMemoryNetworkThreadsThreadId_QueryParams }
-        : { query: GetMemoryNetworkThreadsThreadId_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetMemoryNetworkThreadsThreadId_RouteContract {
-  pathParams: GetMemoryNetworkThreadsThreadId_PathParams;
-  queryParams: GetMemoryNetworkThreadsThreadId_QueryParams;
-  body: never;
-  request: GetMemoryNetworkThreadsThreadId_Request;
-  response: GetMemoryNetworkThreadsThreadId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /memory/network/threads/:threadId/messages
-// ============================================================================
-export type GetMemoryNetworkThreadsThreadIdMessages_PathParams = GetMemoryThreadsThreadId_PathParams;
-
-export type GetMemoryNetworkThreadsThreadIdMessages_QueryParams = {
-  page?: number | undefined;
-  perPage?: number | undefined;
-  agentId?: string | undefined;
-  resourceId?: string | undefined;
-  orderBy?:
-    | (
-        | {
-            field?: 'createdAt' | undefined;
-            direction?: ('ASC' | 'DESC') | undefined;
-          }
-        | undefined
-      )
-    | undefined;
-  include?:
-    | {
-        id: string;
-        threadId?: string | undefined;
-        withPreviousMessages?: number | undefined;
-        withNextMessages?: number | undefined;
-      }[]
-    | undefined;
-  filter?: InputShared_Type_12 | undefined;
-};
-
-export type GetMemoryNetworkThreadsThreadIdMessages_Response = GetMemoryThreadsThreadIdMessages_Response;
-
-export type GetMemoryNetworkThreadsThreadIdMessages_Request = Simplify<
-  (GetMemoryNetworkThreadsThreadIdMessages_PathParams extends never
-    ? {}
-    : { params: GetMemoryNetworkThreadsThreadIdMessages_PathParams }) &
-    (GetMemoryNetworkThreadsThreadIdMessages_QueryParams extends never
-      ? {}
-      : {} extends GetMemoryNetworkThreadsThreadIdMessages_QueryParams
-        ? { query?: GetMemoryNetworkThreadsThreadIdMessages_QueryParams }
-        : { query: GetMemoryNetworkThreadsThreadIdMessages_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetMemoryNetworkThreadsThreadIdMessages_RouteContract {
-  pathParams: GetMemoryNetworkThreadsThreadIdMessages_PathParams;
-  queryParams: GetMemoryNetworkThreadsThreadIdMessages_QueryParams;
-  body: never;
-  request: GetMemoryNetworkThreadsThreadIdMessages_Request;
-  response: GetMemoryNetworkThreadsThreadIdMessages_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /memory/network/save-messages
-// ============================================================================
-export type PostMemoryNetworkSaveMessages_QueryParams = GetMemoryConfig_QueryParams;
-
-export type PostMemoryNetworkSaveMessages_Body = PostMemorySaveMessages_Body;
-
-export type PostMemoryNetworkSaveMessages_Response = PostMemorySaveMessages_Response;
-
-export type PostMemoryNetworkSaveMessages_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (PostMemoryNetworkSaveMessages_QueryParams extends never
-      ? {}
-      : {} extends PostMemoryNetworkSaveMessages_QueryParams
-        ? { query?: PostMemoryNetworkSaveMessages_QueryParams }
-        : { query: PostMemoryNetworkSaveMessages_QueryParams }) &
-    (PostMemoryNetworkSaveMessages_Body extends never
-      ? {}
-      : {} extends PostMemoryNetworkSaveMessages_Body
-        ? { body?: PostMemoryNetworkSaveMessages_Body }
-        : { body: PostMemoryNetworkSaveMessages_Body })
->;
-
-export interface PostMemoryNetworkSaveMessages_RouteContract {
-  pathParams: never;
-  queryParams: PostMemoryNetworkSaveMessages_QueryParams;
-  body: PostMemoryNetworkSaveMessages_Body;
-  request: PostMemoryNetworkSaveMessages_Request;
-  response: PostMemoryNetworkSaveMessages_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /memory/network/threads
-// ============================================================================
-export type PostMemoryNetworkThreads_QueryParams = GetMemoryConfig_QueryParams;
-
-export type PostMemoryNetworkThreads_Body = PostMemoryThreads_Body;
-
-export type PostMemoryNetworkThreads_Response = GetMemoryThreadsThreadId_Response;
-
-export type PostMemoryNetworkThreads_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (PostMemoryNetworkThreads_QueryParams extends never
-      ? {}
-      : {} extends PostMemoryNetworkThreads_QueryParams
-        ? { query?: PostMemoryNetworkThreads_QueryParams }
-        : { query: PostMemoryNetworkThreads_QueryParams }) &
-    (PostMemoryNetworkThreads_Body extends never
-      ? {}
-      : {} extends PostMemoryNetworkThreads_Body
-        ? { body?: PostMemoryNetworkThreads_Body }
-        : { body: PostMemoryNetworkThreads_Body })
->;
-
-export interface PostMemoryNetworkThreads_RouteContract {
-  pathParams: never;
-  queryParams: PostMemoryNetworkThreads_QueryParams;
-  body: PostMemoryNetworkThreads_Body;
-  request: PostMemoryNetworkThreads_Request;
-  response: PostMemoryNetworkThreads_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: PATCH /memory/network/threads/:threadId
-// ============================================================================
-export type PatchMemoryNetworkThreadsThreadId_PathParams = GetMemoryThreadsThreadId_PathParams;
-
-export type PatchMemoryNetworkThreadsThreadId_QueryParams = GetMemoryConfig_QueryParams;
-
-export type PatchMemoryNetworkThreadsThreadId_Body = PatchMemoryThreadsThreadId_Body;
-
-export type PatchMemoryNetworkThreadsThreadId_Response = GetMemoryThreadsThreadId_Response;
-
-export type PatchMemoryNetworkThreadsThreadId_Request = Simplify<
-  (PatchMemoryNetworkThreadsThreadId_PathParams extends never
-    ? {}
-    : { params: PatchMemoryNetworkThreadsThreadId_PathParams }) &
-    (PatchMemoryNetworkThreadsThreadId_QueryParams extends never
-      ? {}
-      : {} extends PatchMemoryNetworkThreadsThreadId_QueryParams
-        ? { query?: PatchMemoryNetworkThreadsThreadId_QueryParams }
-        : { query: PatchMemoryNetworkThreadsThreadId_QueryParams }) &
-    (PatchMemoryNetworkThreadsThreadId_Body extends never
-      ? {}
-      : {} extends PatchMemoryNetworkThreadsThreadId_Body
-        ? { body?: PatchMemoryNetworkThreadsThreadId_Body }
-        : { body: PatchMemoryNetworkThreadsThreadId_Body })
->;
-
-export interface PatchMemoryNetworkThreadsThreadId_RouteContract {
-  pathParams: PatchMemoryNetworkThreadsThreadId_PathParams;
-  queryParams: PatchMemoryNetworkThreadsThreadId_QueryParams;
-  body: PatchMemoryNetworkThreadsThreadId_Body;
-  request: PatchMemoryNetworkThreadsThreadId_Request;
-  response: PatchMemoryNetworkThreadsThreadId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: DELETE /memory/network/threads/:threadId
-// ============================================================================
-export type DeleteMemoryNetworkThreadsThreadId_PathParams = GetMemoryThreadsThreadId_PathParams;
-
-export type DeleteMemoryNetworkThreadsThreadId_QueryParams = DeleteMemoryThreadsThreadId_QueryParams;
-
-export type DeleteMemoryNetworkThreadsThreadId_Response = DeleteMemoryThreadsThreadId_Response;
-
-export type DeleteMemoryNetworkThreadsThreadId_Request = Simplify<
-  (DeleteMemoryNetworkThreadsThreadId_PathParams extends never
-    ? {}
-    : { params: DeleteMemoryNetworkThreadsThreadId_PathParams }) &
-    (DeleteMemoryNetworkThreadsThreadId_QueryParams extends never
-      ? {}
-      : {} extends DeleteMemoryNetworkThreadsThreadId_QueryParams
-        ? { query?: DeleteMemoryNetworkThreadsThreadId_QueryParams }
-        : { query: DeleteMemoryNetworkThreadsThreadId_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface DeleteMemoryNetworkThreadsThreadId_RouteContract {
-  pathParams: DeleteMemoryNetworkThreadsThreadId_PathParams;
-  queryParams: DeleteMemoryNetworkThreadsThreadId_QueryParams;
-  body: never;
-  request: DeleteMemoryNetworkThreadsThreadId_Request;
-  response: DeleteMemoryNetworkThreadsThreadId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /memory/network/messages/delete
-// ============================================================================
-export type PostMemoryNetworkMessagesDelete_QueryParams = DeleteMemoryThreadsThreadId_QueryParams;
-
-export type PostMemoryNetworkMessagesDelete_Body = PostMemoryMessagesDelete_Body;
-
-export type PostMemoryNetworkMessagesDelete_Response = PostMemoryMessagesDelete_Response;
-
-export type PostMemoryNetworkMessagesDelete_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (PostMemoryNetworkMessagesDelete_QueryParams extends never
-      ? {}
-      : {} extends PostMemoryNetworkMessagesDelete_QueryParams
-        ? { query?: PostMemoryNetworkMessagesDelete_QueryParams }
-        : { query: PostMemoryNetworkMessagesDelete_QueryParams }) &
-    (PostMemoryNetworkMessagesDelete_Body extends never
-      ? {}
-      : {} extends PostMemoryNetworkMessagesDelete_Body
-        ? { body?: PostMemoryNetworkMessagesDelete_Body }
-        : { body: PostMemoryNetworkMessagesDelete_Body })
->;
-
-export interface PostMemoryNetworkMessagesDelete_RouteContract {
-  pathParams: never;
-  queryParams: PostMemoryNetworkMessagesDelete_QueryParams;
-  body: PostMemoryNetworkMessagesDelete_Body;
-  request: PostMemoryNetworkMessagesDelete_Request;
-  response: PostMemoryNetworkMessagesDelete_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
 // Route: GET /scores/scorers
 // ============================================================================
 export type GetScoresScorers_Response = {
@@ -10475,7 +10071,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_207 | undefined;
+  where?: InputShared_Auxiliary_193 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10565,7 +10161,7 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_207 | undefined;
+  where?: InputShared_Auxiliary_193 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (
@@ -10595,7 +10191,7 @@ export type PostObservabilityTracesAggregate_Body = {
       )
     | `countDistinct.${string}`
   )[];
-  having?: InputShared_Auxiliary_230 | undefined;
+  having?: InputShared_Auxiliary_216 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10677,9 +10273,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: InputShared_Auxiliary_207 | undefined;
+    where?: InputShared_Auxiliary_193 | undefined;
   };
-  where?: InputShared_Auxiliary_264 | undefined;
+  where?: InputShared_Auxiliary_250 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10722,7 +10318,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_230 | undefined;
+  where?: InputShared_Auxiliary_216 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
@@ -18647,7 +18243,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_766[] | undefined;
+  files?: InputShared_Auxiliary_752[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18705,7 +18301,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_766[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_752[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -24200,10 +23796,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/recover': PostAgentsAgentIdRecover_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
-  'POST /agents/:agentId/approve-network-tool-call': PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
-  'POST /agents/:agentId/decline-network-tool-call': PostAgentsAgentIdDeclineNetworkToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream-until-idle': PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
-  'POST /agents/:agentId/network': PostAgentsAgentIdNetwork_RouteContract;
   'POST /agents/:agentId/model': PostAgentsAgentIdModel_RouteContract;
   'POST /agents/:agentId/model/reset': PostAgentsAgentIdModelReset_RouteContract;
   'POST /agents/:agentId/models/reorder': PostAgentsAgentIdModelsReorder_RouteContract;
@@ -24285,15 +23878,6 @@ export interface RouteTypes {
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/messages/delete': PostMemoryMessagesDelete_RouteContract;
   'GET /memory/search': GetMemorySearch_RouteContract;
-  'GET /memory/network/status': GetMemoryNetworkStatus_RouteContract;
-  'GET /memory/network/threads': GetMemoryNetworkThreads_RouteContract;
-  'GET /memory/network/threads/:threadId': GetMemoryNetworkThreadsThreadId_RouteContract;
-  'GET /memory/network/threads/:threadId/messages': GetMemoryNetworkThreadsThreadIdMessages_RouteContract;
-  'POST /memory/network/save-messages': PostMemoryNetworkSaveMessages_RouteContract;
-  'POST /memory/network/threads': PostMemoryNetworkThreads_RouteContract;
-  'PATCH /memory/network/threads/:threadId': PatchMemoryNetworkThreadsThreadId_RouteContract;
-  'DELETE /memory/network/threads/:threadId': DeleteMemoryNetworkThreadsThreadId_RouteContract;
-  'POST /memory/network/messages/delete': PostMemoryNetworkMessagesDelete_RouteContract;
   'GET /scores/scorers': GetScoresScorers_RouteContract;
   'GET /scores/scorers/:scorerId': GetScoresScorersScorerId_RouteContract;
   'GET /scores/run/:runId': GetScoresRunRunId_RouteContract;
@@ -24764,9 +24348,6 @@ export interface Client {
   '/agents/:agentId': {
     GET: GetAgentsAgentId_RouteContract;
   };
-  '/agents/:agentId/approve-network-tool-call': {
-    POST: PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
-  };
   '/agents/:agentId/approve-tool-call': {
     POST: PostAgentsAgentIdApproveToolCall_RouteContract;
   };
@@ -24775,9 +24356,6 @@ export interface Client {
   };
   '/agents/:agentId/clone': {
     POST: PostAgentsAgentIdClone_RouteContract;
-  };
-  '/agents/:agentId/decline-network-tool-call': {
-    POST: PostAgentsAgentIdDeclineNetworkToolCall_RouteContract;
   };
   '/agents/:agentId/decline-tool-call': {
     POST: PostAgentsAgentIdDeclineToolCall_RouteContract;
@@ -24811,9 +24389,6 @@ export interface Client {
   };
   '/agents/:agentId/models/reorder': {
     POST: PostAgentsAgentIdModelsReorder_RouteContract;
-  };
-  '/agents/:agentId/network': {
-    POST: PostAgentsAgentIdNetwork_RouteContract;
   };
   '/agents/:agentId/observe': {
     POST: PostAgentsAgentIdObserve_RouteContract;
@@ -25114,27 +24689,6 @@ export interface Client {
   };
   '/memory/messages/delete': {
     POST: PostMemoryMessagesDelete_RouteContract;
-  };
-  '/memory/network/messages/delete': {
-    POST: PostMemoryNetworkMessagesDelete_RouteContract;
-  };
-  '/memory/network/save-messages': {
-    POST: PostMemoryNetworkSaveMessages_RouteContract;
-  };
-  '/memory/network/status': {
-    GET: GetMemoryNetworkStatus_RouteContract;
-  };
-  '/memory/network/threads': {
-    GET: GetMemoryNetworkThreads_RouteContract;
-    POST: PostMemoryNetworkThreads_RouteContract;
-  };
-  '/memory/network/threads/:threadId': {
-    DELETE: DeleteMemoryNetworkThreadsThreadId_RouteContract;
-    GET: GetMemoryNetworkThreadsThreadId_RouteContract;
-    PATCH: PatchMemoryNetworkThreadsThreadId_RouteContract;
-  };
-  '/memory/network/threads/:threadId/messages': {
-    GET: GetMemoryNetworkThreadsThreadIdMessages_RouteContract;
   };
   '/memory/observational-memory': {
     GET: GetMemoryObservationalMemory_RouteContract;

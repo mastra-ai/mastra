@@ -17,11 +17,8 @@ describe('FileTreeBadge', () => {
             declineToolcall={vi.fn()}
             approveToolcallGenerate={vi.fn()}
             declineToolcallGenerate={vi.fn()}
-            approveNetworkToolcall={vi.fn()}
-            declineNetworkToolcall={vi.fn()}
             isRunning={false}
             toolCallApprovals={{}}
-            networkToolCallApprovals={{}}
           >
             <FileTreeBadge
               toolName="mastra_workspace_list_files"
@@ -34,7 +31,6 @@ describe('FileTreeBadge', () => {
                 args: {},
                 runId: 'run-1',
               }}
-              isNetwork={false}
             />
           </ToolCallProvider>
         </TooltipProvider>,

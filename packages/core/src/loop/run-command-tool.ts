@@ -17,7 +17,7 @@ import { promisify } from 'node:util';
 
 import { z } from 'zod/v4';
 
-import { createTool } from '../../tools';
+import { createTool } from '../tools';
 
 const execAsync = promisify(exec);
 

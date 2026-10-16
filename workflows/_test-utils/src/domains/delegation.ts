@@ -1,14 +1,8 @@
 /**
- * Network-equivalent delegation tests for DurableAgent
+ * Delegation tests for DurableAgent
  *
- * `Agent.network()` itself is a plain-Agent surface: the network loop is
- * built directly on the default in-process workflow engine
- * (loop/network/index.ts → createWorkflow → default engine), and neither
- * DurableAgent nor EventedAgent exposes a network() method — so the literal
- * network-mode behaviors cannot be exercised cross-engine. What *is*
- * cross-engine is the delegation family those behaviors are built from: a
- * supervisor agent routing work to sub-agents through the agentic loop.
- * These tests pin that family through the DurableAgentLike surface so every
+ * A supervisor agent routing work to sub-agents through the agentic loop.
+ * These tests pin that behaviour through the DurableAgentLike surface so every
  * leg (DurableAgent, EventedAgent, plain Agent, Inngest) proves the same
  * contract:
  *
@@ -20,10 +14,7 @@
  * - bail() from onDelegationComplete stops the loop in the same iteration
  * - a sub-agent failure surfaces to the supervisor without killing the run
  *
- * Observational-memory × network guards
- * (AGENT_NETWORK_OBSERVATIONAL_MEMORY_UNSUPPORTED etc.) stay in
- * packages/core/src/agent/agent-network.test.ts: they gate the plain-Agent
- * network() entry point, which no other leg has. The durable OM surface
+ * The durable OM surface
  * (serialized flag, title-generation guard) is pinned by
  * agent/durable/utils/serialize-state.test.ts and
  * agent/durable/workflows/__tests__/finalize-run.test.ts.
@@ -84,10 +75,10 @@ function streamCallCount(model: unknown): number {
   return (model as { doStreamCalls: unknown[] }).doStreamCalls.length;
 }
 
-export function createNetworkTests(context: DurableAgentTestContext) {
+export function createDelegationTests(context: DurableAgentTestContext) {
   const { createAgent } = context;
 
-  describe('Network-equivalent delegation', () => {
+  describe('Delegation', () => {
     it('routes a delegation tool-call to the named sub-agent and not its siblings', async () => {
       const researchModel = createTextStreamModel('Dolphins are marine mammals.');
       const writerModel = createTextStreamModel('A polished report.');
@@ -109,7 +100,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       const supervisorModel = createToolCallThenTextModel('agent-research', { prompt: 'research dolphins' }, 'Done');
 
       const agent = await createAgent({
-        id: 'network-routing-agent',
+        id: 'delegation-supervisor',
         instructions: 'You orchestrate sub-agents.',
         model: supervisorModel,
         agents: { research, writer },
@@ -132,7 +123,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       const supervisorModel = createToolCallThenTextModel('agent-research', { prompt: 'research dolphins' }, 'Done');
 
       const agent = await createAgent({
-        id: 'network-result-agent',
+        id: 'delegation-result-agent',
         instructions: 'You orchestrate sub-agents.',
         model: supervisorModel,
         agents: { research },
@@ -156,7 +147,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       const research = makeSubAgent('research', 'Findings.');
 
       const agent = await createAgent({
-        id: 'network-delegation-start-agent',
+        id: 'delegation-delegation-start-agent',
         instructions: 'You orchestrate sub-agents.',
         model: createToolCallThenTextModel('agent-research', { prompt: 'research dolphins' }, 'Done'),
         agents: { research },
@@ -185,7 +176,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       const writerAgent = makeSubAgent('writerAgent', 'Here is the final report.');
 
       const agent = await createAgent({
-        id: 'network-delegation-complete-agent',
+        id: 'delegation-delegation-complete-agent',
         instructions: 'You orchestrate sub-agents.',
         model: createToolCallThenTextModel('agent-writerAgent', { prompt: 'write a report' }, 'Done'),
         agents: { writerAgent },
@@ -214,7 +205,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       const streamSpy = vi.spyOn(research, 'stream');
 
       const agent = await createAgent({
-        id: 'network-memory-scope-agent',
+        id: 'delegation-memory-scope-agent',
         instructions: 'You orchestrate sub-agents.',
         model: createToolCallThenTextModel('agent-research', { prompt: 'research dolphins' }, 'Done'),
         agents: { research },
@@ -256,7 +247,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       });
 
       const agent = await createAgent({
-        id: 'network-delegation-context-agent',
+        id: 'delegation-delegation-context-agent',
         instructions: 'You orchestrate sub-agents.',
         model: createToolCallThenTextModel('agent-specialist', { prompt: 'do specialized work' }, 'Done'),
         agents: { specialist },
@@ -296,7 +287,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       });
 
       const agent = await createAgent({
-        id: 'network-bail-agent',
+        id: 'delegation-bail-agent',
         instructions: 'You orchestrate sub-agents.',
         model: supervisorModel,
         agents: { research },
@@ -337,7 +328,7 @@ export function createNetworkTests(context: DurableAgentTestContext) {
       const supervisorModel = createToolCallThenTextModel('agent-broken', { prompt: 'do work' }, 'Recovered');
 
       const agent = await createAgent({
-        id: 'network-subagent-error-agent',
+        id: 'delegation-subagent-error-agent',
         instructions: 'You orchestrate sub-agents.',
         model: supervisorModel,
         agents: { broken },

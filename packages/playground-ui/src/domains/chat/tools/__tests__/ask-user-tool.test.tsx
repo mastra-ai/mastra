@@ -22,11 +22,8 @@ const renderTool = (props: RenderProps) => {
         declineToolcall={vi.fn()}
         approveToolcallGenerate={vi.fn()}
         declineToolcallGenerate={vi.fn()}
-        approveNetworkToolcall={vi.fn()}
-        declineNetworkToolcall={vi.fn()}
         isRunning={false}
         toolCallApprovals={{}}
-        networkToolCallApprovals={{}}
       >
         <AskUserTool {...props} />
       </ToolCallProvider>

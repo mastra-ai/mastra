@@ -39,9 +39,6 @@ const paths: Record<string, (...args: any[]) => string> = {
   workflowLink: id => `/workflows/${id}`,
   schedulesLink: () => '/schedules',
   scheduleLink: id => `/schedules/${id}`,
-  networkLink: id => `/networks/${id}`,
-  networkNewThreadLink: id => `/networks/${id}/chat/new`,
-  networkThreadLink: (networkId, threadId) => `/networks/${networkId}/chat/${threadId}`,
   scorerLink: (id: string, params?: { scoreId?: string; entity?: string }) => {
     const query = new URLSearchParams(
       Object.entries(params ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1])),

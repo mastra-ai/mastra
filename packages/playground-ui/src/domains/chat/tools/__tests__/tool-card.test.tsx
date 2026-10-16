@@ -57,11 +57,8 @@ const Providers = ({ children }: { children: ReactNode }) => {
               declineToolcall={() => {}}
               approveToolcallGenerate={() => {}}
               declineToolcallGenerate={() => {}}
-              approveNetworkToolcall={() => {}}
-              declineNetworkToolcall={() => {}}
               isRunning={false}
               toolCallApprovals={{}}
-              networkToolCallApprovals={{}}
             >
               {children}
             </ToolCallProvider>
@@ -523,7 +520,6 @@ describe('ToolCard dispatch', () => {
           messages={[]}
           toolCallId="approval-call"
           toolName="agent-head"
-          isNetwork={false}
           toolApprovalMetadata={{ toolCallId: 'approval-call', toolName: 'agent-head', args: {} }}
           isComplete
         />,
@@ -543,7 +539,6 @@ describe('ToolCard dispatch', () => {
         agentId: 'head',
         toolCallId: 'waiting-call',
         toolName: 'agent-head',
-        isNetwork: false,
         toolApprovalMetadata: undefined,
       };
       const { rerender } = render(<AgentBadge {...props} messages={[]} />, { wrapper: Providers });
@@ -562,7 +557,6 @@ describe('ToolCard dispatch', () => {
         messages: [{ type: 'text' as const, content: 'Checking the forecast.' }],
         toolCallId: 'streaming-call',
         toolName: 'agent-head',
-        isNetwork: false,
         toolApprovalMetadata: undefined,
         isComplete: true,
       };
@@ -581,7 +575,6 @@ describe('ToolCard dispatch', () => {
           messages={[{ type: 'tool', toolName: 'search', toolCallId: 'child-call', toolOutput }]}
           toolCallId="approval-call"
           toolName="agent-head"
-          isNetwork={false}
           toolApprovalMetadata={{ toolCallId: 'approval-call', toolName: 'agent-head', args: {} }}
           isComplete
         />,
@@ -600,7 +593,6 @@ describe('ToolCard dispatch', () => {
           messages={[{ type: 'text', content: 'Done.' }]}
           toolCallId="successful-delegation"
           toolName="agent-head"
-          isNetwork={false}
           toolApprovalMetadata={undefined}
           isComplete
           errorText="stale error"
@@ -628,7 +620,6 @@ describe('ToolCard dispatch', () => {
         messages: [{ type: 'text' as const, content: 'Looking it up.' }],
         toolCallId: 'failed-delegation',
         toolName: 'agent-head',
-        isNetwork: false,
         toolApprovalMetadata: undefined,
         isComplete: true,
       };

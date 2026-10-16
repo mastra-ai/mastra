@@ -23,11 +23,8 @@ const renderWithProvider = (node: ReactNode) =>
       declineToolcall={vi.fn()}
       approveToolcallGenerate={vi.fn()}
       declineToolcallGenerate={vi.fn()}
-      approveNetworkToolcall={vi.fn()}
-      declineNetworkToolcall={vi.fn()}
       isRunning={false}
       toolCallApprovals={{}}
-      networkToolCallApprovals={{}}
     >
       {node}
     </ToolCallProvider>,
@@ -44,7 +41,6 @@ describe('CodeModeBadge', () => {
         result={{ success: true, result: { count: 5 }, logs: ['fetched 5 orders'] }}
         toolCallId="call-1"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 
@@ -64,7 +60,6 @@ describe('CodeModeBadge', () => {
         result={{ success: true, result: 3 }}
         toolCallId="call-fmt"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 
@@ -89,7 +84,6 @@ describe('CodeModeBadge', () => {
         result={{ success: false, error: { message: 'boom', name: 'Error', line: 1 } }}
         toolCallId="call-2"
         toolApprovalMetadata={undefined}
-        isNetwork={false}
       />,
     );
 

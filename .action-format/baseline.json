@@ -1,0 +1,6352 @@
+{
+  "commit": "12a8a89938e",
+  "totals": {
+    "files": 1268,
+    "passed": 20268,
+    "failed": 0,
+    "skipped": 88,
+    "failedFiles": 0
+  },
+  "files": {
+    "src/affected-tests-resolution.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/utils.delay.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/utils.test.ts": {
+      "passed": 111,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/a2a/a2a-agent.test.ts": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/a2a/browser-entry.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/a2a/error.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/agent-network.test.ts": {
+      "passed": 86,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/agent-processor.test.ts": {
+      "passed": 108,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/agent-stream-processor.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/agent-writer-repro.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/agent.test.ts": {
+      "passed": 71,
+      "failed": 0,
+      "skipped": 3
+    },
+    "src/agent/mcp-guidance.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/memory-thread-ownership.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/resume-span-input.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/signals.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/thread-history.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/utils.test.ts": {
+      "passed": 61,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/agent-controller-channels-registration.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/agent-controller-mastra-registration.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/clone-thread.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/display-state.test.ts": {
+      "passed": 102,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/exact-thread-id.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/follower-suspension-cleanup.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/fork-clone-metadata.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/get-om-record.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/input-step-tripwire.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/list-available-models.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/list-threads-fork-filter.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/message-part-span-parity.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/mode-model-persistence.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/mode-validation.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/model-persistence-migration.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/model-sync-from-persisted.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/new-thread-history.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/om-failure-abort.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/om-threshold-persistence.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/persisted-tool-approval.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/query-thread-messages.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/repro-mc-bug.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/resource-id.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/send-message-settles.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-bus-amplification.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-bus.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-collaboration.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-isolation.test.ts": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-om.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-permissions.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-preference-persistence.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-state.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/session-subagents.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/signal-history.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/signal-messages.test.ts": {
+      "passed": 58,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/subagent-tool.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/subagent-workspace-integration.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/subscription-request-context.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/switch-model.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/task-tools.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/thread-locking.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/thread-selection-scope.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/thread-title.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/token-usage.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/tracing-propagation.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/unterminated-run-end.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/workspace-resolution.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/background-tasks/library-mode.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/background-tasks/manager-lifecycle.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/background-tasks/manager-unix-socket.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/background-tasks/manager.test.ts": {
+      "passed": 80,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/background-tasks/resolve-config.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/background-tasks/system-prompt.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/background-tasks/workflow.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/browser/browser.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/browser/processor.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/bundler/index.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/cache/inmemory.test.ts": {
+      "passed": 43,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/classifier/index.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/formatting.test.ts": {
+      "passed": 46,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/inline-media.test.ts": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/processor.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/error/index.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/error/utils.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/caching-pubsub.test.ts": {
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/subscribe-start-position.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/topics.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/unix-socket-pubsub-codec.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/unix-socket-pubsub-lease-recovery.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/unix-socket-pubsub-redelivery-budget.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/unix-socket-pubsub-solo.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/unix-socket-pubsub-split-brain.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/unix-socket-pubsub.test.ts": {
+      "passed": 53,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/base.test.ts": {
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/classifier-scorer.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/collect-tool-mocks.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/hooks.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/not-scorable.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/predicate.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/prepareRun.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/request-context-snapshot.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/thresholds.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/types.test.ts": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/integration/openapi-toolset.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/hooks/index.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/hooks/mitt.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/hooks/scorer-owner.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/logger/adapter.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/logger/console-logger.test.ts": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/logger/dual-logger.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/logger/multi-logger.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mcp/mcp-versioning.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mcp/registry-v2.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/memory-config.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/message-history-config.test.ts": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/mock-working-memory-merge.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/processor-caching.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/recall-signal-exclusions.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/run-state.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/system-reminders.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/memory/working-memory-utils.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/eager-tool-dispatch-loop-boundary.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/loop.test.ts": {
+      "passed": 151,
+      "failed": 0,
+      "skipped": 33
+    },
+    "src/loop/provider-tool-terminal-error.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/run-scope-helpers.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/timeout-step-fallback.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/timeout-total.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/timeout.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/tool-payload-transform-forwarding.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/zero-output-finish.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/notifications/dispatch-lazy.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/notifications/dispatch-snapshot-retention.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/notifications/notifications.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/notifications/signals.test.ts": {
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/predicate/index.test.ts": {
+      "passed": 59,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/observability/context-factory.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/observability/context-storage.regression.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/observability/context.test.ts": {
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/observability/rag-ingestion.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/observability/span-record.test.ts": {
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/observability/utils.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/observability/w3c.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/add-dynamic-workflow-warnings.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/add-dynamic-workflows-bundle.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/channels-resolver.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/classifiers.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/config-spread.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/cross-process-workflow.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/custom-gateway-integration.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/durable-agent-workflow-visibility.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/environment.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/fs-agent-schedules.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/fs-and-code-agents.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/hook.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/idgenerator.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 1
+    },
+    "src/mastra/internal-workflow-registry.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/list-active-workflow-runs.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/processor-workflow-registration.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/recover-all-durable-agents.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/register-exporter.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/register-fs-agents.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/register-fs-server.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/register-fs-storage.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/remove-agent.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/remove-tool.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/remove-workflow.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/restart-active-runs-filter.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/restart-all-active-workflow-runs.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/run-scope.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/scheduler-integration.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/scorer-hook-teardown.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/scorer-registration.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/server-app-access.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/set-server.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/set-studio.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/shutdown-pubsub.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/shutdown-storage.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/shutdown.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/tool-payload-transform.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/workers-filter.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/workers-option.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/workspace-cleanup.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/mastra/workspace-registration.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processor-provider/phase-filtered-processor.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/agents-md-autoload-integration.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/background-work-signals.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/cyber-refusal-handler.test.ts": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/llm-request-response-spans.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/output-processor-data-chunks.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/output-processor-tool-execution.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/output-stream-processor-hook-duration.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/output-stream-processor-span-teardown.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/prefill-error-handler.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/process-input-step.test.ts": {
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processor-state-span.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processor-tool-request-context.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/provider-history-compat.test.ts": {
+      "passed": 109,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/runner.test.ts": {
+      "passed": 84,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/send-signal.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/sendSignal-integration.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/span-payload.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/stability-defaults.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/step-schema.test.ts": {
+      "passed": 85,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/stream-error-retry-processor.test.ts": {
+      "passed": 61,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/tool-result-reminder.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/trailing-assistant-guard.test.ts": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/unsupported-file-handler.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/request-context/index.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/schedules/api.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/schedules/define.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/schedules/hooks.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/schedules/integration.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/schedules/schedules.test.ts": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/schedules/worker.test.ts": {
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/server/auth.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/server/composite-auth.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/server/server.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/server/simple-auth.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/signals/signal-provider.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/signals/task-signal-provider.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/signals/webhook-signal-provider.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/skills/agent-skills-resolver.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/skills/create-skill.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/skills/inline-skill-source.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/skills/validate.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/telemetry/context.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/telemetry/feature-telemetry.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/telemetry/posthog.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/telemetry/usage-telemetry.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/RunOutput.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/signal-exclusions.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/smooth-stream.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/usage-aggregation.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/base.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/bundle.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/factory-storage.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/filesystem.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/git-history.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/mock.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/pagination.test.ts": {
+      "passed": 44,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/retention.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/storageWithInit.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/types.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/utils.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/workflow-snapshot.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tool-provider/runtime.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/utils/deep-equal.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/utils/fetchWithRetry.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/utils/interop.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/utils/retry-after.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/utils/zod-utils.test.ts": {
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/vector/validation.test.ts": {
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/worker/worker.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builder-validation-context.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/createtool-types.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/exact-optional-property-types.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/observe.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/payload-transform.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/provider-tool-utils.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/suspend-payload.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/tool-stream.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/tool-title.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/tool.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/toolchecks.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/unified-integration.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 1
+    },
+    "src/tools/validation.test.ts": {
+      "passed": 120,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/zod-compatibility.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/a2a/compat/v0_3.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/a2a/compat/v1.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-builder/ee/allowlist.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-builder/ee/errors.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-builder/ee/normalize-candidate.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-builder/ee/picker.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-builder/ee/policy.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-builder/ee/types.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/factory-sandbox.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/glob.test.ts": {
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/line-utils.test.ts": {
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/workspace-logger.test.ts": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/workspace-safety.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/workspace.test.ts": {
+      "passed": 175,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/branch-map-bug.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/cancel-finished-run.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/cancel-sleep.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/concurrent-resume.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/create.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/default.test.ts": {
+      "passed": 63,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/durable-operation-ids.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/fetch-import.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/foreach-failure-progress.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/foreach-nested-workflow.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/foreach-suspend-payload.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/map-initdata-serialization.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/mapping-id-determinism.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/nested-restart-state.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/nested-resume-label.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/nested-resume-restart.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/nested-suspend-steps.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/on-start.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/parallel-nested-restart.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/processor-step.test.ts": {
+      "passed": 60,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/restart-completed-boundary.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/restart-pruned-predecessor.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/resume-restart-suspend-data.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/schedule-declaration.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/state-reader.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/timetravel-divergence.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/timetravel-foreach.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/utils.test.ts": {
+      "passed": 47,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/watch-event-payload.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/workflow.test.ts": {
+      "passed": 324,
+      "failed": 0,
+      "skipped": 4
+    },
+    "src/agent/fs-routing/index.test.ts": {
+      "passed": 71,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/goal/activity.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/goal/scorer.test.ts": {
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/goal/signal-provider.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/goal/state-processor.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/execution-fence.test.ts": {
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/run-registry-activity.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/run-registry.test.ts": {
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/should-cache.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/step-start-chunk-shape.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/memory-message-refs.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/message-list-abandoned-provider-tool-calls.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/message-list-suspended-tool-calls.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/rollback-to-step-boundary.test.ts": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/save-queue/save-queue.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-allow-result-retention.repro.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-ask-user-snapshot-failure.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-ask-user.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-fable-fallback.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-fga.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-finish-reason.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-notifications.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-session-created.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-session-deleted.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/agent-controller-tool-suspension.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/approval-run-binding.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/durable-approval-message-identity.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/message-author.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/message-identity-integration.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/mode-tool-availability.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/mode-workspace-tool-availability.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/run-engine-abort-deadline.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/run-engine-db-message.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/run-engine-delegated-subagent.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/session-abort-approval-suspension.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/session-abort-immediate-next-message.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/session-approval-ack.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/session-approval-isolation.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/session-thread-derived-state.test.ts": {
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/signal-messages.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/thread-owner.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent-controller/__tests__/trailing-guard-new-run.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/browser/__tests__/cli-handler.test.ts": {
+      "passed": 87,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/browser/screencast/screencast-stream.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/coding-agent/__tests__/coding-agent.test.ts": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/validation/validator.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/__tests__/caller-driven-experiments.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/__tests__/dataset.test.ts": {
+      "passed": 64,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/__tests__/experiment-memory.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/__tests__/experiment-traces.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/__tests__/experiment.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/__tests__/manager.test.ts": {
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/__tests__/snapshot.test.ts": {
+      "passed": 62,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/abort-run-stream-without-thread.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/active-tools-enforcement.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-fga.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-id-context.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-loop-snapshot-size.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-memory-message-refs.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-memory-source-document.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-model-settings-defaults.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-request-context-memory-resume.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-response-cache.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-scopes-legacy.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-scopes-runs.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-scopes-server.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-scopes.test.ts": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-signals.test.ts": {
+      "passed": 291,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-skills-wiring.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-thread-lease.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-thread-stream-ack.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agent-turn-tool-stream.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/agentic-loop-snapshot-lifecycle.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/attachment-download-recovery.test.ts": {
+      "passed": 124,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/background-tool-model-output.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/base64-images-with-threads.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/batch-parts-downstream.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/batch-parts-stop-when.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/browser.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/callbacks.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/client-observability-v6-toolmetadata.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/client-tool-updates.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/concurrent-resume-claim.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/concurrent-workflow-tool-approval.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/credential-error-fallback.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/cyber-refusal-recovery.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/delegated-resume-custom-frames.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/delegated-resume-request-context.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/delegation-context-refs.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/delegation-memory-inheritance.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/delegation-thread-metadata.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/durable-standalone-import.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/dynamic-memory.test.ts": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/dynamic-model-fallback.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/dynamic-subagent-background-ownership.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/execution-workflow-storage-noise.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/generate-signal-visibility.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/goal.test.ts": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/input-processors.test.ts": {
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/input-step-tripwire-settles.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/instructions.test.ts": {
+      "passed": 50,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/list-active-thread-runs.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/mastra-gateway-duck-typing.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/mcp-instructions.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/memory-error-processors.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/memory-metadata.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 3
+    },
+    "src/agent/__tests__/memory-readonly.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/memory-requestcontext-inheritance.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/message-trace-id.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/model-generation-span-tool-calls.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/model-list.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 10
+    },
+    "src/agent/__tests__/model-retry-after.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/output-processor-stopwhen-text.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/output-result-tripwire-saved-messages.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/parallel-delegation-approval.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/per-model-fallback-settings.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/persisted-approval-run-id.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/prefill-error-recovery.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/processor-retry-budget.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/processor-stream-observability-context.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/processor-workflow-storage-noise.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/processor-workflow-stream-capability.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/processor-workflow-stream-execution.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/processor-workflow-stream-parity.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/processor-workflow-stream-persistence.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/reasoning-client-echo.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/reasoning-interleaved.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/reasoning-memory.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/reasoning-openai-summaries.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/reasoning-per-step.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/recent-requests.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/request-context-reserved-keys.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/request-context-schema.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/response-cache-url-part.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/resume-invalid-data.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/resume-signal-exclusions.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/resume-span-tracing.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/resume-step-boundary.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/resume-stream-no-snapshot.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/root-version-resume.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/runscope-leak.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/save-and-errors.test.ts": {
+      "passed": 52,
+      "failed": 0,
+      "skipped": 2
+    },
+    "src/agent/__tests__/schema-compat-tool-validation.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/scorers-resume.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/scorers.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/signal-reasoning-preemption.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/signal-run-span.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/skills-activation-persistence.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/skills-with-custom-processors.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/specialist-workflow-resume.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/standalone-ephemeral-leak.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/stream-id.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/stream-locked-retry-crash.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/stream-until-idle.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/stream.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 3
+    },
+    "src/agent/__tests__/structured-output-abort.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/structured-output-fallback.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/structured-output-memory.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/structured-output-openai-compat.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/structured-output-retry.test.ts": {
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/structured-output-tool-calls.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/structured-output-tool-narration.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/structured-output.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-background-config.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-background-tool-content.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-duplicate-prompt.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-error-propagation.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-model-supplied-run-id.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-resume-duplicate-parts.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-resume-without-suspension.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent-versioning.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/subagent.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/supervisor-integration.test.ts": {
+      "passed": 66,
+      "failed": 0,
+      "skipped": 1
+    },
+    "src/agent/__tests__/supervisor-output-processor-stream.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/suspended-run-discovery.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/suspended-run-ttl-resume.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/suspended-run-ttl.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/suspended-snapshot-growth.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/suspended-snapshot-request-dedupe.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tagged-file-data-input.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-ack.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-broadcast-sanitization.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-durable-continuation.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-generation.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-initial-history-agent.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-initial-history.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-liveness.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-ownership.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-phantom-replay.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-publish-lag.test.ts": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-replay-ordering.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-restart.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-slow-recall.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-suspended-run.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-trim-signals.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-trim.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/thread-stream-yield.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/title-generation.test.ts": {
+      "passed": 64,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-approval-large-snapshot.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-approval-reasoning-mutation.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-approval-recall-roundtrip.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-approval-standalone-repro.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-approval.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-call-no-input-deltas.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-call-resumed-chunk.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-concurrency-active-tools.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-concurrency-called-strategy-resume.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-concurrency-called-strategy.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-concurrency.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-handling.test.ts": {
+      "passed": 68,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-model-output-image-url.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-search-context-resume.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-stream.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-suspension.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-title.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tool-transform-persistence.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/tools.test.ts": {
+      "passed": 47,
+      "failed": 0,
+      "skipped": 1
+    },
+    "src/agent/__tests__/uimessage.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/usage-tracking.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/user-first-turn.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/utils.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/v3-features.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/voice.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/workflow-background-config.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/workflow-tool-background-injection.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/workflow-tool-memory-isolation.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/workflow-tool-supplied-run-id.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/workflow-tool-suspend-schema.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/working-memory-context.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/__tests__/workspace-tool-context.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/agent-channels.test.ts": {
+      "passed": 163,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/agent-controller-channels-tenant-context.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/agent-controller-channels.test.ts": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/controller-channels-instance-injection.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/integration.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/output-processor.test.ts": {
+      "passed": 94,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/state-adapter.test.ts": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/__tests__/stream-helpers.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/channels/compat/slack.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/__tests__/acking-callback.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/__tests__/cross-process-codec-roundtrip.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/__tests__/local-only-multiprocess.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/__tests__/per-thread-pubsub-multiprocess.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/__tests__/redelivery-end-to-end.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/codec/codec.test.ts": {
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/event-emitter/ack-handle-buffer.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/event-emitter/batch-policy.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/event-emitter/event-emitter.batch.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/events/event-emitter/event-emitter.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/run/gates.scenario.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/run/index.test.ts": {
+      "passed": 65,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/run/multi-turn.scenario.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/run/score-persistence.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/knowledge/__tests__/knowledge.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/knowledge/__tests__/reconcile.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/scoreTraces/scoreTrace.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/evals/scoreTraces/utils.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/network/index.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/network/run-command-tool.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 1
+    },
+    "src/loop/network/validation.test.ts": {
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/cloudflare-workers-ai-url.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateway-resolver.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/model-auth-resolver.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/model-settings.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/model.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/openai-websocket-fetch.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/provider-options-generation.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/provider-registry.test.ts": {
+      "passed": 58,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/registry-generator.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/resolve-model.test.ts": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-custom-provider-api.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-custom-provider.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-deepseek.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-gateway-auth-cache.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-openai-websocket.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-openrouter-headers.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-provider-tools.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-serialize-for-span.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-supported-urls.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/router-v3-tool-result-media.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/server-side-fallback.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/errors.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/prune-snapshot.test.ts": {
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/schema.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/serialization-invariants.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/stream-signals.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/stream.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/auto-resume-system-message.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/build-llm-prompt-args.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/compose-step-input.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/continuation-core.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/inject-background-task-prompt.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/interruptible-stream.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/merge-llm-call-headers.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/normalize-model-output.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/record-terminal-error-message.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/stream-until-idle-helpers.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/suspended-tool-run-id.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/tool-payload-transform.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/memory/memory-input-filter.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/memory/message-history.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/memory/semantic-recall.test.ts": {
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/memory/thread-title-persistence.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/memory/working-memory.test.ts": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/__tests__/caching-transform-stream.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/base/input.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/base/output-format-handlers.test.ts": {
+      "passed": 70,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/base/output.test.ts": {
+      "passed": 64,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/base/schema.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/base/step-message-mirrors.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/base/step-request-dedupe.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/batch-parts.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/classifier.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/detector-request-context.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/file-upload-agent.test.ts": {
+      "passed": 82,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/file-upload.test.ts": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/language-detector.test.ts": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/model-selection.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/moderation.test.ts": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/pii-detector-agent.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/pii-detector.test.ts": {
+      "passed": 120,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/processors-integration.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/prompt-injection-detector.test.ts": {
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/regex-filter.test.ts": {
+      "passed": 86,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/skill-search.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/skills.test.ts": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/structured-output.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/system-prompt-scrubber.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/token-cost-control.test.ts": {
+      "passed": 99,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/token-limiter-agent.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/token-limiter.test.ts": {
+      "passed": 65,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/tool-call-filter-persistence.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/tool-call-filter.test.ts": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/tool-search-integration.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/tool-search-resolved-tools.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/tool-search-stores.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/tool-search.test.ts": {
+      "passed": 82,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/unicode-normalizer.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/processors/processors/workspace-instructions.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/providers/github.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tool-loop-agent/__tests__/tool-loop-agent.test.ts": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/worker/strategies/in-process-strategy.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/worker/transport/pull-transport.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/__tests__/malformed-tool.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/__tests__/provider-tools-serialization.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/__tests__/request-context-schema.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/__tests__/transform-agent-integration.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/code-mode/stub-generator.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builtin/ask-user.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builtin/submit-plan.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builtin/task-state-processor.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builtin/task-tools-e2e.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builtin/task-tools.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builtin/web-fetch.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/builtin/web-search.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/tool-builder/background-override-injection.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/tool-builder/builder.test.ts": {
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/tools/tool-builder/schema-compat-validation.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 1
+    },
+    "src/tools/tool-builder/validation-error-paths.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/lsp/client.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/lsp/language.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/lsp/manager.test.ts": {
+      "passed": 65,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/lsp/servers.test.ts": {
+      "passed": 87,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/filesystem/composite-filesystem.test.ts": {
+      "passed": 93,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/filesystem/file-read-tracker.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/filesystem/file-write-lock.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/filesystem/fs-utils.test.ts": {
+      "passed": 100,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/filesystem/local-filesystem.test.ts": {
+      "passed": 126,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/filesystem/mastra-filesystem.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/search/bm25.test.ts": {
+      "passed": 80,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/search/search-engine.test.ts": {
+      "passed": 75,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/computer.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/local-process-manager.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/local-sandbox.browser-safety.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/local-sandbox.test.ts": {
+      "passed": 204,
+      "failed": 0,
+      "skipped": 2
+    },
+    "src/workspace/sandbox/mastra-sandbox.test.ts": {
+      "passed": 70,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/mount-manager.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/networking.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/sandbox.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/utils.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/skills/schemas.test.ts": {
+      "passed": 55,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/skills/skill-versioning.test.ts": {
+      "passed": 58,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/skills/tools.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/skills/workspace-skills.test.ts": {
+      "passed": 122,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/classifier-workflow.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/declarative-step-entries.test.ts": {
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/dynamic-round-trip.test.ts": {
+      "passed": 54,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/lazy-step-writer.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/mapping-template.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/parallel-writer.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/predicate-builder.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/request-context-schema.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/snapshot-write-amplification.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/step-entry.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/step-output-type-preservation.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/template-scalar-step-result.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/__tests__/writer-custom-bubbling.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/builder/authoring-schema.test.ts": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/builder/index.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/dynamic/json-schema-to-zod.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/output-helpers.test.ts": {
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/entry-executors/actor-propagation.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/entry-executors/run-agent-entry.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/entry-executors/run-mapping-entry.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/auth-token-persistence.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/concurrent-resume.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/evented-workflow.test.ts": {
+      "passed": 310,
+      "failed": 0,
+      "skipped": 5
+    },
+    "src/workflows/evented/finish-live-tail.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/foreach-failure.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/honor-options.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/mid-run-state-restart.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/mid-step-recording.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/nested-resume-restart.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/pre-first-step-restart.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/restart-before-workers.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/schedule-config.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/sleep-restart.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/step-executor.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/storage-capability-gate.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/subscriber-isolation.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/suspended-redelivery.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/handlers/persist-step-update.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/scheduler/cron.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/scheduler/definition-hash.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/scheduler/scheduler.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/predicate/index.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/create-durable-agentic-workflow.one-message-per-turn.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/create-durable-agentic-workflow.tool-call-concurrency.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/utils/client-tools-xproc.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/utils/resolve-runtime-approval.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/utils/resolve-runtime-request-context.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/utils/serialize-state.test.ts": {
+      "passed": 53,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/utils/toolsets-xproc.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV4Adapter-file-media-type.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-file-media-type.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-file-ui-part.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-malformed-parts.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-part-createdAt.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-provider-executed.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-suspended-parts.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-tagged-file-data.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-tool-name-sanitization.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV5Adapter-tool-result-args-recovery.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV6Adapter-suspended-parts.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/AIV6Adapter-tool-search-item-ids.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/agent-signal-ui-conversion.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/error-part-roundtrip.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/adapters/tool-output-value.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/cache/CacheKeyGenerator-file-media-type.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/cache/CacheKeyGenerator-reasoning-guard.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/cache/CacheKeyGenerator-reasoning-identity.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/cache/CacheKeyGenerator-tool-invocation-guard.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/cache/reasoning-identity.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/cache/stable-stringify.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/input-converter.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-error-part.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-file-metadata.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-provider-executed.test.ts": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-provider-file-id.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-provider-options.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-tool-output-value.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-tool-search.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/output-converter-unsigned-reasoning.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/to-prompt-malformed-parts.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/to-prompt-stable-key-order.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/to-prompt-tool-name-sanitization.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/to-prompt.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/conversion/tool-result-model-output.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/merge/MessageMerger.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/prompt/attachments-to-parts.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/prompt/convert-to-mastra-v1-reasoning.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/prompt/convert-to-mastra-v1.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/prompt/download-assets.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/prompt/image-utils.test.ts": {
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/agent-config-durable.test.ts": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/agreement-memory.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/cache-ttl.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/create-durable-agent.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/delegated-resume-custom-frames-durable.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/deprecated-exports.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-abort-parity.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-abort.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-actor.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-advanced.test.ts": {
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-approval-resume-data.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-background-task-prompt.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-background-tasks.test.ts": {
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-background-transcript-transform.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-background-transform.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-before-approval.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-cached-response.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-callback-order.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-callback-payload.test.ts": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-callbacks.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-channel-render.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-client-tool-callbacks.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-client-tool-output.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-client-tool-pending.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-client-tools.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-concurrent-runs.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-crash-recovery.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-cross-process-abort.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-default-loop-contracts.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-default-options.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-deferred-provider-result.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-delegation-bail.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-delegation.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-dynamic-config.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-emit-error.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-engine-fallback.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-error-processor-rotation.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-error-surfaces.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-evented-two-process.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-execution-fence.test.ts": {
+      "passed": 58,
+      "failed": 0,
+      "skipped": 2
+    },
+    "src/agent/durable/__tests__/durable-agent-failed-run-error.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-generate-api.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-generate.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-goal.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-headers.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-idle-wake-output.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-image-url-model-output.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-images.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-is-task-complete.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-iteration-callback.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-malformed-function-call.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-memory-message-refs.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-memory.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-message-content.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-model-fallback.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-model-retry-fallback.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-model-settings-body.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-model-settings-validation.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-output-processor-persistence.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-output-processors-parity.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-output-processors.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-output-result-tripwire.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-output-step-tripwire.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-prepare-step-parity.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-prepare-step.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-processor-approval-concurrency.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-processor-approval-tool.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-processor-data-chunks.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-processor-order.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-processor-step-number.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-processor-tool-agent-id.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-queued-tool-approval.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-reasoning-tool-preservation.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-reasoning.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-request-context-iterations.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-request-context-memory-resume.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-request-context.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-require-tool-approval-fn.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-resume-request-context.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-scopes.test.ts": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-scorers-e2e.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-scorers-parity.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-scorers.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-send-tool-approval.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-signal-drain.test.ts": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-signal-preemption.test.ts": {
+      "passed": 92,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-step-budget-recovery.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-step-data.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-step-finish-continuation.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-stop-when.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-stopwhen.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-stream.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-structured-output-parity.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-structured-output-persistence.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-structured-output.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-suspend-metadata.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-system-messages.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-terminal-finish-reasons.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-text-only-multistep.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-timeout-total.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-timeout-validation.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-to-model-output.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-approval.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-call-resumed.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-choice.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-concurrency.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-errors.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-metadata.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-search-processor.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-suspension.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-workflow-execution.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tool-writer.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tools.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-tracing.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-trailing-assistant-guard.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-transform.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-uimessage.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-until-idle-cap.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-until-idle-replay.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-usage-detail-counters.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-usage-partial-omission.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-usage-unknown.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-usage.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-version-resume.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-workflow-events-cleanup.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent-working-memory.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-agent.test.ts": {
+      "passed": 46,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-input-processor-agent-context.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-input-processor-error-parity.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-input-processor-parity.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-input-processor-request-context.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/durable-stream-adapter-ack.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/early-cleanup-releases-thread.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-agent-auth-token.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-engine.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-hostless-fallback.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-snapshot-write-amplification.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-split-transport.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-terminal-cleanup.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-workflow-agent-step-restart.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-workflow-agent-suspend-recovery.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/evented-workflow-sleep-restart.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/list-active-runs.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/model-supplied-run-id-durable.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/no-double-wrap-pubsub.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/observe-detach.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/observe-idle-timeout.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/output-processor-errors.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/parallel-delegation-approval-durable.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/parity-harness.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/parity.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 13
+    },
+    "src/agent/durable/__tests__/persisted-approval-run-id-durable.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/persisted-suspension-run-id-durable.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/recover-active-runs.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/recover-run.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/recover-tool-search.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/restart-agreement.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/restart-harness.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/resumable-streams.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/resume-api.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/run-id-reuse-isolation.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/run-local-topics-not-cached.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/running-snapshot-request-echo.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/snapshot-persistence-policy.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/stream-generation.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/stream-subscription-cleanup.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/suspend-after-persist.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/terminal-cleanup.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/toolsets-single-process.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/unfenced-recovery-warning.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/__tests__/workflow-restart-shapes.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/aborted-tool-call-resume.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/anthropic-thinking-roundtrip.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/empty-tool-input.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-aisdk-attachments.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-aisdk-v5-url.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-file-data-validation.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-gemini.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-memory-load.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-om-multistep.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-ordering.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-sealed.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-source-document.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-transient-signals.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-url-handling.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list-v5.test.ts": {
+      "passed": 84,
+      "failed": 0,
+      "skipped": 2
+    },
+    "src/agent/message-list/tests/message-list-v6.test.ts": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/message-list.test.ts": {
+      "passed": 95,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/openai-reasoning-multistep-bug.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/openai-reasoning-roundtrip.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/provider-tool-error-result.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/reasoning-roundtrip-persist.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/response-message-rotation.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/run-response-messages.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/split-tool-call-args.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/step-start.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/stored-history-layering.test.ts": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/tool-mutation-ordering.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/tests/update-tool-invocation.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/auth/ee/__tests__/capabilities-fga.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/auth/ee/__tests__/capabilities-rbac-binding.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/auth/ee/__tests__/ee-telemetry.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/auth/ee/__tests__/fga-check.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/utils/convert-messages.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/utils/provider-compat.test.ts": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/message-list/utils/unwrap-legacy-tool-output.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/workflows/prepare-stream/client-tool-output-hooks.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/workflows/prepare-stream/run-scope.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/auth/defaults/session/cookie.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/browser/recording/__tests__/mjpeg-avi.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/browser/recording/__tests__/overlay.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/browser/recording/__tests__/tools.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/executor.test.ts": {
+      "passed": 53,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/lifecycle-hooks.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/not-scorable.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/p0-regression.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/p1-regression.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/runExperiment.test.ts": {
+      "passed": 64,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/scorer-trajectory.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/tool-mocks-execution.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/tool-mocks.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/workflow-resume-regression.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/aisdk/generate-to-stream.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/azure.test.ts": {
+      "passed": 44,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/constants.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/custom-gateway.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/gateway-manager.test.ts": {
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/mastra.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/models-dev.test.ts": {
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/netlify.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/gateways/serialize-for-span.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/aborted-tool-call-pipeline.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/background-task-check-step.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/build-messages-from-chunks.test.ts": {
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/eager-tool-dispatch-safety.test.ts": {
+      "passed": 61,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/eager-tool-dispatch-settled-work.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/eager-tool-dispatch.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/goal-step.test.ts": {
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/index.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/is-task-complete-step.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/llm-execution-step.api-error-retry-rollback.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/llm-execution-step.createdat-ordering.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/llm-execution-step.processor-retry-history.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/llm-execution-step.test.ts": {
+      "passed": 46,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/llm-mapping-step.test.ts": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/tool-call-concurrency.test.ts": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/tool-call-step-before-approval.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/workflows/agentic-execution/tool-call-step.test.ts": {
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v4/transform.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/steps/background-dispatch-core.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/steps/background-task-result-core.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/steps/is-task-complete-core.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/steps/signal-drain-core.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/shared/steps/tool-result-commit-core.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v5/compat.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v5/execute.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v5/file.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v5/input.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v5/step-timeout.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v5/transform.test.ts": {
+      "passed": 65,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/agents/filesystem.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/agents/inmemory.test.ts": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/agents/source.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/channels/inmemory.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/favorites/inmemory.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/harness/inmemory.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/mcp-clients/filesystem.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/mcp-clients/inmemory.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/mcp-servers/inmemory.test.ts": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/memory/inmemory.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/memory/observation-history.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/memory/patch-thread.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/memory/update-thread-resource-id.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/prompt-blocks/inmemory.test.ts": {
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/base.test.ts": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/feedback.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/inmemory-feedback-review.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/inmemory-light-list.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/inmemory-metrics-filter.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/inmemory-trace-exclusive-filter.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/logs.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/metrics.test.ts": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/record-builders.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/scores.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/span-query.test.ts": {
+      "passed": 86,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/trace-aggregate-planner.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/trace-aggregate-registry.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/trace-aggregate.test.ts": {
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/trace-query.test.ts": {
+      "passed": 78,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/observability/tracing.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/scorer-definitions/inmemory.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/thread-state/inmemory.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/scores/inmemory-list-order.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/scores/inmemory.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/skills/inmemory.test.ts": {
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/skills/skill-snapshot-field-equal.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/tool-provider-connections/inmemory.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/workflow-definitions/inmemory.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/workflows/clone-run-data.test.ts": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/workflows/inmemory-get-by-id.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/workflows/inmemory-persist.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/dynamic/validate/index.test.ts": {
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/sandbox/process-manager/process-handle.test.ts": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/ast-edit.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/capability-delegation.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/composite-no-root-mount.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/computer-tools.test.ts": {
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/delete-file.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/dynamic-filesystem.test.ts": {
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/dynamic-sandbox.test.ts": {
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/edit-file.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/execute-command.test.ts": {
+      "passed": 58,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/file-stat.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/grep.test.ts": {
+      "passed": 47,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/helpers.test.ts": {
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/index-content.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/lazy-tool-construction.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/list-files.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/lsp-inspect.test.ts": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/mkdir.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/read-file.test.ts": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/read-tracker-lifetime.test.ts": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/sandbox-tools.test.ts": {
+      "passed": 83,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/search.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/tool-creation.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/tracing.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/tree-formatter.test.ts": {
+      "passed": 57,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/workspace-tools-metadata.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/workspace-tracing.test.ts": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/write-file.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workspace/tools/__tests__/write-lock.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/__tests__/finalize-run.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/test-utils/redelivery-driver.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/shared/execute-scorers.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/shared/iteration-state.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/shared/message-list-state.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/shared/tool-call-concurrency.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/conditional-restart.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/dispatch.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/end-workflow.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/foreach-concurrency.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/loop-iteration-count.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/parallel-restart.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/resource-attribution.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/retry-budget.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/scheduled-default.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/serializing-pubsub.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/step-run-fence.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/topic-cleanup.test.ts": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/workflows/evented/workflow-event-processor/utils.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/background-task-check.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/llm-mapping-pending-client-tool.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/scorer-execution.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-approval-recall.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-actor.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-approval-context.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-bg.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-cold-resume.test.ts": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-fga.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-keep-alive.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-nested-approval.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-provider-executed.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-provider-fallback.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-result-processors.test.ts": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/agent/durable/workflows/steps/tool-call-xproc-workspace.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/scenarios/mock-match-args-ignore.scenario.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/scenarios/mock-mismatch-aborts.scenario.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/scenarios/mock-ordered-consumption.scenario.test.ts": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/scenarios/mock-served.scenario.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/datasets/experiment/__tests__/scenarios/mock-unmocked-live.scenario.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/aisdk/v4/model.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/aisdk/v6/model.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/aisdk/v7/model.test.ts": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/llm/model/aisdk/v5/model.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/abort-during-tool-execution.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/abort-signal.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/abort-structured-output.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/active-tools-enforcement.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/actor-identity.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/agents-as-tools.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/approval-conditional.scenario.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/approval-tool-level.scenario.test.ts": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/auto-resume-suspended-tools.scenario.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/background-task-agent-level.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/background-task-call-id-reuse.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/background-task-result-history-window.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/background-task-stream-until-idle.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/background-task-tool-level.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/client-tools.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/concurrent-approval.scenario.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/cross-turn-message-ordering.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/delegation-complete-bail.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/delegation-context-refs.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/delegation-message-filter.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/delegation-modify-prompt.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/dynamic-instructions.scenario.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/dynamic-model.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/empty-turn.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/error-processor-retry-exhaustion.scenario.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/error-processor-retry-max-steps.scenario.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/error-processor.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/fs-routed-agent.scenario.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/fs-routed-subagent.scenario.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/generate-approval-path.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/goal-budget-exhausted.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/goal-default-scorer-json-fallback.scenario.test.ts": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/goal-multi-turn-buffering.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/goal-satisfied.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/guardrail-tripwire.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/include-subagent-tool-results.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/input-processor.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/input-step-processor.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/is-task-complete-early.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/is-task-complete-gating.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/is-task-complete-multiple-scorers.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/iteration-complete.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/mastra-distinctive.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/max-steps-edge-cases.scenario.test.ts": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/maxsteps-long-chains.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/maxsteps-stopwhen-composition.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/memory-history.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/memory-multi-turn-persistence.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/memory-recall-window.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/memory-thread-switch.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/model-retry-after.scenario.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/multi-call-thread-persistence.scenario.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/multi-step-tool-loop.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/multi-tool-parallel.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/nested-tool-calls.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/observability-context.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/on-error-callback.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/on-finish.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/on-step-finish.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/output-processor-error-chunks.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/output-step-processor.scenario.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/pending-tool-result-flush.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/prepare-step.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/processor-retry.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/provider-error.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/provider-metadata.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/request-body-override.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/request-context-isolation.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/request-context-mutation.scenario.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/resume-after-decline.scenario.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/resume-stream.scenario.test.ts": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/runtime-context.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/save-per-step.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/signal-active-discard.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/signal-active-run-drain.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/signal-edge-cases.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/signal-idle-persist.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/signal-no-subscriber.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/signal-queue-message.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/signal-send-message.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/skills-integration.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/skills-same-name-disambiguation.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/stop-condition-long-loop.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/stream-error-retry.scenario.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/structured-output-error-strategy.scenario.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/structured-output-repair.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/structured-output-validation-failure.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/structured-output-with-tools.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/structured-output.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/subagent-background-tool-content.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/subagent-resume-without-suspension.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/suspended-snapshot-integrity.scenario.test.ts": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/text-streaming.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/tool-approval.scenario.test.ts": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/tool-call-filter-resume.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/tool-choice.scenario.test.ts": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/tool-execution-errors.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/tool-lifecycle-hooks.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/tool-runtime-suspension.scenario.test.ts": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/tool-streaming.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/toolsets-override.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/workflow-as-tool.scenario.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/working-memory.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/loop/test-utils/aimock/scenarios/workspace.scenario.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/stream/aisdk/v5/compat/prepare-tools.test.ts": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/background-tasks/__tests__/inmemory.test.ts": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/datasets/__tests__/datasets.test.ts": {
+      "passed": 97,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/experiments/__tests__/experiments.test.ts": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/knowledge/__tests__/base.test.ts": {
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/knowledge/__tests__/scope.test.ts": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/knowledge/__tests__/wikilinks.test.ts": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "src/storage/domains/schedules/__tests__/inmemory.test.ts": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    }
+  }
+}

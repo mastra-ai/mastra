@@ -521,13 +521,6 @@ const toolCallActionBodySchema = z.object({
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
   modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
 });
-const networkToolCallActionBodySchema = z.object({
-  runId: z.string(),
-  model: z.string().optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  format: z.string().optional(),
-});
-
 /**
  * Body schema for approving tool call
  */
@@ -538,19 +531,6 @@ export const approveToolCallBodySchema = toolCallActionBodySchema;
  */
 export const declineToolCallBodySchema = toolCallActionBodySchema.extend({
   /** Optional explanation surfaced to the model in place of the default decline message. */
-  reason: z.string().optional(),
-});
-
-/**
- * Body schema for approving network tool call
- */
-export const approveNetworkToolCallBodySchema = networkToolCallActionBodySchema;
-
-/**
- * Body schema for declining network tool call
- */
-export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema.extend({
-  /** Optional explanation surfaced in place of the default decline message. */
   reason: z.string().optional(),
 });
 

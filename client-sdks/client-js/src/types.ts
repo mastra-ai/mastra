@@ -1,7 +1,6 @@
 import type { JSONValue, ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
-  MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
   SerializableStructuredOutputOptions,
@@ -335,12 +334,6 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
-export type NetworkStreamParams<OUTPUT = undefined> = {
-  messages: MessageListInput;
-  model?: string;
-  tracingOptions?: TracingOptions;
-} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model' | 'scopes'>;
-
 export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'> & {
   /** Handler-provided identifier omitted from the serialized route schema's value shape. */
   id: string;
@@ -510,12 +503,6 @@ export type SaveMessageToMemoryParams = GeneratedRequest<
     messages: (MastraMessageV1 | MastraDBMessage)[];
   };
 
-export type SaveNetworkMessageToMemoryParams = GeneratedRequest<
-  Body<'POST /memory/network/save-messages'> & QueryParams<'POST /memory/network/save-messages'>
-> & {
-  messages: (MastraMessageV1 | MastraDBMessage)[];
-};
-
 /** The server schema currently represents persisted message payloads as `unknown`. */
 export type SaveMessageToMemoryResponse = GeneratedResponse<'POST /memory/save-messages'> & {
   messages: (MastraMessageV1 | MastraDBMessage)[];
@@ -546,10 +533,7 @@ export type UpdateMemoryThreadParams = Omit<
   };
 
 export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>> &
-  RequestContextOptions & {
-    /** Optional network ID. When provided, uses the network memory endpoint. */
-    networkId?: string;
-  };
+  RequestContextOptions & {};
 
 /** The route schema intentionally keeps persisted message payloads opaque. */
 export type ListMemoryThreadMessagesResponse = GeneratedResponse<'GET /memory/threads/:threadId/messages'> & {
@@ -590,71 +574,6 @@ export type GetLogParams = Omit<
 export type GetLogsResponse = GeneratedResponse<'GET /logs'>;
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
-export interface GetVNextNetworkResponse {
-  id: string;
-  name: string;
-  instructions: string;
-  agents: Array<{
-    name: string;
-    provider: string;
-    modelId: string;
-  }>;
-  routingModel: {
-    provider: string;
-    modelId: string;
-  };
-  workflows: Array<{
-    name: string;
-    description: string;
-    inputSchema: string | undefined;
-    outputSchema: string | undefined;
-  }>;
-  tools: Array<{
-    id: string;
-    description: string;
-  }>;
-}
-
-export interface GenerateVNextNetworkResponse {
-  task: string;
-  result: string;
-  resourceId: string;
-  resourceType: 'none' | 'tool' | 'agent' | 'workflow';
-}
-
-export interface GenerateOrStreamVNextNetworkParams {
-  message: string;
-  threadId?: string;
-  resourceId?: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
-
-export interface LoopStreamVNextNetworkParams {
-  message: string;
-  threadId?: string;
-  resourceId?: string;
-  maxIterations?: number;
-  requestContext?: RequestContext | Record<string, any>;
-}
-
-export interface LoopVNextNetworkResponse {
-  status: 'success';
-  result: {
-    task: string;
-    resourceId: string;
-    resourceType: 'agent' | 'workflow' | 'none' | 'tool';
-    result: string;
-    iteration: number;
-    isOneOff: boolean;
-    prompt: string;
-    threadId?: string | undefined;
-    threadResourceId?: string | undefined;
-    isComplete?: boolean | undefined;
-    completionReason?: string | undefined;
-  };
-  steps: WorkflowResult<any, any, any, any>['steps'];
-}
-
 export type McpServerListResponse = GeneratedResponse<'GET /mcp/v0/servers'>;
 
 /** MCP server registry entry plus the transports served under `/mcp/:serverId`. */
