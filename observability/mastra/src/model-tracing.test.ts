@@ -2468,6 +2468,35 @@ describe('ModelSpanTracker', () => {
       expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
     });
 
+    it('gives each step its own clock when the installed core has no inference spans', async () => {
+      coreFeatures.delete('model-inference-span');
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              { type: 'step-start', payload: {} }, // +100
+              { type: 'text-delta', payload: { text: 'a' } }, // +200 first chunk of step 0
+              stepFinish('tool-calls'), // +300
+              { type: 'step-start', payload: {} }, // +400
+              { type: 'text-delta', payload: { text: 'b' } }, // +500 first chunk of step 1
+              stepFinish('stop'), // +600
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)).toHaveLength(0);
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP).map(clockOf)).toEqual([t0 + 200, t0 + 500]);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
+    });
+
     it('counts a whole tool-call chunk as the first chunk', async () => {
       const t0 = now;
       const { agentSpan, modelSpan } = startRun();
@@ -2490,6 +2519,38 @@ describe('ModelSpanTracker', () => {
 
       expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)[0])).toBe(t0 + 200);
       expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
+    });
+
+    it('ignores a tool-call the agent replays before the model call', async () => {
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              // +100 replayed background task on resume, no model call yet
+              {
+                type: 'tool-call',
+                from: 'AGENT',
+                payload: { toolCallId: 'bg-1', toolName: 'research', args: {} },
+              },
+              { type: 'step-start', payload: {} }, // +200
+              { type: 'text-delta', payload: { text: 'a' } }, // +300 first provider chunk
+              stepFinish('stop'), // +400
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      // The replayed chunk opens no early step, so the model call keeps one step and one inference.
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(1);
+      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE).map(clockOf)).toEqual([t0 + 300]);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 300);
     });
 
     it('never writes to an agent run it was not given', async () => {

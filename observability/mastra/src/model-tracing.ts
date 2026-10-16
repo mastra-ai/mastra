@@ -392,6 +392,13 @@ export class ModelSpanTracker {
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
   #inferenceCompletionStartTime?: Date;
+  /**
+   * True between a step's `step-start` and `step-finish` chunks, the window in which
+   * the provider responds. Chunks outside it, such as a `tool-call` replayed for a
+   * finished background task on resume, are Mastra's own and never start the clock.
+   * Durable runs wrap one step's provider stream at a time, so every chunk there counts.
+   */
+  #inModelResponse = false;
   /** Set only by the agent's main loop; receives the first chunk's completionStartTime. */
   #agentRunSpan?: Span<SpanType.AGENT_RUN>;
   #currentStepInputIsFinal: boolean = false;
@@ -572,8 +579,9 @@ export class ModelSpanTracker {
       tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
     this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
-    // Reset chunk sequence for new step
+    // Reset chunk sequence and first-chunk clock for new step
     this.#chunkSequence = 0;
+    this.#inferenceCompletionStartTime = undefined;
   }
 
   /**
@@ -1005,7 +1013,7 @@ export class ModelSpanTracker {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) {
+          if ((this.#inModelResponse || this.#deferStepClose) && MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) {
             this.#captureCompletionStartTime();
           }
 
@@ -1038,6 +1046,7 @@ export class ModelSpanTracker {
               break;
 
             case 'step-start':
+              this.#inModelResponse = true;
               // If step already started (via startStep()), just update with payload data
               // Otherwise start a new step (for backwards compatibility)
               if (this.#currentStepSpan) {
@@ -1055,6 +1064,7 @@ export class ModelSpanTracker {
               break;
 
             case 'step-finish':
+              this.#inModelResponse = false;
               if (this.#deferStepClose) {
                 // Durable mode: save payload for later, don't close the step.
                 // Close MODEL_INFERENCE eagerly though - the provider stream is

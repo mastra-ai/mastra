@@ -1245,6 +1245,100 @@ describe('Tracing Integration Tests', () => {
         expect(getTimeToFirstChunkMs(span)).toBeGreaterThanOrEqual(35);
       }
     });
+
+    it('ignores a tool-call replayed for a background task on resume', async () => {
+      const research = createTool({
+        id: 'research',
+        description: 'research a topic',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        background: { enabled: true },
+        execute: async () => ({ summary: 'done' }),
+      });
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          return {
+            stream: convertArrayToReadableStream(
+              call++ === 0
+                ? [
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'c1',
+                      toolName: 'research',
+                      // Awaited, so the replayed tool-call lands before the next model call
+                      input: JSON.stringify({ _background: { disposition: 'awaited' } }),
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ]
+                : [
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'done' },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'bg-agent',
+        name: 'bg-agent',
+        instructions: 'x',
+        model,
+        tools: { research },
+        backgroundTasks: { tools: { research: true } },
+      });
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+        backgroundTasks: { enabled: true },
+      });
+      await mastra.startEventEngine();
+
+      try {
+        const first = await mastra.getAgent('agent').stream('go');
+        let toolCallId: string | undefined;
+        for await (const chunk of first.fullStream) {
+          if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+        }
+        expect(toolCallId).toBeDefined();
+        const firstRunSpanIds = new Set(testExporter.getAllSpans().map(span => span.id));
+
+        const resumed = await mastra.getAgent('agent').approveToolCall({ runId: first.runId, toolCallId: toolCallId! });
+        await resumed.consumeStream();
+
+        const resumedSpans = <T extends SpanType>(type: T) =>
+          testExporter.getSpansByType(type).filter(span => !firstRunSpanIds.has(span.id));
+        const steps = resumedSpans(SpanType.MODEL_STEP);
+        const inferences = resumedSpans(SpanType.MODEL_INFERENCE);
+        // One step carries the resumed tool result, the other is the model call
+        expect(steps).toHaveLength(2);
+        expect(inferences).toHaveLength(2);
+        expect(inferences[1]!.input).toBeTruthy();
+
+        for (const span of [
+          ...resumedSpans(SpanType.AGENT_RUN),
+          ...resumedSpans(SpanType.MODEL_GENERATION),
+          steps[1]!,
+          inferences[1]!,
+        ]) {
+          expect(getTimeToFirstChunkMs(span)).toBeGreaterThanOrEqual(35);
+        }
+      } finally {
+        await mastra.backgroundTaskManager?.shutdown();
+        await mastra.stopEventEngine();
+      }
+    });
   });
 
   describe.each(agentMethods)('agent launched inside workflow step using $name', ({ name, method, model }) => {
