@@ -2115,7 +2115,7 @@ function titleGenerationTests(version: 'v2') {
         message: {
           role: 'user',
           content: [
-            { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+            { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mediaType: 'image/png' },
             { type: 'text' as const, text: 'Describe this image' },
           ],
         },
@@ -2136,7 +2136,7 @@ function titleGenerationTests(version: 'v2') {
       const result = await agent.generateTitleFromUserMessage({
         message: {
           role: 'user',
-          content: [{ type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' }],
+          content: [{ type: 'file' as const, data: 'data:image/png;base64,iVBOR', mediaType: 'image/png' }],
         },
       });
 
@@ -2237,7 +2237,7 @@ function titleGenerationTests(version: 'v2') {
         message: {
           role: 'user',
           content: [
-            { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+            { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mediaType: 'image/png' },
             { type: 'text' as const, text: 'Describe this image for me' },
           ],
         },
@@ -2297,32 +2297,19 @@ function titleGenerationTests(version: 'v2') {
         {
           id: '1',
           role: 'user' as const,
-          content: '',
           parts: [{ type: 'text' as const, text: 'What is the weather in Paris?' }],
         },
         {
           id: '2',
           role: 'assistant' as const,
-          content: '',
           parts: [
+            { type: 'tool-getWeather', toolCallId: 'call-1', state: 'input-available', input: { city: 'Paris' } },
             {
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                toolCallId: 'call-1',
-                toolName: 'getWeather',
-                state: 'call' as const,
-                args: { city: 'Paris' },
-              },
-            },
-            {
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                toolCallId: 'call-1',
-                toolName: 'getWeather',
-                state: 'result' as const,
-                args: { city: 'Paris' },
-                result: { temp: 22, condition: 'sunny' },
-              },
+              type: 'tool-getWeather',
+              toolCallId: 'call-1',
+              state: 'output-available',
+              input: { city: 'Paris' },
+              output: { temp: 22, condition: 'sunny' },
             },
             { type: 'text' as const, text: 'The weather in Paris is 22°C and sunny.' },
           ],
@@ -2330,7 +2317,6 @@ function titleGenerationTests(version: 'v2') {
         {
           id: '3',
           role: 'user' as const,
-          content: '',
           parts: [{ type: 'text' as const, text: 'What about tomorrow?' }],
         },
       ];
@@ -2432,7 +2418,7 @@ function titleGenerationTests(version: 'v2') {
       expect(allText).not.toContain('providerOptions');
     });
 
-    it('should still emit string content when a message has no text part (tool-invocation only)', async () => {
+    it('should emit the tool result line once for a tool-only message', async () => {
       // Pins the content fallback: a hand-built message with string `content` and only
       // a tool-invocation part has no text part, so the content line must still be
       // emitted (alongside the tool lines) — exactly once each.
@@ -2471,17 +2457,13 @@ function titleGenerationTests(version: 'v2') {
           {
             id: '1',
             role: 'user' as const,
-            content: 'Please check the weather',
             parts: [
               {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  toolCallId: 'call-1',
-                  toolName: 'getWeather',
-                  state: 'result' as const,
-                  args: { city: 'Paris' },
-                  result: { temp: 22, condition: 'sunny' },
-                },
+                type: 'tool-getWeather',
+                toolCallId: 'call-1',
+                state: 'output-available',
+                input: { city: 'Paris' },
+                output: { temp: 22, condition: 'sunny' },
               },
             ],
           },
@@ -2492,66 +2474,8 @@ function titleGenerationTests(version: 'v2') {
       const allText = textParts.map((p: any) => p.text).join('\n');
       const lines = allText.split('\n');
 
-      // The content line survives (no text part exists to carry it) — exactly once
-      expect(lines.filter(l => l === 'User: Please check the weather')).toHaveLength(1);
       // The tool result line is emitted — exactly once
       expect(lines.filter(l => l.startsWith('Tool Result getWeather:'))).toHaveLength(1);
-    });
-
-    it('should keep string content when no text part carries the same text', async () => {
-      // Pins the equality rule in formatMessagesForTitle: `content` may only be
-      // skipped when a text part carries the exact same text. A stored message can
-      // legitimately have a content string that differs from its text parts
-      // (AIV4Adapter uses m.content.content verbatim when set), and that text must
-      // not be dropped.
-      let capturedUserContent: any[] = [];
-
-      let titleModel: MockLanguageModelV2;
-
-      {
-        titleModel = new MockLanguageModelV2({
-          doGenerate: async options => {
-            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
-            if (userMsg) {
-              capturedUserContent = userMsg.content;
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: 'Weather Check',
-              content: [{ type: 'text', text: 'Weather Check' }],
-              warnings: [],
-            };
-          },
-        });
-      }
-
-      const agent = new Agent({
-        id: 'content-mismatch-agent',
-        name: 'Content Mismatch Agent',
-        instructions: 'You are a helpful assistant.',
-        model: titleModel,
-      });
-
-      await agent.generateTitleFromUserMessage({
-        messages: [
-          {
-            id: '1',
-            role: 'user' as const,
-            content: 'Please check the weather',
-            parts: [{ type: 'text' as const, text: 'Paris' }],
-          },
-        ],
-      });
-
-      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
-      const allText = textParts.map((p: any) => p.text).join('\n');
-      const lines = allText.split('\n');
-
-      // Both the distinct content and the text part are emitted — exactly once each
-      expect(lines.filter(l => l === 'User: Please check the weather')).toHaveLength(1);
-      expect(lines.filter(l => l === 'User: Paris')).toHaveLength(1);
     });
 
     it('should handle file parts after .ui() conversion uses url/mediaType (regression)', async () => {
@@ -2565,7 +2489,7 @@ function titleGenerationTests(version: 'v2') {
           {
             role: 'user',
             content: [
-              { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+              { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mediaType: 'image/png' },
               { type: 'text' as const, text: 'Describe this image' },
             ],
           },

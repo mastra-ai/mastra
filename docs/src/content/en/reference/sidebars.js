@@ -73,7 +73,6 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/handle-workflow-stream', label: 'handleWorkflowStream()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-messages', label: 'toAISdkMessages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-stream', label: 'toAISdkStream()' },
-        { type: 'doc', id: 'ai-sdk/to-ai-sdk-v4-messages', label: 'toAISdkV4Messages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
         { type: 'doc', id: 'ai-sdk/with-mastra', label: 'withMastra()' },
         { type: 'doc', id: 'ai-sdk/with-sse-heartbeat', label: 'withSseHeartbeat()' },

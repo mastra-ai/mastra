@@ -152,7 +152,7 @@ describe('DurableAgent instructions handling', () => {
       {
         role: 'system',
         content: 'You are a strict JSON-only assistant.',
-        experimental_providerMetadata: {
+        providerOptions: {
           anthropic: {
             cacheControl: { type: 'ephemeral' },
           },

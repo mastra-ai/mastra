@@ -5,7 +5,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { toAISdkMessages, toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
+import { toAISdkMessages, toAISdkV5Messages } from '../convert-messages';
 import { toAISdkV5Stream } from '../convert-streams';
 
 describe('toAISdkFormat', () => {
@@ -94,44 +94,6 @@ describe('toAISdkFormat', () => {
       expect(toAISdkMessages([])).toEqual([]);
       expect(toAISdkMessages([], { version: 'v6' })).toEqual([]);
       expect(toAISdkMessages([], { version: 'v7' })).toEqual([]);
-    });
-  });
-
-  describe('toAISdkV4Messages', () => {
-    it('should convert Mastra V2 messages to AI SDK V4 UI format', () => {
-      const result = toAISdkV4Messages(sampleMessages);
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toHaveProperty('id', 'msg-1');
-      expect(result[0]).toHaveProperty('role', 'user');
-      expect(result[1]).toHaveProperty('id', 'msg-2');
-      expect(result[1]).toHaveProperty('role', 'assistant');
-    });
-
-    it('should handle empty array', () => {
-      const result = toAISdkV4Messages([]);
-      expect(result).toEqual([]);
-    });
-
-    it('should keep system reminders out of UI-facing v4 conversions', () => {
-      const result = toAISdkV4Messages([
-        {
-          id: 'msg-reminder',
-          role: 'user',
-          content: {
-            format: 2,
-            parts: [{ type: 'text', text: '<system-reminder>continue</system-reminder>' }],
-            metadata: {
-              systemReminder: {
-                type: 'anthropic-prefill-processor-retry',
-              },
-            },
-          },
-          createdAt: new Date(),
-        },
-      ]);
-
-      expect(result).toEqual([]);
     });
   });
 

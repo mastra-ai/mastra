@@ -4,8 +4,8 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type {
+  LanguageModelRequestMetadata,
   ReasoningPart,
   StepResult,
   ModelMessage,
@@ -29,7 +29,6 @@ export interface LLMIterationStepResult {
   isContinued: boolean;
   /** Private continuation: the physical attempt did not complete a logical step. */
   signalPreempted?: boolean;
-  logprobs?: LanguageModelV1LogProbs;
   totalUsage: LanguageModelUsage;
   headers?: Record<string, string>;
   messageId?: string;

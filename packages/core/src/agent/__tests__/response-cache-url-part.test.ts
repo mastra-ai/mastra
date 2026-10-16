@@ -239,7 +239,7 @@ describe('ResponseCache with URL file parts (integration via Agent)', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'Describe this image' },
-          { type: 'image', image: new URL('https://example.com/cat.png'), mimeType: 'image/png' },
+          { type: 'image', image: new URL('https://example.com/cat.png'), mediaType: 'image/png' },
         ],
       },
     ]);
@@ -253,7 +253,7 @@ describe('ResponseCache with URL file parts (integration via Agent)', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'Describe this image' },
-          { type: 'image', image: new URL('https://example.com/dog.png'), mimeType: 'image/png' },
+          { type: 'image', image: new URL('https://example.com/dog.png'), mediaType: 'image/png' },
         ],
       },
     ]);

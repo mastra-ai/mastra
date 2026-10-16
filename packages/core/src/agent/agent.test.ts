@@ -2,9 +2,12 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { LanguageModelV2CallOptions, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
-import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4';
+import type {
+  ModelMessage as CoreMessage,
+  SystemModelMessage as CoreSystemMessage,
+  SystemModelMessage,
+} from '@internal/ai-sdk-v5';
 import { APICallError, tool } from '@internal/ai-sdk-v5';
-import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { config } from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1025,7 +1028,6 @@ function agentTests({ version }: { version: 'v2' }) {
       const messagesWithMetadata = [
         {
           role: 'user' as const,
-          content: 'Hello with metadata',
           parts: [{ type: 'text' as const, text: 'Hello with metadata' }],
           metadata: {
             source: 'web-ui',
@@ -1086,7 +1088,6 @@ function agentTests({ version }: { version: 'v2' }) {
       const messagesWithMetadata = [
         {
           role: 'user' as const,
-          content: 'Stream with metadata',
           parts: [{ type: 'text' as const, text: 'Stream with metadata' }],
           metadata: {
             source: 'mobile-app',
@@ -1156,7 +1157,6 @@ function agentTests({ version }: { version: 'v2' }) {
       const mixedMessages = [
         {
           role: 'user' as const,
-          content: 'First message with metadata',
           parts: [{ type: 'text' as const, text: 'First message with metadata' }],
           metadata: {
             messageType: 'initial',
@@ -1165,12 +1165,10 @@ function agentTests({ version }: { version: 'v2' }) {
         },
         {
           role: 'assistant' as const,
-          content: 'Response without metadata',
           parts: [{ type: 'text' as const, text: 'Response without metadata' }],
         },
         {
           role: 'user' as const,
-          content: 'Second user message',
           parts: [{ type: 'text' as const, text: 'Second user message' }],
           // No metadata on this message
         },
@@ -2003,16 +2001,18 @@ describe('Agent Tests', () => {
     });
   });
 
-  it('should preserve empty assistant messages after tool use', () => {
+  it('should preserve empty assistant messages after tool use', async () => {
     const messageList = new MessageList();
 
     const assistantToolCall_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', input: {} }],
     };
     const toolMessage_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', result: 'res1' }],
+      content: [
+        { type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', output: { type: 'json', value: 'res1' } },
+      ],
     };
     const emptyAssistant_Core: CoreMessage = {
       role: 'assistant',
@@ -2028,7 +2028,7 @@ describe('Agent Tests', () => {
     messageList.add(emptyAssistant_Core, 'memory');
     messageList.add(userMessage_Core, 'memory');
 
-    const finalCoreMessages = messageList.get.all.core();
+    const finalCoreMessages = await messageList.get.all.aiV5.llmPrompt();
 
     // Expected:
     // 1. Assistant message with tool-1 call.
@@ -2062,24 +2062,28 @@ describe('Agent Tests', () => {
     expect(userMsg?.content).toEqual([{ type: 'text', text: 'Hello' }]); // convertToCoreMessages makes text content an array
   });
 
-  it('should properly sanitize incomplete tool calls from memory messages', () => {
+  it('should properly sanitize incomplete tool calls from memory messages', async () => {
     const messageList = new MessageList();
-    // Original CoreMessages for context, but we'll test the output of list.get.all.core()
+    // Original CoreMessages for context, but we'll test the output of list.get.all.aiV5.model()
     const toolResultOne_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'test-tool-1', toolCallId: 'tool-1', result: 'res1' }],
+      content: [
+        { type: 'tool-result', toolName: 'test-tool-1', toolCallId: 'tool-1', output: { type: 'json', value: 'res1' } },
+      ],
     };
     const toolCallTwo_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'test-tool-2', toolCallId: 'tool-2', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'test-tool-2', toolCallId: 'tool-2', input: {} }],
     };
     const toolResultTwo_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'test-tool-2', toolCallId: 'tool-2', result: 'res2' }],
+      content: [
+        { type: 'tool-result', toolName: 'test-tool-2', toolCallId: 'tool-2', output: { type: 'json', value: 'res2' } },
+      ],
     };
     const toolCallThree_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'test-tool-3', toolCallId: 'tool-3', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'test-tool-3', toolCallId: 'tool-3', input: {} }],
     };
 
     // Add messages. addOne will merge toolCallTwo and toolResultTwo.
@@ -2089,7 +2093,7 @@ describe('Agent Tests', () => {
     messageList.add(toolResultTwo_Core, 'memory');
     messageList.add(toolCallThree_Core, 'memory');
 
-    const finalCoreMessages = messageList.get.all.core();
+    const finalCoreMessages = await messageList.get.all.aiV5.llmPrompt();
 
     // Expected: toolCallThree (orphaned assistant call) should be gone.
     // toolResultOne assumes the tool call was completed, so should be present
@@ -2120,7 +2124,12 @@ describe('Agent Tests', () => {
     expect(toolResultForTool2).toBeDefined();
     expect(toolResultForTool2?.content).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'tool-result', toolCallId: 'tool-2', toolName: 'test-tool-2', result: 'res2' }),
+        expect.objectContaining({
+          type: 'tool-result',
+          toolCallId: 'tool-2',
+          toolName: 'test-tool-2',
+          output: { type: 'text', value: 'res2' },
+        }),
       ]),
     );
 

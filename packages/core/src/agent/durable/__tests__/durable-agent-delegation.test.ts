@@ -247,7 +247,7 @@ describe('DurableAgent delegation hooks', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Preserve this assistant text' },
-          { type: 'tool-call', toolCallId: 'orphan-call', toolName: 'agent-history', args: { prompt: 'go' } },
+          { type: 'tool-call', toolCallId: 'orphan-call', toolName: 'agent-history', input: { prompt: 'go' } },
         ],
       },
       'response',

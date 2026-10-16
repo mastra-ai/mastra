@@ -189,7 +189,7 @@ import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './du
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
-import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import type { MessageInput, MessageListInput, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
@@ -3993,17 +3993,17 @@ export class Agent<
     for (const part of parts) {
       if (part.type === 'text') {
         lines.push(`${role}: ${part.text}`);
-      } else if (part.type === 'tool-invocation') {
-        const inv = part.toolInvocation;
-        if (inv.state === 'result') {
-          const resultStr = typeof inv.result === 'string' ? inv.result : JSON.stringify(inv.result);
-          lines.push(`Tool Result ${inv.toolName}: ${resultStr.slice(0, 200)}`);
-        } else {
-          lines.push(`Tool Call ${inv.toolName}: ${JSON.stringify(inv.args).slice(0, 200)}`);
+      } else if (part.type === 'dynamic-tool' || (part.type.startsWith('tool-') && 'toolCallId' in part)) {
+        const toolName = part.type === 'dynamic-tool' ? part.toolName : part.type.slice('tool-'.length);
+        if (part.state === 'output-available') {
+          const resultStr = typeof part.output === 'string' ? part.output : JSON.stringify(part.output);
+          lines.push(`Tool Result ${toolName}: ${resultStr.slice(0, 200)}`);
+        } else if (part.state === 'input-available' || part.state === 'input-streaming') {
+          lines.push(`Tool Call ${toolName}: ${JSON.stringify(part.input).slice(0, 200)}`);
         }
       } else if (part.type === 'reasoning') {
-        if (part.reasoning) {
-          lines.push(`Reasoning: ${part.reasoning}`);
+        if (part.text) {
+          lines.push(`Reasoning: ${part.text}`);
         }
       } else if (part.type === 'source-url') {
         lines.push(`${role}: User added URL: ${part.url.substring(0, 100)}`);
@@ -4020,20 +4020,11 @@ export class Agent<
    * formats each one's parts with role context, and joins the results.
    */
   formatMessagesForTitle(
-    messages: Array<{ role: string; content?: string; parts?: Array<{ type: string; [key: string]: any }> }>,
+    messages: Array<{ role: string; parts?: Array<{ type: string; [key: string]: any }> }>,
   ): string {
     const lines: string[] = [];
     for (const msg of messages) {
       const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      // AIV4 UI messages can carry the same text in both `content` and a text part.
-      // Skip `content` only when a text part carries the exact same text, so each
-      // message's text is emitted once without ever dropping distinct content.
-      const hasContent = typeof msg.content === 'string' && msg.content !== '';
-      const contentDuplicatedByPart =
-        hasContent && msg.parts?.some(part => part.type === 'text' && part.text === msg.content);
-      if (hasContent && !contentDuplicatedByPart) {
-        lines.push(`${role}: ${msg.content}`);
-      }
       if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
         lines.push(...this.formatMessagePartsForTitle(msg.parts, role));
       }
@@ -4122,7 +4113,7 @@ export class Agent<
     return cleanedText;
   }
 
-  getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>) {
+  getMostRecentUserMessage(messages: UIMessage[]) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
   }
@@ -4161,7 +4152,7 @@ export class Agent<
         });
       }
       if (userMessage) {
-        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.aiV5.ui().at(-1);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
@@ -8580,7 +8571,7 @@ export class Agent<
             | undefined,
         );
 
-        const uiMessages = messageList.get.all.ui();
+        const uiMessages = messageList.get.all.aiV5.ui();
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title) {

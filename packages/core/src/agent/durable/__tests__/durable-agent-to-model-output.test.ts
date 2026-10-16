@@ -534,12 +534,17 @@ describe('DurableAgent toModelOutput parity', () => {
     const result = await durableAgent.stream([
       {
         role: 'assistant',
-        content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', args: {} }],
+        content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', input: {} }],
       },
       {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { fileId: 'file-9' } },
+          {
+            type: 'tool-result',
+            toolCallId: 'tc-client-1',
+            toolName: 'client-tool',
+            output: { type: 'json', value: { fileId: 'file-9' } },
+          },
         ],
       },
     ] satisfies Parameters<typeof durableAgent.stream>[0]);

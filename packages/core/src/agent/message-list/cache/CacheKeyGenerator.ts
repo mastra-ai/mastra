@@ -1,12 +1,12 @@
-import type { UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { getImageCacheKey, resolveFilePartMediaTypeAndData } from '../prompt/image-utils';
-import type { AIV5Type, CoreMessageV4 } from '../types';
+import type { LegacyCoreMessage, LegacyUIMessage } from '../state/legacy-shapes';
+import type { AIV5Type } from '../types';
 import { getResponseProviderItemKeys } from '../utils/response-item-metadata';
 import { appendReasoningIdentityKeys, hashIdentityValue } from './reasoning-identity';
 import { stableStringify } from './stable-stringify';
-import type { MastraMessagePart, UIMessageV4Part } from './types';
+import type { MastraMessagePart, MastraBasePart } from './types';
 
 function appendResponseProviderItemKeys(cacheKey: string, ...providerSources: unknown[]): string {
   const itemKeys = new Set(
@@ -40,11 +40,11 @@ export class CacheKeyGenerator {
   /**
    * Generate cache key from AIV4 UIMessage parts
    */
-  static fromAIV4Parts(parts: UIMessageV4['parts']): string {
+  static fromLegacyParts(parts: LegacyUIMessage['parts']): string {
     let key = '';
     for (const part of parts) {
       key += part.type;
-      key += CacheKeyGenerator.fromAIV4Part(part);
+      key += CacheKeyGenerator.fromLegacyPart(part);
     }
     return key;
   }
@@ -52,7 +52,7 @@ export class CacheKeyGenerator {
   /**
    * Generate cache key from a single AIV4 UIMessage part
    */
-  static fromAIV4Part(part: UIMessageV4['parts'][number]): string {
+  static fromLegacyPart(part: LegacyUIMessage['parts'][number]): string {
     let cacheKey = '';
     if (part.type === 'text') {
       cacheKey += part.text;
@@ -127,17 +127,17 @@ export class CacheKeyGenerator {
         const data = (part as AIV5Type.DataUIPart<AIV5.UIDataTypes>).data;
         key += stableStringify(data); // order-independent: jsonb vs text storage may reorder keys
       } else {
-        // Cast to UIMessageV4Part since we've already handled data-* parts above
-        key += CacheKeyGenerator.fromAIV4Part(part as UIMessageV4Part);
+        // Cast to MastraBasePart since we've already handled data-* parts above
+        key += CacheKeyGenerator.fromLegacyPart(part as MastraBasePart);
       }
     }
     return key;
   }
 
   /**
-   * Generate cache key from AIV4 CoreMessage content
+   * Generate cache key from stored format-1 (MastraMessageV1) content
    */
-  static fromAIV4CoreMessageContent(content: CoreMessageV4['content']): string {
+  static fromV1Content(content: LegacyCoreMessage['content']): string {
     if (typeof content === 'string') return content;
     let key = '';
     for (const part of content) {
@@ -176,6 +176,13 @@ export class CacheKeyGenerator {
       }
     }
     return key;
+  }
+
+  /**
+   * Generate cache key from system message content
+   */
+  static fromSystemMessageContent(content: string): string {
+    return content;
   }
 
   /**

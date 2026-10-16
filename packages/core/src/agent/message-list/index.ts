@@ -22,30 +22,24 @@ export type {
   MastraToolApproval,
   MastraToolInvocation,
   MastraToolInvocationPart,
-  UIMessageV4Part,
+  MastraBasePart,
   MessageSource,
   MemoryInfo,
-  UIMessageWithMetadata,
 } from './state/types';
 
 // Re-export AI SDK types for convenience
-export type { AIV6Type, AIV5Type, AIV4Type, CoreMessageV4, UIMessageV4 } from './types';
+export type { AIV6Type, AIV5Type } from './types';
 
 // Utility exports
 export { convertMessages } from './utils/convert-messages';
 export type { OutputFormat } from './utils/convert-messages';
 
 // Conversion exports
-export {
-  aiV4CoreMessageToV1PromptMessage,
-  aiV5ModelMessageToV2PromptMessage,
-  coreContentToString,
-  messagesAreEqual,
-} from './conversion';
+export { aiV5ModelMessageToV2PromptMessage, coreContentToString, messagesAreEqual } from './conversion';
 
 // Adapter exports
-export { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
-export type { AIV4AdapterContext, AIV5AdapterContext, AdapterContext } from './adapters';
+export { AIV5Adapter, AIV6Adapter, MastraV1Adapter } from './adapters';
+export type { AIV5AdapterContext, AdapterContext, MastraV1AdapterContext } from './adapters';
 
 // Provider compatibility exports
 export {

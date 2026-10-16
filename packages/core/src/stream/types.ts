@@ -9,11 +9,15 @@ import type {
 } from '@ai-sdk/provider-v5';
 
 import type {
+  CallSettings,
   FinishReason,
   LanguageModelRequestMetadata,
-  LogProbs as LanguageModelV1LogProbs,
-} from '@internal/ai-sdk-v4';
-import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+  ModelMessage,
+  StepResult,
+  ToolSet,
+  TypedToolCall,
+  UIMessage,
+} from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
@@ -265,7 +269,6 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     rawReason?: string;
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
-    logprobs?: LanguageModelV1LogProbs;
   };
   output: {
     usage: LanguageModelUsage;
@@ -329,7 +332,6 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
   response?: LanguageModelV2ResponseMetadata;
   messageId?: string;
   stepResult: {
-    logprobs?: LanguageModelV1LogProbs;
     isContinued?: boolean;
     warnings?: LanguageModelV2CallWarning[];
     reason: LanguageModelV2FinishReason;

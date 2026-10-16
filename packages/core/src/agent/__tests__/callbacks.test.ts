@@ -1,4 +1,4 @@
-import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { simulateReadableStream } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { Agent } from '../agent';

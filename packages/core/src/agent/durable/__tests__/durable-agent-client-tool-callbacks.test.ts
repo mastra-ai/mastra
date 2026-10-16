@@ -232,11 +232,18 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
       [
         {
           role: 'assistant',
-          content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', args: {} }],
+          content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', input: {} }],
         },
         {
           role: 'tool',
-          content: [{ type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { ok: true } }],
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'tc-client-1',
+              toolName: 'client-tool',
+              output: { type: 'json', value: { ok: true } },
+            },
+          ],
         },
       ] satisfies Parameters<typeof durableAgent.stream>[0],
       { maxSteps: 2 },
@@ -299,11 +306,18 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
       [
         {
           role: 'assistant',
-          content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', args: {} }],
+          content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', input: {} }],
         },
         {
           role: 'tool',
-          content: [{ type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { ok: true } }],
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'tc-client-1',
+              toolName: 'client-tool',
+              output: { type: 'json', value: { ok: true } },
+            },
+          ],
         },
       ] satisfies Parameters<typeof durableAgent.stream>[0],
       { maxSteps: 2, memory: { thread: threadId, resource: resourceId } },

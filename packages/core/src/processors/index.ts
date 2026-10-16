@@ -1,6 +1,5 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { CoreMessage as CoreMessageV4, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';

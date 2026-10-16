@@ -119,7 +119,7 @@ describe('AISDKV7LanguageModel', () => {
               {
                 type: 'file',
                 data: `data:image/webp;base64,${imageData}`,
-                mimeType: 'image/webp',
+                mediaType: 'image/webp',
               },
             ],
           },

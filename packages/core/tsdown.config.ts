@@ -115,7 +115,6 @@ export default defineConfig({
     neverBundle: ['vite', 'vitest'],
     alwaysBundle: [
       '@ai-sdk/openai',
-      '@internal/ai-sdk-v4',
       '@internal/ai-sdk-v5',
       '@internal/ai-v6',
       '@internal/auth',
@@ -132,7 +131,6 @@ export default defineConfig({
       new Set([
         '@ai-sdk/*',
         'eventsource-parser',
-        '@internal/ai-sdk-v4',
         '@internal/ai-sdk-v5',
         '@internal/ai-v6',
         '@internal/ai-v7',

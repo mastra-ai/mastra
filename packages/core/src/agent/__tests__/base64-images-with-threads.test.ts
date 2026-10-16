@@ -1,4 +1,4 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { CoreMessage } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MockMemory } from '../../memory/mock';
@@ -50,7 +50,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
             {
               type: 'image',
               image: base64Image,
-              mimeType: 'image/png',
+              mediaType: 'image/png',
             },
           ],
         },
@@ -95,7 +95,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
             {
               type: 'image',
               image: dataUri,
-              mimeType: 'image/png',
+              mediaType: 'image/png',
             },
           ],
         },
@@ -151,7 +151,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
             {
               type: 'image',
               image: base64Image,
-              mimeType: 'image/png',
+              mediaType: 'image/png',
             },
           ],
         },
@@ -201,12 +201,12 @@ describe('Base64 Images with Threads - Issue #10480', () => {
             {
               type: 'image',
               image: rawBase64, // Raw base64
-              mimeType: 'image/png',
+              mediaType: 'image/png',
             },
             {
               type: 'image',
               image: dataUri, // Data URI
-              mimeType: 'image/jpeg',
+              mediaType: 'image/jpeg',
             },
           ],
         },
@@ -295,7 +295,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
             {
               type: 'image',
               image: imageUrl,
-              mimeType: 'image/png',
+              mediaType: 'image/png',
             },
           ],
         },
@@ -350,12 +350,12 @@ describe('Base64 Images with Threads - Issue #10480', () => {
             {
               type: 'image',
               image: placeholderUrl,
-              mimeType: 'image/png',
+              mediaType: 'image/png',
             },
             {
               type: 'image',
               image: rawBase64,
-              mimeType: 'image/png',
+              mediaType: 'image/png',
             },
           ],
         },

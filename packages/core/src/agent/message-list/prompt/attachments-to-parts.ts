@@ -1,4 +1,4 @@
-import type { FilePart, ImagePart, TextPart, UIMessage } from '@internal/ai-sdk-v4';
+import type { FilePart, ImagePart, TextPart, LegacyUIMessage as UIMessage } from '../state/legacy-shapes';
 import { categorizeFileData, createDataUri } from './image-utils';
 
 type ContentPart = TextPart | ImagePart | FilePart;

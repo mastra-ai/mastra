@@ -480,7 +480,7 @@ describe('createToolCallStep background task resume with falsy payload', () => {
     // tool-RESULT message that is appended unconditionally a few lines below it.
     const callRecords = added
       .flat()
-      .filter((message: any) => message?.role === 'tool')
+      .filter((message: any) => message?.role === 'assistant')
       .filter((message: any) => (message.content ?? []).some((part: any) => part.type === 'tool-call'));
     expect(callRecords).toHaveLength(1);
     const persisted = new MessageList();

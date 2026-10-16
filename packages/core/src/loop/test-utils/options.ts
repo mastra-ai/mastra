@@ -2980,7 +2980,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       },
                     ],
                   },
-                  "createdAt": 2024-01-01T00:00:00.002Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                   "id": "msg-0",
                   "role": "assistant",
                 },

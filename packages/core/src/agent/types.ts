@@ -1,5 +1,4 @@
-import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
-import type { CallSettings } from '@internal/ai-sdk-v5';
+import type { GenerateTextOnStepFinishCallback, CallSettings } from '@internal/ai-sdk-v5';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
@@ -77,15 +76,9 @@ import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
-export type {
-  MastraDBMessage,
-  MastraMessageContentV2,
-  MastraMessagePart,
-  UIMessageWithMetadata,
-  MessageList,
-} from './message-list/index';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageList } from './message-list/index';
 export type { ReasoningLevel } from '../loop/types';
-export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
+export type { UIMessage as AiMessageType } from '@internal/ai-sdk-v5';
 export type {
   NotificationDeliveryPolicyConfig,
   NotificationDeliveryPolicyDecider,

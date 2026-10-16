@@ -6,7 +6,6 @@
  * materializes them into runnable steps, the shared helpers, and end-to-end
  * runtime behavior across both execution engines.
  */
-import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';

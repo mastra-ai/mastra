@@ -15,36 +15,38 @@ describe('CacheKeyGenerator provider-generic reasoning identity (#26859)', () =>
   const acmeA = { acme: { signature: 'sig-A' } };
   const acmeB = { acme: { signature: 'sig-B' } };
 
-  it('fromAIV4Part / fromDBParts distinguish empty-text reasoning by metadata identity', () => {
-    expect(CacheKeyGenerator.fromAIV4Part(v4Reasoning(acmeA))).not.toBe(
-      CacheKeyGenerator.fromAIV4Part(v4Reasoning(acmeB)),
+  it('fromLegacyPart / fromDBParts distinguish empty-text reasoning by metadata identity', () => {
+    expect(CacheKeyGenerator.fromLegacyPart(v4Reasoning(acmeA))).not.toBe(
+      CacheKeyGenerator.fromLegacyPart(v4Reasoning(acmeB)),
     );
     expect(CacheKeyGenerator.fromDBParts([v4Reasoning(acmeA)])).not.toBe(
       CacheKeyGenerator.fromDBParts([v4Reasoning(acmeB)]),
     );
-    expect(CacheKeyGenerator.fromAIV4Part(v4Reasoning(acmeA))).toBe(CacheKeyGenerator.fromAIV4Part(v4Reasoning(acmeA)));
+    expect(CacheKeyGenerator.fromLegacyPart(v4Reasoning(acmeA))).toBe(
+      CacheKeyGenerator.fromLegacyPart(v4Reasoning(acmeA)),
+    );
   });
 
-  it('fromAIV4Part distinguishes reasoning by detail signatures and redacted data', () => {
+  it('fromLegacyPart distinguishes reasoning by detail signatures and redacted data', () => {
     const withDetail = (detail: any) => ({ type: 'reasoning', reasoning: '', details: [detail] }) as any;
-    expect(CacheKeyGenerator.fromAIV4Part(withDetail({ type: 'text', text: '', signature: 'aaa' }))).not.toBe(
-      CacheKeyGenerator.fromAIV4Part(withDetail({ type: 'text', text: '', signature: 'bbb' })),
+    expect(CacheKeyGenerator.fromLegacyPart(withDetail({ type: 'text', text: '', signature: 'aaa' }))).not.toBe(
+      CacheKeyGenerator.fromLegacyPart(withDetail({ type: 'text', text: '', signature: 'bbb' })),
     );
-    expect(CacheKeyGenerator.fromAIV4Part(withDetail({ type: 'redacted', data: 'aaa' }))).not.toBe(
-      CacheKeyGenerator.fromAIV4Part(withDetail({ type: 'redacted', data: 'bbb' })),
+    expect(CacheKeyGenerator.fromLegacyPart(withDetail({ type: 'redacted', data: 'aaa' }))).not.toBe(
+      CacheKeyGenerator.fromLegacyPart(withDetail({ type: 'redacted', data: 'bbb' })),
     );
   });
 
   it('ignores non-identity metadata so identical blocks still dedupe', () => {
     expect(
-      CacheKeyGenerator.fromAIV4Part(
+      CacheKeyGenerator.fromLegacyPart(
         v4Reasoning({ acme: { signature: 'sig-A', cacheControl: { type: 'ephemeral' } } }),
       ),
-    ).toBe(CacheKeyGenerator.fromAIV4Part(v4Reasoning(acmeA)));
+    ).toBe(CacheKeyGenerator.fromLegacyPart(v4Reasoning(acmeA)));
   });
 
-  it('fromAIV4CoreMessageContent distinguishes reasoning by metadata, options, signature and redacted data', () => {
-    const key = (part: any) => CacheKeyGenerator.fromAIV4CoreMessageContent([part]);
+  it('fromV1Content distinguishes reasoning by metadata, options, signature and redacted data', () => {
+    const key = (part: any) => CacheKeyGenerator.fromV1Content([part]);
     expect(key({ type: 'reasoning', text: '', providerMetadata: acmeA })).not.toBe(
       key({ type: 'reasoning', text: '', providerMetadata: acmeB }),
     );
@@ -69,7 +71,7 @@ describe('CacheKeyGenerator provider-generic reasoning identity (#26859)', () =>
   });
 
   it('keeps the existing OpenAI itemId key segment', () => {
-    const key = CacheKeyGenerator.fromAIV4Part(v4Reasoning({ openai: { itemId: 'rs_123' } }));
+    const key = CacheKeyGenerator.fromLegacyPart(v4Reasoning({ openai: { itemId: 'rs_123' } }));
     expect(key).toContain('|openai:rs_123');
   });
 

@@ -1,7 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -23,7 +22,7 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
 function saveAndErrorE2ETests(version: 'v2') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
+  let openaiModel: LanguageModelV2;
 
   beforeEach(() => {
     {

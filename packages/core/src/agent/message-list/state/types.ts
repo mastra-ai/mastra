@@ -1,6 +1,6 @@
-import type { UIMessage as UIMessageV4, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type * as AIV5 from '@internal/ai-sdk-v5';
 import type { AIV5Type } from '../types';
+import type { LegacyCoreMessage, LegacyUIMessage, LegacyUIPart } from './legacy-shapes';
 
 export type MessageSource =
   | 'memory'
@@ -22,9 +22,9 @@ type MastraMessageShared = {
   type?: string;
 };
 
-type LegacyToolInvocationPart = Extract<UIMessageV4['parts'][number], { type: 'tool-invocation' }>;
-type LegacySourcePart = Extract<UIMessageV4['parts'][number], { type: 'source' }>;
-type LegacyToolInvocation = NonNullable<UIMessageV4['toolInvocations']>[number];
+type LegacyToolInvocationPart = Extract<LegacyUIPart, { type: 'tool-invocation' }>;
+type LegacySourcePart = Extract<LegacyUIPart, { type: 'source' }>;
+type LegacyToolInvocation = NonNullable<LegacyUIMessage['toolInvocations']>[number];
 export type MastraProviderMetadata = AIV5Type.ProviderMetadata;
 type MastraPartExtensions = { providerMetadata?: MastraProviderMetadata; createdAt?: number };
 type PartWithProviderMetadata<T> = T & MastraPartExtensions;
@@ -92,7 +92,7 @@ export type MastraSourceUrlPart = Omit<LegacySourcePart, 'providerMetadata'> & {
 
 // Named alias so TypeScript caches the Exclude expansion and avoids TS2589 when
 // MastraMessagePart is used alongside deeply-generic libraries like @hono/zod-openapi.
-type UIV4NonMastraPart = Exclude<UIMessageV4['parts'][number], { type: 'tool-invocation' | 'source' | 'step-start' }>;
+type UIV4NonMastraPart = Exclude<LegacyUIPart, { type: 'tool-invocation' | 'source' | 'step-start' }>;
 
 // Canonical stored part type. It starts from the v4 UI part model and extends
 // it with provider metadata, AI SDK v5 data parts, and v6-only persisted parts
@@ -106,30 +106,28 @@ export type MastraMessagePart =
   | MastraSourceDocumentPart
   | PartWithProviderMetadata<AIV5Type.DataUIPart<AIV5.UIDataTypes>>;
 
-// V4-compatible part type (excludes DataUIPart which V4 doesn't support)
-export type UIMessageV4Part = UIMessageV4['parts'][number] & MastraPartExtensions;
+// Stored part type without AI SDK v5 data parts
+export type MastraBasePart = LegacyUIPart & MastraPartExtensions;
 
 export type MastraMessageContentV2 = {
-  format: 2; // format 2 === UIMessage in AI SDK v4
+  format: 2; // format 2: parts modelled on the AI SDK v4 UI message
   parts: MastraMessagePart[];
-  experimental_attachments?: UIMessageV4['experimental_attachments'];
-  content?: UIMessageV4['content'];
-  toolInvocations?: UIMessageV4['toolInvocations'];
-  reasoning?: UIMessageV4['reasoning'];
-  annotations?: UIMessageV4['annotations'];
+  experimental_attachments?: LegacyUIMessage['experimental_attachments'];
+  content?: LegacyUIMessage['content'];
+  toolInvocations?: LegacyUIMessage['toolInvocations'];
+  reasoning?: LegacyUIMessage['reasoning'];
+  annotations?: LegacyUIMessage['annotations'];
   metadata?: Record<string, unknown>;
   providerMetadata?: MastraProviderMetadata;
 };
 
-// maps to AI SDK V4 UIMessage
 export type MastraDBMessage = MastraMessageShared & {
   content: MastraMessageContentV2;
 };
 
-// maps to AI SDK V5 UIMessage
 export type MastraMessageV1 = {
   id: string;
-  content: string | CoreMessageV4['content'];
+  content: string | LegacyCoreMessage['content'];
   role: 'system' | 'user' | 'assistant' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
@@ -138,9 +136,4 @@ export type MastraMessageV1 = {
   toolCallArgs?: Record<string, unknown>[];
   toolNames?: string[];
   type: 'text' | 'tool-call' | 'tool-result';
-};
-
-// Extend UIMessage to include optional metadata field
-export type UIMessageWithMetadata = UIMessageV4 & {
-  metadata?: Record<string, unknown>;
 };

@@ -1,11 +1,5 @@
 import type { CoreMessage } from '@internal/ai-sdk-v5';
-import type {
-  Agent,
-  AgentExecutionOptions,
-  AgentMemoryOption,
-  AiMessageType,
-  UIMessageWithMetadata,
-} from '../../agent';
+import type { Agent, AgentExecutionOptions, AgentMemoryOption, AiMessageType } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
@@ -33,7 +27,7 @@ type WorkflowRunOptions = WorkflowRunStartOptions & {
   initialState?: any;
 };
 
-type AgentInputType = string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+type AgentInputType = string | string[] | CoreMessage[] | AiMessageType[];
 
 type RunEvalsDataItemBase = {
   groundTruth?: any;

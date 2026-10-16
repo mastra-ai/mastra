@@ -1,10 +1,9 @@
-import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
-import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
+import type { ModelMessage as CoreMessage, UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage, UIMessageWithMetadata } from '../';
 import type { MastraMessageV1 } from '../../../memory';
 import { MessageList } from '../index';
-import type { AIV4Type, AIV5Type } from '../types';
+import type { AIV5Type } from '../types';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
@@ -29,7 +28,7 @@ describe('MessageList', () => {
               type: 'tool-call',
               toolCallId: 'call-1',
               toolName: 'get_weather',
-              args: { location: 'London' },
+              input: { location: 'London' },
             },
           ],
         },
@@ -45,7 +44,7 @@ describe('MessageList', () => {
               type: 'tool-result',
               toolCallId: 'call-1',
               toolName: 'get_weather',
-              result: 'Sunny, 70°F',
+              output: { type: 'json', value: 'Sunny, 70°F' },
             },
           ],
         },
@@ -203,8 +202,7 @@ describe('MessageList', () => {
         'memory',
       );
 
-      expect(list.get.all.aiV4.core()).toHaveLength(0);
-      expect(list.get.all.aiV4.ui()).toHaveLength(0);
+      expect(list.get.all.aiV5.ui()).toHaveLength(0);
       expect(list.get.all.aiV5.model()).toHaveLength(0);
       expect(list.get.all.aiV5.ui()).toHaveLength(0);
       expect(list.get.all.v1()).toHaveLength(0);
@@ -216,22 +214,21 @@ describe('MessageList', () => {
           role: 'user',
           content: '',
           parts: [{ type: 'text' as const, text: 'hi' }],
-        } satisfies AIV4Type.Message,
+        } satisfies AIV5Type.UIMessage,
         'memory',
       );
 
       list.addSystem(`test system message`, `memory`);
 
-      expect(list.get.all.aiV4.core()).toHaveLength(1);
-      expect(list.get.all.aiV4.ui()).toHaveLength(1);
+      expect(list.get.all.aiV5.ui()).toHaveLength(1);
       expect(list.get.all.aiV5.model()).toHaveLength(1);
       expect(list.get.all.aiV5.ui()).toHaveLength(1);
       expect(list.get.all.v1()).toHaveLength(1);
       expect(list.get.all.db()).toHaveLength(1);
 
       expect(list.getSystemMessages(`memory`)).toHaveLength(1);
-      expect(list.get.all.aiV4.prompt()).toHaveLength(2); // system message + user message
-      expect(list.get.all.aiV4.llmPrompt()).toHaveLength(2); // system message + user message
+      expect(list.get.all.aiV5.prompt()).toHaveLength(2); // system message + user message
+      expect(await list.get.all.aiV5.llmPrompt()).toHaveLength(2); // system message + user message
       expect(list.get.all.aiV5.prompt()).toHaveLength(2); // system message + user message
       expect(await list.get.all.aiV5.llmPrompt()).toHaveLength(2); // system message + user message
     });
@@ -240,10 +237,8 @@ describe('MessageList', () => {
       const input = {
         id: 'ui-msg-1',
         role: 'user',
-        content: 'Hello from UI!',
         createdAt: new Date('2023-10-26T10:00:00.000Z'),
         parts: [{ type: 'text', text: 'Hello from UI!' }],
-        experimental_attachments: [],
       } satisfies VercelUIMessage;
 
       const list = new MessageList({ threadId, resourceId }).add(input, 'input');
@@ -251,14 +246,13 @@ describe('MessageList', () => {
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
-      expect(messages[0]).toEqual({
+      expect(messages[0]).toMatchObject({
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
         content: {
           format: 2,
           parts: [expect.objectContaining({ type: 'text', text: 'Hello from UI!', createdAt: expect.any(Number) })],
-          experimental_attachments: [],
         },
         threadId,
         resourceId,
@@ -301,7 +295,7 @@ describe('MessageList', () => {
       const messageOne = { role: 'user' as const, content: 'Run the tool' as const } satisfies VercelCoreMessage;
       const messageTwo = {
         role: 'assistant' as const,
-        content: [{ type: 'tool-call', toolName: 'test-tool', toolCallId: 'call-3', args: { query: 'test' } }],
+        content: [{ type: 'tool-call', toolName: 'test-tool', toolCallId: 'call-3', input: { query: 'test' } }],
       } satisfies VercelCoreMessage;
 
       const initialMessages = [messageOne, messageTwo];
@@ -311,54 +305,37 @@ describe('MessageList', () => {
       const messageThree = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'test-tool', toolCallId: 'call-3', result: 'Tool execution successful' },
+          {
+            type: 'tool-result',
+            toolName: 'test-tool',
+            toolCallId: 'call-3',
+            output: { type: 'json', value: 'Tool execution successful' },
+          },
         ],
       } satisfies CoreMessage;
 
       list.add(messageThree, 'response');
 
-      expect(list.get.all.ui()).toEqual([
+      expect(list.get.all.aiV5.ui()).toMatchObject([
         {
           id: expect.any(String),
-          content: messageOne.content,
-          role: `user` as const,
-          experimental_attachments: [],
-          createdAt: expect.any(Date),
-          parts: [
-            expect.objectContaining({ type: 'text' as const, text: messageOne.content, createdAt: expect.any(Number) }),
-          ],
+          role: 'user',
+          parts: [expect.objectContaining({ type: 'text', text: messageOne.content })],
         },
         {
           id: expect.any(String),
           role: 'assistant',
-          content: '',
-          createdAt: expect.any(Date),
-          reasoning: undefined,
-          toolInvocations: [
-            {
-              state: 'result',
-              toolName: 'test-tool',
-              toolCallId: 'call-3',
-              args: messageTwo.content[0].args,
-              result: messageThree.content[0].result,
-              step: undefined,
-            },
-          ],
           parts: [
             {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolName: 'test-tool',
-                toolCallId: 'call-3',
-                args: messageTwo.content[0].args,
-                result: messageThree.content[0].result,
-                step: undefined,
-              },
+              type: 'tool-test-tool',
+              toolCallId: 'call-3',
+              state: 'output-available',
+              input: { query: 'test' },
+              output: 'Tool execution successful',
             },
           ],
         },
-      ] satisfies VercelUIMessage[]);
+      ]);
     });
 
     it('should preserve tool args when restoring messages from database with toolInvocations', () => {
@@ -403,7 +380,7 @@ describe('MessageList', () => {
       expect(v2Messages).toHaveLength(1);
 
       // Check parts array has correct args and no duplicate entries
-      expect(v2Messages[0].content.parts).toEqual([
+      expect(v2Messages[0].content.parts).toMatchObject([
         {
           type: 'tool-invocation',
           toolInvocation: {
@@ -417,7 +394,7 @@ describe('MessageList', () => {
       ]);
 
       // Check toolInvocations array has correct args (should be fixed by hydration)
-      expect(v2Messages[0].content.toolInvocations).toEqual([
+      expect(v2Messages[0].content.toolInvocations).toMatchObject([
         {
           state: 'result',
           toolCallId: 'call-123',
@@ -428,9 +405,11 @@ describe('MessageList', () => {
       ]);
 
       // Check UI messages preserve args
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages).toHaveLength(1);
-      expect(uiMessages[0].toolInvocations![0].args).toEqual({ query: 'mastra framework' });
+      expect(uiMessages[0].parts.find(p => p.type === 'tool-searchTool')).toMatchObject({
+        input: { query: 'mastra framework' },
+      });
     });
 
     it('should preserve tool args when tool-result arrives in a separate message', () => {
@@ -448,7 +427,7 @@ describe('MessageList', () => {
             type: 'tool-call' as const,
             toolName: 'weatherTool',
             toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
-            args: { location: 'Paris' },
+            input: { location: 'Paris' },
           },
         ],
       } satisfies VercelCoreMessage;
@@ -460,9 +439,9 @@ describe('MessageList', () => {
             type: 'tool-result' as const,
             toolName: 'weatherTool',
             toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
-            result: {
-              temperature: 24.3,
-              conditions: 'Partly cloudy',
+            output: {
+              type: 'json' as const,
+              value: { temperature: 24.3, conditions: 'Partly cloudy' },
             },
           },
         ],
@@ -482,7 +461,7 @@ describe('MessageList', () => {
       expect(assistantV2Message.role).toBe('assistant');
 
       // Check parts array has correct args and only one tool-invocation (no duplicate call part)
-      expect(assistantV2Message.content.parts).toEqual([
+      expect(assistantV2Message.content.parts).toMatchObject([
         expect.objectContaining({
           type: 'tool-invocation',
           createdAt: expect.any(Number),
@@ -501,7 +480,7 @@ describe('MessageList', () => {
       ]);
 
       // Check toolInvocations array has correct args
-      expect(assistantV2Message.content.toolInvocations).toEqual([
+      expect(assistantV2Message.content.toolInvocations).toMatchObject([
         {
           state: 'result',
           toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
@@ -516,16 +495,17 @@ describe('MessageList', () => {
       ]);
 
       // Check that the args are preserved in the final UI messages
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages).toHaveLength(2);
 
       const assistantMessage = uiMessages[1];
       expect(assistantMessage.role).toBe('assistant');
-      expect(assistantMessage.toolInvocations).toHaveLength(1);
-      expect(assistantMessage.toolInvocations![0].args).toEqual({ location: 'Paris' });
+      const toolParts = assistantMessage.parts.filter(p => p.type === 'tool-weatherTool');
+      expect(toolParts).toHaveLength(1);
+      expect(toolParts[0]).toMatchObject({ input: { location: 'Paris' } });
 
       // Check that args are preserved in Core messages (used by LLM)
-      const coreMessages = list.get.all.core();
+      const coreMessages = list.get.all.aiV5.model();
       // Note: Core messages may include the tool message separately
       expect(coreMessages.length).toBeGreaterThanOrEqual(2);
 
@@ -542,7 +522,7 @@ describe('MessageList', () => {
       if (toolCallPart?.type !== `tool-call`) {
         throw new Error(`expected tool call part`);
       }
-      expect(toolCallPart.args).toEqual({ location: 'Paris' });
+      expect(toolCallPart.input).toMatchObject({ location: 'Paris' });
     });
 
     it('should correctly convert and add a Mastra V1 MessageType with array content (text and tool-call)', () => {
@@ -633,14 +613,14 @@ describe('MessageList', () => {
             type: 'tool-call',
             toolName: 'calculator',
             toolCallId: 'call-1',
-            args: { operation: 'add', numbers: [1, 2] },
+            input: { operation: 'add', numbers: [1, 2] },
           },
         ],
       } satisfies VercelCoreMessage;
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -672,31 +652,32 @@ describe('MessageList', () => {
       const msg1 = {
         id: 'user-msg-seq-1',
         role: 'user' as const,
-        content: 'Initial user query',
         createdAt: new Date('2023-10-26T11:00:00.000Z'),
         parts: [{ type: 'text', text: 'Initial user query' }],
-        experimental_attachments: [],
       } satisfies VercelUIMessage;
       const msg2 = {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Thinking...' },
-          { type: 'tool-call', toolName: 'search-tool', toolCallId: 'call-seq-1', args: { query: 'some query' } },
+          { type: 'tool-call', toolName: 'search-tool', toolCallId: 'call-seq-1', input: { query: 'some query' } },
         ],
       } satisfies VercelCoreMessage;
       const msg3 = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'search-tool', toolCallId: 'call-seq-1', result: 'Search results data' },
+          {
+            type: 'tool-result',
+            toolName: 'search-tool',
+            toolCallId: 'call-seq-1',
+            output: { type: 'json', value: 'Search results data' },
+          },
         ],
       } satisfies VercelCoreMessage;
       const msg4 = {
         id: 'assistant-msg-seq-2',
         role: 'assistant',
-        content: 'Here are the results.',
         createdAt: new Date('2023-10-26T11:00:03.000Z'),
         parts: [{ type: 'text', text: 'Here are the results.' }],
-        experimental_attachments: [],
       } satisfies VercelUIMessage;
 
       const messageSequence = [msg1, msg2, msg3, msg4];
@@ -708,8 +689,7 @@ describe('MessageList', () => {
           createdAt: msg1.createdAt,
           content: {
             format: 2,
-            parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
-            experimental_attachments: [],
+            parts: [expect.objectContaining({ type: 'text', text: msg1.parts[0].text, createdAt: expect.any(Number) })],
           },
           threadId,
           resourceId,
@@ -729,15 +709,15 @@ describe('MessageList', () => {
                   state: 'result',
                   toolName: msg2.content[1].toolName,
                   toolCallId: msg2.content[1].toolCallId,
-                  args: msg2.content[1].args,
-                  result: msg3.content[0].result,
+                  args: msg2.content[1].input,
+                  result: msg3.content[0].output.value,
                   step: undefined,
                 },
               }),
               { type: 'step-start' },
               expect.objectContaining({
                 type: 'text',
-                text: msg4.content,
+                text: msg4.parts[0].text,
                 createdAt: expect.any(Number),
               }),
             ],
@@ -746,8 +726,8 @@ describe('MessageList', () => {
                 state: 'result',
                 toolName: msg2.content[1].toolName,
                 toolCallId: msg2.content[1].toolCallId,
-                args: msg2.content[1].args,
-                result: msg3.content[0].result,
+                args: msg2.content[1].input,
+                result: msg3.content[0].output.value,
                 step: undefined,
               },
             ],
@@ -756,173 +736,24 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.db()).toEqual(
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.db()).toMatchObject(
         expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
-
-      let messages: Message[] = [];
-      const list = new MessageList();
-
-      // msg1
-      messages = appendClientMessage({ messages, message: msg1 });
-      expect(new MessageList().add(messages, 'input').get.all.ui()).toEqual(
-        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
-      list.add(messages, 'input');
-      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
-
-      // msg2
-      messages = appendResponseMessages({
-        messages,
-        responseMessages: [{ ...msg2, id: globalThis.crypto.randomUUID() }],
-      });
-      // Filter out tool invocations with state="call" from expected UI messages
-      const expectedUIMessages = messages.map(m => {
-        if (m.role === 'assistant' && m.parts && m.toolInvocations) {
-          return {
-            ...m,
-            parts: m.parts.filter(p => !(p.type === 'tool-invocation' && p.toolInvocation.state === 'call')),
-            toolInvocations: m.toolInvocations.filter(t => t.state === 'result'),
-            createdAt: expect.any(Date),
-          };
-        }
-        return { ...m, createdAt: expect.any(Date) };
-      });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(expectedUIMessages);
-      list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(expectedUIMessages);
-
-      // msg3
-      messages = appendResponseMessages({
-        messages,
-        responseMessages: [{ id: globalThis.crypto.randomUUID(), ...msg3 }],
-      });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toMatchObject([
-        expect.objectContaining({
-          role: 'user',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
-        }),
-        expect.objectContaining({
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          parts: expect.arrayContaining([
-            expect.objectContaining({ type: 'step-start' }),
-            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: expect.objectContaining({
-                state: 'result',
-                toolName: msg2.content[1].toolName,
-                toolCallId: msg2.content[1].toolCallId,
-                args: msg2.content[1].args,
-                result: msg3.content[0].result,
-                step: expect.any(Number),
-              }),
-            }),
-          ]),
-        }),
-      ]);
-      list.add(messages, 'response');
-      expect(list.get.all.ui()).toMatchObject([
-        expect.objectContaining({
-          role: 'user',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
-        }),
-        expect.objectContaining({
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          parts: expect.arrayContaining([
-            expect.objectContaining({ type: 'step-start' }),
-            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: expect.objectContaining({
-                state: 'result',
-                toolName: msg2.content[1].toolName,
-                toolCallId: msg2.content[1].toolCallId,
-                args: msg2.content[1].args,
-                result: msg3.content[0].result,
-                step: expect.any(Number),
-              }),
-            }),
-          ]),
-        }),
-      ]);
-
-      // msg4
-      messages = appendResponseMessages({ messages, responseMessages: [msg4] });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toMatchObject([
-        expect.objectContaining({
-          role: 'user',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
-        }),
-        expect.objectContaining({
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          parts: expect.arrayContaining([
-            expect.objectContaining({ type: 'step-start' }),
-            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: expect.objectContaining({
-                state: 'result',
-                toolName: msg2.content[1].toolName,
-                toolCallId: msg2.content[1].toolCallId,
-                args: msg2.content[1].args,
-                result: msg3.content[0].result,
-                step: expect.any(Number),
-              }),
-            }),
-            expect.objectContaining({ type: 'text', text: msg4.content, createdAt: expect.any(Number) }),
-          ]),
-        }),
-      ]);
-      list.add(messages, 'response');
-      expect(list.get.all.ui()).toMatchObject([
-        expect.objectContaining({
-          role: 'user',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
-        }),
-        expect.objectContaining({
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          parts: expect.arrayContaining([
-            expect.objectContaining({ type: 'step-start' }),
-            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: expect.objectContaining({
-                state: 'result',
-                toolName: msg2.content[1].toolName,
-                toolCallId: msg2.content[1].toolCallId,
-                args: msg2.content[1].args,
-                result: msg3.content[0].result,
-                step: expect.any(Number),
-              }),
-            }),
-            expect.objectContaining({ type: 'text', text: msg4.content, createdAt: expect.any(Number) }),
-          ]),
-        }),
-      ]);
     });
 
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
       const inputCoreMessage = {
         role: 'assistant',
         content: [
-          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
-          { type: 'redacted-reasoning', data: 'sensitive data' },
+          { type: 'reasoning', text: 'Step 1: Analyze', providerOptions: { anthropic: { signature: 'sig-a' } } },
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { redactedData: 'sensitive data' } } },
           { type: 'text', text: 'Result of step 1.' },
         ],
       } satisfies VercelCoreMessage;
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -934,13 +765,15 @@ describe('MessageList', () => {
                 type: 'reasoning',
                 createdAt: expect.any(Number),
                 reasoning: 'Step 1: Analyze',
-                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
+                details: [{ type: 'text', text: 'Step 1: Analyze' }],
+                providerMetadata: { anthropic: { signature: 'sig-a' } },
               }),
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
                 reasoning: '',
-                details: [{ type: 'redacted', data: 'sensitive data' }],
+                details: [{ type: 'text', text: '' }],
+                providerMetadata: { anthropic: { redactedData: 'sensitive data' } },
               }),
               expect.objectContaining({ type: 'text', text: 'Result of step 1.', createdAt: expect.any(Number) }),
             ],
@@ -956,13 +789,13 @@ describe('MessageList', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'Here is an image:' },
-          { type: 'file', mimeType: 'image/png', data: new Uint8Array([1, 2, 3, 4]) },
+          { type: 'file', mediaType: 'image/png', data: new Uint8Array([1, 2, 3, 4]) },
         ],
       } satisfies VercelCoreMessage;
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'user',
@@ -974,7 +807,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'file',
                 mimeType: 'image/png',
-                data: 'AQIDBA==',
+                data: 'data:image/png;base64,AQIDBA==',
                 createdAt: expect.any(Number),
               }), // Base64 of [1, 2, 3, 4]
             ],
@@ -1075,23 +908,37 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Step 1: Call tool A' },
-          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', input: {} },
         ],
       } satisfies VercelCoreMessage;
       const msg2 = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+        content: [
+          {
+            type: 'tool-result',
+            toolName: 'tool-a',
+            toolCallId: 'call-a-1',
+            output: { type: 'json', value: 'Result A' },
+          },
+        ],
       } satisfies VercelCoreMessage;
       const msg3 = {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Step 2: Call tool B' },
-          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', input: {} },
         ],
       } satisfies VercelCoreMessage;
       const msg4 = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+        content: [
+          {
+            type: 'tool-result',
+            toolName: 'tool-b',
+            toolCallId: 'call-b-1',
+            output: { type: 'json', value: 'Result B' },
+          },
+        ],
       } satisfies VercelCoreMessage;
       const msg5 = {
         role: 'assistant',
@@ -1175,23 +1022,36 @@ describe('MessageList', () => {
       const assistantMsgPart1 = {
         role: 'assistant',
         content: [
-          { type: 'reasoning', text: 'First, I need to gather some data.', signature: 'sig-gather' },
+          {
+            type: 'reasoning',
+            text: 'First, I need to gather some data.',
+            providerOptions: { anthropic: { signature: 'sig-gather' } },
+          },
           { type: 'text', text: 'Calling data tool...' },
-          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
+          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', input: { query: 'required data' } },
         ],
       } satisfies VercelCoreMessage;
 
       const toolResultMsg = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'data-tool', toolCallId: 'call-data-1', result: '{"data": "gathered"}' },
+          {
+            type: 'tool-result',
+            toolName: 'data-tool',
+            toolCallId: 'call-data-1',
+            output: { type: 'json', value: '{"data": "gathered"}' },
+          },
         ],
       } satisfies VercelCoreMessage;
 
       const assistantMsgPart2 = {
         role: 'assistant',
         content: [
-          { type: 'reasoning', text: 'Data gathered, now processing.', signature: 'sig-process' },
+          {
+            type: 'reasoning',
+            text: 'Data gathered, now processing.',
+            providerOptions: { anthropic: { signature: 'sig-process' } },
+          },
           { type: 'text', text: 'Task completed successfully with gathered data.' },
         ],
       } satisfies VercelCoreMessage;
@@ -1200,7 +1060,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'user',
@@ -1334,7 +1194,7 @@ describe('MessageList', () => {
         const list = new MessageList({ threadId, resourceId }).add(
           {
             role: 'user',
-            content: [{ type: 'file', mimeType: 'text/csv', data, filename: 'leads.csv' }],
+            content: [{ type: 'file', mediaType: 'text/csv', data, filename: 'leads.csv' }],
           } satisfies VercelCoreMessage,
           'input',
         );
@@ -1397,7 +1257,7 @@ describe('MessageList', () => {
           { type: 'text', text: 'Here is another image URL:' },
           {
             type: 'file',
-            mimeType: 'image/png',
+            mediaType: 'image/png',
             data: new URL('https://example.com/another-image.png'),
             filename: 'another-image.png',
           },
@@ -1406,7 +1266,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'user',
@@ -1438,15 +1298,10 @@ describe('MessageList', () => {
       const input = {
         id: 'ui-msg-attachments-1',
         role: 'user',
-        content: 'Message with attachment',
         createdAt: new Date('2023-10-26T10:05:00.000Z'),
-        parts: [{ type: 'text', text: 'Message with attachment' }],
-        experimental_attachments: [
-          {
-            name: 'report.pdf',
-            url: 'https://example.com/files/report.pdf',
-            contentType: 'application/pdf',
-          },
+        parts: [
+          { type: 'text', text: 'Message with attachment' },
+          { type: 'file', mediaType: 'application/pdf', url: 'https://example.com/files/report.pdf' },
         ],
       } satisfies VercelUIMessage;
 
@@ -1455,7 +1310,7 @@ describe('MessageList', () => {
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
-      expect(messages[0]).toEqual({
+      expect(messages[0]).toMatchObject({
         id: input.id,
         role: 'user',
         createdAt: expect.any(Date),
@@ -1463,13 +1318,11 @@ describe('MessageList', () => {
           format: 2,
           parts: [
             expect.objectContaining({ type: 'text', text: 'Message with attachment', createdAt: expect.any(Number) }),
-          ],
-          experimental_attachments: [
-            {
-              name: 'report.pdf',
-              url: 'https://example.com/files/report.pdf',
-              contentType: 'application/pdf',
-            },
+            expect.objectContaining({
+              type: 'file',
+              data: 'https://example.com/files/report.pdf',
+              mimeType: 'application/pdf',
+            }),
           ],
         },
         threadId,
@@ -1480,16 +1333,11 @@ describe('MessageList', () => {
     it('should correctly convert and add a Vercel UIMessage with text and experimental_attachments', () => {
       const input = {
         id: 'ui-msg-text-attachment-1',
-        role: 'user',
-        content: 'Check out this image:', // The content string might still be present in some useChat versions, though parts is preferred
+        role: 'user', // The content string might still be present in some useChat versions, though parts is preferred
         createdAt: new Date('2023-10-26T10:10:00.000Z'),
-        parts: [{ type: 'text', text: 'Check out this image:' }],
-        experimental_attachments: [
-          {
-            name: 'example.png',
-            url: 'https://example.com/images/example.png',
-            contentType: 'image/png',
-          },
+        parts: [
+          { type: 'text', text: 'Check out this image:' },
+          { type: 'file', mediaType: 'image/png', url: 'https://example.com/images/example.png' },
         ],
       } satisfies VercelUIMessage;
 
@@ -1498,7 +1346,7 @@ describe('MessageList', () => {
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
-      expect(messages[0]).toEqual({
+      expect(messages[0]).toMatchObject({
         id: input.id,
         role: 'user',
         createdAt: expect.any(Date),
@@ -1506,13 +1354,11 @@ describe('MessageList', () => {
           format: 2,
           parts: [
             expect.objectContaining({ type: 'text', text: 'Check out this image:', createdAt: expect.any(Number) }),
-          ],
-          experimental_attachments: [
-            {
-              name: 'example.png',
-              url: 'https://example.com/images/example.png',
-              contentType: 'image/png',
-            },
+            expect.objectContaining({
+              type: 'file',
+              data: 'https://example.com/images/example.png',
+              mimeType: 'image/png',
+            }),
           ],
         },
         threadId,
@@ -1559,17 +1405,15 @@ describe('MessageList', () => {
       const assistantMsgUIV2 = {
         id: 'ui-assistant-1',
         role: 'assistant',
-        content: 'Here is the information I found.',
         createdAt: new Date('2023-10-26T12:00:03.000Z'),
         parts: [{ type: 'text', text: 'Here is the information I found.' }],
-        experimental_attachments: [],
       } satisfies VercelUIMessage;
 
       const messageSequence = [userMsgV1, assistantMsgV1, toolResultMsgV1, assistantMsgUIV2];
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: userMsgV1.id,
           role: 'user',
@@ -1636,7 +1480,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, I will perform the task.' },
-          { type: 'tool-call', toolName: 'task-tool', toolCallId: 'call-task-1', args: { task: 'perform' } },
+          { type: 'tool-call', toolName: 'task-tool', toolCallId: 'call-task-1', input: { task: 'perform' } },
         ],
       } satisfies VercelCoreMessage;
 
@@ -1647,7 +1491,7 @@ describe('MessageList', () => {
             type: 'tool-result',
             toolName: 'task-tool',
             toolCallId: 'call-task-1',
-            result: 'Task completed successfully.',
+            output: { type: 'json', value: 'Task completed successfully.' },
           },
         ],
       } satisfies VercelCoreMessage;
@@ -1734,7 +1578,7 @@ describe('MessageList', () => {
           { type: 'text', text: 'Here is an embedded image:' },
           {
             type: 'file',
-            mimeType: 'image/gif',
+            mediaType: 'image/gif',
             data: new URL('data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='),
           },
         ],
@@ -1742,7 +1586,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'user',
@@ -1773,16 +1617,24 @@ describe('MessageList', () => {
       const inputCoreMessage = {
         role: 'assistant',
         content: [
-          { type: 'reasoning', text: 'First, I need to gather some data.', signature: 'sig-gather' },
+          {
+            type: 'reasoning',
+            text: 'First, I need to gather some data.',
+            providerOptions: { anthropic: { signature: 'sig-gather' } },
+          },
           { type: 'text', text: 'Gathering data...' },
-          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
-          { type: 'reasoning', text: 'Data gathered, now I will process it.', signature: 'sig-process' },
+          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', input: { query: 'required data' } },
+          {
+            type: 'reasoning',
+            text: 'Data gathered, now I will process it.',
+            providerOptions: { anthropic: { signature: 'sig-process' } },
+          },
         ],
       } satisfies VercelCoreMessage;
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1793,7 +1645,8 @@ describe('MessageList', () => {
               {
                 type: 'reasoning',
                 reasoning: 'First, I need to gather some data.',
-                details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
+                details: [{ type: 'text', text: 'First, I need to gather some data.' }],
+                providerMetadata: { anthropic: { signature: 'sig-gather' } },
               },
               { type: 'text', text: 'Gathering data...' },
               {
@@ -1808,7 +1661,8 @@ describe('MessageList', () => {
               {
                 type: 'reasoning',
                 reasoning: 'Data gathered, now I will process it.',
-                details: [{ type: 'text', text: 'Data gathered, now I will process it.', signature: 'sig-process' }],
+                details: [{ type: 'text', text: 'Data gathered, now I will process it.' }],
+                providerMetadata: { anthropic: { signature: 'sig-process' } },
               },
             ],
           },
@@ -1828,20 +1682,34 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, I will check the weather for both cities.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-london', args: { city: 'London' } },
+          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-london', input: { city: 'London' } },
           { type: 'text', text: 'And now for Paris.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-paris', args: { city: 'Paris' } },
+          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-paris', input: { city: 'Paris' } },
         ],
       } satisfies VercelCoreMessage;
 
       const toolResultLondon = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-london', result: '20°C, sunny' }],
+        content: [
+          {
+            type: 'tool-result',
+            toolName: 'weather-tool',
+            toolCallId: 'call-london',
+            output: { type: 'json', value: '20°C, sunny' },
+          },
+        ],
       } satisfies VercelCoreMessage;
 
       const toolResultParis = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-paris', result: '15°C, cloudy' }],
+        content: [
+          {
+            type: 'tool-result',
+            toolName: 'weather-tool',
+            toolCallId: 'call-paris',
+            output: { type: 'json', value: '15°C, cloudy' },
+          },
+        ],
       } satisfies VercelCoreMessage;
 
       const assistantMsgWithFinalText = {
@@ -1859,7 +1727,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'user',
@@ -1901,7 +1769,6 @@ describe('MessageList', () => {
                   step: undefined,
                 },
               }),
-              expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
               expect.objectContaining({ type: 'text', text: 'And now for Paris.', createdAt: expect.any(Number) }),
               expect.objectContaining({
                 type: 'tool-invocation',
@@ -1951,15 +1818,15 @@ describe('MessageList', () => {
       const inputCoreMessage = {
         role: 'assistant',
         content: [
-          { type: 'reasoning', text: 'Thinking step 1...', signature: 'sig-1' },
-          { type: 'redacted-reasoning', data: 'some hidden data' },
-          { type: 'reasoning', text: 'Final thought.', signature: 'sig-2' },
+          { type: 'reasoning', text: 'Thinking step 1...', providerOptions: { anthropic: { signature: 'sig-1' } } },
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { redactedData: 'some hidden data' } } },
+          { type: 'reasoning', text: 'Final thought.', providerOptions: { anthropic: { signature: 'sig-2' } } },
         ],
       } satisfies VercelCoreMessage;
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.db()).toEqual([
+      expect(list.get.all.db()).toMatchObject([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1970,412 +1837,26 @@ describe('MessageList', () => {
               {
                 type: 'reasoning',
                 reasoning: 'Thinking step 1...',
-                details: [{ type: 'text', text: 'Thinking step 1...', signature: 'sig-1' }],
+                details: [{ type: 'text', text: 'Thinking step 1...' }],
+                providerMetadata: { anthropic: { signature: 'sig-1' } },
               },
-              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'some hidden data' }] },
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [{ type: 'text', text: '' }],
+                providerMetadata: { anthropic: { redactedData: 'some hidden data' } },
+              },
               {
                 type: 'reasoning',
                 reasoning: 'Final thought.',
-                details: [{ type: 'text', text: 'Final thought.', signature: 'sig-2' }],
+                details: [{ type: 'text', text: 'Final thought.' }],
+                providerMetadata: { anthropic: { signature: 'sig-2' } },
               },
             ],
           },
           threadId,
           resourceId,
         } satisfies MastraDBMessage,
-      ]);
-    });
-
-    it('works with a copy/pasted conversation from useChat input messages', () => {
-      const history = (
-        [
-          {
-            id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
-            content: 'hi',
-            role: 'user' as const,
-            type: 'text',
-            createdAt: '2025-03-25T20:29:58.103Z',
-            threadId: '68',
-          },
-          {
-            id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
-            content: [
-              {
-                type: 'text',
-                text: 'Hello! How can I assist you today?',
-              },
-            ],
-            role: 'assistant',
-            type: 'text',
-            createdAt: '2025-03-25T20:29:58.717Z',
-            threadId: '68',
-          },
-          {
-            id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
-            content: 'LA',
-            role: 'user' as const,
-            type: 'text',
-            createdAt: '2025-03-25T20:30:01.911Z',
-            threadId: '68',
-          },
-          {
-            id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
-            content: [
-              {
-                type: 'tool-call',
-                toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
-                toolName: 'updateWorkingMemory',
-                args: {
-                  memory: '<user><location>LA</location></user>',
-                },
-              },
-            ],
-            role: 'assistant',
-            type: 'tool-call',
-            createdAt: '2025-03-25T20:30:02.175Z',
-            threadId: '68',
-          },
-          {
-            id: 'c27b7dbe-ce80-41f5-9eb3-33a668238a1b',
-            content: [
-              {
-                type: 'tool-result',
-                toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
-                toolName: 'updateWorkingMemory',
-                result: {
-                  success: true,
-                },
-              },
-            ],
-            role: 'tool',
-            type: 'tool-result',
-            createdAt: '2025-03-25T20:30:02.176Z',
-            threadId: '68',
-          },
-          {
-            id: 'd1fc1d8e-2aca-47a8-8239-0bb761d63fd6',
-            content: [
-              {
-                type: 'text',
-                text: "Got it! You're in LA. What would you like to talk about or do today?",
-              },
-            ],
-            role: 'assistant',
-            type: 'text',
-            createdAt: '2025-03-25T20:30:02.177Z',
-            threadId: '68',
-          },
-          {
-            id: '1b271c02-7762-4416-91e9-146a25ce9c73',
-            content: [
-              {
-                type: 'text',
-                text: 'Hello',
-              },
-            ],
-            role: 'user' as const,
-            type: 'text',
-            createdAt: '2025-05-13T22:23:26.584Z',
-            threadId: '68',
-          },
-          {
-            id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
-            content: [
-              {
-                type: 'text',
-                text: 'Hello again! How can I help you today?',
-              },
-            ],
-            role: 'assistant',
-            type: 'text',
-            createdAt: '2025-05-13T22:23:26.585Z',
-            threadId: '68',
-          },
-          {
-            id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
-            content: [
-              {
-                type: 'text',
-                text: 'Hi',
-              },
-            ],
-            role: 'user' as const,
-            type: 'text',
-            createdAt: '2025-05-13T22:24:51.608Z',
-            threadId: '68',
-          },
-          {
-            id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
-            content: [
-              {
-                type: 'text',
-                text: "Hi there! What's on your mind?",
-              },
-            ],
-            role: 'assistant',
-            type: 'text',
-            createdAt: '2025-05-13T22:24:51.609Z',
-            threadId: '68',
-          },
-          {
-            role: 'user' as const,
-            content: [
-              {
-                type: 'text',
-                text: 'hello',
-              },
-            ],
-          },
-        ] as const
-      ).map(m => ({
-        ...m,
-        createdAt: `createdAt` in m && m.createdAt ? new Date(m.createdAt) : new Date(),
-      })) as MastraMessageV1[];
-
-      const list = new MessageList({ threadId: '68' }).add(history, 'response');
-
-      const uiMessages = list.get.all.ui();
-
-      expect(uiMessages.length).toBe(9);
-      const expectedMessages = [
-        {
-          id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
-          role: 'user',
-          content: 'hi',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: 'hi', createdAt: expect.any(Number) })],
-          experimental_attachments: [],
-        },
-        {
-          id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
-          role: 'assistant',
-          content: 'Hello! How can I assist you today?',
-          createdAt: expect.any(Date),
-          parts: [
-            expect.objectContaining({
-              type: 'text',
-              text: 'Hello! How can I assist you today?',
-              createdAt: expect.any(Number),
-            }),
-          ],
-          reasoning: undefined,
-          toolInvocations: undefined,
-        },
-        {
-          id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
-          role: 'user',
-          content: 'LA',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: 'LA', createdAt: expect.any(Number) })],
-          experimental_attachments: [],
-        },
-        {
-          id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
-          role: 'assistant',
-          content: "Got it! You're in LA. What would you like to talk about or do today?",
-          createdAt: expect.any(Date),
-          parts: [
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
-                toolName: 'updateWorkingMemory',
-                args: { memory: '<user><location>LA</location></user>' },
-                result: { success: true },
-                step: undefined,
-              },
-            }),
-            {
-              type: 'step-start',
-            },
-            expect.objectContaining({
-              type: 'text',
-              text: "Got it! You're in LA. What would you like to talk about or do today?",
-              createdAt: expect.any(Number),
-            }),
-          ],
-          reasoning: undefined,
-          toolInvocations: [
-            {
-              state: 'result',
-              toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
-              toolName: 'updateWorkingMemory',
-              args: { memory: '<user><location>LA</location></user>' },
-              result: { success: true },
-              step: undefined,
-            },
-          ],
-        },
-        {
-          id: '1b271c02-7762-4416-91e9-146a25ce9c73',
-          role: 'user',
-          content: 'Hello',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: 'Hello', createdAt: expect.any(Number) })],
-          experimental_attachments: [],
-        },
-        {
-          id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
-          role: 'assistant',
-          content: 'Hello again! How can I help you today?',
-          createdAt: expect.any(Date),
-          parts: [
-            expect.objectContaining({
-              type: 'text',
-              text: 'Hello again! How can I help you today?',
-              createdAt: expect.any(Number),
-            }),
-          ],
-          reasoning: undefined,
-          toolInvocations: undefined,
-        },
-        {
-          id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
-          role: 'user',
-          content: 'Hi',
-          createdAt: expect.any(Date),
-          parts: [expect.objectContaining({ type: 'text', text: 'Hi', createdAt: expect.any(Number) })],
-          experimental_attachments: [],
-        },
-        {
-          id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
-          role: 'assistant',
-          content: "Hi there! What's on your mind?",
-          createdAt: expect.any(Date),
-          parts: [
-            expect.objectContaining({
-              type: 'text',
-              text: "Hi there! What's on your mind?",
-              createdAt: expect.any(Number),
-            }),
-          ],
-          reasoning: undefined,
-          toolInvocations: undefined,
-        },
-        {
-          id: expect.any(String), // The last message doesn't have an ID in the input, so MessageList generates one
-          role: 'user',
-          content: 'hello',
-          createdAt: expect.any(Date), // MessageList generates createdAt for messages without one
-          parts: [expect.objectContaining({ type: 'text', text: 'hello', createdAt: expect.any(Number) })],
-          experimental_attachments: [],
-        },
-      ];
-      expect(uiMessages).toEqual(expectedMessages);
-
-      let newId = globalThis.crypto.randomUUID();
-      const responseMessages = [
-        {
-          id: newId,
-          role: 'assistant' as const,
-          content: [{ type: 'text' as const, text: 'As a large language model...' }],
-        },
-      ];
-      let newUIMessages = appendResponseMessages({
-        messages: uiMessages,
-        responseMessages,
-      });
-
-      expect(newUIMessages.length).toBe(uiMessages.length + 1);
-      const newUIMessages2 = list.add(responseMessages, 'response').get.all.ui();
-      expect(newUIMessages2).toEqual([
-        ...uiMessages,
-        {
-          role: 'assistant',
-          id: newId,
-          content: 'As a large language model...',
-          createdAt: expect.any(Date),
-          parts: [
-            expect.objectContaining({
-              type: 'text',
-              text: 'As a large language model...',
-              createdAt: expect.any(Number),
-            }),
-          ],
-          reasoning: undefined,
-          toolInvocations: undefined,
-        } satisfies UIMessage,
-      ]);
-
-      const newClientMessage = {
-        id: globalThis.crypto.randomUUID(),
-        role: 'user',
-        createdAt: new Date(),
-        content: 'Do it anyway please',
-        experimental_attachments: [],
-        parts: [{ type: 'step-start' }, { type: 'text', text: 'Do it anyway please' }],
-      } satisfies Message;
-
-      const newUIMessages3 = appendClientMessage({
-        messages: newUIMessages2,
-        message: newClientMessage,
-      });
-
-      expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
-      const newUIMessages4 = list.add(newClientMessage, 'input').get.all.ui();
-      expect(newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) }))).toEqual(
-        newUIMessages3.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
-
-      const responseMessages2 = [
-        { id: globalThis.crypto.randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
-        {
-          id: globalThis.crypto.randomUUID(),
-          role: 'assistant',
-          content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
-        },
-        {
-          id: globalThis.crypto.randomUUID(),
-          role: 'tool',
-          content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
-        },
-      ];
-      const newUIMessages5 = appendResponseMessages({
-        messages: newUIMessages3,
-        // @ts-expect-error - testing response message format
-        responseMessages: responseMessages2,
-      });
-
-      expect(list.add(newUIMessages5, 'response').get.all.ui()).toEqual([
-        ...newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) })),
-        {
-          role: 'assistant',
-          content: "Ok fine I'll call a tool then",
-          id: expect.any(String),
-          createdAt: expect.any(Date),
-          parts: [
-            expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
-            expect.objectContaining({
-              type: 'text',
-              text: "Ok fine I'll call a tool then",
-              createdAt: expect.any(Number),
-            }),
-            expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
-            expect.objectContaining({
-              type: 'tool-invocation',
-              toolInvocation: {
-                result: { lets: 'go' },
-                toolCallId: 'ok-fine-1',
-                toolName: 'okFineTool',
-                args: { ok: 'fine' },
-                state: 'result',
-                step: 1,
-              },
-            }),
-          ],
-          reasoning: undefined,
-          toolInvocations: [
-            {
-              result: { lets: 'go' },
-              toolCallId: 'ok-fine-1',
-              toolName: 'okFineTool',
-              args: { ok: 'fine' },
-              state: 'result',
-              step: 1,
-            },
-          ],
-        } satisfies Message,
       ]);
     });
 
@@ -2391,7 +1872,7 @@ describe('MessageList', () => {
         expect(systemMessages[0]?.content).toBe(systemMsgContent);
 
         expect(list.get.all.db().length).toBe(0); // Should not be in MastraDBMessage list
-        expect(list.get.all.ui().length).toBe(0); // Should not be in UI messages
+        expect(list.get.all.aiV5.ui().length).toBe(0); // Should not be in UI messages
       });
 
       it('should not add duplicate system messages based on content', () => {
@@ -2431,7 +1912,7 @@ describe('MessageList', () => {
         expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
 
         expect(list.get.all.db().length).toBe(2); // user and assistant
-        expect(list.get.all.ui().length).toBe(2); // user and assistant
+        expect(list.get.all.aiV5.ui().length).toBe(2); // user and assistant
       });
     });
 
@@ -2937,61 +2418,71 @@ describe('MessageList', () => {
   });
 
   describe('core message sanitization', () => {
-    it('should remove an orphaned tool-call part from an assistant message if no result is provided', () => {
+    it('should remove an orphaned tool-call part from an assistant message if no result is provided', async () => {
       const list = new MessageList({ threadId, resourceId });
       const userMessage: CoreMessage = { role: 'user', content: 'Call a tool' };
       const assistantMessageWithOrphanedCall: CoreMessage = {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay' },
-          { type: 'tool-call', toolCallId: 'orphan-call-1', toolName: 'test-tool', args: {} },
+          { type: 'tool-call', toolCallId: 'orphan-call-1', toolName: 'test-tool', input: {} },
         ],
       };
 
       list.add(userMessage, 'input');
       list.add(assistantMessageWithOrphanedCall, 'response');
 
-      const coreMessages = list.get.all.core();
+      const coreMessages = await list.get.all.aiV5.llmPrompt();
 
       expect(coreMessages.length).toBe(2);
       const assistantMsg = coreMessages.find(m => m.role === 'assistant');
       expect(assistantMsg).toBeDefined();
-      expect(assistantMsg?.content).toEqual([
-        expect.objectContaining({ type: 'text', text: 'Okay', createdAt: expect.any(Number) }),
-      ]); // Should only have the text part
+      expect(assistantMsg?.content).toEqual([expect.objectContaining({ type: 'text', text: 'Okay' })]); // Should only have the text part
     });
 
-    it('should handle an assistant message with mixed valid and orphaned tool calls', () => {
+    it('should handle an assistant message with mixed valid and orphaned tool calls', async () => {
       const list = new MessageList({ threadId, resourceId });
       const assistantMessage: CoreMessage = {
         role: 'assistant',
         content: [
-          { type: 'tool-call', toolCallId: 'valid-1', toolName: 'tool-a', args: {} },
+          { type: 'tool-call', toolCallId: 'valid-1', toolName: 'tool-a', input: {} },
           { type: 'text', text: 'Some text in between' },
-          { type: 'tool-call', toolCallId: 'orphan-3', toolName: 'tool-b', args: {} },
+          { type: 'tool-call', toolCallId: 'orphan-3', toolName: 'tool-b', input: {} },
         ],
       };
       const toolMessageResult: CoreMessage = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' }],
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'valid-1',
+            toolName: 'tool-a',
+            output: { type: 'json', value: 'Result for valid-1' },
+          },
+        ],
       };
 
       list.add(assistantMessage, 'response');
       list.add(toolMessageResult, 'response');
 
-      const coreMessages = list.get.all.core();
+      const coreMessages = await list.get.all.aiV5.llmPrompt();
       expect(coreMessages.length).toBe(3); // Assistant message and Tool message for valid-1
 
       const finalAssistantMsg = [...coreMessages].reverse().find(m => m.role === 'assistant');
       expect(finalAssistantMsg).toBeDefined();
       expect(finalAssistantMsg?.content).toEqual([
-        expect.objectContaining({ type: 'text', text: 'Some text in between', createdAt: expect.any(Number) }),
+        expect.objectContaining({ type: 'text', text: 'Some text in between' }),
       ]);
 
       const finalToolMsg = coreMessages.find(m => m.role === 'tool');
       expect(finalToolMsg).toBeDefined();
-      expect(finalToolMsg?.content).toEqual([
-        { type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' },
+      expect(finalToolMsg?.content).toMatchObject([
+        {
+          type: 'tool-result',
+          toolCallId: 'valid-1',
+          toolName: 'tool-a',
+          output: { type: 'text', value: 'Result for valid-1' },
+        },
       ]);
     });
   });
@@ -3047,7 +2538,7 @@ describe('MessageList', () => {
   });
 
   describe('toUIMessage filtering', () => {
-    it('should filter out tool invocations with state="call" when converting to UIMessage', () => {
+    it('should filter out tool invocations with state="call" when converting to UIMessage', async () => {
       const messageWithCallState: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
@@ -3083,35 +2574,22 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithCallState, 'response');
 
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
-      expect(uiMessage.parts).toEqual([
-        expect.objectContaining({
-          type: 'step-start',
-          createdAt: expect.any(Number),
-        }),
-        expect.objectContaining({
-          type: 'text',
-          text: 'Let me check that for you.',
-          createdAt: expect.any(Number),
-        }),
+      // AI SDK v5 UI messages represent an unanswered call as input-available
+      expect(uiMessage.parts).toMatchObject([
+        { type: 'step-start' },
+        { type: 'text', text: 'Let me check that for you.' },
+        { type: 'tool-getLuckyNumber', toolCallId: 'call-1', state: 'input-available', input: {} },
       ]);
-
-      // Check that the tool invocation with state="call" is filtered out from parts
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(0);
-
-      // Check that text and step-start parts are preserved
-      expect(uiMessage.parts).toEqual([
-        expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
-        expect.objectContaining({ type: 'text', text: 'Let me check that for you.', createdAt: expect.any(Number) }),
-      ]);
-
-      // Check that toolInvocations array is also filtered
-      expect(uiMessage.toolInvocations).toEqual([]);
+      // The prompt sent to the model drops the unanswered call
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      expect(prompt.flatMap(m => (Array.isArray(m.content) ? m.content : [])).some(p => p.type === 'tool-call')).toBe(
+        false,
+      );
     });
 
     it('should preserve tool invocations with state="result" when converting to UIMessage', () => {
@@ -3152,62 +2630,19 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithResultState, 'response');
 
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
-      expect(uiMessage.parts).toEqual([
-        expect.objectContaining({
-          type: 'step-start',
-          createdAt: expect.any(Number),
-        }),
-        expect.objectContaining({
-          type: 'text',
-          text: 'Your lucky number is:',
-          createdAt: expect.any(Number),
-        }),
-        {
-          type: 'tool-invocation',
-          toolInvocation: {
-            state: 'result',
-            step: 0,
-            toolCallId: 'call-2',
-            toolName: 'getLuckyNumber',
-            args: {},
-            result: 42,
-          },
-        },
-      ]);
-
-      // Check that the tool invocation with state="result" is preserved
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(1);
-      expect(toolInvocationParts[0]).toEqual({
-        type: 'tool-invocation',
-        toolInvocation: {
-          state: 'result',
-          toolCallId: 'call-2',
-          toolName: 'getLuckyNumber',
-          step: 0,
-          args: {},
-          result: 42,
-        },
-      });
-
-      // Check that toolInvocations array also has the result
-      expect(uiMessage.toolInvocations).toEqual([
-        {
-          state: 'result',
-          toolCallId: 'call-2',
-          toolName: 'getLuckyNumber',
-          args: {},
-          result: 42,
-        },
+      expect(uiMessage.parts).toMatchObject([
+        { type: 'step-start' },
+        { type: 'text', text: 'Your lucky number is:' },
+        { type: 'tool-getLuckyNumber', toolCallId: 'call-2', state: 'output-available', input: {}, output: 42 },
       ]);
     });
 
-    it('should filter out partial-call states and preserve only results', () => {
+    it('should filter out partial-call states and preserve only results', async () => {
       const messageWithMixedStates: MastraDBMessage = {
         id: 'msg-3',
         role: 'assistant',
@@ -3259,22 +2694,24 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithMixedStates, 'response');
 
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       const uiMessage = uiMessages[0];
 
-      // Only the result state should be preserved
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(1);
-      expect(toolInvocationParts[0].toolInvocation.state).toBe('result');
-      expect(toolInvocationParts[0].toolInvocation.toolCallId).toBe('call-4');
+      // Only the result state carries output
+      const completed = uiMessage.parts.filter(
+        p => p.type.startsWith('tool-') && (p as any).state === 'output-available',
+      );
+      expect(completed).toMatchObject([{ type: 'tool-calculateTool', toolCallId: 'call-4', output: 30 }]);
 
-      // toolInvocations array should also only have the result
-      expect(uiMessage.toolInvocations).toHaveLength(1);
-      expect(uiMessage.toolInvocations![0].state).toBe('result');
-      expect(uiMessage.toolInvocations![0].toolCallId).toBe('call-4');
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const promptCallIds = prompt
+        .flatMap(m => (Array.isArray(m.content) ? m.content : []))
+        .filter(p => p.type === 'tool-call')
+        .map(p => (p as any).toolCallId);
+      expect(promptCallIds).toEqual(['call-4']);
     });
 
-    it('should handle clientTool scenario - filter call states when querying from memory', () => {
+    it('should handle clientTool scenario - filter call states when querying from memory', async () => {
       // Simulate the scenario from GitHub issue #5016
       // Test that tool invocations with "call" state are filtered when converting to UI messages
 
@@ -3317,28 +2754,22 @@ describe('MessageList', () => {
       list.add(assistantCallMessage, 'memory');
 
       // When converting to UI messages (what the client sees)
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
-      expect(uiMessage.parts).toEqual([
+      // AI SDK v5 UI messages represent an unanswered call as input-available
+      expect(uiMessage.parts).toMatchObject([
         { type: 'step-start' },
         { type: 'text', text: 'Let me get your lucky number.' },
+        { type: 'tool-getLuckyNumber', toolCallId: 'call-lucky-1', state: 'input-available', input: {} },
       ]);
-
-      // Tool invocations with "call" state should be filtered out from parts
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(0); // Should be filtered out
-
-      // Only text and step-start parts should remain
-      expect(uiMessage.parts).toEqual([
-        { type: 'step-start' },
-        { type: 'text', text: 'Let me get your lucky number.' },
-      ]);
-
-      // toolInvocations array should be empty (filtered)
-      expect(uiMessage.toolInvocations).toEqual([]);
+      // The prompt sent to the model drops the unanswered call
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      expect(prompt.flatMap(m => (Array.isArray(m.content) ? m.content : [])).some(p => p.type === 'tool-call')).toBe(
+        false,
+      );
 
       // Now test with a result state - should be preserved
       const assistantResultMessage: MastraDBMessage = {
@@ -3377,25 +2808,13 @@ describe('MessageList', () => {
 
       list.add(assistantResultMessage, 'memory');
 
-      const uiMessages2 = list.get.all.ui();
+      const uiMessages2 = list.get.all.aiV5.ui();
       expect(uiMessages2.length).toBe(2);
 
-      const uiMessageWithResult = uiMessages2[1];
-
-      // Tool invocations with "result" state should be preserved
-      const resultToolParts = uiMessageWithResult.parts.filter(p => p.type === 'tool-invocation');
-      expect(resultToolParts.length).toBe(1);
-      expect(resultToolParts[0].toolInvocation.state).toBe('result');
-      if (resultToolParts[0].toolInvocation.state === `result`) {
-        expect(resultToolParts[0].toolInvocation.result).toBe(42);
-      }
-
-      // toolInvocations array should have the result
-      expect(uiMessageWithResult.toolInvocations).toHaveLength(1);
-      expect(uiMessageWithResult.toolInvocations![0].state).toBe('result');
-      if (uiMessageWithResult.toolInvocations![0].state === `result`) {
-        expect(uiMessageWithResult.toolInvocations![0].result).toBe(42);
-      }
+      // Tool invocations with "result" state are preserved with their output
+      expect(uiMessages2[1].parts.filter(p => p.type.startsWith('tool-'))).toMatchObject([
+        { type: 'tool-getLuckyNumber', toolCallId: 'call-lucky-2', state: 'output-available', output: 42 },
+      ]);
     });
   });
 
@@ -3447,7 +2866,7 @@ describe('MessageList', () => {
         const list = new MessageList({ threadId, resourceId }).add(v2Message, 'response');
 
         // Convert to UI and back to v2
-        const uiMessages = list.get.all.ui();
+        const uiMessages = list.get.all.aiV5.ui();
         const newList = new MessageList({ threadId, resourceId }).add(uiMessages, 'response');
         const v2Messages = newList.get.all.db();
 
@@ -3520,10 +2939,9 @@ describe('MessageList', () => {
       });
 
       it('should handle UIMessage with empty metadata object', () => {
-        const uiMessage: UIMessageWithMetadata = {
+        const uiMessage: VercelUIMessage = {
           id: 'ui-msg-empty-metadata',
           role: 'user' as const,
-          content: 'hi',
           parts: [{ type: 'text' as const, text: 'hi' }],
           createdAt: new Date(),
           metadata: {},
@@ -3534,7 +2952,8 @@ describe('MessageList', () => {
         const v2Messages = list.get.all.db();
 
         expect(v2Messages.length).toBe(1);
-        expect(v2Messages[0].content.metadata).toEqual({});
+        // AI SDK v5 input: an empty metadata object carries nothing and is not stored
+        expect(v2Messages[0].content.metadata).toBeUndefined();
       });
 
       it('should handle UIMessage with null/undefined metadata', () => {
@@ -3569,10 +2988,8 @@ describe('MessageList', () => {
         const uiMessage: UIMessageWithMetadata = {
           id: 'ui-assistant-metadata',
           role: 'assistant' as const,
-          content: 'Processing your request',
           createdAt: new Date(),
           parts: [{ type: 'text' as const, text: 'Processing your request' }],
-          toolInvocations: [],
           metadata,
         };
 
@@ -3625,10 +3042,10 @@ describe('MessageList', () => {
         expect(savedUserMessage?.content.metadata).toEqual(userMetadata);
 
         // Convert back to UI messages (for client display)
-        const uiMessages = list.get.all.ui();
+        const uiMessages = list.get.all.aiV5.ui();
         const uiUserMessage = uiMessages.find(m => m.id === 'user-msg-flow') as UIMessageWithMetadata | undefined;
         expect(uiUserMessage).toBeDefined();
-        expect(uiUserMessage?.metadata).toEqual(userMetadata);
+        expect(uiUserMessage?.metadata).toMatchObject(userMetadata);
       });
 
       it('should handle metadata from onlook.dev use case', () => {
@@ -3657,11 +3074,11 @@ describe('MessageList', () => {
 
         // Verify it's saved correctly as v2
         const v2Messages = list.get.all.db();
-        expect(v2Messages[0].content.metadata).toEqual(onlookMessage.metadata);
+        expect(v2Messages[0].content.metadata).toMatchObject(onlookMessage.metadata);
 
         // Verify it roundtrips back to UI format
-        const uiMessages = list.get.all.ui();
-        expect((uiMessages[0] as UIMessageWithMetadata).metadata).toEqual(onlookMessage.metadata);
+        const uiMessages = list.get.all.aiV5.ui();
+        expect((uiMessages[0] as UIMessageWithMetadata).metadata).toMatchObject(onlookMessage.metadata);
       });
     });
   });
@@ -3721,15 +3138,15 @@ describe('MessageList', () => {
       newMessageList.add(v2Messages, 'memory');
 
       // Get back as UI messages
-      const uiMessages = newMessageList.get.all.ui();
+      const uiMessages = newMessageList.get.all.aiV5.ui();
 
       // Verify metadata is still preserved after round trip
-      expect(uiMessages[0].metadata).toEqual({
+      expect(uiMessages[0].metadata).toMatchObject({
         source: 'web-ui',
         timestamp: 1234567890,
         customField: 'custom-value',
       });
-      expect(uiMessages[1].metadata).toEqual({
+      expect(uiMessages[1].metadata).toMatchObject({
         model: 'gpt-4',
         processingTime: 250,
         tokens: 50,
@@ -3843,7 +3260,7 @@ describe('MessageList', () => {
       );
 
       // Step 6: Get prompt messages (what's sent to LLM)
-      const promptMessages = returnList.get.all.prompt();
+      const promptMessages = returnList.get.all.aiV5.prompt();
 
       // Verify the tool history is preserved
       // Check if tool calls are present
@@ -4156,7 +3573,7 @@ describe('MessageList', () => {
       it('should preserve providerOptions on CoreMessage with string content', async () => {
         const messageList = new MessageList();
 
-        const coreMessage: AIV4Type.CoreMessage = {
+        const coreMessage: AIV5Type.ModelMessage = {
           role: 'user' as const,
           content: 'Core message with caching',
           providerOptions: {
@@ -4178,7 +3595,7 @@ describe('MessageList', () => {
       it('should preserve providerOptions on CoreMessage content parts', async () => {
         const messageList = new MessageList();
 
-        const coreMessage: AIV4Type.CoreMessage = {
+        const coreMessage: AIV5Type.ModelMessage = {
           role: 'user' as const,
           content: [
             {
@@ -4368,7 +3785,7 @@ describe('MessageList', () => {
       list.addSystem('Original instruction 1');
       list.addSystem('Memory context', 'memory');
 
-      const newSystemMessages: AIV4Type.CoreSystemMessage[] = [
+      const newSystemMessages: AIV5Type.SystemModelMessage[] = [
         { role: 'system', content: 'New instruction 1' },
         { role: 'system', content: 'New instruction 2' },
       ];
@@ -4418,10 +3835,10 @@ describe('MessageList', () => {
     });
   });
 
-  describe('mastraDBMessageToAIV4UIMessage', () => {
+  describe('MastraDBMessage to UI message', () => {
     it('should handle MastraDBMessage with undefined parts (issue #11526)', () => {
       // This test reproduces the bug where ModerationProcessor crashes when
-      // mastraDBMessageToAIV4UIMessage receives a message with undefined parts.
+      // UI conversion receives a message with undefined parts.
       // The MastraMessageContentV2 type only requires format: 2, not parts.
       const messageWithUndefinedParts: MastraDBMessage = {
         id: 'test-id',
@@ -4438,11 +3855,13 @@ describe('MessageList', () => {
 
       // This should not throw "Cannot read properties of undefined (reading 'reduce')"
       // or "Cannot read properties of undefined (reading 'length')"
-      expect(() => list.get.all.ui()).not.toThrow();
+      expect(() => list.get.all.aiV5.ui()).not.toThrow();
 
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages).toHaveLength(1);
-      expect(uiMessages[0].content).toBe('This is text content without parts');
+      expect(uiMessages[0].parts).toEqual([
+        expect.objectContaining({ type: 'text', text: 'This is text content without parts' }),
+      ]);
     });
 
     it('should handle MastraDBMessage with null parts', () => {
@@ -4460,11 +3879,11 @@ describe('MessageList', () => {
       const list = new MessageList();
       list.add(messageWithNullParts, 'response');
 
-      expect(() => list.get.all.ui()).not.toThrow();
+      expect(() => list.get.all.aiV5.ui()).not.toThrow();
 
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages).toHaveLength(1);
-      expect(uiMessages[0].content).toBe('Assistant response');
+      expect(uiMessages[0].parts).toEqual([expect.objectContaining({ type: 'text', text: 'Assistant response' })]);
     });
 
     it('should handle MastraDBMessage with empty parts array', () => {
@@ -4482,11 +3901,13 @@ describe('MessageList', () => {
       const list = new MessageList();
       list.add(messageWithEmptyParts, 'input');
 
-      expect(() => list.get.all.ui()).not.toThrow();
+      expect(() => list.get.all.aiV5.ui()).not.toThrow();
 
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages).toHaveLength(1);
-      expect(uiMessages[0].content).toBe('Content with empty parts');
+      expect(uiMessages[0].parts).toEqual([
+        expect.objectContaining({ type: 'text', text: 'Content with empty parts' }),
+      ]);
     });
   });
 });

@@ -15,14 +15,16 @@ describe('step message mirrors', () => {
       messageList.add(
         {
           role: 'assistant',
-          content: [{ type: 'tool-call', toolCallId: `call-${i}`, toolName: 'echo', args: { i } }],
+          content: [{ type: 'tool-call', toolCallId: `call-${i}`, toolName: 'echo', input: { i } }],
         },
         'response',
       );
       messageList.add(
         {
           role: 'tool',
-          content: [{ type: 'tool-result', toolCallId: `call-${i}`, toolName: 'echo', result: { i } }],
+          content: [
+            { type: 'tool-result', toolCallId: `call-${i}`, toolName: 'echo', output: { type: 'json', value: { i } } },
+          ],
         },
         'response',
       );

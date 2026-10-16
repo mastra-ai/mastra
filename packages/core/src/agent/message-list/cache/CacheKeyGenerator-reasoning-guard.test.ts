@@ -11,7 +11,7 @@ import { CacheKeyGenerator } from './CacheKeyGenerator';
  *   { type: 'reasoning', reasoning: '', details: [{ type: 'text' }] }   // no `text`
  *
  * On the next turn, Observational Memory reloads that message and
- * CacheKeyGenerator.fromAIV4Part crashes:
+ * CacheKeyGenerator.fromLegacyPart crashes:
  *
  *   TypeError: Cannot read properties of undefined (reading 'length')
  *
@@ -20,45 +20,45 @@ import { CacheKeyGenerator } from './CacheKeyGenerator';
  * gracefully instead of crashing the message-loading pipeline.
  */
 describe('CacheKeyGenerator reasoning null guard (#18280)', () => {
-  it('fromAIV4Part should not crash when a text detail has no `text`', () => {
+  it('fromLegacyPart should not crash when a text detail has no `text`', () => {
     const brokenPart = {
       type: 'reasoning' as const,
       reasoning: '',
       details: [{ type: 'text' }],
     };
 
-    expect(() => CacheKeyGenerator.fromAIV4Part(brokenPart as any)).not.toThrow();
+    expect(() => CacheKeyGenerator.fromLegacyPart(brokenPart as any)).not.toThrow();
   });
 
-  it('fromAIV4Part should not crash when `details` is undefined', () => {
+  it('fromLegacyPart should not crash when `details` is undefined', () => {
     const brokenPart = {
       type: 'reasoning' as const,
       reasoning: '',
     };
 
-    expect(() => CacheKeyGenerator.fromAIV4Part(brokenPart as any)).not.toThrow();
+    expect(() => CacheKeyGenerator.fromLegacyPart(brokenPart as any)).not.toThrow();
   });
 
-  it('fromAIV4Part should return a stable key for a broken reasoning part', () => {
+  it('fromLegacyPart should return a stable key for a broken reasoning part', () => {
     const brokenPart = {
       type: 'reasoning' as const,
       reasoning: '',
       details: [{ type: 'text' }],
     };
 
-    const key1 = CacheKeyGenerator.fromAIV4Part(brokenPart as any);
-    const key2 = CacheKeyGenerator.fromAIV4Part(brokenPart as any);
+    const key1 = CacheKeyGenerator.fromLegacyPart(brokenPart as any);
+    const key2 = CacheKeyGenerator.fromLegacyPart(brokenPart as any);
 
     expect(key1).toBe(key2);
   });
 
-  it('fromAIV4Parts should not crash when a reasoning part has malformed details', () => {
+  it('fromLegacyParts should not crash when a reasoning part has malformed details', () => {
     const parts = [
       { type: 'text' as const, text: 'hello' },
       { type: 'reasoning' as const, reasoning: '', details: [{ type: 'text' }] },
     ];
 
-    expect(() => CacheKeyGenerator.fromAIV4Parts(parts as any)).not.toThrow();
+    expect(() => CacheKeyGenerator.fromLegacyParts(parts as any)).not.toThrow();
   });
 
   it('fromDBParts should not crash when a reasoning part has malformed details', () => {
@@ -70,14 +70,14 @@ describe('CacheKeyGenerator reasoning null guard (#18280)', () => {
     expect(() => CacheKeyGenerator.fromDBParts(parts as any)).not.toThrow();
   });
 
-  it('fromAIV4Part should still work correctly with valid reasoning parts', () => {
+  it('fromLegacyPart should still work correctly with valid reasoning parts', () => {
     const validPart = {
       type: 'reasoning' as const,
       reasoning: 'thinking it through',
       details: [{ type: 'text', text: 'thinking it through' }],
     };
 
-    const key = CacheKeyGenerator.fromAIV4Part(validPart as any);
+    const key = CacheKeyGenerator.fromLegacyPart(validPart as any);
     // text length (19) contributes to the key, unchanged by the guard.
     expect(key).toContain('thinking it through');
     expect(key).toContain('19');

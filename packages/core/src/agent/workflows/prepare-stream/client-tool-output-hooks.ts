@@ -19,6 +19,18 @@ function getParts(message: unknown): unknown[] {
   return [];
 }
 
+/** Reads a v5/v6 UI tool part (`tool-<name>` or `dynamic-tool`). */
+function getUIToolPart(record: Record<string, unknown>) {
+  if (typeof record.type !== 'string' || typeof record.toolCallId !== 'string') return;
+  if (record.type === 'dynamic-tool') {
+    return typeof record.toolName === 'string'
+      ? { toolName: record.toolName, toolCallId: record.toolCallId }
+      : undefined;
+  }
+  if (!record.type.startsWith('tool-') || record.type === 'tool-call' || record.type === 'tool-result') return;
+  return { toolName: record.type.slice('tool-'.length), toolCallId: record.toolCallId };
+}
+
 function getToolCall(part: unknown): ToolCall | undefined {
   if (!part || typeof part !== 'object') return;
   const record = part as Record<string, unknown>;
@@ -26,23 +38,15 @@ function getToolCall(part: unknown): ToolCall | undefined {
     return { toolCallId: record.toolCallId, toolName: record.toolName };
   }
 
-  if (record.type !== 'tool-invocation' || !record.toolInvocation || typeof record.toolInvocation !== 'object') return;
-  const invocation = record.toolInvocation as Record<string, unknown>;
-  if (
-    (invocation.state === 'call' || invocation.state === 'partial-call') &&
-    typeof invocation.toolCallId === 'string' &&
-    typeof invocation.toolName === 'string'
-  ) {
-    return { toolCallId: invocation.toolCallId, toolName: invocation.toolName };
-  }
+  const uiTool = getUIToolPart(record);
+  if (uiTool && (record.state === 'input-available' || record.state === 'input-streaming')) return uiTool;
 }
 
 function getToolResult(part: unknown): ToolResult | undefined {
   if (!part || typeof part !== 'object') return;
   const record = part as Record<string, unknown>;
   if (record.type === 'tool-result' && typeof record.toolCallId === 'string' && typeof record.toolName === 'string') {
-    const value = 'result' in record ? record.result : record.output;
-    const normalized = normalizeToolOutput(value);
+    const normalized = normalizeToolOutput(record.output);
     return {
       toolCallId: record.toolCallId,
       toolName: record.toolName,
@@ -51,20 +55,10 @@ function getToolResult(part: unknown): ToolResult | undefined {
     };
   }
 
-  if (record.type !== 'tool-invocation' || !record.toolInvocation || typeof record.toolInvocation !== 'object') return;
-  const invocation = record.toolInvocation as Record<string, unknown>;
-  if (
-    invocation.state === 'result' &&
-    typeof invocation.toolCallId === 'string' &&
-    typeof invocation.toolName === 'string'
-  ) {
-    const normalized = normalizeToolOutput(invocation.result);
-    return {
-      toolCallId: invocation.toolCallId,
-      toolName: invocation.toolName,
-      output: normalized.output,
-      ...(normalized.isError ? { skip: true as const } : {}),
-    };
+  const uiTool = getUIToolPart(record);
+  if (uiTool && record.state === 'output-available') {
+    const normalized = normalizeToolOutput(record.output);
+    return { ...uiTool, output: normalized.output, ...(normalized.isError ? { skip: true as const } : {}) };
   }
 }
 

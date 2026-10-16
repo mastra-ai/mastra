@@ -71,12 +71,12 @@ function resolveOutputText(messageList: MessageList): string {
   const hasCompletionCheckMessages = responseMessages.some(message => message.content?.metadata?.completionResult);
   if (hasCompletionCheckMessages) {
     const lastRealMessage = responseMessages.findLast(message => !message.content?.metadata?.completionResult);
-    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
+    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV5.Model') : [];
     const lastConverted = converted.at(-1);
     return lastConverted ? coreContentToString(lastConverted.content) : '';
   }
 
-  const converted = messageList.get.response.aiV4.core();
+  const converted = messageList.get.response.aiV5.model();
   const lastResponseMessage = converted.at(-1);
   return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
 }
@@ -512,7 +512,7 @@ export async function generateDurableThreadTitle({
   if (!shouldGenerate || thread?.title) return;
 
   const titleMessageList = new MessageList().deserialize(messageListState);
-  const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
+  const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.aiV5.ui());
   if (uiMessages.length < (minMessages ?? 1)) return;
 
   const userMessage = agent.getMostRecentUserMessage(uiMessages);

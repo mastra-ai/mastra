@@ -1,4 +1,4 @@
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
+import type { ModelMessage } from '@internal/ai-sdk-v5';
 
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { TypeDetector } from '../detection/TypeDetector';
@@ -8,7 +8,7 @@ import type { MessageInput } from '../types';
  * Convert CoreMessage content to a plain string.
  * Extracts text from text parts and concatenates them.
  */
-export function coreContentToString(content: CoreMessageV4['content']): string {
+export function coreContentToString(content: ModelMessage['content']): string {
   if (typeof content === `string`) return content;
 
   return content.reduce((p, c) => {
@@ -24,31 +24,13 @@ export function coreContentToString(content: CoreMessageV4['content']): string {
  * Uses cache keys for efficient comparison across different message formats.
  */
 export function messagesAreEqual(one: MessageInput, two: MessageInput): boolean {
-  const oneUIV4 = TypeDetector.isAIV4UIMessage(one) && one;
-  const twoUIV4 = TypeDetector.isAIV4UIMessage(two) && two;
-  if (oneUIV4 && !twoUIV4) return false;
-  if (oneUIV4 && twoUIV4) {
-    return CacheKeyGenerator.fromAIV4Parts(one.parts) === CacheKeyGenerator.fromAIV4Parts(two.parts);
-  }
-
-  const oneCMV4 = TypeDetector.isAIV4CoreMessage(one) && one;
-  const twoCMV4 = TypeDetector.isAIV4CoreMessage(two) && two;
-  if (oneCMV4 && !twoCMV4) return false;
-  if (oneCMV4 && twoCMV4) {
-    return (
-      CacheKeyGenerator.fromAIV4CoreMessageContent(oneCMV4.content) ===
-      CacheKeyGenerator.fromAIV4CoreMessageContent(twoCMV4.content)
-    );
-  }
-
   const oneMM1 = TypeDetector.isMastraMessageV1(one) && one;
   const twoMM1 = TypeDetector.isMastraMessageV1(two) && two;
   if (oneMM1 && !twoMM1) return false;
   if (oneMM1 && twoMM1) {
     return (
       oneMM1.id === twoMM1.id &&
-      CacheKeyGenerator.fromAIV4CoreMessageContent(oneMM1.content) ===
-        CacheKeyGenerator.fromAIV4CoreMessageContent(twoMM1.content)
+      CacheKeyGenerator.fromV1Content(oneMM1.content) === CacheKeyGenerator.fromV1Content(twoMM1.content)
     );
   }
 

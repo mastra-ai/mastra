@@ -1,6 +1,11 @@
 {
   "redirects": [
     {
+      "source": "/reference/ai-sdk/to-ai-sdk-v4-messages",
+      "destination": "/reference/ai-sdk/to-ai-sdk-v5-messages",
+      "permanent": true
+    },
+    {
       "source": "/reference/agents/generateLegacy",
       "destination": "/reference/agents/generate",
       "permanent": true

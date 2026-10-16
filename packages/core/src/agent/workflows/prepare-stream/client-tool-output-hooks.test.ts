@@ -50,25 +50,23 @@ function browserToolWith(onOutput: (options: OnOutputOptions) => void | Promise<
 function toolCallMessage(toolCallId: string, toolName = 'browserTool') {
   return {
     role: 'assistant' as const,
-    content: [{ type: 'tool-call' as const, toolCallId, toolName, args: {} }],
+    content: [{ type: 'tool-call' as const, toolCallId, toolName, input: {} }],
   };
 }
 
 function toolResultMessage(toolCallId: string, result: unknown, toolName = 'browserTool') {
   return {
     role: 'tool' as const,
-    content: [{ type: 'tool-result' as const, toolCallId, toolName, result }],
+    content: [{ type: 'tool-result' as const, toolCallId, toolName, output: { type: 'json', value: result } }],
   };
 }
 
 function toolInvocationResultMessage(toolCallId: string, result: unknown, toolName = 'browserTool') {
   return {
+    id: `ui-${toolCallId}`,
     role: 'assistant' as const,
-    content: [
-      {
-        type: 'tool-invocation' as const,
-        toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result },
-      },
+    parts: [
+      { type: `tool-${toolName}` as const, toolCallId, state: 'output-available' as const, input: {}, output: result },
     ],
   };
 }
@@ -283,7 +281,14 @@ describe('fireClientToolOutputHooks', () => {
       toolCallMessage('call-1'),
       {
         role: 'assistant' as const,
-        content: [{ type: 'tool-result' as const, toolCallId: 'call-1', toolName: 'browserTool', result: 'db shape' }],
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolCallId: 'call-1',
+            toolName: 'browserTool',
+            output: { type: 'json', value: 'db shape' },
+          },
+        ],
       },
     ];
 
@@ -338,8 +343,8 @@ describe('fireClientToolOutputHooks', () => {
       {
         role: 'assistant' as const,
         content: [
-          { type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'browserTool', args: {} },
-          { type: 'tool-call' as const, toolCallId: 'call-2', toolName: 'browserTool', args: {} },
+          { type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'browserTool', input: {} },
+          { type: 'tool-call' as const, toolCallId: 'call-2', toolName: 'browserTool', input: {} },
         ],
       },
       toolResultMessage('call-1', 'first'),
@@ -379,9 +384,9 @@ describe('fireClientToolOutputHooks', () => {
       {
         role: 'assistant' as const,
         content: [
-          { type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'browserTool', args: {} },
-          { type: 'tool-call' as const, toolCallId: 'call-2', toolName: 'secondBrowserTool', args: {} },
-          { type: 'tool-call' as const, toolCallId: 'call-3', toolName: 'serverTool', args: {} },
+          { type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'browserTool', input: {} },
+          { type: 'tool-call' as const, toolCallId: 'call-2', toolName: 'secondBrowserTool', input: {} },
+          { type: 'tool-call' as const, toolCallId: 'call-3', toolName: 'serverTool', input: {} },
         ],
       },
       toolResultMessage('call-1', 'first'),

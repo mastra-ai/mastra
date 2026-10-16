@@ -1,5 +1,4 @@
-import type { CoreSystemMessage } from '@internal/ai-sdk-v4';
-import type { SystemModelMessage } from '@internal/ai-sdk-v5';
+import type { CoreSystemMessage, SystemModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../../logger';

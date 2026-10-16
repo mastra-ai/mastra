@@ -3,8 +3,7 @@ import type {
   LanguageModelV2CallWarning,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
+import type { LanguageModelRequestMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
@@ -389,7 +388,6 @@ export interface DurableLLMStepOutput {
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
     signalPreempted?: boolean;
-    logprobs?: LanguageModelV1LogProbs;
     totalUsage?: LanguageModelUsage;
     headers?: Record<string, string>;
     messageId?: string;

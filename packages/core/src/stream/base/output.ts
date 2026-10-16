@@ -241,12 +241,10 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
       return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
     }
   }
-  const hasCompletionCheckMessages = messageList.get.response.db().some(m => m.content?.metadata?.completionResult);
-  const converted = hasCompletionCheckMessages
-    ? convertMessages([lastRealMessage]).to('AIV4.Core')
-    : messageList.get.response.aiV4.core();
-  const lastConverted = converted[converted.length - 1];
-  return lastConverted ? coreContentToString(lastConverted.content) : undefined;
+  // The v5 model view splits one stored message at step boundaries; join them back.
+  const converted = convertMessages([lastRealMessage]).to('AIV5.Model');
+  if (!converted.length) return undefined;
+  return converted.map(m => coreContentToString(m.content)).join('');
 }
 
 /**

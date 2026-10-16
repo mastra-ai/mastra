@@ -26,13 +26,13 @@ function userContent(variant: Variant) {
   if (variant === 'image') {
     return [
       { type: 'text' as const, text: 'what is this?' },
-      { type: 'image' as const, image: PNG, mimeType: 'image/png' },
+      { type: 'image' as const, image: PNG, mediaType: 'image/png' },
     ];
   }
   if (variant === 'file') {
     return [
       { type: 'text' as const, text: 'read this' },
-      { type: 'file' as const, data: FILE_BODY, mimeType: 'text/plain', filename: 't39.txt' },
+      { type: 'file' as const, data: FILE_BODY, mediaType: 'text/plain', filename: 't39.txt' },
     ];
   }
   if (variant === 'multipart') {

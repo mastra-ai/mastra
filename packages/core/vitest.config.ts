@@ -29,7 +29,10 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts'],
-          setupFiles: ['@internal/test-utils/setup'],
+          setupFiles: [
+            '@internal/test-utils/setup',
+            ...(process.env.PROMPT_RECORD_DIR ? ['./src/test-utils/prompt-recorder.setup.ts'] : []),
+          ],
           testTimeout: 120000,
           env: {
             OPENROUTER_API_KEY: '',

@@ -5,7 +5,6 @@ import { openai as openai_v7 } from '@ai-sdk/openai-v7';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
@@ -32,7 +31,7 @@ beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
 function runStreamE2ETest(version: 'v2' | 'v3' | 'v4') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
+  let openaiModel: LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
 
   {
     openaiModel = openai_v5('gpt-4o-mini');

@@ -1,7 +1,6 @@
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-
-import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
+import { AIV5Adapter, AIV6Adapter, MastraV1Adapter } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
+import type { LegacyCoreMessage } from '../state/legacy-shapes';
 import type { MastraDBMessage, MastraMessageV1, MessageSource, MemoryInfo } from '../state/types';
 import type { MessageInput } from '../types';
 import { stampMessageParts } from '../utils/stamp-part';
@@ -59,12 +58,6 @@ export function inputToMastraDBMessage(
   }
   if (TypeDetector.isMastraDBMessage(message)) {
     return stampMessageParts(hydrateMastraDBMessageFields(message, context, messageSource), messageSource);
-  }
-  if (TypeDetector.isAIV4CoreMessage(message)) {
-    return stampMessageParts(AIV4Adapter.fromCoreMessage(message, context, messageSource), messageSource);
-  }
-  if (TypeDetector.isAIV4UIMessage(message)) {
-    return stampMessageParts(AIV4Adapter.fromUIMessage(message, context, messageSource), messageSource);
   }
 
   // Use custom ID generator if message doesn't have an ID, otherwise keep the original
@@ -150,11 +143,11 @@ export function mastraMessageV1ToMastraDBMessage(
   messageSource: MessageSource,
   context: InputConversionContext,
 ): MastraDBMessage {
-  const coreV2 = AIV4Adapter.fromCoreMessage(
+  const coreV2 = MastraV1Adapter.fromV1Message(
     {
       content: message.content,
       role: message.role,
-    } as CoreMessageV4,
+    } as LegacyCoreMessage,
     context,
     messageSource,
   );
