@@ -135,7 +135,7 @@ describe('session-owner model catalog', () => {
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
       expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
-      expect(body.payer).toEqual({
+      expect(body.owner).toEqual({
         user: { id: 'owner', name: 'Ward Peeters' },
         credentials: { anthropic: { type: 'oauth', subscription: 'Claude Pro/Max' } },
       });
@@ -165,7 +165,7 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('factory');
       expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
-      expect(body.payer).toEqual({ credentials: { deepseek: { type: 'api_key' } } });
+      expect(body.owner).toEqual({ credentials: { deepseek: { type: 'api_key' } } });
       expect(body.models.map((m: { id: string }) => m.id)).toEqual(['deepseek/deepseek-flash']);
     },
   );
@@ -176,7 +176,7 @@ describe('session-owner model catalog', () => {
 
     const body = await (await app.request('/web/config/models?resourceId=session-1&threadId=chat-thread')).json();
 
-    expect(body.payer.user).toEqual({ id: 'owner' });
+    expect(body.owner.user).toEqual({ id: 'owner' });
     expect(JSON.stringify(body)).not.toContain('ward@example.com');
   });
 

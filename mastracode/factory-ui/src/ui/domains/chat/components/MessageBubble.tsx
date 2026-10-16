@@ -1,5 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
-import type { SessionPayer } from '@mastra/factory/routes/session-payer';
+import type { SessionOwner } from '@mastra/factory/routes/session-owner';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -76,7 +76,7 @@ export function MessageBubble({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
-  payer?: SessionPayer;
+  payer?: SessionOwner;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));

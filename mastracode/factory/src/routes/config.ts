@@ -47,8 +47,8 @@ import {
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
-import { payerCredentialsByModelProvider } from './session-payer.js';
-import type { SessionPayer } from './session-payer.js';
+import { ownerCredentialsByModelProvider } from './session-owner.js';
+import type { SessionOwner } from './session-owner.js';
 import { createSessionOwnerProfileResolver } from './source-control-sessions.js';
 import type { SessionOwnerUserProvider } from './source-control-sessions.js';
 
@@ -969,7 +969,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
             let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
-            let paidBy: Pick<SessionPayer, 'user'> | undefined;
+            let paidBy: Pick<SessionOwner, 'user'> | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             if (resourceId !== undefined || threadId !== undefined) {
@@ -1080,11 +1080,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 // Fail soft: the catalog still serves the built-in models.
               }
             }
-            const payer: SessionPayer | undefined =
+            const owner: SessionOwner | undefined =
               paidBy && tenantCredentials
                 ? {
                     ...paidBy,
-                    credentials: payerCredentialsByModelProvider(
+                    credentials: ownerCredentialsByModelProvider(
                       models.map(model => model.provider),
                       tenantCredentials,
                     ),
@@ -1092,7 +1092,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 : undefined;
             return c.json({
               ...sessionPolicy,
-              ...(payer ? { payer } : {}),
+              ...(owner ? { owner } : {}),
               models: catalog.sort((a, b) =>
                 a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
               ),

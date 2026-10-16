@@ -1,5 +1,5 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
-import type { SessionPayer } from '@mastra/factory/routes/session-payer';
+import type { SessionOwner } from '@mastra/factory/routes/session-owner';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -158,7 +158,7 @@ describe('message meta', () => {
   const grok = { modelId: 'grok-4', provider: 'xai.chat' };
   const kimi = { modelId: 'kimi-k2-thinking', provider: 'kimi-for-coding.messages' };
   const payerCases: Array<{
-    payer: SessionPayer;
+    payer: SessionOwner;
     viewerId: string;
     model: { modelId: string; provider: string };
     label: string;

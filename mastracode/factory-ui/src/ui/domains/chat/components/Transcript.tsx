@@ -1,5 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
-import type { SessionPayer } from '@mastra/factory/routes/session-payer';
+import type { SessionOwner } from '@mastra/factory/routes/session-owner';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
@@ -31,7 +31,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
-  const payer = useChatModelScope().sessionModelsQuery.data?.payer;
+  const payer = useChatModelScope().sessionModelsQuery.data?.owner;
   const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -96,7 +96,7 @@ export function TranscriptEntries({
   running?: boolean;
   /** The signed-in user; anyone else's message gets their avatar beside it. */
   viewerId?: string;
-  payer?: SessionPayer;
+  payer?: SessionOwner;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -212,7 +212,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
-  payer?: SessionPayer;
+  payer?: SessionOwner;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {

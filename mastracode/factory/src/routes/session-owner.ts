@@ -1,20 +1,20 @@
 import type { CredentialRecord } from '../storage/domains/credentials/base.js';
 import { getAuthProviderId, WEB_OAUTH_PROVIDERS } from './provider-credentials.js';
 
-export type PayerCredential = { type: 'api_key' } | { type: 'oauth'; subscription: string };
+export type OwnerCredential = { type: 'api_key' } | { type: 'oauth'; subscription: string };
 
 /** Whose credentials answer a thread: a person's own, or the organization's when `user` is absent. */
-export interface SessionPayer {
+export interface SessionOwner {
   user?: { id: string; name?: string };
   /** Keyed by catalog provider (`anthropic`), not the AI SDK's `anthropic.messages` a reply carries. */
-  credentials: Record<string, PayerCredential>;
+  credentials: Record<string, OwnerCredential>;
 }
 
-export function payerCredentialsByModelProvider(
+export function ownerCredentialsByModelProvider(
   modelProviders: Iterable<string>,
   records: CredentialRecord[],
-): SessionPayer['credentials'] {
-  const credentials: SessionPayer['credentials'] = {};
+): SessionOwner['credentials'] {
+  const credentials: SessionOwner['credentials'] = {};
   for (const provider of modelProviders) {
     const record = records.find(candidate => candidate.provider === getAuthProviderId(provider));
     if (record?.credential.type === 'api_key') credentials[provider] = { type: 'api_key' };
