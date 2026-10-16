@@ -1,36 +1,71 @@
+import { hostname } from 'node:os';
+import type { MemoryStorage, ObservationalMemoryOperationName } from '@mastra/core/storage';
+
 /**
- * Process-level operation registry for Observational Memory.
+ * Tracks which Observational Memory operations (reflecting, observing, buffering) are running,
+ * through the storage adapter's operation claims.
  *
- * Tracks which operations (reflecting, observing, buffering) are actively running
- * in THIS process. Used to detect stale DB flags left by crashed processes.
- *
- * Key format: `${recordId}:${operationType}`
+ * OM sets a DB flag (`isReflecting`, `isBufferingObservation`, ...) while an operation runs. When it
+ * finds a flag set, it asks whether any owner holds the operation; if none does, the flag is treated
+ * as left behind by a dead process and cleared.
  */
 
-export type OmOperationName = 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection';
+export type OmOperationName = ObservationalMemoryOperationName;
 
-const activeOps = new Map<string, number>();
+/** Identifies this process as an operation owner. One per module instance, so one per process. */
+export const processOperationOwner = `${hostname()}:${process.pid}:${Math.random().toString(36).slice(2, 10)}`;
 
-export function opKey(recordId: string, op: OmOperationName): string {
-  return `${recordId}:${op}`;
+const OPERATION_TTL_MS = 5 * 60_000;
+
+/**
+ * Used when the installed `@mastra/core` predates storage operation claims. Matches the core
+ * default: counted, process-local, correct for a single process only.
+ */
+const legacyActiveOps = new Map<string, number>();
+
+function supportsOperationClaims(storage: MemoryStorage): boolean {
+  return (
+    typeof storage.claimObservationalMemoryOperation === 'function' &&
+    typeof storage.releaseObservationalMemoryOperation === 'function' &&
+    typeof storage.getObservationalMemoryOperationOwner === 'function'
+  );
 }
 
-export function registerOp(recordId: string, op: OmOperationName): void {
-  const key = opKey(recordId, op);
-  activeOps.set(key, (activeOps.get(key) ?? 0) + 1);
-}
+export class OMOperationTracker {
+  private readonly useStorage: boolean;
 
-export function unregisterOp(recordId: string, op: OmOperationName): void {
-  const key = opKey(recordId, op);
-  const count = activeOps.get(key);
-  if (!count) return;
-  if (count <= 1) {
-    activeOps.delete(key);
-  } else {
-    activeOps.set(key, count - 1);
+  constructor(
+    private readonly storage: MemoryStorage,
+    private readonly owner: string = processOperationOwner,
+  ) {
+    this.useStorage = supportsOperationClaims(storage);
   }
-}
 
-export function isOpActiveInProcess(recordId: string, op: OmOperationName): boolean {
-  return (activeOps.get(opKey(recordId, op)) ?? 0) > 0;
+  /** Registers the claim synchronously (before the caller's next await), so the result is not awaited. */
+  begin(recordId: string, operation: OmOperationName): void {
+    if (!this.useStorage) {
+      const key = `${recordId}:${operation}`;
+      legacyActiveOps.set(key, (legacyActiveOps.get(key) ?? 0) + 1);
+      return;
+    }
+    void this.storage
+      .claimObservationalMemoryOperation({ recordId, operation, owner: this.owner, ttlMs: OPERATION_TTL_MS })
+      .catch(() => {});
+  }
+
+  end(recordId: string, operation: OmOperationName): void {
+    if (!this.useStorage) {
+      const key = `${recordId}:${operation}`;
+      const count = legacyActiveOps.get(key) ?? 0;
+      if (count <= 1) legacyActiveOps.delete(key);
+      else legacyActiveOps.set(key, count - 1);
+      return;
+    }
+    void this.storage.releaseObservationalMemoryOperation({ recordId, operation, owner: this.owner }).catch(() => {});
+  }
+
+  async isActive(recordId: string, operation: OmOperationName): Promise<boolean> {
+    if (!this.useStorage) return (legacyActiveOps.get(`${recordId}:${operation}`) ?? 0) > 0;
+    return (await this.storage.getObservationalMemoryOperationOwner({ recordId, operation })) !== undefined;
+  }
 }

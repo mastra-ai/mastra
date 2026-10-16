@@ -1,92 +1,90 @@
+import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
-import { opKey, registerOp, unregisterOp, isOpActiveInProcess } from '../operation-registry';
+import { OMOperationTracker } from '../operation-registry';
 
-describe('operation-registry', () => {
-  const recordId = 'test-record-123';
+const withStorageClaims = () => new InMemoryMemory({ db: new InMemoryDB() });
 
-  describe('opKey', () => {
-    it('creates a key from recordId and operation name', () => {
-      expect(opKey(recordId, 'reflecting')).toBe('test-record-123:reflecting');
-      expect(opKey(recordId, 'observing')).toBe('test-record-123:observing');
-      expect(opKey(recordId, 'bufferingObservation')).toBe('test-record-123:bufferingObservation');
-      expect(opKey(recordId, 'bufferingReflection')).toBe('test-record-123:bufferingReflection');
-    });
+/** An adapter built against a @mastra/core that predates operation claims. */
+const withoutStorageClaims = () => {
+  const storage = withStorageClaims();
+  for (const method of [
+    'claimObservationalMemoryOperation',
+    'renewObservationalMemoryOperation',
+    'releaseObservationalMemoryOperation',
+    'getObservationalMemoryOperationOwner',
+  ] as const) {
+    Object.defineProperty(storage, method, { value: undefined });
+  }
+  return storage as MemoryStorage;
+};
+
+describe.each([
+  ['storage claims', withStorageClaims],
+  ['older @mastra/core fallback', withoutStorageClaims],
+])('OMOperationTracker (%s)', (_name, makeStorage) => {
+  const tracker = () => new OMOperationTracker(makeStorage());
+
+  it('is inactive until begun', async () => {
+    expect(await tracker().isActive('unreg-1', 'reflecting')).toBe(false);
   });
 
-  describe('registerOp / unregisterOp / isOpActiveInProcess', () => {
-    // Use unique recordIds per test to avoid cross-test pollution from the shared Set
-    it('returns false when no op is registered', () => {
-      expect(isOpActiveInProcess('unreg-1', 'reflecting')).toBe(false);
-    });
+  it('registers synchronously, before the caller awaits', async () => {
+    const t = tracker();
+    t.begin('sync-1', 'bufferingObservation');
+    const active = t.isActive('sync-1', 'bufferingObservation');
+    t.end('sync-1', 'bufferingObservation');
+    expect(await active).toBe(true);
+  });
 
-    it('returns true after registering an op', () => {
-      registerOp('reg-1', 'observing');
-      expect(isOpActiveInProcess('reg-1', 'observing')).toBe(true);
-      // cleanup
-      unregisterOp('reg-1', 'observing');
-    });
+  it('is inactive after end', async () => {
+    const t = tracker();
+    t.begin('end-1', 'reflecting');
+    t.end('end-1', 'reflecting');
+    expect(await t.isActive('end-1', 'reflecting')).toBe(false);
+  });
 
-    it('returns false after unregistering an op', () => {
-      registerOp('unreg-2', 'reflecting');
-      unregisterOp('unreg-2', 'reflecting');
-      expect(isOpActiveInProcess('unreg-2', 'reflecting')).toBe(false);
-    });
+  it('tracks operations and records independently', async () => {
+    const t = tracker();
+    t.begin('multi-1', 'observing');
+    t.begin('multi-1', 'reflecting');
+    t.begin('multi-2', 'observing');
+    t.end('multi-1', 'observing');
 
-    it('tracks different operations independently for the same record', () => {
-      registerOp('multi-1', 'observing');
-      registerOp('multi-1', 'reflecting');
+    expect(await t.isActive('multi-1', 'observing')).toBe(false);
+    expect(await t.isActive('multi-1', 'reflecting')).toBe(true);
+    expect(await t.isActive('multi-1', 'bufferingObservation')).toBe(false);
+    expect(await t.isActive('multi-2', 'observing')).toBe(true);
 
-      expect(isOpActiveInProcess('multi-1', 'observing')).toBe(true);
-      expect(isOpActiveInProcess('multi-1', 'reflecting')).toBe(true);
-      expect(isOpActiveInProcess('multi-1', 'bufferingObservation')).toBe(false);
+    t.end('multi-1', 'reflecting');
+    t.end('multi-2', 'observing');
+  });
 
-      unregisterOp('multi-1', 'observing');
-      expect(isOpActiveInProcess('multi-1', 'observing')).toBe(false);
-      expect(isOpActiveInProcess('multi-1', 'reflecting')).toBe(true);
+  it('counts repeated begins, so chained buffers keep the op active until the last ends', async () => {
+    const t = tracker();
+    t.begin('dup-1', 'bufferingObservation');
+    t.begin('dup-1', 'bufferingObservation');
+    t.end('dup-1', 'bufferingObservation');
+    expect(await t.isActive('dup-1', 'bufferingObservation')).toBe(true);
+    t.end('dup-1', 'bufferingObservation');
+    expect(await t.isActive('dup-1', 'bufferingObservation')).toBe(false);
+  });
 
-      // cleanup
-      unregisterOp('multi-1', 'reflecting');
-    });
+  it('tolerates ending more times than begun', async () => {
+    const t = tracker();
+    t.begin('idem-1', 'bufferingObservation');
+    t.end('idem-1', 'bufferingObservation');
+    t.end('idem-1', 'bufferingObservation');
+    expect(await t.isActive('idem-1', 'bufferingObservation')).toBe(false);
+  });
 
-    it('tracks different records independently', () => {
-      registerOp('rec-a', 'observing');
-      registerOp('rec-b', 'observing');
-
-      expect(isOpActiveInProcess('rec-a', 'observing')).toBe(true);
-      expect(isOpActiveInProcess('rec-b', 'observing')).toBe(true);
-
-      unregisterOp('rec-a', 'observing');
-      expect(isOpActiveInProcess('rec-a', 'observing')).toBe(false);
-      expect(isOpActiveInProcess('rec-b', 'observing')).toBe(true);
-
-      // cleanup
-      unregisterOp('rec-b', 'observing');
-    });
-
-    it('unregisterOp is idempotent (no error on double-unregister)', () => {
-      registerOp('idem-1', 'bufferingObservation');
-      unregisterOp('idem-1', 'bufferingObservation');
-      unregisterOp('idem-1', 'bufferingObservation'); // should not throw
-      expect(isOpActiveInProcess('idem-1', 'bufferingObservation')).toBe(false);
-    });
-
-    it('handles concurrent duplicate registrations with ref counting', () => {
-      registerOp('dup-1', 'observing');
-      registerOp('dup-1', 'observing'); // second concurrent registration
-
-      // After one unregister, the op should still be active (ref count = 1)
-      unregisterOp('dup-1', 'observing');
-      expect(isOpActiveInProcess('dup-1', 'observing')).toBe(true);
-
-      // After the second unregister, the op should be inactive (ref count = 0)
-      unregisterOp('dup-1', 'observing');
-      expect(isOpActiveInProcess('dup-1', 'observing')).toBe(false);
-    });
-
-    it('unregisterOp on non-registered key is a no-op', () => {
-      unregisterOp('never-registered', 'reflecting'); // should not throw
-      expect(isOpActiveInProcess('never-registered', 'reflecting')).toBe(false);
-    });
+  it('sees operations begun by another OM instance in the same process', async () => {
+    const storage = makeStorage();
+    const a = new OMOperationTracker(storage);
+    const b = new OMOperationTracker(storage);
+    a.begin('shared-1', 'reflecting');
+    expect(await b.isActive('shared-1', 'reflecting')).toBe(true);
+    a.end('shared-1', 'reflecting');
   });
 });

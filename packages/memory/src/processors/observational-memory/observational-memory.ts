@@ -332,7 +332,7 @@ import { ObservationTurn } from './observation-turn/index';
 import type { ObservationTurnHooks } from './observation-turn/types';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
 import { ObserverRunner } from './observer-runner';
-import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
+import { OMOperationTracker } from './operation-registry';
 import type { CompressionLevel } from './reflector-agent';
 import { isReflectionApplied, ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
@@ -492,6 +492,7 @@ export class ObservationalMemory {
    * accept eventual consistency (acceptable for v1).
    */
   private locks = new Map<string, Promise<void>>();
+  private readonly operations: OMOperationTracker;
 
   /**
    * Initial record lookup/creation promises keyed by the effective storage scope.
@@ -594,6 +595,7 @@ export class ObservationalMemory {
 
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
+    this.operations = new OMOperationTracker(config.storage);
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
     this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
@@ -842,6 +844,7 @@ export class ObservationalMemory {
     });
 
     this.reflector = new ReflectorRunner({
+      operations: this.operations,
       reflectionConfig: this.reflectionConfig,
       observationConfig: this.observationConfig,
       tokenCounter: this.tokenCounter,
@@ -2462,7 +2465,7 @@ ${formattedMessages}
     BufferingCoordinator.setObservationBoundary(bufferKey, currentTokens);
 
     // Set persistent flag so new instances (created per request) know buffering is in progress
-    registerOp(record.id, 'bufferingObservation');
+    this.operations.begin(record.id, 'bufferingObservation');
     runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, true, currentTokens)).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
@@ -2486,7 +2489,7 @@ ${formattedMessages}
           BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         }
         // Clear persistent flag
-        unregisterOp(record.id, 'bufferingObservation');
+        this.operations.end(record.id, 'bufferingObservation');
         runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(err => {
           omError('[OM] Failed to clear buffering observation flag', err);
         });
@@ -2699,6 +2702,7 @@ ${formattedMessages}
       opts.record,
       this.storage,
       opts.threshold,
+      opts.record.isBufferingObservation && (await this.operations.isActive(opts.record.id, 'bufferingObservation')),
     );
 
     if (shouldTrigger) {
@@ -3329,6 +3333,7 @@ ${formattedMessages}
         record,
         this.storage,
         threshold,
+        record.isBufferingObservation && (await this.operations.isActive(record.id, 'bufferingObservation')),
       );
     }
 
@@ -3531,7 +3536,7 @@ ${formattedMessages}
     }
 
     // Check if another process is already buffering (and the op is genuinely active)
-    if (record.isBufferingObservation && isOpActiveInProcess(record.id, 'bufferingObservation')) {
+    if (record.isBufferingObservation && (await this.operations.isActive(record.id, 'bufferingObservation'))) {
       return { buffered: false, record };
     }
 
@@ -3574,7 +3579,7 @@ ${formattedMessages}
     // Set persistent flag and register op. Unregister under the same id: `record` is replaced by the
     // fresh head below, which a rollover may have given a new id.
     const opRecordId = record.id;
-    registerOp(opRecordId, 'bufferingObservation');
+    this.operations.begin(opRecordId, 'bufferingObservation');
     const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
     // Waiting for the previous op may have let an activation reset the boundary (or a later op
     // take it); then this op no longer persists its starting boundary.
@@ -3761,7 +3766,7 @@ ${formattedMessages}
       return { buffered: false, record };
     } finally {
       releaseChunkWrite();
-      unregisterOp(opRecordId, 'bufferingObservation');
+      this.operations.end(opRecordId, 'bufferingObservation');
       // A later call may already have registered itself behind this op; keep its entry.
       if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
@@ -3999,7 +4004,7 @@ ${formattedMessages}
     await runOMCommit(commitKey, () => this.storage.setBufferingObservationFlag(swappedRecordId, false)).catch(
       () => {},
     );
-    unregisterOp(freshRecord.id, 'bufferingObservation');
+    this.operations.end(freshRecord.id, 'bufferingObservation');
 
     // Fetch updated record for marker emission
     const postSwapRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
@@ -4339,7 +4344,7 @@ ${formattedMessages}
     // An in-flight reflection in this process skips quietly; a flag left behind
     // by a dead process is stale — clear it and proceed.
     if (record.isReflecting) {
-      if (isOpActiveInProcess(record.id, 'reflecting')) {
+      if (await this.operations.isActive(record.id, 'reflecting')) {
         omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
         return { reflected: false, record, usage: undefined };
       }
@@ -4348,7 +4353,7 @@ ${formattedMessages}
     }
 
     await this.storage.setReflectingFlag(record.id, true);
-    registerOp(record.id, 'reflecting');
+    this.operations.begin(record.id, 'reflecting');
 
     const hookContext: ObserveHookContext = { threadId, resourceId, trigger: 'manual' };
     const hooks = this.composeHooks(undefined, hookContext);
@@ -4443,7 +4448,7 @@ ${formattedMessages}
       try {
         await this.storage.setReflectingFlag(record.id, false);
       } finally {
-        unregisterOp(record.id, 'reflecting');
+        this.operations.end(record.id, 'reflecting');
       }
 
       let endHookError: unknown;

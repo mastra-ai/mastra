@@ -2,7 +2,6 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { getOMLockKey, runOMCommit } from './commit-queue';
 import { omDebug } from './debug';
-import { isOpActiveInProcess } from './operation-registry';
 import type { ResolvedObservationConfig, ResolvedReflectionConfig } from './types';
 
 /**
@@ -157,11 +156,13 @@ export class BufferingCoordinator {
     record: ObservationalMemoryRecord,
     storage?: { setBufferingObservationFlag(id: string, flag: boolean): Promise<void> },
     messageTokensThreshold?: number,
+    /** Whether an owner holds the bufferingObservation operation; callers look it up before calling. */
+    bufferingObservationActive = false,
   ): boolean {
     if (!this.isAsyncObservationEnabled()) return false;
 
     if (record.isBufferingObservation) {
-      if (isOpActiveInProcess(record.id, 'bufferingObservation')) return false;
+      if (bufferingObservationActive) return false;
       omDebug(`[OM:shouldTriggerAsyncObs] isBufferingObservation=true but stale, clearing`);
       if (storage) {
         void runOMCommit(lockKey, () => storage.setBufferingObservationFlag(record.id, false)).catch(() => {});
