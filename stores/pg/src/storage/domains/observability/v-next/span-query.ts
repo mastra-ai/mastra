@@ -1,12 +1,13 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  SpanQueryCostMetric,
   SpanQueryIdentity,
   SpanQueryPayload,
   SpanQuerySelectedRow,
   TrustedSpanQueryPlan,
 } from '@mastra/core/storage';
 import type { DbClient } from '../../../client';
-import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
+import { qualifiedTable, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate, runWithPostgresTraceQueryTimeout } from './trace-query';
 
@@ -213,7 +214,25 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
         model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
         provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
       }));
-      return buildSpanQueryResponse(plan, hydrated, payloads);
+      // Preserve costs only for older core contracts that still return them.
+      let metrics: SpanQueryCostMetric[] = [];
+      if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY) {
+        await remaining();
+        const metricValues: unknown[] = [];
+        const metricWhere = selectedKeys(page, metricValues);
+        metrics = await tx.any<SpanQueryCostMetric>(
+          `SELECT ${identities}, name, "estimatedCost", "costUnit",
+          "costMetadata" ->> 'allocation' AS allocation, COALESCE("costMetadata" ? 'error', false) AS "costError"
+          FROM (SELECT DISTINCT ON (${identities}, "metricId") ${identities}, name, "estimatedCost", "costUnit", "costMetadata" FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
+            WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
+            ORDER BY ${identities}, "metricId", "cursorId" DESC) m
+          LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
+          metricValues,
+        );
+        if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS)
+          throw new coreStorage.TraceQueryResourceLimitError();
+      }
+      return buildSpanQueryResponse(plan, hydrated, payloads, metrics);
     },
     { repeatableRead: true },
   );

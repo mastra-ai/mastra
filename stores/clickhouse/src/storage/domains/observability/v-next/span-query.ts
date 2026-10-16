@@ -2,13 +2,14 @@ import { TupleParam } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  SpanQueryCostMetric,
   SpanQueryIdentity,
   SpanQueryPayload,
   SpanQuerySelectedRow,
   TrustedSpanQueryPlan,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
-import { TABLE_SPAN_EVENTS } from './ddl';
+import { TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 import { buildSpanQueryResponse } from './preview-compat';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import { compileSpanQueryPredicate, runWithClickHouseTraceQueryTimeout } from './trace-query';
@@ -209,7 +210,23 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
     const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...metadata } = row;
     return [{ ...metadata, ...identity, durationMs: Number(row.durationMs) }];
   });
-  const result = buildSpanQueryResponse(plan, hydrated, payloads);
+  // Preserve costs only for older core contracts that still return them.
+  let metrics: SpanQueryCostMetric[] = [];
+  if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY) {
+    const metricWhere = `tuple(${identitySetColumns}) IN {page:Array(Tuple(UInt8, String, UInt8, String, String, String))}`;
+    metrics = await run<SpanQueryCostMetric>({
+      query: `SELECT ${identities}, data.1 AS name, data.2 AS estimatedCost,
+        data.3 AS costUnit, data.4 AS allocation, data.5 AS costError
+      FROM (SELECT ${identities}, metricId, argMax(tuple(name, estimatedCost, costUnit,
+          JSONExtractString(costMetadata, 'allocation'), JSONHas(costMetadata, 'error')), timestamp) AS data
+        FROM ${TABLE_METRIC_EVENTS} WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
+        GROUP BY ${identities}, metricId)
+      LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
+      query_params: { page: page.map(row => new TupleParam(identityValues(row))) },
+    });
+    if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS) throw new coreStorage.TraceQueryResourceLimitError();
+  }
+  const result = buildSpanQueryResponse(plan, hydrated, payloads, metrics);
   const last = page.at(-1)!;
   // Cursor follows the selected page even if a concurrent deletion removed a hydrated row.
   result.page.next =

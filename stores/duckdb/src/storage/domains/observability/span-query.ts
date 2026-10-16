@@ -1,5 +1,6 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  SpanQueryCostMetric,
   SpanQueryIdentity,
   SpanQueryPayload,
   SpanQuerySelectedRow,
@@ -210,5 +211,20 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
     provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
   }));
-  return buildSpanQueryResponse(plan, hydrated, payloads);
+  // Preserve costs only for older core contracts that still return them.
+  let metrics: SpanQueryCostMetric[] = [];
+  if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY) {
+    const metricValues: unknown[] = [];
+    const metricWhere = keys(page, metricValues);
+    metrics = await query<SpanQueryCostMetric>(
+      `SELECT ${identities}, name, estimatedCost, costUnit,
+      json_extract_string(costMetadata, '$.allocation') AS allocation,
+      COALESCE(json_exists(costMetadata, '$.error'), false) AS costError
+      FROM metric_events WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
+      LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
+      metricValues,
+    );
+    if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS) throw new coreStorage.TraceQueryResourceLimitError();
+  }
+  return buildSpanQueryResponse(plan, hydrated, payloads, metrics);
 }

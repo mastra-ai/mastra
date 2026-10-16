@@ -31,14 +31,23 @@ vi.mock('@mastra/core/storage', async importOriginal => {
     SPAN_QUERY_FIELD_REGISTRY: undefined,
     // The old builder iterates metrics even for an empty page.
     buildSpanQueryResponse: (...args: Parameters<typeof actual.buildSpanQueryResponse>) => {
-      expect(args[3]).toEqual([]);
+      expect(Array.isArray(args[3])).toBe(true);
       for (const row of args[1]) {
         expect(row).not.toHaveProperty('threadId');
         expect(row).not.toHaveProperty('parentEntityName');
         expect(row).not.toHaveProperty('version');
         expect(row).not.toHaveProperty('cursorId');
       }
-      return actual.buildSpanQueryResponse(...args);
+      const response = actual.buildSpanQueryResponse(...args);
+      return {
+        ...response,
+        spans: response.spans.map(row => ({
+          ...row,
+          cost: actual.resolveSpanQueryCost(
+            args[3]!.filter(metric => actual.spanQueryIdentityKey(metric) === actual.spanQueryIdentityKey(row)),
+          ),
+        })),
+      };
     },
   };
 });
@@ -66,6 +75,35 @@ it('keeps span queries and legacy model/provider predicates usable without the n
       }),
     ],
   });
+  expect((await storage.querySpans(planSpanQuery(request))).spans[0]).toMatchObject({ cost: { state: 'missing' } });
+  await storage.batchCreateMetrics({
+    metrics: [
+      {
+        metricId: 'priced',
+        traceId: 'legacy',
+        spanId: 'legacy',
+        timestamp: new Date(startedAt.getTime() + 120_000),
+        name: 'mastra_model_total_input_tokens',
+        value: 10,
+        labels: {},
+        estimatedCost: 0.03,
+        costUnit: 'usd',
+        costMetadata: { allocation: 'query_total' },
+      },
+      {
+        metricId: 'other',
+        traceId: 'other',
+        spanId: 'other',
+        timestamp: startedAt,
+        name: 'mastra_model_total_input_tokens',
+        value: 10,
+        labels: {},
+        estimatedCost: 999,
+        costUnit: 'usd',
+        costMetadata: { allocation: 'query_total' },
+      },
+    ],
+  });
   for (const field of ['model', 'provider'] as const) {
     // Trusted predicates that the older planner accepts.
     const result = await storage.querySpans({
@@ -78,6 +116,7 @@ it('keeps span queries and legacy model/provider predicates usable without the n
       model: 'model-a',
       provider: 'provider-a',
       inputPreview: 'hello',
+      cost: { state: 'available', amount: 0.03, currency: 'usd' },
     });
   }
 });
