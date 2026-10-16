@@ -1,10 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
 import { Agent } from '../agent';
+import { mockTextModel } from '../test-utils/llm-mock';
 import { LocalFilesystem } from '../workspace/filesystem';
 import { Workspace } from '../workspace/workspace';
 import { Mastra } from './index';
@@ -50,14 +50,12 @@ describe('Workspace Registration', () => {
   };
 
   const createMockModel = () =>
-    new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Test response',
-      }),
-    });
+    mockTextModel(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: 'Test response',
+    }));
 
   const createWorkspace = (id: string, name?: string) => {
     const filesystem = new LocalFilesystem({ basePath: tempDir });

@@ -14,8 +14,8 @@ const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
-export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
-  const openaiModel = version === 'v1' ? openai('gpt-4o') : openaiV5('gpt-4o');
+export function imagePromptTest({ version }: { version: 'v2' }) {
+  const openaiModel = openaiV5('gpt-4o');
 
   describe('image prompt test', () => {
     it(
@@ -34,24 +34,7 @@ export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
 
-        if (version === 'v1') {
-          result = await agent.generateLegacy([
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
-                  mimeType: 'image/png',
-                },
-                {
-                  type: 'text',
-                  text: 'What is the photo?',
-                },
-              ],
-            },
-          ]);
-        } else {
+        {
           result = await agent.generate([
             {
               role: 'user',
@@ -76,7 +59,6 @@ export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
   });
 }
 
-imagePromptTest({ version: 'v1' });
 imagePromptTest({ version: 'v2' });
 
 /**

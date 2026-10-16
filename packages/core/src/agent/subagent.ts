@@ -1,6 +1,5 @@
 import type { Mastra } from '..';
 import type { AgentBackgroundConfig } from '../background-tasks';
-import type { MastraLegacyLanguageModel } from '../llm/model/shared.types';
 import type { MastraLanguageModel, MastraMemory } from '../memory';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, FullOutput, MastraModelOutput } from '../stream';
@@ -65,9 +64,7 @@ export interface SubAgent<TId = string, TRequestContext extends Record<string, a
   getDescription(): string;
 
   /** Returns the model instance used to select the execution path. */
-  getModel(opts?: {
-    requestContext?: RequestContext;
-  }): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+  getModel(opts?: { requestContext?: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
 
   /** Whether this subagent has its own memory configured */
   hasOwnMemory(): boolean;
@@ -92,18 +89,6 @@ export interface SubAgent<TId = string, TRequestContext extends Record<string, a
 
   /** Resume a previously suspended stream execution */
   resumeStream(resumeData: any, options?: any): Promise<MastraModelOutput | SubAgentStreamResult>;
-
-  /**
-   * Execute a prompt using a legacy v1 model
-   * @deprecated Use generate instead
-   */
-  generateLegacy?(messages: MessageListInput, options?: any): Promise<any>;
-
-  /**
-   * Stream a prompt execution using a legacy v1 model
-   * @deprecated Use stream instead
-   */
-  streamLegacy?(messages: MessageListInput, options?: any): Promise<any>;
 
   /** Register a Mastra instance on implementations that need it */
   __registerMastra?(mastra: Mastra): void;

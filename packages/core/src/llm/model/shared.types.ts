@@ -1,7 +1,6 @@
 import type { LanguageModelV2, LanguageModelV2CallOptions, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4, LanguageModelV4CallOptions, SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod/v4';
 import type { TracingPolicy } from '../../observability';
@@ -78,9 +77,6 @@ export type MastraLanguageModelV4 = Omit<LanguageModelV4, 'doGenerate' | 'doStre
   doStream: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
 };
 
-export type MastraLanguageModelV1 = MastraLegacyLanguageModel;
-export type MastraLegacyLanguageModel = LanguageModelV1;
-
 /** Union of modern language models (V2/V3/V4) */
 export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3 | MastraLanguageModelV4;
 
@@ -90,10 +86,9 @@ export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOp
 // - "openai/gpt-4o" (magic string with autocomplete)
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
-// - LanguageModelV1/V2/V3/V4 (existing AI SDK models)
+// - LanguageModelV2/V3/V4 (existing AI SDK models)
 // - { model, id: "mastra/openai/gpt-4o" } (any of the above, labeled with its full model ID)
 type BaseModelConfig =
-  | LanguageModelV1
   | LanguageModelV2
   | LanguageModelV3
   | LanguageModelV4

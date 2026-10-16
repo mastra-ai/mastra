@@ -7,7 +7,6 @@ import type { MastraDBMessage, MessageInput } from '../../agent/message-list';
 import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
-import { isSupportedLanguageModel } from '../../agent/utils';
 import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../auth/ee';
 import type { ActorSignal } from '../../auth/ee';
 import type { MastraBase } from '../../base';
@@ -88,7 +87,7 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
+import { resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
@@ -455,7 +454,6 @@ function createStepFromParams<
  */
 async function processAgentStream(params: {
   fullStream: AsyncIterable<unknown>;
-  isV2Model: boolean;
   pubsub: { publish: (channel: string, data: any) => Promise<void> };
   runId: string;
   toolData: { name: string; args: unknown };
@@ -463,7 +461,7 @@ async function processAgentStream(params: {
   streamFormat?: 'legacy' | 'vnext';
   logger?: { debug: (msg: string, data?: unknown) => void };
 }): Promise<{ tripwireChunk: TripwireChunk | null }> {
-  const { fullStream, isV2Model, pubsub, runId, toolData, logger, writer, streamFormat } = params;
+  const { fullStream, pubsub, runId, toolData, logger, writer, streamFormat } = params;
 
   // Publish stream start event
   try {
@@ -488,7 +486,7 @@ async function processAgentStream(params: {
 
     // Publish text deltas
     if (typeof chunk === 'object' && chunk !== null && 'type' in chunk && chunk.type === 'text-delta') {
-      const textDelta = getTextDeltaFromChunk(chunk as any, isV2Model);
+      const textDelta = getTextDeltaFromChunk(chunk as any);
       if (textDelta) {
         try {
           await pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -503,9 +501,7 @@ async function processAgentStream(params: {
       }
     }
 
-    if (streamFormat !== 'legacy') {
-      await forwardAgentStreamChunk({ writer, chunk });
-    }
+    await forwardAgentStreamChunk({ writer, chunk });
   }
 
   // Publish stream finish event
@@ -588,9 +584,6 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         args: inputData,
       } as const;
 
-      // Detect model version to choose streaming method
-      const isV2Model = isSupportedLanguageModel(await agent.getModel({ requestContext }));
-
       // Track structured output result
       let structuredResult: any = null;
 
@@ -608,63 +601,35 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       let cleanup: (() => void) | undefined;
 
       try {
-        if (isV2Model) {
-          const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
-            ...(agentOptions ?? {}),
-            ...observabilityContext,
-            requestContext,
-            onFinish: (result: any) => {
-              handleFinish(result);
-              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-            },
-            abortSignal,
-          });
-          const durableStreamResult = streamResult as typeof streamResult & {
-            output?: typeof streamResult;
-            cleanup?: () => void;
-          };
-          const isDurableStreamResult =
-            typeof durableStreamResult.cleanup === 'function' &&
-            durableStreamResult.output &&
-            typeof durableStreamResult.output === 'object';
-          const modelOutput = isDurableStreamResult ? durableStreamResult.output! : streamResult;
-          cleanup = isDurableStreamResult ? durableStreamResult.cleanup : undefined;
-          fullStream = modelOutput.fullStream;
-          textPromise = modelOutput.text;
-        } else {
-          // V1 model path: use .streamLegacy() for backwards compatibility
-          let resolveText: (value: string) => void;
-          textPromise = new Promise(resolve => {
-            resolveText = resolve;
-          });
-
-          const legacyAgent = resolveLegacyAgent(agent, mastra);
-          if (typeof legacyAgent.streamLegacy !== 'function') {
-            throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
-          }
-
-          const legacyResult = await legacyAgent.streamLegacy((inputData as { prompt: string }).prompt, {
-            ...(agentOptions ?? {}),
-            ...observabilityContext,
-            requestContext,
-            onFinish: (result: any) => {
-              handleFinish(result);
-              resolveText!(result.text);
-              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-            },
-            abortSignal,
-          });
-          fullStream = legacyResult.fullStream;
-        }
+        const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
+          ...observabilityContext,
+          requestContext,
+          onFinish: (result: any) => {
+            handleFinish(result);
+            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+          },
+          abortSignal,
+        });
+        const durableStreamResult = streamResult as typeof streamResult & {
+          output?: typeof streamResult;
+          cleanup?: () => void;
+        };
+        const isDurableStreamResult =
+          typeof durableStreamResult.cleanup === 'function' &&
+          durableStreamResult.output &&
+          typeof durableStreamResult.output === 'object';
+        const modelOutput = isDurableStreamResult ? durableStreamResult.output! : streamResult;
+        cleanup = isDurableStreamResult ? durableStreamResult.cleanup : undefined;
+        fullStream = modelOutput.fullStream;
+        textPromise = modelOutput.text;
 
         if (abortSignal.aborted) {
           return abort() as TStepOutput;
         }
 
-        // Process the stream (unified for V1/V2)
         const { tripwireChunk } = await processAgentStream({
           fullStream,
-          isV2Model,
           pubsub,
           runId,
           toolData,

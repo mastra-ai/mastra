@@ -776,69 +776,6 @@ describe('createScorer', () => {
       expect(serializedPrompts.filter(prompt => prompt.includes('explain this score'))).toHaveLength(2);
     });
 
-    it('normalizes successful V1 judge usage and records model identity', async () => {
-      const model = createMockModel({ mockText: { score: 0.75 }, objectGenerationMode: 'json', version: 'v1' });
-      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
-
-      try {
-        const scorer = createScorer({
-          id: 'v1-judge-telemetry-scorer',
-          description: 'Captures normalized telemetry from a V1 judge',
-          judge: {
-            model,
-            instructions: 'Return a score.',
-          },
-        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
-
-        const result = await scorer.run(testData.scoringInput);
-
-        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
-        expect(result.judge?.generateScore?.executions[0]).toMatchObject({
-          status: 'success',
-          prompt: 'score this output',
-          output: 0.75,
-          judgeModelId: 'mock-model-id',
-          judgeProvider: 'mock-provider',
-          usage: {
-            inputTokens: 10,
-            outputTokens: 20,
-            totalTokens: 30,
-          },
-          attemptCount: 1,
-          modelCallCount: 1,
-          durationMs: expect.any(Number),
-        });
-      } finally {
-        generateLegacySpy.mockRestore();
-      }
-    });
-
-    it('routes V1 judges through generateLegacy without error processors', async () => {
-      const model = createMockModel({ mockText: { score: 1 }, version: 'v1' });
-      const errorProcessor = { id: 'v1-error-processor', processAPIError: vi.fn(() => ({ retry: true })) };
-      const generateLegacySpy = vi
-        .spyOn(Agent.prototype, 'generateLegacy')
-        .mockRejectedValueOnce(createProviderError(429, true));
-      try {
-        const scorer = createScorer({
-          id: 'v1-legacy-judge-scorer',
-          description: 'V1 scorer judges bypass error processors',
-          judge: {
-            model,
-            instructions: 'Return a score.',
-            errorProcessors: [errorProcessor],
-            maxProcessorRetries: 2,
-          },
-        }).generateScore({ description: 'score', createPrompt: () => 'score this' });
-
-        await expect(scorer.run(testData.scoringInput)).rejects.toThrow('provider failed');
-        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
-        expect(errorProcessor.processAPIError).not.toHaveBeenCalled();
-      } finally {
-        generateLegacySpy.mockRestore();
-      }
-    });
-
     it('lets the per-step judge override the scorer-level jsonPromptInjection', async () => {
       const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
@@ -872,34 +809,6 @@ describe('createScorer', () => {
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(false);
       } finally {
         streamSpy.mockRestore();
-      }
-    });
-
-    it('forwards scorer-level judge modelSettings to the V1 generateLegacy run', async () => {
-      const model = createMockModel({ mockText: { score: 1 }, objectGenerationMode: 'json', version: 'v1' });
-      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
-      try {
-        const scorer = createScorer({
-          id: 'model-settings-v1-scorer',
-          name: 'model-settings-v1-scorer',
-          description: 'Forwards scorer-level modelSettings to a V1 judge',
-          judge: {
-            model,
-            instructions: 'Test instructions',
-            modelSettings: { temperature: 0.42 },
-          },
-        }).generateScore({
-          description: 'score',
-          createPrompt: () => 'score this',
-        });
-
-        await scorer.run(testData.scoringInput);
-
-        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
-        const [, options] = (generateLegacySpy.mock.calls[0] ?? []) as any[];
-        expect(options?.modelSettings).toEqual({ temperature: 0.42 });
-      } finally {
-        generateLegacySpy.mockRestore();
       }
     });
 
@@ -994,30 +903,6 @@ describe('createScorer', () => {
       }
     });
 
-    it('forwards judge modelSettings to the V1 generateLegacy run', async () => {
-      const model = createMockModel({ mockText: { score: 1 }, objectGenerationMode: 'json', version: 'v1' });
-      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
-      try {
-        const scorer = createScorer({
-          id: 'v1-model-settings-scorer',
-          description: 'Forwards modelSettings on the V1 judge path',
-          judge: {
-            model,
-            instructions: 'Return a score.',
-            modelSettings: { temperature: 0.42 },
-          },
-        }).generateScore({ description: 'score', createPrompt: () => 'score this' });
-
-        await scorer.run(testData.scoringInput);
-
-        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
-        const [, options] = (generateLegacySpy.mock.calls[0] ?? []) as any[];
-        expect(options?.modelSettings).toEqual({ temperature: 0.42 });
-      } finally {
-        generateLegacySpy.mockRestore();
-      }
-    });
-
     it('retries the judge with jsonPromptInjection when the first attempt yields no structured object', async () => {
       // Regression guard: a judge model can resolve *without throwing* but
       // produce no parseable structured object. The judge must recover via the
@@ -1052,6 +937,29 @@ describe('createScorer', () => {
       } finally {
         streamSpy.mockRestore();
       }
+    });
+
+    it('normalizes successful judge usage and records model identity', async () => {
+      const model = createMockModel({ mockText: { score: 0.75 } });
+      const scorer = createScorer({
+        id: 'judge-telemetry-scorer',
+        description: 'Captures normalized telemetry from a judge',
+        judge: { model, instructions: 'Return a score.' },
+      }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+      const result = await scorer.run(testData.scoringInput);
+
+      expect(result.judge?.generateScore?.executions[0]).toMatchObject({
+        status: 'success',
+        prompt: 'score this output',
+        output: 0.75,
+        judgeModelId: 'mock-model-id',
+        judgeProvider: 'mock-provider',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        attemptCount: 1,
+        modelCallCount: 1,
+        durationMs: expect.any(Number),
+      });
     });
 
     it('aggregates current judge fallback attempts without double-counting usage and preserves callbacks', async () => {

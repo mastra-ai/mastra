@@ -316,33 +316,20 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
           : baseSchema;
 
       let result: SystemPromptDetectionResult;
-      if (isSupportedLanguageModel(model)) {
-        const response = await this.detectionAgent.generate(text, {
-          structuredOutput: {
-            ...(this.structuredOutputOptions ?? {}),
-            schema,
-          },
-          requestContext,
-          ...observabilityContext,
-        });
 
-        if (!response.object) {
-          throw new Error('Structured output returned no object');
-        }
-        result = response.object;
-      } else {
-        const standardSchema = toStandardSchema(schema as PublicSchema);
-        const response = await this.detectionAgent.generateLegacy(text, {
-          output: standardSchemaToJSONSchema(standardSchema),
-          requestContext,
-          ...observabilityContext,
-        });
+      const response = await this.detectionAgent.generate(text, {
+        structuredOutput: {
+          ...(this.structuredOutputOptions ?? {}),
+          schema,
+        },
+        requestContext,
+        ...observabilityContext,
+      });
 
-        if (!response.object) {
-          throw new Error('Legacy output returned no object');
-        }
-        result = response.object as SystemPromptDetectionResult;
+      if (!response.object) {
+        throw new Error('Structured output returned no object');
       }
+      result = response.object;
 
       return result;
     } catch (error) {

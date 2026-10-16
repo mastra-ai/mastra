@@ -1,28 +1,24 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { RequestContext } from '../../request-context';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
 
 describe('Dynamic Model Selection with Fallback', () => {
   it('should support a dynamic function returning a single v1 model', async () => {
-    const premiumModel = new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 5, completionTokens: 7 },
-        text: 'Premium v1 response',
-      }),
-    });
+    const premiumModel = mockTextModel(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 5, completionTokens: 7 },
+      text: 'Premium v1 response',
+    }));
 
-    const standardModel = new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 4, completionTokens: 6 },
-        text: 'Standard v1 response',
-      }),
-    });
+    const standardModel = mockTextModel(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 4, completionTokens: 6 },
+      text: 'Standard v1 response',
+    }));
 
     const agent = new Agent({
       id: 'dynamic-single-v1',
@@ -36,7 +32,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     const requestContext = new RequestContext();
     requestContext.set('foo', true);
 
-    const result = await agent.generateLegacy('Test message', { requestContext });
+    const result = await agent.generate('Test message', { requestContext });
 
     expect(result.text).toBe('Premium v1 response');
     await expect(agent.getModelList(requestContext)).resolves.toBeNull();

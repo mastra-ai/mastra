@@ -1,4 +1,3 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
@@ -6,6 +5,7 @@ import { MastraError } from '../error';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
+import { mockTextModel } from '../test-utils/llm-mock';
 import { Mastra } from './index';
 
 class RegisteredMemory extends MockMemory {
@@ -32,14 +32,12 @@ function createMastraWithMemory(idGenerator?: () => string) {
     id: 'test-agent',
     name: 'Test Agent',
     instructions: 'You are a test agent',
-    model: new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Test response',
-      }),
-    }),
+    model: mockTextModel(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: 'Test response',
+    })),
     memory,
   });
 
@@ -332,7 +330,7 @@ describe('Mastra ID Generator', () => {
     it('should use custom ID generator in agent operations', async () => {
       const { mastra: _mastra, agent } = createMastraWithMemory(customIdGenerator);
 
-      await agent.generateLegacy('Hello');
+      await agent.generate('Hello');
       expect(customIdGenerator).toHaveBeenCalled();
     });
 
@@ -353,14 +351,12 @@ describe('Mastra ID Generator', () => {
         id: 'agent1',
         name: 'Agent 1',
         instructions: 'You are agent 1',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Response 1',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Response 1',
+        })),
         memory: memory1,
       });
 
@@ -369,14 +365,12 @@ describe('Mastra ID Generator', () => {
         id: 'agent2',
         name: 'Agent 2',
         instructions: 'You are agent 2',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Response 2',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Response 2',
+        })),
         memory: memory2,
       });
 
@@ -386,8 +380,8 @@ describe('Mastra ID Generator', () => {
         agents: { agent1, agent2 },
       });
 
-      await agent1.generateLegacy('Hello from agent 1');
-      await agent2.generateLegacy('Hello from agent 2');
+      await agent1.generate('Hello from agent 1');
+      await agent2.generate('Hello from agent 2');
 
       expect(customIdGenerator).toHaveBeenCalled();
     });
@@ -395,7 +389,7 @@ describe('Mastra ID Generator', () => {
     it('should use custom ID generator in streaming operations', async () => {
       const { mastra: _mastra, agent } = createMastraWithMemory(customIdGenerator);
 
-      await agent.streamLegacy('Hello', {
+      await agent.stream('Hello', {
         threadId: 'test-thread',
         resourceId: 'test-resource',
       });
@@ -413,14 +407,12 @@ describe('Mastra ID Generator', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test agent',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Test response',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Test response',
+        })),
         memory: ({ requestContext, mastra: mastraInstance }) => {
           receivedMastraInstance = mastraInstance;
           receivedRequestContext = requestContext;
@@ -461,14 +453,12 @@ describe('Mastra ID Generator', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a context-aware agent',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Context-aware response',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Context-aware response',
+        })),
         memory: ({ requestContext, mastra: mastraInstance }) => {
           contextUserId = requestContext.get('userId');
           contextSessionId = requestContext.get('sessionId');
@@ -515,14 +505,12 @@ describe('Mastra ID Generator', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a multi-context agent',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Multi-context response',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Multi-context response',
+        })),
         memory: ({ requestContext, mastra: mastraInstance }) => {
           const userId = requestContext.get('userId');
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
@@ -568,14 +556,12 @@ describe('Mastra ID Generator', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test agent',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Test response',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Test response',
+        })),
         memory: ({ requestContext, mastra: mastraInstance }) => {
           // Verify the ID generator is available even when memory creation might fail
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
@@ -665,14 +651,12 @@ describe('Mastra ID Generator', () => {
         id: 'help-agent',
         name: 'Help Agent',
         instructions: 'You are a helpful assistant',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'I can help you with that!',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'I can help you with that!',
+        })),
         memory,
       });
 
@@ -683,7 +667,7 @@ describe('Mastra ID Generator', () => {
       });
 
       // Simulate user conversation
-      await agent.generateLegacy('Hello, can you help me?', {
+      await agent.generate('Hello, can you help me?', {
         threadId: 'user-conversation',
         resourceId: 'user-session',
       });
@@ -698,14 +682,12 @@ describe('Mastra ID Generator', () => {
         id: 'multi-user-agent',
         name: 'Multi-User Agent',
         instructions: 'You are a multi-user assistant',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Hello! I can help multiple users.',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Hello! I can help multiple users.',
+        })),
         memory,
       });
 
@@ -724,7 +706,7 @@ describe('Mastra ID Generator', () => {
 
       const results = await Promise.all(
         conversations.map(conv =>
-          agent.generateLegacy(conv.message, {
+          agent.generate(conv.message, {
             threadId: conv.threadId,
             resourceId: conv.resourceId,
           }),
@@ -743,14 +725,12 @@ describe('Mastra ID Generator', () => {
         id: 'workflow-agent',
         name: 'Workflow Agent',
         instructions: 'You are a workflow assistant',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Workflow step completed.',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Workflow step completed.',
+        })),
         memory,
       });
 
@@ -810,14 +790,12 @@ describe('Mastra ID Generator', () => {
         id: 'streaming-agent',
         name: 'Streaming Agent',
         instructions: 'You are a streaming assistant',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Streaming response content.',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Streaming response content.',
+        })),
         memory,
       });
 
@@ -827,7 +805,7 @@ describe('Mastra ID Generator', () => {
         agents: { streamingAgent: agent },
       });
 
-      await agent.streamLegacy('Please provide a streaming response', {
+      await agent.stream('Please provide a streaming response', {
         threadId: 'streaming-thread',
         resourceId: 'streaming-resource',
       });
@@ -885,14 +863,12 @@ describe('Mastra ID Generator', () => {
         id: 'context-test-agent',
         name: 'Context Test Agent',
         instructions: 'You are a test agent for context-aware ID generation',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Test response',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Test response',
+        })),
         memory,
       });
 
@@ -903,7 +879,7 @@ describe('Mastra ID Generator', () => {
       });
 
       // Trigger agent generation which should call idGenerator with context
-      await agent.generateLegacy('Hello', {
+      await agent.generate('Hello', {
         threadId: 'test-thread-123',
         resourceId: 'user-456',
       });
@@ -1035,14 +1011,12 @@ describe('Mastra ID Generator', () => {
         id: 'source-test-agent',
         name: 'Source Test Agent',
         instructions: 'Test agent',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Test response',
-          }),
-        }),
+        model: mockTextModel(async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: 'Test response',
+        })),
         memory,
       });
 
@@ -1052,7 +1026,7 @@ describe('Mastra ID Generator', () => {
         agents: { sourceTestAgent: agent },
       });
 
-      await agent.generateLegacy('Hello');
+      await agent.generate('Hello');
 
       // ASSERT: idGenerator should receive context with source='agent'
       const agentRunContext = receivedContexts.find(ctx => ctx.idType === 'run' && ctx.source === 'agent');

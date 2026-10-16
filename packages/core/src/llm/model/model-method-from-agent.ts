@@ -3,9 +3,9 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ModelMethodType } from './model.loop.types';
 
 export function getModelMethodFromAgentMethod(methodType: AgentMethodType): ModelMethodType {
-  if (methodType === 'generate' || methodType === 'generateLegacy') {
+  if (methodType === 'generate') {
     return 'generate';
-  } else if (methodType === 'stream' || methodType === 'streamLegacy') {
+  } else if (methodType === 'stream') {
     return 'stream';
   } else {
     throw new MastraError({

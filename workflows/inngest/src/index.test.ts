@@ -15271,7 +15271,6 @@ createWorkflowTestSuite({
     // ============================================================================
     schemaValidationThrows: true, // Inngest doesn't throw - validation happens async, returns result
     abortStatus: true, // Inngest returns 'failed' or 'success', no 'canceled' status
-    streamingSuspendResumeLegacy: true, // Inngest streaming has different suspend/resume behavior
     abortDuringStep: true, // Abort during step test has 5s timeout waiting for abort signal
     agentStepDeepNested: true, // Deep nested agent workflow fails on Inngest
     executionFlowNotDefined: true, // InngestWorkflow.createRun() doesn't validate stepFlow

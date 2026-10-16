@@ -1,43 +1,17 @@
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
 import { MockMemory } from '../../memory';
 import { Agent } from '../agent';
 
-function uiMessageTest(version: 'v1' | 'v2') {
+function uiMessageTest(version: 'v2') {
   describe(`${version} - UIMessageWithMetadata support`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV2;
     const mockMemory = new MockMemory();
 
     beforeEach(() => {
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            finishReason: 'stop',
-            usage: { completionTokens: 10, promptTokens: 3 },
-            text: 'Response acknowledging metadata',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Response' },
-                { type: 'text-delta', textDelta: ' acknowledging' },
-                { type: 'text-delta', textDelta: ' metadata' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             content: [
@@ -90,16 +64,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
         },
       ];
 
-      if (version === 'v1') {
-        await agent.generateLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'customer-12345',
-            thread: {
-              id: 'support-thread',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate(messagesWithMetadata, {
           memory: {
             resource: 'customer-12345',
@@ -159,16 +124,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
       ];
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'user-mobile',
-            thread: {
-              id: 'mobile-thread',
-            },
-          },
-        });
-      } else {
+      {
         stream = await agent.stream(messagesWithMetadata, {
           memory: {
             resource: 'user-mobile',
@@ -246,16 +202,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
         },
       ];
 
-      if (version === 'v1') {
-        await agent.generateLegacy(mixedMessages, {
-          memory: {
-            resource: 'mixed-user',
-            thread: {
-              id: 'mixed-thread',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate(mixedMessages, {
           memory: {
             resource: 'mixed-user',
@@ -305,28 +252,8 @@ function uiMessageTest(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v2') {
+      {
         await agent.generate(
-          [
-            {
-              role: 'user',
-              content: 'First message with metadata',
-              metadata: {
-                foo: 'bar',
-              },
-            },
-          ],
-          {
-            memory: {
-              resource: 'simple-content-user',
-              thread: {
-                id: 'simple-content-thread',
-              },
-            },
-          },
-        );
-      } else {
-        await agent.generateLegacy(
           [
             {
               role: 'user',
@@ -376,5 +303,4 @@ function uiMessageTest(version: 'v1' | 'v2') {
   });
 }
 
-uiMessageTest('v1');
 uiMessageTest('v2');

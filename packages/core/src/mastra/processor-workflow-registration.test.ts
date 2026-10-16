@@ -1,8 +1,8 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../processors';
 import { ProcessorStepSchema } from '../processors/step-schema';
+import { mockTextModel } from '../test-utils/llm-mock';
 import { createWorkflow } from '../workflows';
 import { Mastra } from './index';
 
@@ -17,14 +17,12 @@ describe('Processor Workflow Registration', () => {
   const waitForWorkflowRegistration = () => new Promise(resolve => setTimeout(resolve, 50));
 
   const createMockModel = () =>
-    new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Test response',
-      }),
-    });
+    mockTextModel(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: 'Test response',
+    }));
 
   describe('Static processor registration', () => {
     it('should register input processor workflow when agent has static inputProcessors', async () => {

@@ -1,7 +1,7 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import type { LanguageDetectionResult, TranslationResult } from './language-detector';
 import { LanguageDetector } from './language-detector';
 
@@ -50,23 +50,20 @@ function createMockLanguageResult(
   return result;
 }
 
-function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResult[]): MockLanguageModelV1 {
+function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResult[]): ReturnType<typeof mockTextModel> {
   const results = Array.isArray(result) ? result : [result];
   let callCount = 0;
 
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
-    doGenerate: async () => {
-      const currentResult = results[callCount % results.length];
-      callCount++;
+  return mockTextModel(async () => {
+    const currentResult = results[callCount % results.length];
+    callCount++;
 
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `${JSON.stringify(currentResult)}`,
-      };
-    },
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: `${JSON.stringify(currentResult)}`,
+    };
   });
 }
 
@@ -559,11 +556,8 @@ describe('LanguageDetector', () => {
     it.each([undefined, 'warn'] as const)(
       'should fail open when detection agent fails with errorStrategy %s',
       async errorStrategy => {
-        const model = new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
-          doGenerate: async () => {
-            throw new TripWire('Detection agent failed');
-          },
+        const model = mockTextModel(async () => {
+          throw new TripWire('Detection agent failed');
         });
         const detector = new LanguageDetector({
           model,
@@ -597,11 +591,8 @@ describe('LanguageDetector', () => {
     );
 
     it('should propagate the processor tripwire when strict model detection fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new Error('provider failure');
-        },
+      const model = mockTextModel(async () => {
+        throw new Error('provider failure');
       });
       const detector = new LanguageDetector({
         model,
@@ -622,7 +613,7 @@ describe('LanguageDetector', () => {
     it('should propagate the processor tripwire when legacy detection returns no object', async () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
       const detector = new LanguageDetector({ model, targetLanguages: ['English'], errorStrategy: 'strict' });
-      vi.spyOn((detector as any).detectionAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      vi.spyOn((detector as any).detectionAgent, 'generate').mockResolvedValue({ object: undefined });
       const tripwire = new TripWire('strict language failure');
       const abort = vi.fn(() => {
         throw tripwire;
@@ -731,17 +722,14 @@ describe('LanguageDetector', () => {
      */
     function setupRequestCapturingModel(result: LanguageDetectionResult) {
       const requests: string[] = [];
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async options => {
-          requests.push(JSON.stringify(options));
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `${JSON.stringify(result)}`,
-          };
-        },
+      const model = mockTextModel(async options => {
+        requests.push(JSON.stringify(options));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `${JSON.stringify(result)}`,
+        };
       });
       return { model, requests };
     }
@@ -765,7 +753,8 @@ describe('LanguageDetector', () => {
       });
 
       expect(requests).toHaveLength(1);
-      return requests[0]!;
+      // Message createdAt timestamps differ between calls and are not part of the request being compared.
+      return requests[0]!.replace(/"createdAt":\d+/g, '"createdAt":0');
     }
 
     it('should send an identical request no matter which value is configured', async () => {
@@ -822,15 +811,12 @@ describe('LanguageDetector', () => {
 
   describe('edge cases', () => {
     it('should handle malformed detection results gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'invalid json',
-        }),
-      });
+      const model = mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'invalid json',
+      }));
       const detector = new LanguageDetector({
         model,
         includeDetectionDetails: true,

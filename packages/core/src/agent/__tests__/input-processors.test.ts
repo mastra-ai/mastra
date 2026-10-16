@@ -1,4 +1,3 @@
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
@@ -6,9 +5,9 @@ import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
-function inputProcessorTests(version: 'v1' | 'v2') {
+function inputProcessorTests(version: 'v2') {
   describe(`${version} - Input Processors`, () => {
-    let mockModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let mockModel: MockLanguageModelV2;
 
     // Helper function to create a MastraDBMessage
     const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => ({
@@ -22,68 +21,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
     });
 
     beforeEach(() => {
-      if (version === 'v1') {
-        mockModel = new MockLanguageModelV1({
-          doGenerate: async ({ prompt }) => {
-            // Extract text content from the prompt messages
-            const messages = Array.isArray(prompt) ? prompt : [];
-            const textContent = messages
-              .map(msg => {
-                if (typeof msg.content === 'string') {
-                  return msg.content;
-                } else if (Array.isArray(msg.content)) {
-                  return msg.content
-                    .filter(part => part.type === 'text')
-                    .map(part => part.text)
-                    .join(' ');
-                }
-                return '';
-              })
-              .filter(Boolean)
-              .join(' ');
-
-            return {
-              text: `processed: ${textContent}`,
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-            };
-          },
-          doStream: async ({ prompt }) => {
-            // Extract text content from the prompt messages
-            const messages = Array.isArray(prompt) ? prompt : [];
-            const textContent = messages
-              .map(msg => {
-                if (typeof msg.content === 'string') {
-                  return msg.content;
-                } else if (Array.isArray(msg.content)) {
-                  return msg.content
-                    .filter(part => part.type === 'text')
-                    .map(part => part.text)
-                    .join(' ');
-                }
-                return '';
-              })
-              .filter(Boolean)
-              .join(' ');
-
-            return {
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'processed: ' },
-                  { type: 'text-delta', textDelta: textContent },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { promptTokens: 10, completionTokens: 20 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: prompt, rawSettings: {} },
-            };
-          },
-        });
-      } else {
+      {
         mockModel = new MockLanguageModelV2({
           doGenerate: async ({ prompt }: LanguageModelV2CallOptions) => {
             const messages = Array.isArray(prompt) ? prompt : [];
@@ -165,9 +103,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithProcessor.generateLegacy('Hello world');
-        } else {
+        {
           result = await agentWithProcessor.generate('Hello world');
         }
 
@@ -177,8 +113,6 @@ function inputProcessorTests(version: 'v1' | 'v2') {
       });
 
       it('should run processLLMRequest through the explicit LLM request processor path', async () => {
-        if (version === 'v1') return;
-
         const processor1 = {
           id: 'input-processor',
           name: 'Input Processor',
@@ -248,9 +182,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithProcessors.generateLegacy('Hello');
-        } else {
+        {
           result = await agentWithProcessors.generate('Hello');
         }
 
@@ -287,9 +219,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithAsyncProcessors.generateLegacy('Test async');
-        } else {
+        {
           result = await agentWithAsyncProcessors.generate('Test async');
         }
 
@@ -319,9 +249,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithAbortProcessor.generateLegacy('This should be aborted');
-        } else {
+        {
           result = await agentWithAbortProcessor.generate('This should be aborted');
         }
 
@@ -350,9 +278,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithCustomAbort.generateLegacy('Custom abort test');
-        } else {
+        {
           result = await agentWithCustomAbort.generate('Custom abort test');
         }
 
@@ -392,9 +318,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithAbortSequence.generateLegacy('Abort sequence test');
-        } else {
+        {
           result = await agentWithAbortSequence.generate('Abort sequence test');
         }
 
@@ -423,9 +347,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let stream;
-        if (version === 'v1') {
-          stream = await agentWithStreamProcessor.streamLegacy('Stream test');
-        } else {
+        {
           stream = await agentWithStreamProcessor.stream('Stream test');
         }
 
@@ -456,11 +378,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let stream;
-        if (version === 'v1') {
-          stream = await agentWithStreamAbort.streamLegacy('Stream abort test');
-          expect(stream.tripwire).toBeDefined();
-          expect(stream.tripwire?.reason).toBe('Stream aborted');
-        } else {
+        {
           stream = await agentWithStreamAbort.stream('Stream abort test');
 
           for await (const chunk of stream.fullStream) {
@@ -499,33 +417,11 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let stream;
-        if (version === 'v1') {
-          stream = await agentWithDeployerAbort.streamLegacy('Deployer abort test');
-        } else {
+        {
           stream = await agentWithDeployerAbort.stream('Deployer abort test');
         }
 
-        if (version === 'v1') {
-          expect(stream.tripwire).toBeDefined();
-          expect(stream.tripwire?.reason).toBe('Deployer test abort');
-          // Verify deployer methods exist and return Response objects
-          expect(typeof stream.toDataStreamResponse).toBe('function');
-          expect(typeof stream.toTextStreamResponse).toBe('function');
-
-          const dataStreamResponse = stream.toDataStreamResponse();
-          const textStreamResponse = stream.toTextStreamResponse();
-
-          expect(dataStreamResponse).toBeInstanceOf(Response);
-          expect(textStreamResponse).toBeInstanceOf(Response);
-          expect(dataStreamResponse.status).toBe(200);
-          expect(textStreamResponse.status).toBe(200);
-
-          // Verify other required methods are present
-          expect(typeof stream.pipeDataStreamToResponse).toBe('function');
-          expect(typeof stream.pipeTextStreamToResponse).toBe('function');
-          expect(stream.experimental_partialOutputStream).toBeDefined();
-          expect(typeof stream.experimental_partialOutputStream[Symbol.asyncIterator]).toBe('function');
-        } else if (version === 'v2') {
+        {
           const fullOutput = await (stream as MastraModelOutput<any>).getFullOutput();
           expect(fullOutput.tripwire).toBeDefined();
           expect(fullOutput.tripwire?.reason).toBe('Deployer test abort');
@@ -559,11 +455,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithDynamicProcessors.generateLegacy('Test dynamic', {
-            requestContext,
-          });
-        } else {
+        {
           result = await agentWithDynamicProcessors.generate('Test dynamic', {
             requestContext,
           });
@@ -582,9 +474,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithEmptyProcessors.generateLegacy('No processors test');
-        } else {
+        {
           result = await agentWithEmptyProcessors.generate('No processors test');
         }
 
@@ -619,9 +509,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         });
 
         let result;
-        if (version === 'v1') {
-          result = await agentWithModifier.generateLegacy('Original user message');
-        } else {
+        {
           result = await agentWithModifier.generate('Original user message');
         }
 
@@ -665,18 +553,14 @@ function inputProcessorTests(version: 'v1' | 'v2') {
 
         // Test valid content
         let validResult;
-        if (version === 'v1') {
-          validResult = await agentWithValidator.generateLegacy('This is appropriate content');
-        } else {
+        {
           validResult = await agentWithValidator.generate('This is appropriate content');
         }
         expect(validResult.text).toContain('Content validated');
 
         // Test invalid content
         let invalidResult;
-        if (version === 'v1') {
-          invalidResult = await agentWithValidator.generateLegacy('This contains inappropriate content');
-        } else {
+        {
           invalidResult = await agentWithValidator.generate('This contains inappropriate content');
         }
         expect(invalidResult.tripwire).toBeDefined();
@@ -686,7 +570,6 @@ function inputProcessorTests(version: 'v1' | 'v2') {
   });
 }
 
-inputProcessorTests('v1');
 inputProcessorTests('v2');
 
 describe('v2 - TripWire exits do not persist terminal error parts', () => {

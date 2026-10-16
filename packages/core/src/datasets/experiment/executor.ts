@@ -1,5 +1,4 @@
 import type { Agent } from '../../agent';
-import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
@@ -239,9 +238,9 @@ async function executeAgent(
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
-  const model = await agent.getModel({ requestContext: reqCtx });
+  // Resolve the model up front so dynamic resolver errors surface before generation starts.
+  await agent.getModel({ requestContext: reqCtx });
 
-  // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
   const input = item.input as MessageListInput;
 
@@ -313,28 +312,17 @@ async function executeAgent(
 
   let rawResult: unknown;
   try {
-    rawResult = isSupportedLanguageModel(model)
-      ? await agent.generate(input, {
-          scorers: {},
-          returnScorerData: true,
-          abortSignal: generateSignal,
-          ...memoryOption,
-          ...(reqCtx ? { requestContext: reqCtx } : {}),
-          tracingOptions,
-          ...(versions ? { versions } : {}),
-          ...(mockHooks ? { hooks: mockHooks } : {}),
-          ...(mockConcurrency ?? {}),
-        })
-      : await agent.generateLegacy(input, {
-          scorers: {},
-          returnScorerData: true,
-          abortSignal: generateSignal,
-          ...memoryOption,
-          ...(reqCtx ? { requestContext: reqCtx } : {}),
-          tracingOptions,
-          ...(mockHooks ? { hooks: mockHooks } : {}),
-          ...(mockConcurrency ?? {}),
-        });
+    rawResult = await agent.generate(input, {
+      scorers: {},
+      returnScorerData: true,
+      abortSignal: generateSignal,
+      ...memoryOption,
+      ...(reqCtx ? { requestContext: reqCtx } : {}),
+      tracingOptions,
+      ...(versions ? { versions } : {}),
+      ...(mockHooks ? { hooks: mockHooks } : {}),
+      ...(mockConcurrency ?? {}),
+    });
   } catch (error) {
     // A mock failure aborts the run mid-flight: surface the deterministic coded
     // error instead of the raw abort. Any other error rethrows unchanged.

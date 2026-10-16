@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { Agent, isSupportedLanguageModel } from '../agent';
+import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
@@ -114,10 +114,9 @@ export interface ScorerJudgeConfig {
    */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /**
-   * Optional error processors for the internal V2+ judge agent. These implement
+   * Optional error processors for the internal judge agent. These implement
    * `processAPIError` and can inspect LLM API rejections and signal a retry,
-   * e.g. `StreamErrorRetryProcessor`. V1 judges use `generateLegacy()` and do
-   * not run error processors.
+   * e.g. `StreamErrorRetryProcessor`.
    */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
@@ -1597,11 +1596,6 @@ class MastraScorer<
         await onFinish?.(finishEvent);
       }
     };
-    const recordLegacyUsage = (usage: unknown, steps: unknown) => {
-      telemetry.recordedAttemptCount += 1;
-      telemetry.modelCallCount += Array.isArray(steps) ? Math.max(steps.length, 1) : 1;
-      addScorerJudgeUsage(telemetry.usage, normalizeScorerJudgeUsage(usage));
-    };
     const createExecution = (output: JSONValue): ScorerJudgeExecution => ({
       status: 'success',
       prompt,
@@ -1738,39 +1732,25 @@ class MastraScorer<
       // GenerateScore output must be a number
       if (scorerStep.name === 'generateScore') {
         let result;
-        if (isSupportedLanguageModel(resolvedModel)) {
-          result = await tryStreamWithJsonFallback(judge, prompt, {
-            fallbackJsonPromptInjection,
-            structuredOutput: {
-              schema: z.object({ score: z.number() }),
-              jsonPromptInjection,
-            },
-            ...createJudgeStreamRunOptions(),
-            ...(onStream ? { onStream } : {}),
-            onStreamAttempt: recordAttempt,
-            onStreamFinish: recordStreamResult,
-          });
-          const object = await result.object;
-          const score = (object as { score: number }).score;
-          return { result: score, prompt, judgeModel, execution: createExecution(score) };
-        } else {
-          const schema = z.object({
-            score: z.number(),
-          });
-          const standardSchema = toStandardSchema(schema as PublicSchema);
-          recordAttempt();
-          result = await judge.generateLegacy(prompt, {
-            output: standardSchemaToJSONSchema(standardSchema),
-            ...judgeRunOptions,
-          });
-          recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
-          const score = (result.object as { score: number }).score;
-          return { result: score, prompt, judgeModel, execution: createExecution(score) };
-        }
+
+        result = await tryStreamWithJsonFallback(judge, prompt, {
+          fallbackJsonPromptInjection,
+          structuredOutput: {
+            schema: z.object({ score: z.number() }),
+            jsonPromptInjection,
+          },
+          ...createJudgeStreamRunOptions(),
+          ...(onStream ? { onStream } : {}),
+          onStreamAttempt: recordAttempt,
+          onStreamFinish: recordStreamResult,
+        });
+        const object = await result.object;
+        const score = (object as { score: number }).score;
+        return { result: score, prompt, judgeModel, execution: createExecution(score) };
 
         // GenerateReason output must be a string
       } else if (scorerStep.name === 'generateReason') {
-        if (isSupportedLanguageModel(resolvedModel)) {
+        {
           recordAttempt();
           const result = await judge.stream(prompt, createJudgeStreamRunOptions());
           void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
@@ -1783,43 +1763,27 @@ class MastraScorer<
           })();
           return { result: reason, prompt, judgeModel, execution: createExecution(reason) };
         }
-
-        recordAttempt();
-        const result = await judge.generateLegacy(prompt, judgeRunOptions);
-        recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
-        const reason = result.text;
-        return { result: reason, prompt, judgeModel, execution: createExecution(reason) };
       } else {
         const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
         // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
         // Cast to PublicSchema since outputSchema can be any schema type
         const standardSchema = toStandardSchema(promptStep.outputSchema as PublicSchema);
         let result;
-        if (isSupportedLanguageModel(resolvedModel)) {
-          // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
-          result = await tryStreamWithJsonFallback(judge, prompt, {
-            fallbackJsonPromptInjection,
-            structuredOutput: {
-              schema: standardSchema as any,
-              jsonPromptInjection,
-            },
-            ...createJudgeStreamRunOptions(),
-            ...(onStream ? { onStream } : {}),
-            onStreamAttempt: recordAttempt,
-            onStreamFinish: recordStreamResult,
-          });
-          const object = (await result.object) as JSONValue;
-          return { result: object, prompt, judgeModel, execution: createExecution(object) };
-        } else {
-          recordAttempt();
-          result = await judge.generateLegacy(prompt, {
-            output: standardSchemaToJSONSchema(standardSchema),
-            ...judgeRunOptions,
-          });
-          recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
-          const object = result.object as JSONValue;
-          return { result: object, prompt, judgeModel, execution: createExecution(object) };
-        }
+
+        // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
+        result = await tryStreamWithJsonFallback(judge, prompt, {
+          fallbackJsonPromptInjection,
+          structuredOutput: {
+            schema: standardSchema as any,
+            jsonPromptInjection,
+          },
+          ...createJudgeStreamRunOptions(),
+          ...(onStream ? { onStream } : {}),
+          onStreamAttempt: recordAttempt,
+          onStreamFinish: recordStreamResult,
+        });
+        const object = (await result.object) as JSONValue;
+        return { result: object, prompt, judgeModel, execution: createExecution(object) };
       }
     } catch (error) {
       const failedExecution = createFailedExecution(error);

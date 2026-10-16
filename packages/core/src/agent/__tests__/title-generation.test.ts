@@ -1,4 +1,3 @@
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../../logger';
@@ -7,26 +6,11 @@ import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../types';
 
-function titleGenerationTests(version: 'v1' | 'v2') {
-  let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+function titleGenerationTests(version: 'v2') {
+  let dummyModel: MockLanguageModelV2;
 
   beforeEach(() => {
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'Dummy response',
-        }),
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-    } else {
+    {
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -60,32 +44,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       let agentModel;
       let titleModel;
 
-      if (version === 'v1') {
-        // Create a mock model for the agent's main model
-        agentModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            agentModelUsed = true;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: `Agent model response`,
-            };
-          },
-        });
-
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            titleModelUsed = true;
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Custom Title Model Response`,
-            };
-          },
-        });
-      } else {
+      {
         agentModel = new MockLanguageModelV2({
           doGenerate: async () => {
             agentModelUsed = true;
@@ -199,18 +158,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        // Generate a response that will trigger title generation
-        await agent.generateLegacy('What is the weather like today?', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              title: '', // Empty title triggers title generation
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('What is the weather like today?', {
           memory: {
             resource: 'user-1',
@@ -242,34 +190,10 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
-      let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV2;
+      let standardModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        premiumModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Premium Title`,
-            };
-          },
-        });
-
-        standardModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            usedModelName = 'standard';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Standard Title`,
-            };
-          },
-        });
-      } else {
+      {
         premiumModel = new MockLanguageModelV2({
           doGenerate: async () => {
             usedModelName = 'premium';
@@ -389,18 +313,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       const requestContext = new RequestContext();
       requestContext.set('userTier', 'premium');
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-premium',
-              title: '',
-            },
-          },
-          requestContext,
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -421,18 +334,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       const standardContext = new RequestContext();
       standardContext.set('userTier', 'standard');
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-2',
-            thread: {
-              id: 'thread-standard',
-              title: '',
-            },
-          },
-          requestContext: standardContext,
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
@@ -453,34 +355,10 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
-      let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV2;
+      let standardModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        premiumModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Premium Title`,
-            };
-          },
-        });
-
-        standardModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            usedModelName = 'standard';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Standard Title`,
-            };
-          },
-        });
-      } else {
+      {
         premiumModel = new MockLanguageModelV2({
           doGenerate: async () => {
             usedModelName = 'premium';
@@ -581,9 +459,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         model: standardModel,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message');
-      } else {
+      {
         await agent.generate('Test message');
       }
 
@@ -593,9 +469,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       agent.__updateModel({ model: premiumModel });
       usedModelName = '';
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message');
-      } else {
+      {
         await agent.generate('Test message');
       }
 
@@ -616,35 +490,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         };
       };
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            // Check if this is for title generation based on the prompt
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              titleGenerationCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: `Generated Title`,
-              };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: `Agent Response`,
-              };
-            }
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async options => {
             // Check if this is for title generation based on the prompt
@@ -753,17 +601,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-bool',
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -787,17 +625,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         };
       };
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-2',
-            thread: {
-              id: 'thread-bool-false',
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
@@ -837,32 +665,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         return originalUpdateThread(args);
       };
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: 'Serverless Safe Title',
-              };
-            }
-
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'Agent Response',
-            };
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -932,20 +737,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         pending.push(promise);
       };
 
-      if (version === 'v1') {
-        // Legacy already awaits title generation inline — no waitUntil hook needed.
-        releaseTitleWrite?.();
-        await agent.generateLegacy('Name this conversation', {
-          memory: {
-            resource: 'user-await',
-            thread: {
-              id: threadId,
-              title: '',
-            },
-          },
-        });
-        expect(titlePersisted).toBe(true);
-      } else {
+      {
         await agent.generate('Name this conversation', {
           serverless: { waitUntil },
           memory: {
@@ -998,34 +790,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         };
       };
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              titleGenerationCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: 'Help with coding project',
-              };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: 'Agent Response',
-              };
-            }
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -1065,14 +832,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       });
 
       // Send first message to the pre-created thread
-      if (version === 'v1') {
-        await agent.generateLegacy('Help me with my coding project', {
-          memory: {
-            resource: 'user-123',
-            thread: threadId,
-          },
-        });
-      } else {
+      {
         await agent.generate('Help me with my coding project', {
           memory: {
             resource: 'user-123',
@@ -1122,34 +882,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         };
       };
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              titleGenerationCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: 'Help with coding project',
-              };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: 'Agent Response',
-              };
-            }
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -1189,14 +924,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       });
 
       // Send first message to the pre-created thread (no messages exist yet)
-      if (version === 'v1') {
-        await agent.generateLegacy('Help me with my coding project', {
-          memory: {
-            resource: 'user-123',
-            thread: threadId,
-          },
-        });
-      } else {
+      {
         await agent.generate('Help me with my coding project', {
           memory: {
             resource: 'user-123',
@@ -1232,15 +960,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         },
       });
 
-      let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let errorModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        errorModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            throw new Error('Title generation failed');
-          },
-        });
-      } else {
+      {
         errorModel = new MockLanguageModelV2({
           doGenerate: async () => {
             throw new Error('Title generation failed');
@@ -1269,17 +991,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       agent.__setLogger(noopLogger);
 
       // This should not throw, title generation happens async
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-error',
-              title: originalTitle,
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -1310,35 +1022,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         return {};
       };
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            // Check if this is for title generation based on the prompt
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              titleGenerationCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: `Should not be called`,
-              };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: `Agent Response`,
-              };
-            }
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async options => {
             // Check if this is for title generation based on the prompt
@@ -1447,17 +1133,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-undefined',
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -1480,40 +1156,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const systemMessage = messages.find((msg: any) => msg.role === 'system');
-            if (systemMessage) {
-              capturedPrompt =
-                typeof systemMessage.content === 'string'
-                  ? systemMessage.content
-                  : JSON.stringify(systemMessage.content);
-            }
-
-            if (capturedPrompt.includes('簡潔なタイトル')) {
-              usedLanguage = 'ja';
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: `日本語のタイトル`,
-              };
-            } else {
-              usedLanguage = 'en';
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: `English Title`,
-              };
-            }
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -1651,18 +1296,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       const japaneseContext = new RequestContext();
       japaneseContext.set('language', 'ja');
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-ja',
-              title: '',
-            },
-          },
-          requestContext: japaneseContext,
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -1685,18 +1319,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       const englishContext = new RequestContext();
       englishContext.set('language', 'en');
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-2',
-            thread: {
-              id: 'thread-en',
-              title: '',
-            },
-          },
-          requestContext: englishContext,
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
@@ -1720,29 +1343,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            // Capture the prompt to verify custom instructions are used
-            const messages = options.prompt;
-            const systemMessage = messages.find((msg: any) => msg.role === 'system');
-            if (systemMessage) {
-              capturedPrompt =
-                typeof systemMessage.content === 'string'
-                  ? systemMessage.content
-                  : JSON.stringify(systemMessage.content);
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Creative Custom Title`,
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             // Capture the prompt to verify custom instructions are used
@@ -1824,17 +1427,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('What is the weather like today?', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-custom-instructions',
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('What is the weather like today?', {
           memory: {
             resource: 'user-1',
@@ -1864,28 +1457,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const systemMessage = messages.find((msg: any) => msg.role === 'system');
-            if (systemMessage) {
-              capturedPrompt =
-                typeof systemMessage.content === 'string'
-                  ? systemMessage.content
-                  : JSON.stringify(systemMessage.content);
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Default Title`,
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -1964,17 +1538,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-default',
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -2012,20 +1576,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         },
       });
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async () => {
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Title with error handling`,
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async () => {
             return {
@@ -2092,17 +1645,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       agent.__setLogger(noopLogger);
 
       // This should not throw, title generation happens async
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-instructions-error',
-              title: originalTitle,
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -2124,10 +1667,6 @@ function titleGenerationTests(version: 'v1' | 'v2') {
     });
 
     it('should catch title persistence failures without causing an unhandled rejection', async () => {
-      if (version !== 'v2') {
-        return;
-      }
-
       const titleText = 'Generated thread title';
       const mockMemory = new MockMemory();
       const originalUpdateThread = mockMemory.updateThread.bind(mockMemory);
@@ -2228,48 +1767,10 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel1: MockLanguageModelV1 | MockLanguageModelV2;
-      let titleModel2: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel1: MockLanguageModelV2;
+      let titleModel2: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel1 = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const systemMessage = messages.find((msg: any) => msg.role === 'system');
-            if (systemMessage) {
-              capturedPrompt =
-                typeof systemMessage.content === 'string'
-                  ? systemMessage.content
-                  : JSON.stringify(systemMessage.content);
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Title with default instructions`,
-            };
-          },
-        });
-
-        titleModel2 = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const systemMessage = messages.find((msg: any) => msg.role === 'system');
-            if (systemMessage) {
-              capturedPrompt =
-                typeof systemMessage.content === 'string'
-                  ? systemMessage.content
-                  : JSON.stringify(systemMessage.content);
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Title with null instructions`,
-            };
-          },
-        });
-      } else {
+      {
         titleModel1 = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -2411,17 +1912,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       agent.__setLogger(noopLogger);
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-empty-instructions',
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
@@ -2449,17 +1940,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         };
       };
 
-      if (version === 'v1') {
-        await agent.generateLegacy('Test message', {
-          memory: {
-            resource: 'user-2',
-            thread: {
-              id: 'thread-null-instructions',
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
@@ -2495,34 +1976,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // with the default lastMessages: 10. We need lastMessages: false to properly disable it.
       (mockMemory as any).threadConfig = { lastMessages: false, generateTitle: true };
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              titleGenerationCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: 'Generated Title',
-              };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: 'Agent Response',
-              };
-            }
-          },
-        });
-      } else {
+      {
         testModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -2606,17 +2062,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       const threadId = 'thread-no-history';
 
       // First call - should generate title
-      if (version === 'v1') {
-        await agent.generateLegacy('First message', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: threadId,
-              title: '',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('First message', {
           memory: {
             resource: 'user-1',
@@ -2633,14 +2079,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(agentCallCount).toBe(1);
 
       // Second call to the same thread - should NOT generate title again
-      if (version === 'v1') {
-        await agent.generateLegacy('Second message', {
-          memory: {
-            resource: 'user-1',
-            thread: threadId,
-          },
-        });
-      } else {
+      {
         await agent.generate('Second message', {
           memory: {
             resource: 'user-1',
@@ -2712,25 +2151,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // would see those and produce titles referencing internal framework details.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const userMsg = messages.find((msg: any) => msg.role === 'user');
-            if (userMsg) {
-              capturedUserContent = userMsg.content;
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: 'Weather in Paris',
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -2780,25 +2203,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // reach the title model — not providerOptions, createdAt timestamps, etc.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const userMsg = messages.find((msg: any) => msg.role === 'user');
-            if (userMsg) {
-              capturedUserContent = userMsg.content;
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: 'Image Description Request',
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -2857,25 +2264,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // including assistant responses, tool calls, and tool results.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const userMsg = messages.find((msg: any) => msg.role === 'user');
-            if (userMsg) {
-              capturedUserContent = userMsg.content;
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: 'Paris Weather Check',
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const messages = options.prompt;
@@ -2977,24 +2368,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       //   Assistant: Dummy response
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
-            if (userMsg) {
-              capturedUserContent = userMsg.content;
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: 'Greeting',
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
@@ -3028,17 +2404,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hi', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-dedupe',
-              title: '', // Empty title triggers title generation
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hi', {
           memory: {
             resource: 'user-1',
@@ -3059,7 +2425,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // The legacy (v1) path sends only the most recent user message to the title
       // model; the v2 path sends the full transcript. Either way, each message must
       // appear exactly once.
-      expect(allText).toBe(version === 'v1' ? 'User: hi' : 'User: hi\nAssistant: Dummy response');
+      expect(allText).toBe('User: hi\nAssistant: Dummy response');
       // No JSON artifacts
       expect(allText).not.toContain('{');
       expect(allText).not.toContain('"type"');
@@ -3072,24 +2438,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // emitted (alongside the tool lines) — exactly once each.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
-            if (userMsg) {
-              capturedUserContent = userMsg.content;
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: 'Weather Check',
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
@@ -3155,24 +2506,9 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // not be dropped.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let titleModel: MockLanguageModelV2;
 
-      if (version === 'v1') {
-        titleModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
-            if (userMsg) {
-              capturedUserContent = userMsg.content;
-            }
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: 'Weather Check',
-            };
-          },
-        });
-      } else {
+      {
         titleModel = new MockLanguageModelV2({
           doGenerate: async options => {
             const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
@@ -3248,7 +2584,6 @@ function titleGenerationTests(version: 'v1' | 'v2') {
   });
 }
 
-titleGenerationTests('v1');
 titleGenerationTests('v2');
 
 /**

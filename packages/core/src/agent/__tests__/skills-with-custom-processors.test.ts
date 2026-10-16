@@ -6,7 +6,6 @@
  * 1. inputProcessors on Agent constructor - should merge with skills
  * 2. inputProcessors on generate()/stream() options - should merge with skills
  */
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -15,6 +14,7 @@ import { ProcessorStepSchema } from '../../processors/index';
 import type { Processor, ProcessInputArgs } from '../../processors/index';
 import { SkillSearchProcessor } from '../../processors/processors/skill-search';
 import { SkillsProcessor } from '../../processors/processors/skills';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows/create';
 import { createStep } from '../../workflows/workflow';
@@ -541,55 +541,6 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       expect(prompt).toContain('<available_skills>');
       expect(prompt).toContain('Skills are NOT tools');
       expect(prompt).toContain('To discover available skills, call search_skills');
-    });
-
-    it('should apply on-demand mode in legacy generate options', async () => {
-      const legacyModel = new MockLanguageModelV1({
-        doGenerate: async ({ prompt, mode }) => {
-          capturedPrompt = prompt;
-          capturedTools = mode.type === 'regular' ? mode.tools : undefined;
-
-          return {
-            text: 'response',
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 5 },
-            rawCall: { rawPrompt: prompt, rawSettings: {} },
-          };
-        },
-      });
-
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'You are a test agent',
-        model: legacyModel,
-        workspace: mockWorkspace,
-        tools: {
-          custom_lookup: createTool({
-            id: 'custom_lookup',
-            description: 'Custom lookup tool',
-            inputSchema: z.object({ query: z.string() }),
-            execute: async () => 'ok',
-          }),
-        },
-      });
-
-      await agent.generateLegacy('Hello', {
-        inputProcessors: [new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })],
-      });
-
-      const toolNames = getToolNames(capturedTools);
-      expect(toolNames).toContain('custom_lookup');
-      expect(toolNames).toContain('search_skills');
-      expect(toolNames).toContain('load_skill');
-      expect(toolNames).toContain('skill_read');
-      expect(toolNames).not.toContain('skill');
-      expect(toolNames).not.toContain('skill_search');
-
-      const prompt = JSON.stringify(capturedPrompt);
-      expect(prompt).toContain('To discover available skills, call search_skills');
-      expect(prompt).not.toContain('<available_skills>');
-      expect(prompt).not.toContain('Skills are NOT tools');
     });
   });
 });

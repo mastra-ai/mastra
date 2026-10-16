@@ -1,8 +1,8 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { mockTextModel } from '../../../test-utils/llm-mock';
 import { createTool } from '../../../tools';
 import type { CoreTool } from '../../../tools/types';
 import { Agent } from '../../agent';
@@ -561,18 +561,16 @@ describe('client tool onOutput through agent.generate (production path)', () => 
       id: 'legacy-test-agent',
       name: 'legacy-test-agent',
       instructions: 'test agent',
-      model: new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 1, completionTokens: 1 },
-          text: 'ok',
-        }),
-      }),
+      model: mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1 },
+        text: 'ok',
+      })),
       tools: { browserTool: browserToolWith(onOutput) },
     });
 
-    await agent.generateLegacy(followUpMessages);
+    await agent.generate(followUpMessages);
 
     expect(onOutput).toHaveBeenCalledWith(
       expect.objectContaining({ toolCallId: 'call-1', toolName: 'browserTool', output: { ok: true } }),

@@ -2095,7 +2095,7 @@ describe('processInputStep', () => {
           model: createMockModel(),
           steps: [],
         }),
-      ).rejects.toThrow(/unsupported model version v1/);
+      ).rejects.toThrow('AI SDK v4 (LanguageModelV1) models are not supported');
     });
   });
 

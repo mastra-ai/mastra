@@ -1,4 +1,3 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -8,7 +7,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 
-function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
+function runStreamTest(version: 'v2' | 'v3' | 'v4') {
   const dummyResponseModel = getDummyResponseModel(version);
   const emptyResponseModel = getEmptyResponseModel(version);
   const errorResponseModel = getErrorResponseModel(version);
@@ -25,12 +24,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('repeat tool calls', {
-          threadId: 'thread-1',
-          resourceId: 'resource-1',
-        });
-      } else {
+      {
         stream = await agent.stream('repeat tool calls', {
           memory: {
             thread: 'thread-1',
@@ -51,39 +45,36 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       ).toBe(true);
     });
 
-    it.skipIf(version === 'v1')(
-      'keeps direct stream consumption working when a thread subscriber is attached',
-      async () => {
-        const mockMemory = new MockMemory();
-        const agent = new Agent({
-          id: 'test-agent-with-subscriber',
-          name: 'Test Agent With Subscriber',
-          instructions: 'test',
-          model: dummyResponseModel,
-          memory: mockMemory,
+    it('keeps direct stream consumption working when a thread subscriber is attached', async () => {
+      const mockMemory = new MockMemory();
+      const agent = new Agent({
+        id: 'test-agent-with-subscriber',
+        name: 'Test Agent With Subscriber',
+        instructions: 'test',
+        model: dummyResponseModel,
+        memory: mockMemory,
+      });
+      const threadId = 'thread-with-subscriber';
+      const resourceId = 'resource-with-subscriber';
+      const subscription = await agent.subscribeToThread({ threadId, resourceId });
+
+      try {
+        const stream = await agent.stream('repeat tool calls', {
+          memory: { thread: threadId, resource: resourceId },
         });
-        const threadId = 'thread-with-subscriber';
-        const resourceId = 'resource-with-subscriber';
-        const subscription = await agent.subscribeToThread({ threadId, resourceId });
+        await stream.consumeStream();
 
-        try {
-          const stream = await agent.stream('repeat tool calls', {
-            memory: { thread: threadId, resource: resourceId },
-          });
-          await stream.consumeStream();
-
-          const result = await mockMemory.recall({ threadId, resourceId });
-          const messages = result.messages;
-          expect(
-            messages[messages.length - 1]?.content?.parts?.some(
-              p => p.type === 'text' && p.text?.includes('Dummy response'),
-            ),
-          ).toBe(true);
-        } finally {
-          subscription.unsubscribe();
-        }
-      },
-    );
+        const result = await mockMemory.recall({ threadId, resourceId });
+        const messages = result.messages;
+        expect(
+          messages[messages.length - 1]?.content?.parts?.some(
+            p => p.type === 'text' && p.text?.includes('Dummy response'),
+          ),
+        ).toBe(true);
+      } finally {
+        subscription.unsubscribe();
+      }
+    });
 
     // Regression test for https://github.com/mastra-ai/mastra/issues/12566
     // stream-legacy creates threads with saveThread: false, causing a race condition
@@ -118,12 +109,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       agent.__setLogger(noopLogger);
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('hello', {
-          threadId: 'thread-12566',
-          resourceId: 'resource-12566',
-        });
-      } else {
+      {
         stream = await agent.stream('hello', {
           memory: {
             thread: 'thread-12566',
@@ -140,73 +126,6 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       // because of foreign key constraints (thread must exist before messages can reference it).
       expect(createThreadSaveThreadArg).not.toBe(false);
     });
-
-    it.skipIf(version === 'v2' || version === 'v3')(
-      'should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)',
-      async () => {
-        // This test reproduces the bug where real LLM providers (like OpenRouter)
-        // send multiple response-metadata chunks (after each text-delta)
-        // which causes the message to have multiple text parts, one for each chunks
-        // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
-        // instead of properly formatted messages like:
-        // [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
-
-        // NOTE: This test is skipped for v2 because it requires format: 'aisdk' which has been removed
-        const mockModel = new MockLanguageModelV1({
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-            stream: convertArrayToReadableStream([
-              { type: 'text-delta', textDelta: 'Hello' },
-              { type: 'text-delta', textDelta: ' world' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-              },
-            ]),
-          }),
-        });
-
-        const agent = new Agent({
-          id: 'test-agent-7050',
-          name: 'Test Agent 7050',
-          instructions: 'test',
-          model: mockModel,
-        });
-
-        let capturedStep: any = null;
-
-        const stream = await agent.streamLegacy('test message', {
-          threadId: 'test-thread-7050',
-          resourceId: 'test-resource-7050',
-          savePerStep: true,
-          onStepFinish: async (step: any) => {
-            capturedStep = step;
-          },
-        });
-
-        // Consume the v1 stream (StreamTextResult has textStream property)
-        for await (const _chunk of stream.textStream) {
-          // Just consume the stream
-        }
-
-        // Verify that onStepFinish was called with properly formatted messages
-        expect(capturedStep).toBeDefined();
-        expect(capturedStep.response).toBeDefined();
-        expect(capturedStep.response.messages).toBeDefined();
-        expect(Array.isArray(capturedStep.response.messages)).toBe(true);
-        expect(capturedStep.response.messages.length).toBeGreaterThan(0);
-
-        // Check that messages have the correct CoreMessage structure
-        const firstMessage = capturedStep.response.messages[0];
-        expect(firstMessage).toHaveProperty('role');
-        expect(firstMessage).toHaveProperty('content');
-        expect(typeof firstMessage.role).toBe('string');
-        expect(['assistant', 'system', 'user'].includes(firstMessage.role)).toBe(true);
-      },
-    );
 
     it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
       const mockMemory = new MockMemory();
@@ -229,12 +148,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('no progress', {
-          threadId: 'thread-2',
-          resourceId: 'resource-2',
-        });
-      } else {
+      {
         stream = await agent.stream('no progress', {
           memory: {
             thread: 'thread-2',
@@ -275,12 +189,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('interrupt before step', {
-          threadId: 'thread-3',
-          resourceId: 'resource-3',
-        });
-      } else {
+      {
         stream = await agent.stream('interrupt before step', {
           memory: {
             thread: 'thread-3',
@@ -316,19 +225,8 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
-      let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
-      if (version === 'v1') {
-        errorModel = new MockLanguageModelV1({
-          doStream: async () => {
-            const stream = new ReadableStream({
-              pull() {
-                throw new Error('Simulated stream error');
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-      } else {
+      let errorModel: MockLanguageModelV2;
+      {
         errorModel = new MockLanguageModelV2({
           doStream: async () => {
             const stream = new ReadableStream({
@@ -353,20 +251,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
 
       let stream;
       try {
-        if (version === 'v1') {
-          stream = await agent.streamLegacy('trigger error', {
-            memory: {
-              resource: 'user-err',
-              thread: {
-                id: 'thread-err-stream',
-              },
-            },
-          });
-
-          for await (const _ of stream.textStream) {
-            // Should throw
-          }
-        } else {
+        {
           stream = await agent.stream('trigger error', {
             memory: {
               resource: 'user-err',
@@ -401,7 +286,6 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
   });
 }
 
-runStreamTest('v1');
 runStreamTest('v2');
 runStreamTest('v3');
 runStreamTest('v4');

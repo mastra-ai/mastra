@@ -2818,15 +2818,6 @@ export class ProcessorRunner {
       const { model: _model, ...rest } = result;
       if (result.model) {
         const resolvedModel = await resolveModelConfig(result.model);
-        const isSupported = isSupportedLanguageModel(resolvedModel);
-        if (!isSupported) {
-          throw new MastraError({
-            category: 'USER',
-            domain: 'AGENT',
-            id: 'PROCESSOR_RETURNED_UNSUPPORTED_MODEL',
-            text: `Processor ${processor.id} returned an unsupported model version ${resolvedModel.specificationVersion} in step ${stepNumber}. Only ${supportedLanguageModelSpecifications.join(', ')} models are supported in processInputStep.`,
-          });
-        }
 
         return {
           model: resolvedModel,

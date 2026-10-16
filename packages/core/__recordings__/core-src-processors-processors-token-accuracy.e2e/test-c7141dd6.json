@@ -1,126 +1,226 @@
 {
   "meta": {
     "name": "test-c7141dd6",
-    "testFile": "packages/core/src/processors/processors/token-accuracy.e2e.test.ts",
-    "testName": "TokenLimiterProcessor > 98% accuracy > 20 messages, 0 tools",
+    "testFile": "src/processors/processors/token-accuracy.e2e.test.ts",
+    "testName": "TokenLimiterProcessor > with gateway mock > 98% accuracy > 20 messages, 0 tools",
     "model": "gpt-4o-mini",
-    "createdAt": "2026-05-18T10:50:52.358Z"
+    "createdAt": "2026-05-18T10:50:52.358Z",
+    "updatedAt": "2026-10-16T17:50:43.871Z"
   },
   "recordings": [
     {
-      "hash": "6e3b644f2a36588f",
+      "hash": "d9c7521b6b96d0c1",
       "request": {
-        "url": "https://api.openai.com/v1/chat/completions",
+        "url": "https://api.openai.com/v1/responses",
         "method": "POST",
         "body": {
           "model": "gpt-4o-mini",
-          "temperature": 0,
-          "messages": [
+          "input": [
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "user",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             },
             {
               "role": "assistant",
-              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+                }
+              ]
             }
           ],
           "tools": [
             {
               "type": "function",
-              "function": {
-                "name": "calculatorTool",
-                "description": "Perform a simple calculation",
-                "parameters": {
-                  "$schema": "http://json-schema.org/draft-07/schema#",
-                  "type": "object",
-                  "properties": {
-                    "expression": {
-                      "type": "string",
-                      "description": "The mathematical expression to calculate"
-                    }
-                  },
-                  "required": ["expression"],
-                  "additionalProperties": false
-                }
+              "name": "calculatorTool",
+              "description": "Perform a simple calculation",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "expression": {
+                    "type": "string",
+                    "description": "The mathematical expression to calculate"
+                  }
+                },
+                "required": [
+                  "expression"
+                ],
+                "additionalProperties": false
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1779101450220
+        "timestamp": 1792173041831
       },
       "response": {
         "status": 200,
@@ -129,61 +229,137 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fda4da039beba76-BRU",
+          "cf-ray": "a4b8e84ccba333fc-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Mon, 18 May 2026 10:50:52 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1668",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Fri, 16 Oct 2026 17:50:43 GMT",
+          "openai-processing-ms": "1067",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9977",
-          "x-ratelimit-remaining-tokens": "197384",
-          "x-ratelimit-reset-requests": "3m16.254s",
-          "x-ratelimit-reset-tokens": "784ms",
-          "x-request-id": "req_e61950c3f8194b9480b61a28974936db"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149998065",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_fd2a187682c046dbb9c33aec2633425b"
         },
         "body": {
-          "id": "chatcmpl-DgpqcdgVkjkj1ON1N9plzM0nvtkAT",
-          "object": "chat.completion",
-          "created": 1779101450,
+          "id": "resp_0e97a969fcf59c5c006ad263f2ca9487d0ba66fdfb61de53e1",
+          "object": "response",
+          "created_at": 1792173042,
+          "status": "completed",
+          "access_programs": null,
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1792173043,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
           "model": "gpt-4o-mini-2024-07-18",
-          "choices": [
+          "moderation": null,
+          "output": [
             {
-              "index": 0,
-              "message": {
-                "role": "assistant",
-                "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape",
-                "refusal": null,
-                "annotations": []
-              },
-              "logprobs": null,
-              "finish_reason": "stop"
+              "id": "msg_0e97a969fcf59c5c006ad263f36e7487d0aaf5f8229859eced",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "If you'd like to do something specific with these fruits, like organize them, analyze them, or create a recipe, just let me know!"
+                }
+              ],
+              "role": "assistant"
             }
           ],
-          "usage": {
-            "prompt_tokens": 1725,
-            "completion_tokens": 101,
-            "total_tokens": 1826,
-            "prompt_tokens_details": {
-              "cached_tokens": 1664,
-              "audio_tokens": 0
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "context": null,
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
             },
-            "completion_tokens_details": {
-              "reasoning_tokens": 0,
-              "audio_tokens": 0,
-              "accepted_prediction_tokens": 0,
-              "rejected_prediction_tokens": 0
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
             }
           },
-          "service_tier": "default",
-          "system_fingerprint": "fp_bf1f66ac25"
+          "tools": [
+            {
+              "type": "function",
+              "description": "Perform a simple calculation",
+              "name": "calculatorTool",
+              "output_schema": null,
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "expression": {
+                    "type": "string",
+                    "description": "The mathematical expression to calculate"
+                  }
+                },
+                "required": [
+                  "expression"
+                ],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 1719,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0
+            },
+            "output_tokens": 30,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 1749
+          },
+          "user": null,
+          "metadata": {}
         },
         "isStreaming": false
       }

@@ -1,8 +1,8 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { PromptInjectionDetector } from './prompt-injection-detector';
 import type { PromptInjectionResult } from './prompt-injection-detector';
 
@@ -39,23 +39,20 @@ function createMockDetectionResult(
   return result;
 }
 
-function setupMockModel(result: PromptInjectionResult | PromptInjectionResult[]): MockLanguageModelV1 {
+function setupMockModel(result: PromptInjectionResult | PromptInjectionResult[]): ReturnType<typeof mockTextModel> {
   const results = Array.isArray(result) ? result : [result];
   let callCount = 0;
 
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
-    doGenerate: async () => {
-      const currentResult = results[callCount % results.length];
-      callCount++;
+  return mockTextModel(async () => {
+    const currentResult = results[callCount % results.length];
+    callCount++;
 
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `${JSON.stringify(currentResult)}`,
-      };
-    },
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: `${JSON.stringify(currentResult)}`,
+    };
   });
 }
 
@@ -534,10 +531,8 @@ describe('PromptInjectionDetector', () => {
 
   describe('error handling', () => {
     it('should fail open when detection agent fails', async () => {
-      const model = new MockLanguageModelV1({
-        doGenerate: async () => {
-          throw new TripWire('Detection agent failed');
-        },
+      const model = mockTextModel(async () => {
+        throw new TripWire('Detection agent failed');
       });
       const detector = new PromptInjectionDetector({
         model,
@@ -561,11 +556,8 @@ describe('PromptInjectionDetector', () => {
     });
 
     it('should propagate the processor tripwire when strict model detection fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new Error('provider failure');
-        },
+      const model = mockTextModel(async () => {
+        throw new Error('provider failure');
       });
       const detector = new PromptInjectionDetector({ model, errorStrategy: 'strict' });
       const tripwire = new TripWire('strict prompt injection failure');
@@ -648,14 +640,12 @@ describe('PromptInjectionDetector', () => {
 
   describe('edge cases', () => {
     it('should handle malformed detection results gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'invalid json',
-        }),
-      });
+      const model = mockTextModel(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'invalid json',
+      }));
       const detector = new PromptInjectionDetector({
         model,
         strategy: 'warn',

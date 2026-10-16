@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ActorSignal } from '../../auth/ee';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL } from '../constants';
 import { runAgentEntry } from './run-agent-entry';
 import { runToolEntry } from './run-tool-entry';
 import type { EntryExecuteContext } from './types';
@@ -15,10 +15,10 @@ import type { EntryExecuteContext } from './types';
 function makeRecordingAgent(record: (opts: any) => void) {
   return {
     name: 'agent-1',
-    getModel: async () => ({ specificationVersion: 'v1' }),
-    streamLegacy: async (_prompt: string, opts: any) => {
+    stream: async (_prompt: string, opts: any) => {
       record(opts);
       return {
+        text: Promise.resolve('done'),
         fullStream: (async function* () {
           opts.onFinish?.({ text: 'done' });
         })(),
@@ -33,7 +33,6 @@ function makeCtx(actor: ActorSignal | undefined): EntryExecuteContext {
     runId: 'run-1',
     workflowId: 'wf-1',
     [PUBSUB_SYMBOL]: { publish: async () => {} },
-    [STREAM_FORMAT_SYMBOL]: 'legacy',
     requestContext: {},
     actor,
     abortSignal: new AbortController().signal,

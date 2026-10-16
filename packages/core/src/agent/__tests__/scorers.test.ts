@@ -10,7 +10,7 @@ vi.mock('../../evals/hooks', () => ({
   runScorer: vi.fn(),
 }));
 
-function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
+function scorersTests(version: 'v2' | 'v3' | 'v4') {
   const dummyModel = getDummyResponseModel(version);
 
   describe('scorer output data', () => {
@@ -23,11 +23,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green', {
-          returnScorerData: true,
-        });
-      } else {
+      {
         result = await agent.generate('Make it green', {
           returnScorerData: true,
         });
@@ -52,11 +48,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green', {
-          returnScorerData: false,
-        });
-      } else {
+      {
         result = await agent.generate('Make it green', {
           returnScorerData: false,
         });
@@ -74,9 +66,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
 
       let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green');
-      } else {
+      {
         result = await agent.generate('Make it green');
       }
 
@@ -124,9 +114,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
     });
 
     it(`${version} - should call scorerTest when no override is provided`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world');
-      } else {
+      {
         await agent.generate('Hello world');
       }
 
@@ -141,13 +129,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
     });
 
     it(`${version} - should use override scorers when provided in generate options`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      } else {
+      {
         await agent.generate('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
@@ -178,13 +160,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
 
     it(`${version} - should call scorers when provided in stream options`, async () => {
       let result: any;
-      if (version === 'v1') {
-        result = await agent.streamLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      } else {
+      {
         result = await agent.stream('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
@@ -204,13 +180,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
     });
 
     it(`${version} - can use scorer name for scorer config for generate`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      } else {
+      {
         await agent.generate('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
@@ -229,13 +199,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
     });
 
     it(`${version} - should call runScorer with correct parameters`, async () => {
-      if (version === 'v1') {
-        await agent.generateLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      } else {
+      {
         await agent.generate('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
@@ -284,15 +248,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
         scorers: { scorer1 },
       });
 
-      if (version === 'v1') {
-        await agentWithMemory.generateLegacy('Hello world', {
-          threadId: 'thread-123',
-          resourceId: 'resource-456',
-          scorers: {
-            scorer1: { scorer: mastraWithMemory.getScorer('scorer1') },
-          },
-        });
-      } else {
+      {
         await agentWithMemory.generate('Hello world', {
           memory: {
             thread: 'thread-123',
@@ -315,7 +271,6 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   });
 }
 
-scorersTests('v1');
 scorersTests('v2');
 scorersTests('v3');
 scorersTests('v4');

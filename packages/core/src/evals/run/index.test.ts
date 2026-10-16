@@ -1,4 +1,3 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
@@ -8,6 +7,7 @@ import { MockMemory } from '../../memory/mock';
 import { NoOpObservability } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
@@ -31,14 +31,12 @@ const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
 };
 
 const createMockAgent = (response: string = 'Dummy response'): Agent => {
-  const dummyModel = new MockLanguageModelV1({
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
-      usage: { promptTokens: 10, completionTokens: 20 },
-      text: response,
-    }),
-  });
+  const dummyModel = mockTextModel(async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: response,
+  }));
 
   const agent = new Agent({
     id: 'mockAgent',
@@ -48,7 +46,7 @@ const createMockAgent = (response: string = 'Dummy response'): Agent => {
   });
 
   // Add a spy to the generate method (without mocking the return value)
-  vi.spyOn(agent, 'generateLegacy');
+  vi.spyOn(agent, 'generate');
 
   return agent;
 };
@@ -152,7 +150,7 @@ describe('runEvals', () => {
   });
 
   describe('V2 Agent integration', () => {
-    it('should call agent.generateLegacy with correct parameters', async () => {
+    it('should call agent.generate with correct parameters', async () => {
       const mockAgent = createMockAgentV2();
       await runEvals({
         data: [{ input: 'test input', groundTruth: 'truth' }],
@@ -173,15 +171,15 @@ describe('runEvals', () => {
   });
 
   describe('Agent integration', () => {
-    it('should call agent.generateLegacy with correct parameters', async () => {
+    it('should call agent.generate with correct parameters', async () => {
       await runEvals({
         data: [{ input: 'test input', groundTruth: 'truth' }],
         scorers: mockScorers,
         target: mockAgent,
       });
 
-      expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generateLegacy).toHaveBeenCalledWith(
+      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
+      expect(mockAgent.generate).toHaveBeenCalledWith(
         'test input',
         expect.objectContaining({
           scorers: {},
@@ -206,8 +204,8 @@ describe('runEvals', () => {
         target: mockAgent,
       });
 
-      expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generateLegacy).toHaveBeenCalledWith(
+      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
+      expect(mockAgent.generate).toHaveBeenCalledWith(
         'test input',
         expect.objectContaining({
           scorers: {},
@@ -228,7 +226,7 @@ describe('runEvals', () => {
       };
 
       // Mock the agent's generate method to return the expected response
-      mockAgent.generateLegacy = vi.fn().mockResolvedValue(mockResponse);
+      mockAgent.generate = vi.fn().mockResolvedValue(mockResponse);
 
       await runEvals({
         data: [{ input: 'test', groundTruth: 'truth' }],
@@ -246,7 +244,7 @@ describe('runEvals', () => {
     });
 
     it('should handle missing scoringData gracefully', async () => {
-      mockAgent.generateLegacy = vi.fn().mockResolvedValue({ response: 'test' });
+      mockAgent.generate = vi.fn().mockResolvedValue({ response: 'test' });
 
       await runEvals({
         data: [{ input: 'test', groundTruth: 'truth' }],
@@ -289,7 +287,7 @@ describe('runEvals', () => {
   });
   describe('Error handling', () => {
     it('should handle agent generate errors', async () => {
-      mockAgent.generateLegacy = vi.fn().mockRejectedValue(new Error('Agent error'));
+      mockAgent.generate = vi.fn().mockRejectedValue(new Error('Agent error'));
 
       await expect(
         runEvals({
@@ -737,27 +735,6 @@ describe('runEvals', () => {
         expect.objectContaining({
           scorers: {},
           returnScorerData: true,
-        }),
-      );
-    });
-
-    it('should not pass targetOptions to generateLegacy (legacy path)', async () => {
-      const mockLegacyAgent = createMockAgent();
-
-      await runEvals({
-        data: [{ input: 'test input', groundTruth: 'truth' }],
-        scorers: mockScorers,
-        target: mockLegacyAgent,
-        targetOptions: { maxSteps: 5 } as any,
-      });
-
-      // Legacy path should not receive targetOptions
-      expect(mockLegacyAgent.generateLegacy).toHaveBeenCalledWith(
-        'test input',
-        expect.objectContaining({
-          scorers: {},
-          returnScorerData: true,
-          requestContext: undefined,
         }),
       );
     });

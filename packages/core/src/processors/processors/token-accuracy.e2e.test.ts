@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { openai } from '@ai-sdk/openai';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { getLLMTestMode, defaultNameGenerator, getLLMRecordingsDir } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -151,7 +150,8 @@ describe('TokenLimiterProcessor', () => {
     });
 
     const estimate = await estimateTokens(messagesV2);
-    const used = (await agent.generateLegacy(fakeCore)).usage.promptTokens;
+    // Usage on the result is summed across steps; the estimate is for the first prompt only.
+    const used = (await agent.generate(fakeCore)).steps[0]!.usage.inputTokens!;
 
     // Check if within accuracy margin
     expect(percentDifference(estimate, used)).toBeLessThanOrEqual(accuracyMargin);
@@ -196,7 +196,7 @@ describe('TokenLimiterProcessor', () => {
         agent = new Agent({
           id: 'token-estimate-agent',
           name: 'Token Estimate Agent',
-          model: openai('gpt-4o-mini'),
+          model: 'openai/gpt-4o-mini',
           instructions: ``,
           tools: { calculatorTool },
         });

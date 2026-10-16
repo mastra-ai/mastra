@@ -12,7 +12,6 @@
  * Agent + MockMemory + real Dataset.startExperiment — the pre-existing
  * experiment tests mock the agent, which is why the bug went unnoticed.
  */
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent/agent';
@@ -25,6 +24,7 @@ import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
+import { mockTextModel } from '../../test-utils/llm-mock';
 import { Dataset } from '../dataset';
 
 const ITEM_INPUTS = ['Hello there', 'Second item', 'Third item'];
@@ -55,17 +55,15 @@ function createV2Model() {
 }
 
 function createV1Model() {
-  return new MockLanguageModelV1({
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop' as const,
-      usage: { promptTokens: 10, completionTokens: 20 },
-      text: 'Dummy response',
-    }),
-  });
+  return mockTextModel(async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: 'Dummy response',
+  }));
 }
 
-function createMemoryAgent(model: MockLanguageModelV1 | MockLanguageModelV2) {
+function createMemoryAgent(model: MockLanguageModelV2) {
   const memory = new MockMemory({ storage: new InMemoryStore() });
   const agent = new Agent({
     id: 'memory-agent',

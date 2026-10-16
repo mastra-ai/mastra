@@ -13,7 +13,7 @@ function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string 
     { type: 'text-delta' as const, id: 'text', delta: text },
     { type: 'text-end' as const, id: 'text' },
   ];
-  if (version === 'v2') {
+  {
     return new MockLanguageModelV2({
       doGenerate: async ({ prompt }) => ({
         content: [{ type: 'text', text: await respond(prompt) }],

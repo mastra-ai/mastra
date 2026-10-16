@@ -1,29 +1,13 @@
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 
-function callbackTests(version: 'v1' | 'v2') {
-  let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+function callbackTests(version: 'v2') {
+  let dummyModel: MockLanguageModelV2;
 
   beforeEach(() => {
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'Dummy response',
-        }),
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-    } else {
+    {
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -58,36 +42,21 @@ function callbackTests(version: 'v1' | 'v2') {
         name: 'Test Default onFinish',
         model: dummyModel,
         instructions: 'You are a helpful assistant.',
-        ...(version === 'v1'
-          ? {
-              defaultStreamOptionsLegacy: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }
-          : {
-              defaultOptions: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }),
+        ...{
+          defaultOptions: {
+            onFinish: data => {
+              onFinishCalled = true;
+              finishData = data;
+            },
+          },
+        },
       });
 
       // Call stream without passing any options - should use defaultOptions
-      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
+      const result = await agent.stream('How are you?');
 
       // Consume the stream to trigger onFinish
-      if (version === 'v1') {
-        let fullText = '';
-        for await (const chunk of result.textStream) {
-          fullText += chunk;
-        }
-        expect(fullText).toBe('Dummy response');
-      } else {
+      {
         await result.consumeStream();
       }
 
@@ -104,37 +73,21 @@ function callbackTests(version: 'v1' | 'v2') {
         name: 'Test Default onFinish Empty',
         model: dummyModel,
         instructions: 'You are a helpful assistant.',
-        ...(version === 'v1'
-          ? {
-              defaultStreamOptionsLegacy: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }
-          : {
-              defaultOptions: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }),
+        ...{
+          defaultOptions: {
+            onFinish: data => {
+              onFinishCalled = true;
+              finishData = data;
+            },
+          },
+        },
       });
 
       // Call stream with empty options - should still use defaultOptions
-      const result =
-        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
+      const result = await agent.stream('How are you?', {});
 
       // Consume the stream to trigger onFinish
-      if (version === 'v1') {
-        let fullText = '';
-        for await (const chunk of result.textStream) {
-          fullText += chunk;
-        }
-        expect(fullText).toBe('Dummy response');
-      } else {
+      {
         await result.consumeStream();
       }
 
@@ -152,47 +105,25 @@ function callbackTests(version: 'v1' | 'v2') {
         name: 'Test Override onFinish',
         model: dummyModel,
         instructions: 'You are a helpful assistant.',
-        ...(version === 'v1'
-          ? {
-              defaultStreamOptionsLegacy: {
-                onFinish: () => {
-                  defaultOnFinishCalled = true;
-                },
-              },
-            }
-          : {
-              defaultOptions: {
-                onFinish: () => {
-                  defaultOnFinishCalled = true;
-                },
-              },
-            }),
+        ...{
+          defaultOptions: {
+            onFinish: () => {
+              defaultOnFinishCalled = true;
+            },
+          },
+        },
       });
 
       // Call stream with explicit onFinish - should override defaultOptions
-      const result =
-        version === 'v1'
-          ? await agent.streamLegacy('How are you?', {
-              onFinish: data => {
-                passedOnFinishCalled = true;
-                finishData = data;
-              },
-            })
-          : await agent.stream('How are you?', {
-              onFinish: data => {
-                passedOnFinishCalled = true;
-                finishData = data;
-              },
-            });
+      const result = await agent.stream('How are you?', {
+        onFinish: data => {
+          passedOnFinishCalled = true;
+          finishData = data;
+        },
+      });
 
       // Consume the stream to trigger onFinish
-      if (version === 'v1') {
-        let fullText = '';
-        for await (const chunk of result.textStream) {
-          fullText += chunk;
-        }
-        expect(fullText).toBe('Dummy response');
-      } else {
+      {
         await result.consumeStream();
       }
 
@@ -221,11 +152,7 @@ function callbackTests(version: 'v1' | 'v2') {
         finishData = data;
       };
 
-      if (version === 'v1') {
-        result = await agent.streamLegacy('How are you?', {
-          onFinish,
-        });
-      } else {
+      {
         result = await agent.stream('How are you?', {
           onFinish,
         });
@@ -249,5 +176,4 @@ function callbackTests(version: 'v1' | 'v2') {
   });
 }
 
-callbackTests('v1');
 callbackTests('v2');

@@ -61,23 +61,10 @@ export function createTripWireFromChunk(chunk: TripwireChunk): TripWire {
 }
 
 /**
- * Extracts text delta from a stream chunk, handling V1 vs V2 differences.
- *
- * V1 (AI SDK v4): Uses `chunk.textDelta` for raw text
- * V2 (AI SDK v5): Uses `chunk.payload.text` for normalized text
- *
- * @param chunk - The stream chunk
- * @param isV2Model - Whether this is a V2 model (uses normalized payload)
- * @returns The text delta string, or undefined if not a text-delta chunk
+ * Extracts the text from a text-delta stream chunk, or undefined for other chunks.
  */
-export function getTextDeltaFromChunk(
-  chunk: { type: string; textDelta?: string; payload?: { text?: string } },
-  isV2Model: boolean,
-): string | undefined {
-  if (chunk.type !== 'text-delta') {
-    return undefined;
-  }
-  return isV2Model ? chunk.payload?.text : chunk.textDelta;
+export function getTextDeltaFromChunk(chunk: { type: string; payload?: { text?: string } }): string | undefined {
+  return chunk.type === 'text-delta' ? chunk.payload?.text : undefined;
 }
 
 /**

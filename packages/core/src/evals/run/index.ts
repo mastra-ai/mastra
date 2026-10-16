@@ -6,7 +6,6 @@ import type {
   AiMessageType,
   UIMessageWithMetadata,
 } from '../../agent';
-import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
@@ -1029,40 +1028,27 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, ta
 
 async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>, targetOptions?: RunEvalsAgentOptions) {
   const observabilityContext = resolveObservabilityContext(item);
-  const model = await agent.getModel();
-  if (isSupportedLanguageModel(model)) {
-    const { structuredOutput, memory, ...restOptions } = targetOptions ?? {};
-    const baseOptions = {
-      ...restOptions,
-      ...observabilityContext,
-      scorers: {},
-      returnScorerData: true,
-      requestContext: item.requestContext,
-      // Single-turn does not own a thread, so a caller-supplied memory must carry
-      // its own thread (the runEvals-level thread relaxation only applies to the
-      // multi-turn `inputs`/`turns` paths, which inject a shared thread per item).
-      ...(memory ? { memory: memory as AgentMemoryOption } : {}),
-    };
-    const result = structuredOutput
-      ? await agent.generate(item.input, { ...baseOptions, structuredOutput })
-      : await agent.generate(item.input, baseOptions);
 
-    return {
-      ...result,
-      entityType: EntityType.AGENT,
-    };
-  } else {
-    const result = await agent.generateLegacy(item.input, {
-      scorers: {},
-      returnScorerData: true,
-      requestContext: item.requestContext,
-      ...observabilityContext,
-    });
-    return {
-      ...result,
-      entityType: EntityType.AGENT,
-    };
-  }
+  const { structuredOutput, memory, ...restOptions } = targetOptions ?? {};
+  const baseOptions = {
+    ...restOptions,
+    ...observabilityContext,
+    scorers: {},
+    returnScorerData: true,
+    requestContext: item.requestContext,
+    // Single-turn does not own a thread, so a caller-supplied memory must carry
+    // its own thread (the runEvals-level thread relaxation only applies to the
+    // multi-turn `inputs`/`turns` paths, which inject a shared thread per item).
+    ...(memory ? { memory: memory as AgentMemoryOption } : {}),
+  };
+  const result = structuredOutput
+    ? await agent.generate(item.input, { ...baseOptions, structuredOutput })
+    : await agent.generate(item.input, baseOptions);
+
+  return {
+    ...result,
+    entityType: EntityType.AGENT,
+  };
 }
 
 /** Per-turn execution record: the turn's input, its own output, and trace metadata. */
@@ -1088,9 +1074,7 @@ async function runAgentTurns(
   targetOptions?: RunEvalsAgentOptions,
 ): Promise<{ allOutputMessages: any[]; perTurn: PerTurnRecord[]; lastResult: any }> {
   const observabilityContext = resolveObservabilityContext(item);
-  const model = await agent.getModel();
   const threadId = globalThis.crypto.randomUUID();
-  const supported = isSupportedLanguageModel(model);
 
   // Multi-turn recall requires a configured memory store: the shared threadId is
   // what lets turn N see turns 1..N-1. Without memory each turn runs in isolation.
@@ -1120,28 +1104,17 @@ async function runAgentTurns(
 
   for (const turnInput of inputs) {
     let result: any;
-    if (supported) {
-      const baseOptions = {
-        ...restOptions,
-        ...observabilityContext,
-        scorers: {},
-        returnScorerData: true,
-        requestContext: item.requestContext,
-        memory: turnMemory,
-      };
-      result = structuredOutput
-        ? await agent.generate(turnInput, { ...baseOptions, structuredOutput })
-        : await agent.generate(turnInput, baseOptions);
-    } else {
-      result = await agent.generateLegacy(turnInput, {
-        ...restOptions,
-        scorers: {},
-        returnScorerData: true,
-        requestContext: item.requestContext,
-        memory: turnMemory,
-        ...observabilityContext,
-      });
-    }
+    const baseOptions = {
+      ...restOptions,
+      ...observabilityContext,
+      scorers: {},
+      returnScorerData: true,
+      requestContext: item.requestContext,
+      memory: turnMemory,
+    };
+    result = structuredOutput
+      ? await agent.generate(turnInput, { ...baseOptions, structuredOutput })
+      : await agent.generate(turnInput, baseOptions);
 
     lastResult = result;
 

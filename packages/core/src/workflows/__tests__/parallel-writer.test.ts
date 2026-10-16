@@ -39,14 +39,14 @@ describe('Parallel Steps with Writer', () => {
       runId: 'test-parallel-writer',
     });
 
-    const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
+    const streamResult = run.stream({ inputData: {} });
 
     const collectedStreamData: StreamEvent[] = [];
-    for await (const data of stream) {
+    for await (const data of streamResult.fullStream) {
       collectedStreamData.push(JSON.parse(JSON.stringify(data)));
     }
 
-    const executionResult = await getWorkflowState();
+    const executionResult = await streamResult.result;
 
     // Verify both steps completed successfully
     expect(executionResult.steps['log-step-1']?.status).toBe('success');
@@ -97,14 +97,14 @@ describe('Parallel Steps with Writer', () => {
       runId: 'test-multi-parallel-writer',
     });
 
-    const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
+    const streamResult = run.stream({ inputData: {} });
 
     const collectedStreamData: StreamEvent[] = [];
-    for await (const data of stream) {
+    for await (const data of streamResult.fullStream) {
       collectedStreamData.push(JSON.parse(JSON.stringify(data)));
     }
 
-    const executionResult = await getWorkflowState();
+    const executionResult = await streamResult.result;
 
     // Verify all steps completed successfully
     expect(executionResult.steps['log-step-1']?.status).toBe('success');

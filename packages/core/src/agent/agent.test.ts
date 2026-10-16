@@ -3,7 +3,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { LanguageModelV2CallOptions, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError, tool } from '@internal/ai-sdk-v5';
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -25,88 +24,14 @@ import { Agent } from './index';
 
 config();
 
-function agentTests({ version }: { version: 'v1' | 'v2' }) {
+function agentTests({ version }: { version: 'v2' }) {
   const _integration = new TestIntegration();
-  let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-  let electionModel: MockLanguageModelV1 | MockLanguageModelV2;
-  let obamaObjectModel: MockLanguageModelV1 | MockLanguageModelV2;
+  let dummyModel: MockLanguageModelV2;
+  let electionModel: MockLanguageModelV2;
+  let obamaObjectModel: MockLanguageModelV2;
 
   beforeEach(() => {
-    if (version === 'v1') {
-      dummyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Dummy response`,
-        }),
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-
-      electionModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.`,
-        }),
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [
-              { type: 'text-delta', textDelta: 'Donald' },
-              { type: 'text-delta', textDelta: ' Trump' },
-              { type: 'text-delta', textDelta: ` won` },
-              { type: 'text-delta', textDelta: ` the` },
-              { type: 'text-delta', textDelta: ` ` },
-              { type: 'text-delta', textDelta: `201` },
-              { type: 'text-delta', textDelta: `6` },
-              { type: 'text-delta', textDelta: ` US` },
-              { type: 'text-delta', textDelta: ` presidential` },
-              { type: 'text-delta', textDelta: ` election` },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                logprobs: undefined,
-                usage: { completionTokens: 10, promptTokens: 3 },
-              },
-            ],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-
-      obamaObjectModel = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `{"winner":"Barack Obama"}`,
-        }),
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [
-              { type: 'text-delta', textDelta: '{' },
-              { type: 'text-delta', textDelta: '"winner":' },
-              { type: 'text-delta', textDelta: `"Barack Obama"` },
-              { type: 'text-delta', textDelta: `}` },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                logprobs: undefined,
-                usage: { completionTokens: 10, promptTokens: 3 },
-              },
-            ],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-    } else {
+    {
       dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -225,9 +150,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
 
-      if (version === 'v1') {
-        response = await agentOne.generateLegacy('Who won the 2016 US presidential election?');
-      } else {
+      {
         response = await agentOne.generate('Who won the 2016 US presidential election?');
       }
 
@@ -254,9 +177,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
 
-      if (version === 'v1') {
-        response = await agentOne.streamLegacy('Who won the 2016 US presidential election?');
-      } else {
+      {
         response = await agentOne.stream('Who won the 2016 US presidential election?');
       }
 
@@ -276,57 +197,31 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let configuredModelUsed = false;
       let overrideModelUsed = false;
 
-      const configuredModel =
-        version === 'v1'
-          ? new MockLanguageModelV1({
-              doGenerate: async () => {
-                configuredModelUsed = true;
-                return {
-                  rawCall: { rawPrompt: null, rawSettings: {} },
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 20 },
-                  text: 'configured model',
-                };
-              },
-            })
-          : new MockLanguageModelV2({
-              doGenerate: async () => {
-                configuredModelUsed = true;
-                return {
-                  rawCall: { rawPrompt: null, rawSettings: {} },
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  content: [{ type: 'text', text: 'configured model' }],
-                  warnings: [],
-                };
-              },
-            });
+      const configuredModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          configuredModelUsed = true;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'configured model' }],
+            warnings: [],
+          };
+        },
+      });
 
-      const overrideModel =
-        version === 'v1'
-          ? new MockLanguageModelV1({
-              doGenerate: async () => {
-                overrideModelUsed = true;
-                return {
-                  rawCall: { rawPrompt: null, rawSettings: {} },
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 20 },
-                  text: 'override model',
-                };
-              },
-            })
-          : new MockLanguageModelV2({
-              doGenerate: async () => {
-                overrideModelUsed = true;
-                return {
-                  rawCall: { rawPrompt: null, rawSettings: {} },
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  content: [{ type: 'text', text: 'override model' }],
-                  warnings: [],
-                };
-              },
-            });
+      const overrideModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          overrideModelUsed = true;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'override model' }],
+            warnings: [],
+          };
+        },
+      });
 
       const agent = new Agent({
         id: 'override-agent',
@@ -335,10 +230,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         model: configuredModel,
       });
 
-      const result =
-        version === 'v1'
-          ? await agent.generateLegacy('Hello', { model: overrideModel })
-          : await agent.generate('Hello', { model: overrideModel });
+      const result = await agent.generate('Hello', { model: overrideModel });
 
       expect(result.text).toBe('override model');
       expect(overrideModelUsed).toBe(true);
@@ -361,13 +253,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const agentOne = mastra.getAgent('electionAgent');
 
       let response;
-      if (version === 'v1') {
-        response = await agentOne.generateLegacy('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
-        });
-      } else {
+      {
         response = await agentOne.generate('Who won the 2012 US presidential election?', {
           structuredOutput: {
             schema: z.object({
@@ -397,25 +283,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const agentOne = mastra.getAgent('electionAgent');
 
       let response;
-      if (version === 'v1') {
-        response = await agentOne.streamLegacy('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
-        });
-        const { partialObjectStream } = response;
-
-        let previousPartialObject = {} as { winner: string };
-        for await (const partialObject of partialObjectStream) {
-          if (partialObject!['winner'] && previousPartialObject['winner']) {
-            expect(partialObject!['winner'] === previousPartialObject['winner']).toBe(false);
-          }
-          previousPartialObject = partialObject! as { winner: string };
-          expect(partialObject).toBeDefined();
-        }
-
-        expect(previousPartialObject['winner']).toBe('Barack Obama');
-      } else {
+      {
         response = await agentOne.stream('Who won the 2012 US presidential election?', {
           structuredOutput: {
             schema: z.object({
@@ -437,24 +305,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   describe(`${version} - agent memory with metadata`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV2;
     beforeEach(() => {
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Dummy response`,
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [{ type: 'text-delta', textDelta: 'dummy' }],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -507,17 +360,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'test' },
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -556,17 +399,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'updated' },
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -604,17 +437,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'same' },
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -640,17 +463,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       let res;
-      if (version === 'v1') {
-        res = await agent.streamLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'test-stream' },
-            },
-          },
-        });
-      } else {
+      {
         res = await agent.stream('hello', {
           memory: {
             resource: 'user-1',
@@ -682,7 +495,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           memory: mockMemory,
         });
 
-        await agent.generateLegacy('hello', {
+        await agent.generate('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
@@ -706,7 +519,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           memory: mockMemory,
         });
 
-        const stream = await agent.streamLegacy('hello', {
+        const stream = await agent.stream('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
@@ -723,70 +536,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
   describe(`${version} - Agent save message parts`, () => {
     // Model that emits 10 parts
-    let dummyResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
-    let emptyResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
-    let errorResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let dummyResponseModel: MockLanguageModelV2;
+    let emptyResponseModel: MockLanguageModelV2;
+    let errorResponseModel: MockLanguageModelV2;
 
     beforeEach(() => {
-      if (version === 'v1') {
-        dummyResponseModel = new MockLanguageModelV1({
-          doGenerate: async _options => ({
-            text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async _options => {
-            let count = 0;
-            const stream = new ReadableStream({
-              pull(controller) {
-                if (count < 10) {
-                  controller.enqueue({
-                    type: 'text-delta',
-                    textDelta: `Dummy response ${count}`,
-                    createdAt: new Date(Date.now() + count * 1000).toISOString(),
-                  });
-                  count++;
-                } else {
-                  controller.close();
-                }
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        // Model never emits any parts
-        emptyResponseModel = new MockLanguageModelV1({
-          doGenerate: async _options => ({
-            text: undefined,
-            finishReason: 'stop',
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-
-        // Model throws immediately before emitting any part
-        errorResponseModel = new MockLanguageModelV1({
-          doGenerate: async _options => {
-            throw new Error('Immediate interruption');
-          },
-          doStream: async _options => {
-            const stream = new ReadableStream({
-              pull() {
-                throw new Error('Immediate interruption');
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-      } else {
+      {
         dummyResponseModel = new MockLanguageModelV2({
           doGenerate: async _options => ({
             text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
@@ -894,12 +649,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       try {
-        if (version === 'v1') {
-          await agent.generateLegacy('interrupt before step', {
-            threadId: 'thread-3-generate',
-            resourceId: 'resource-3-generate',
-          });
-        } else {
+        {
           await agent.generate('interrupt before step', {
             memory: {
               thread: 'thread-3-generate',
@@ -916,10 +666,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         resourceId: 'resource-3-generate',
       });
 
-      if (version === 'v1') {
-        expect(result.messages.length).toBe(0);
-        expect(saveCallCount).toBe(0);
-      } else {
+      {
         expect(result.messages.map(message => message.role)).toEqual(['user', 'assistant']);
         expect(result.messages[1].content.parts).toEqual([
           {
@@ -932,7 +679,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
-  if (version === 'v2') {
+  {
     describe('error handling consistency', () => {
       // Helper to create a model that calls a non-existent tool
       function createModelWithNonExistentToolCall() {
@@ -1235,36 +982,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   }
 
   describe(`${version} - UIMessageWithMetadata support`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV2;
     const mockMemory = new MockMemory();
 
     beforeEach(() => {
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            finishReason: 'stop',
-            usage: { completionTokens: 10, promptTokens: 3 },
-            text: 'Response acknowledging metadata',
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Response' },
-                { type: 'text-delta', textDelta: ' acknowledging' },
-                { type: 'text-delta', textDelta: ' metadata' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1313,16 +1035,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         },
       ];
 
-      if (version === 'v1') {
-        await agent.generateLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'customer-12345',
-            thread: {
-              id: 'support-thread',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate(messagesWithMetadata, {
           memory: {
             resource: 'customer-12345',
@@ -1384,16 +1097,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy(messagesWithMetadata, {
-          memory: {
-            resource: 'user-mobile',
-            thread: {
-              id: 'mobile-thread',
-            },
-          },
-        });
-      } else {
+      {
         stream = await agent.stream(messagesWithMetadata, {
           memory: {
             resource: 'user-mobile',
@@ -1472,16 +1176,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         },
       ];
 
-      if (version === 'v1') {
-        await agent.generateLegacy(mixedMessages, {
-          memory: {
-            resource: 'mixed-user',
-            thread: {
-              id: 'mixed-thread',
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate(mixedMessages, {
           memory: {
             resource: 'mixed-user',
@@ -1535,36 +1230,21 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         name: 'Test Default onFinish',
         model: dummyModel,
         instructions: 'You are a helpful assistant.',
-        ...(version === 'v1'
-          ? {
-              defaultStreamOptionsLegacy: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }
-          : {
-              defaultOptions: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }),
+        ...{
+          defaultOptions: {
+            onFinish: data => {
+              onFinishCalled = true;
+              finishData = data;
+            },
+          },
+        },
       });
 
       // Call stream without passing any options - should use defaultOptions
-      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
+      const result = await agent.stream('How are you?');
 
       // Consume the stream to trigger onFinish
-      if (version === 'v1') {
-        let fullText = '';
-        for await (const chunk of result.textStream) {
-          fullText += chunk;
-        }
-        expect(fullText).toBe('Dummy response');
-      } else {
+      {
         await result.consumeStream();
       }
 
@@ -1581,37 +1261,21 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         name: 'Test Default onFinish Empty',
         model: dummyModel,
         instructions: 'You are a helpful assistant.',
-        ...(version === 'v1'
-          ? {
-              defaultStreamOptionsLegacy: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }
-          : {
-              defaultOptions: {
-                onFinish: data => {
-                  onFinishCalled = true;
-                  finishData = data;
-                },
-              },
-            }),
+        ...{
+          defaultOptions: {
+            onFinish: data => {
+              onFinishCalled = true;
+              finishData = data;
+            },
+          },
+        },
       });
 
       // Call stream with empty options - should still use defaultOptions
-      const result =
-        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
+      const result = await agent.stream('How are you?', {});
 
       // Consume the stream to trigger onFinish
-      if (version === 'v1') {
-        let fullText = '';
-        for await (const chunk of result.textStream) {
-          fullText += chunk;
-        }
-        expect(fullText).toBe('Dummy response');
-      } else {
+      {
         await result.consumeStream();
       }
 
@@ -1629,47 +1293,25 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         name: 'Test Override onFinish',
         model: dummyModel,
         instructions: 'You are a helpful assistant.',
-        ...(version === 'v1'
-          ? {
-              defaultStreamOptionsLegacy: {
-                onFinish: () => {
-                  defaultOnFinishCalled = true;
-                },
-              },
-            }
-          : {
-              defaultOptions: {
-                onFinish: () => {
-                  defaultOnFinishCalled = true;
-                },
-              },
-            }),
+        ...{
+          defaultOptions: {
+            onFinish: () => {
+              defaultOnFinishCalled = true;
+            },
+          },
+        },
       });
 
       // Call stream with explicit onFinish - should override defaultOptions
-      const result =
-        version === 'v1'
-          ? await agent.streamLegacy('How are you?', {
-              onFinish: data => {
-                passedOnFinishCalled = true;
-                finishData = data;
-              },
-            })
-          : await agent.stream('How are you?', {
-              onFinish: data => {
-                passedOnFinishCalled = true;
-                finishData = data;
-              },
-            });
+      const result = await agent.stream('How are you?', {
+        onFinish: data => {
+          passedOnFinishCalled = true;
+          finishData = data;
+        },
+      });
 
       // Consume the stream to trigger onFinish
-      if (version === 'v1') {
-        let fullText = '';
-        for await (const chunk of result.textStream) {
-          fullText += chunk;
-        }
-        expect(fullText).toBe('Dummy response');
-      } else {
+      {
         await result.consumeStream();
       }
 
@@ -1698,11 +1340,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         finishData = data;
       };
 
-      if (version === 'v1') {
-        result = await agent.streamLegacy('How are you?', {
-          onFinish,
-        });
-      } else {
+      {
         result = await agent.stream('How are you?', {
           onFinish,
         });
@@ -2891,7 +2529,6 @@ describe('Agent Tests', () => {
     });
   });
 
-  agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
 });
 

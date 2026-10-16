@@ -1796,14 +1796,6 @@ export class DurableAgent<
     return applyResolvedAgentScopes(options, resolved, requestContext);
   }
 
-  override getDefaultGenerateOptionsLegacy(options?: any) {
-    return this.#wrappedAgent.getDefaultGenerateOptionsLegacy(options);
-  }
-
-  override getDefaultStreamOptionsLegacy(options?: any) {
-    return this.#wrappedAgent.getDefaultStreamOptionsLegacy(options);
-  }
-
   // --- Memory ---
   override getMemory(options?: any) {
     return this.#wrappedAgent.getMemory(options);

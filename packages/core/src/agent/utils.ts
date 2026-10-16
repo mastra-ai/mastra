@@ -1,7 +1,7 @@
 import { JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-sdk-v5';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { MastraLegacyLanguageModel, MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { StorageThreadType } from '../memory';
 import type { StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
 import type { FullOutput } from '../stream/base/output';
@@ -11,9 +11,7 @@ import type { MessageListInput } from './message-list';
 import type { StructuredOutputOptions } from './types';
 
 export const supportedLanguageModelSpecifications = ['v2', 'v3', 'v4'];
-export const isSupportedLanguageModel = (
-  model: MastraLanguageModel | MastraLegacyLanguageModel,
-): model is MastraLanguageModel => {
+export const isSupportedLanguageModel = (model: MastraLanguageModel): model is MastraLanguageModel => {
   return supportedLanguageModelSpecifications.includes(model.specificationVersion);
 };
 

@@ -18,7 +18,7 @@ function createMockModel() {
   return {
     provider: 'test',
     modelId: 'test-model',
-    specificationVersion: 'v1',
+    specificationVersion: 'v2',
     supportsStructuredOutputs: true,
     doGenerate: vi.fn(),
     doStream: vi.fn().mockImplementation(async () => {

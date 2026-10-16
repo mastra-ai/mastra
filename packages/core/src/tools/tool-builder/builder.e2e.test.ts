@@ -1,14 +1,12 @@
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { canonicalizeRequestJsonSchema, createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { Agent, isSupportedLanguageModel } from '../../agent';
+import { Agent } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -22,7 +20,7 @@ const mock = createGatewayMock({ exactMatch: true, transformRequest: canonicaliz
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
-export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
+export const isOpenAIModel = (model: LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
 
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
@@ -128,7 +126,7 @@ function createTestSchemas(schemaKeys: SchemaKey[] = []): z.ZodObject<any> {
 }
 
 async function runStructuredOutputSchemaTest(
-  model: LanguageModel | LanguageModelV2,
+  model: LanguageModelV2,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
@@ -190,10 +188,7 @@ async function runStructuredOutputSchemaTest(
       throw new Error(
         `Could not find description for test prompt from input schema or all schemas object with schema name ${schemaName}`,
       );
-    // Check if model is V1 or V2/V3 and use appropriate method
-    const response = isSupportedLanguageModel(model)
-      ? await agent.generate(prompt, generateOptions)
-      : await agent.generateLegacy(prompt, generateOptions);
+    const response = await agent.generate(prompt, generateOptions);
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
@@ -234,7 +229,7 @@ async function runStructuredOutputSchemaTest(
 }
 
 async function runSingleToolSchemaTest(
-  model: LanguageModel | LanguageModelV2,
+  model: LanguageModelV2,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
@@ -248,16 +243,10 @@ async function runSingleToolSchemaTest(
       tools: { [toolName]: testTool },
     });
 
-    // Check if model is V1 or V2/V3 and use appropriate method
-    const response = isSupportedLanguageModel(model)
-      ? await agent.generate(`Please call the tool named '${toolName}'.`, {
-          toolChoice: 'required',
-          maxSteps: 1,
-        })
-      : await agent.generateLegacy(`Please call the tool named '${toolName}'.`, {
-          toolChoice: 'required',
-          maxSteps: 1,
-        });
+    const response = await agent.generate(`Please call the tool named '${toolName}'.`, {
+      toolChoice: 'required',
+      maxSteps: 1,
+    });
 
     const toolCall = response.toolCalls.find(tr => {
       if (tr.payload) {
@@ -322,20 +311,6 @@ async function runSingleToolSchemaTest(
 const SUITE_TIMEOUT = 300000; // 5 minutes
 const TEST_TIMEOUT = 300000; // 5 minutes
 
-const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
-
-const modelsToTestV1 = [
-  openrouter('anthropic/claude-sonnet-4.5'),
-  openrouter('anthropic/claude-haiku-4.5'),
-  openrouter('openai/gpt-4o-mini'),
-  openrouter('openai/gpt-4.1-mini'),
-  openai('o3-mini'),
-  openai('o4-mini'),
-  openrouter('google/gemini-2.5-pro'),
-  openrouter('google/gemini-2.5-flash'),
-  // gemini-2.0-flash-lite-001 was delisted from OpenRouter; use the current lite tier
-  openrouter('google/gemini-3.1-flash-lite'),
-];
 const modelsToTestV2 = [
   openrouter_v5('anthropic/claude-sonnet-4.5'),
   openrouter_v5('anthropic/claude-haiku-4.5'),
@@ -382,19 +357,6 @@ const testTools = runSchemasIndividually
     ];
 
 // Group tests by model provider for better organization
-const modelsByProviderV1 = modelsToTestV1.reduce(
-  (acc, model) => {
-    const provider = model.provider;
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push(model);
-    return acc;
-  },
-  {} as Record<string, (typeof modelsToTestV1)[number][]>,
-);
-
-// Group tests by model provider for better organization
 const modelsByProviderV2 = modelsToTestV2.reduce(
   (acc, model) => {
     const provider = model.provider;
@@ -407,17 +369,13 @@ const modelsByProviderV2 = modelsToTestV2.reduce(
   {} as Record<string, (typeof modelsToTestV2)[number][]>,
 );
 
-[...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
+Object.entries(modelsByProviderV2).forEach(([provider, models]) => {
   [
     // 'output', // <- waste of time, output doesn't work very well
     // 'structuredOutput', // <- not a waste, but until we do schema compat in structured output it doesn't make sense to test this here
     'tools',
   ].forEach(outputType => {
     models.forEach(model => {
-      // we only support structured output for v2+ models (ai v5+)
-      if (outputType === `structuredOutput` && model.specificationVersion !== `v2`) {
-        return;
-      }
       describe.concurrent(
         `${outputType} schema compatibility > ${provider} > ${model.modelId}`,
         { timeout: SUITE_TIMEOUT },
@@ -1510,7 +1468,7 @@ describe('CoreToolBuilder Output Schema', () => {
     const mockModel = {
       modelId: 'openai/gpt-4.1-mini',
       provider: 'openrouter',
-      specificationVersion: 'v1',
+      specificationVersion: 'v2',
       supportsStructuredOutputs: false,
     } as any;
 

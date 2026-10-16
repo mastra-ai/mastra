@@ -1,4 +1,3 @@
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
@@ -12,26 +11,11 @@ class SerializingMockMemory extends MockMemory {
   }
 }
 
-function memoryMetadataTests(version: 'v1' | 'v2') {
+function memoryMetadataTests(version: 'v2') {
   describe(`${version} - agent memory with metadata`, () => {
-    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV2;
     beforeEach(() => {
-      if (version === 'v1') {
-        dummyModel = new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Dummy response`,
-          }),
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [{ type: 'text-delta', textDelta: 'dummy' }],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        });
-      } else {
+      {
         dummyModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -118,17 +102,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'test' },
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -167,17 +141,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'updated' },
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -213,17 +177,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'updated' },
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -263,14 +217,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
         inputProcessors: [metadataWriter],
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: { id: 'thread-processor-metadata', metadata: { client: 'test' } },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -318,11 +265,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
         inputProcessors: [metadataWriter],
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: { resource: 'user-1', thread: { id: 'thread-title-metadata' } },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: { resource: 'user-1', thread: { id: 'thread-title-metadata' } },
         });
@@ -356,17 +299,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
         memory: mockMemory,
       });
 
-      if (version === 'v1') {
-        await agent.generateLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'same' },
-            },
-          },
-        });
-      } else {
+      {
         await agent.generate('hello', {
           memory: {
             resource: 'user-1',
@@ -392,17 +325,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
       });
 
       let res;
-      if (version === 'v1') {
-        res = await agent.streamLegacy('hello', {
-          memory: {
-            resource: 'user-1',
-            thread: {
-              id: 'thread-1',
-              metadata: { client: 'test-stream' },
-            },
-          },
-        });
-      } else {
+      {
         res = await agent.stream('hello', {
           memory: {
             resource: 'user-1',
@@ -434,7 +357,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           memory: mockMemory,
         });
 
-        await agent.generateLegacy('hello', {
+        await agent.generate('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
@@ -458,7 +381,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           memory: mockMemory,
         });
 
-        const stream = await agent.streamLegacy('hello', {
+        const stream = await agent.stream('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
@@ -474,5 +397,4 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
   });
 }
 
-memoryMetadataTests('v1');
 memoryMetadataTests('v2');

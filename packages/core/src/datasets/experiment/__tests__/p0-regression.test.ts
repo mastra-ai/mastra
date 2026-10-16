@@ -124,37 +124,6 @@ describe('P0 Regression', () => {
     });
   });
 
-  // T-B: generateLegacy missing → explicit error
-  describe('Bug B: generateLegacy silent false success', () => {
-    it('returns error when generateLegacy is not available', async () => {
-      vi.mocked(isSupportedLanguageModel).mockReturnValue(false);
-
-      // Agent WITHOUT generateLegacy
-      const agent = {
-        id: 'no-legacy-agent',
-        name: 'No Legacy Agent',
-        getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v1' }),
-        generate: vi.fn(),
-      } as unknown as Agent;
-
-      const item = {
-        id: 'item-1',
-        datasetId: 'ds-1',
-        input: 'test input',
-        groundTruth: null,
-        version: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const result = await executeTarget(agent, 'agent', item);
-
-      expect(result.output).toBeNull();
-      expect(result.error).toBeTruthy();
-      expect(result.error!.message).toContain('generateLegacy');
-    });
-  });
-
   // T-C: Per-item timeout
   describe('Bug C: Per-item timeout', () => {
     it('times out hanging items without blocking the run', { timeout: 5000 }, async () => {
