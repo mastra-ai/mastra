@@ -34,7 +34,12 @@ type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
 
 function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
-  { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
+  {
+    memorySettings,
+    projects,
+    users,
+    workItems,
+  }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users' | 'workItems'>,
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
   viewer: { workosId: string; organizationId: string } = user,
@@ -604,7 +609,7 @@ describe('source-control session routes', () => {
         body: JSON.stringify(body),
       });
 
-    async function seedPrivateSession() {
+    async function seedPrivateSession(overrides: { branch?: string; visibility?: 'org' | 'private' } = {}) {
       const seeded = await seedGitLabRepository();
       const session = await seeded.sourceControl.sessions.create({
         sessionId: 'visibility-session',
@@ -612,8 +617,9 @@ describe('source-control session routes', () => {
         factoryProjectId: seeded.project.id,
         orgId: 'org-1',
         userId: 'user-1',
-        branch: 'user/session-visibility',
+        branch: overrides.branch ?? 'user/session-visibility',
         baseBranch: 'main',
+        ...(overrides.visibility ? { visibility: overrides.visibility } : {}),
       });
       return { ...seeded, session };
     }
@@ -659,6 +665,41 @@ describe('source-control session routes', () => {
       expect(res.status).toBe(400);
       await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
         visibility: 'private',
+      });
+    });
+
+    it('refuses to change a Factory run session, which stays with the team', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession({
+        branch: 'feature/card-42',
+        visibility: 'org',
+      });
+      const runSessions = new Set([session.sessionId]);
+      const owner = buildApp([sourceControl], {
+        ...seed,
+        workItems: {
+          clearSessionReferences: async () => 0,
+          hasRunBindingForSession: async ({ sessionId }) => runSessions.has(sessionId),
+        },
+      });
+
+      const res = await putVisibility(owner, session.sessionId, { visibility: 'private' });
+      expect(res.status).toBe(409);
+      await expect(res.json()).resolves.toEqual({ error: 'Only user sessions can change visibility' });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'org',
+      });
+    });
+
+    it('refuses to change a Slack thread session', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession({
+        branch: 'slack/1700000000-000100',
+        visibility: 'org',
+      });
+
+      const res = await putVisibility(buildApp([sourceControl], seed), session.sessionId, { visibility: 'private' });
+      expect(res.status).toBe(409);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'org',
       });
     });
   });
