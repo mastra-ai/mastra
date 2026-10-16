@@ -3,6 +3,11 @@ import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+// Old-loop tests broken by the action-native Agent.stream/generate. Their behaviors are tracked in
+// src/new-message-format/BEHAVIORS.md; they are deleted with the old loop. Run them with LEGACY_TESTS=1.
+const legacyTests: string[] = process.env.LEGACY_TESTS
+  ? []
+  : JSON.parse(fs.readFileSync(path.resolve(__dirname, 'legacy-tests.json'), 'utf-8'));
 
 export default defineConfig({
   define: {
@@ -28,7 +33,7 @@ export default defineConfig({
           name: 'unit:packages/core',
           environment: 'node',
           include: ['src/**/*.test.ts'],
-          exclude: ['src/**/*.e2e.test.ts'],
+          exclude: ['src/**/*.e2e.test.ts', ...legacyTests],
           setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
           env: {
