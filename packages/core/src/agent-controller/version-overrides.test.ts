@@ -133,6 +133,56 @@ describe('AgentController per-call version selection', () => {
     expect(runtime.resolveVersion).toHaveBeenCalledWith(expect.any(Agent), { versionId: 'requested-version' });
   });
 
+  it('queueSignal keeps its explicit version ahead of agent defaults and preserves execution context', async () => {
+    const signal = { type: 'reactive' as const, tagName: 'review', contents: 'Run the requested version' };
+    const baseline = await createRuntime();
+    await baseline.session.queueSignal(signal, { requestContext: baseline.requestContext });
+    const runtime = await createRuntime();
+
+    await runtime.session.queueSignal(signal, {
+      requestContext: runtime.requestContext,
+      versions: { agents: { root: { versionId: 'requested-version' } } },
+    });
+
+    expect(runtime.resolveVersion).toHaveBeenCalledWith(expect.any(Agent), { versionId: 'requested-version' });
+    expect(runtime.defaults).toHaveBeenCalledTimes(baseline.defaults.mock.calls.length);
+    expect(runtime.buildStreamOptions.mock.calls[0]![0].requestContext).toBe(runtime.requestContext);
+    const executionContext = runtime.contexts.at(-1)!;
+    expect(executionContext.get('tenant')).toBe('original-tenant');
+    expect(getAgentVersionPins(executionContext)?.root?.versionId).toBe('requested-version');
+    expect(runtime.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+      agents: { root: { versionId: 'context-version' } },
+    });
+  });
+
+  it('queueSignal captures nested caller selectors before asynchronous authorization', async () => {
+    const runtime = await createRuntime();
+    let releaseAuthorization!: () => void;
+    const authorization = new Promise<void>(resolve => {
+      releaseAuthorization = resolve;
+    });
+    const authorize = vi.spyOn(runtime.session.machinery, 'authorizeExecute').mockReturnValueOnce(authorization);
+    const rootSelector = { versionId: 'requested-version' };
+    const versions: VersionOverrides = { agents: { root: rootSelector } };
+    const run = runtime.session.queueSignal(
+      { type: 'reactive', tagName: 'review', contents: 'Keep the submitted version' },
+      { requestContext: runtime.requestContext, versions },
+    );
+
+    try {
+      expect(authorize).toHaveBeenCalledWith(runtime.requestContext);
+      expect(runtime.buildStreamOptions).not.toHaveBeenCalled();
+      rootSelector.versionId = 'mutated-version';
+    } finally {
+      releaseAuthorization();
+    }
+    await run;
+
+    expect(runtime.resolveVersion).toHaveBeenCalledWith(expect.any(Agent), { versionId: 'requested-version' });
+    expect(runtime.resolveVersion).not.toHaveBeenCalledWith(expect.any(Agent), { versionId: 'mutated-version' });
+    expect(getAgentVersionPins(runtime.contexts.at(-1)!)?.root?.versionId).toBe('requested-version');
+  });
+
   it('forwards selectors supplied in sendSignal options to the real run', async () => {
     const runtime = await createRuntime();
     let complete = false;

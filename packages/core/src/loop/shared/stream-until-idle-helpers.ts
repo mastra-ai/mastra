@@ -420,7 +420,7 @@ export async function runIdleLoop<
   let continuationPins = getAgentVersionPins(runRequestContext);
   const continuationBaseOptions = () => {
     if (!continuationPins) return baseContinuationOpts;
-    const requestContext = new RequestContext(runRequestContext.entries());
+    const requestContext = runRequestContext;
     const exactVersions = exactVersionOverridesForPins(continuationPins);
     setAgentVersionPins(requestContext, continuationPins);
     requestContext.set(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, true);
@@ -537,12 +537,28 @@ export async function runIdleLoop<
     isProcessing = true;
     let continuationContext: RequestContext | undefined;
     let continuationToolCallIds: string[] = [];
+    let restoreVersionPolicy: (() => void) | undefined;
     try {
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
       for (const chunk of batch) {
         const tid = (chunk as { payload?: { taskId?: string } }).payload?.taskId;
         const ctype = (chunk as { type?: string }).type;
         if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
+      }
+      if (continuationPins) {
+        // Keep caller-visible context updates, but do not leave this segment's
+        // exact selectors or delegated marker on the caller's selection policy.
+        const priorPolicy = [MASTRA_VERSIONS_KEY, MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY].map(key => ({
+          key,
+          present: runRequestContext.has(key),
+          value: runRequestContext.get(key),
+        }));
+        restoreVersionPolicy = () => {
+          for (const { key, present, value } of priorPolicy) {
+            if (present) runRequestContext.set(key, value);
+            else runRequestContext.delete(key);
+          }
+        };
       }
       const continuationOpts = buildContinuationOpts(
         continuationBaseOptions(),
@@ -579,6 +595,7 @@ export async function runIdleLoop<
       return;
     } finally {
       releaseContinuationToolCallIds(continuationContext, continuationToolCallIds);
+      restoreVersionPolicy?.();
       isProcessing = false;
       if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
         void processIfIdle();

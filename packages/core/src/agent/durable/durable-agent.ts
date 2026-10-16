@@ -3404,7 +3404,7 @@ export class DurableAgent<
       {
         ...(options as DurableAgentStreamOptions<TOutput>),
         requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
-        versions: continuationVersions,
+        versions: continuationVersions as DurableAgentStreamOptions<TOutput>['versions'],
         memory: registeredMemory ?? options?.memory,
       },
       resumeScopesSnapshot,
