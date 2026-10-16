@@ -31,7 +31,7 @@ async function workspacePackagesResolver(entryFile: string): Promise<Plugin | nu
   const resolver = nodeResolve({
     preferBuiltins: true,
     exportConditions: ['node'],
-    extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.tsx', '.mts', '.cts'],
+    extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.tsx'],
     modulePaths: workspaceRoot ? [`${workspaceRoot}/node_modules`] : [],
   });
 
@@ -48,7 +48,7 @@ async function workspacePackagesResolver(entryFile: string): Promise<Plugin | nu
       const resolved = await handler?.call(this, id, importer, options);
       const resolvedId = typeof resolved === 'string' ? resolved : resolved ? resolved.id : undefined;
       // Built workspace packages (plain JS) stay external like any other dependency
-      if (!resolvedId || !/\.[cm]?tsx?$/.test(resolvedId)) {
+      if (!resolvedId || !/\.tsx?$/.test(resolvedId)) {
         return null;
       }
       return resolved;
