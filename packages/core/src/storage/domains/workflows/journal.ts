@@ -58,7 +58,7 @@ const SUMMARY_FIELDS = ['status', 'startedAt', 'endedAt', 'suspendedAt', 'resume
  * The summary of a successful step result. Shared so every adapter summarizes the same way.
  * @experimental
  */
-export function summarizeStepResult(result: StepSuccess<any, any, any, any>): StepResultSummary {
+export function summarizeStepResult(result: StepResultSummary): StepResultSummary {
   const summary: Record<string, unknown> = {};
   for (const field of SUMMARY_FIELDS) {
     if (result[field] !== undefined) summary[field] = result[field];

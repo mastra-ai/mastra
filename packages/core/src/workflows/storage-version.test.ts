@@ -255,6 +255,19 @@ function recordV2Writes(storage: InstanceType<typeof MockStore>) {
     if (args.storageVersion === 2) writes.push({ status: args.snapshot.status, changes: args.changes });
     return persist(args);
   };
+  const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
+  store.writeWorkflowRunCheckpoint = async args => {
+    writes.push({ status: args.header.status });
+    return checkpoint(args);
+  };
+  const append = store.appendWorkflowRunEntries.bind(store);
+  store.appendWorkflowRunEntries = async args => {
+    writes.push({
+      status: args.header.status,
+      changes: { stepIds: Object.keys(args.steps), state: args.state !== undefined },
+    });
+    return append(args);
+  };
   const entries = (workflowName: string, runId: string): { kind: string; stepId?: string }[] =>
     (store as any).db.workflowRunEntries.get(`${workflowName}-${runId}`);
   return { writes, entries };

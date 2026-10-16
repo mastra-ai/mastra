@@ -241,13 +241,11 @@ export async function persistStepUpdate(
       tracingContext,
     };
 
-    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     const journal = engine.getRunJournal(runId);
     if (journal) {
-      if (workflowsStore) {
-        await journal.write(workflowsStore, { workflowName: workflowId, runId, resourceId, snapshot });
-      }
+      await journal.write({ resourceId, snapshot });
     } else {
+      const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflowId,
         runId,

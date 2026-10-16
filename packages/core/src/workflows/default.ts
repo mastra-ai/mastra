@@ -822,7 +822,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // A retried nested resume replaces `input` before it gets here, so write it again.
         delete seed.input;
       }
-      this.#journals.set(runId, new RunJournal(seed));
+      this.#journals.set(
+        runId,
+        new RunJournal({
+          store: await this.mastra?.getStorage()?.getStore('workflows'),
+          workflowName: workflowId,
+          runId,
+          seed,
+        }),
+      );
     }
 
     try {
