@@ -1254,13 +1254,28 @@ describe('runEvals', () => {
           received = run.output;
           return 1;
         });
-        await runEvals({ data: [{ input: 'What is the weather?' }], scorers: { trajectory: [probe] }, target });
-        return { received, warn };
+        let gateReceived: any;
+        const gate = createScorer({
+          id: 'trajectory-gate',
+          description: 'Keeps its input',
+          type: 'trajectory',
+        }).generateScore(({ run }) => {
+          gateReceived = run.output;
+          return 1;
+        });
+        await runEvals({
+          data: [{ input: 'What is the weather?' }],
+          scorers: { trajectory: [probe] },
+          gates: [gate],
+          target,
+        });
+        return { received, gateReceived, warn };
       }
 
       it('uses the stored trace once observability is flushed', async () => {
-        const { received } = await runWithTraceStore({ storedOnFlush: true });
+        const { received, gateReceived } = await runWithTraceStore({ storedOnFlush: true });
         expect(received.steps.map((s: any) => s.stepType)).toEqual(['model_generation']);
+        expect(gateReceived.steps.map((s: any) => s.stepType)).toEqual(['model_generation']);
       });
 
       it('warns and uses the messages when the trace is not stored', async () => {
