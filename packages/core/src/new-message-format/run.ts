@@ -83,7 +83,8 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   const repairs = close(
     repairOpenRun(history, {
       ...(resuming ? { resumingRunId: runId } : {}),
-      answeredCallIds: answeredCalls(additions),
+      // Resuming, this run also runs the calls an earlier answer approved while it waited for the rest.
+      answeredCallIds: answeredCalls([...additions, ...(resuming ? history.filter(a => a.runId === runId) : [])]),
     }),
   );
   const recalled = options.recall ? options.recall([...history, ...repairs]) : [...history, ...repairs];
@@ -126,7 +127,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
         await memory.saveActions({ actions: batch });
       } catch (error) {
         writeFailed = true;
-        const refused = new Set(batch.filter(a => a.type === 'tool-started'));
+        const refused = new Set<PersistableAction>(batch.filter(a => a.type === 'tool-started'));
         pending = [...batch.filter(a => !refused.has(a)), ...pending];
         for (const list of [own, extra])
           for (let i = list.length - 1; i >= 0; i--) if (refused.has(list[i] as PersistableAction)) list.splice(i, 1);
@@ -254,7 +255,12 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     // A run with several approval requests resumes only once every one of them has an answer.
     const runLog = [...history.filter(a => a.runId === runId), ...input];
     const answered = new Set(runLog.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
-    if (runLog.some(a => a.type === 'tool-approval-requested' && !answered.has(a.approvalId))) return;
+    if (runLog.some(a => a.type === 'tool-approval-requested' && !answered.has(a.approvalId))) {
+      // Waiting, not interrupted: the run already ended with `tool-calls`, and its approved calls stay open
+      // for the resume that answers the last approval.
+      ended = true;
+      return;
+    }
 
     const instructions = [options.instructions, ...system].filter(Boolean).join('\n\n');
     const result = streamText({
@@ -350,7 +356,7 @@ function gateTools(tools: ToolSet, mayRun: (toolCallId: string) => boolean): Too
 }
 
 /** Calls the incoming input answers (tool outcomes, approval answers): repair must leave them open. */
-function answeredCalls(actions: ActionDraft[]): Set<string> {
+function answeredCalls(actions: (ActionDraft | PersistableAction)[]): Set<string> {
   const ids = new Set<string>();
   for (const a of actions) {
     if (

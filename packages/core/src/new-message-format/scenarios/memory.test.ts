@@ -57,9 +57,20 @@ describe('action-native memory (aimock)', () => {
 
     await runScenario(agent, memory, 'probe twice', { thread: 't-turns' });
 
-    // Turn 1 is still open while its own tool runs, so nothing is flushed yet.
-    expect(seenDuringTool[0]).toEqual([]);
-    // By turn 2, the input and all of turn 1 are stored.
-    expect(seenDuringTool[1]).toEqual(['text', 'turn-start', 'tool-call', 'tool-result', 'turn-end']);
+    // A tool runs only once the run's input, its call and its tool-started are stored.
+    expect(seenDuringTool[0]).toEqual(['run-start', 'text', 'turn-start', 'tool-call', 'tool-started']);
+    // By turn 2, all of turn 1 is stored too.
+    expect(seenDuringTool[1]).toEqual([
+      'run-start',
+      'text',
+      'turn-start',
+      'tool-call',
+      'tool-started',
+      'tool-result',
+      'turn-end',
+      'turn-start',
+      'tool-call',
+      'tool-started',
+    ]);
   });
 });

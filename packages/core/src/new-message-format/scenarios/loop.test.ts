@@ -36,10 +36,13 @@ describe('action-native loop (aimock)', () => {
     const { types, streamed } = await runScenario(agent, memory, 'Look up alice and bob');
 
     expect(types).toEqual([
+      'run-start',
       'text',
       'turn-start',
       'tool-call',
       'tool-call',
+      'tool-started',
+      'tool-started',
       'tool-result',
       'tool-result',
       'turn-end',
@@ -60,7 +63,7 @@ describe('action-native loop (aimock)', () => {
     llm.on({ endpoint: 'chat' }, { content: '' });
     const { agent, memory } = createActionAgent(llm);
     const { types } = await runScenario(agent, memory, 'say nothing');
-    expect(types).toEqual(['text', 'turn-start', 'turn-end', 'run-end']);
+    expect(types).toEqual(['run-start', 'text', 'turn-start', 'turn-end', 'run-end']);
   });
 
   it('resolves dynamic instructions per request', async () => {
