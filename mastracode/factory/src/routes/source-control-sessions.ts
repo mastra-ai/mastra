@@ -20,6 +20,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
+import { canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
@@ -28,6 +29,8 @@ function loose(c: unknown): RouteContext {
 }
 
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+// Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
+const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -49,7 +52,7 @@ export interface SourceControlSessionRoutesOptions {
   controller?: MountedMastraCode['controller'];
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
 }
 
 interface ResolvedProjectRepository {
@@ -369,11 +372,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if ('response' in resolved) return resolved.response;
         const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
         const session = match?.session;
-        if (
-          !session ||
-          session.orgId !== resolved.tenant.orgId ||
-          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
-        ) {
+        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
         const owners = await resolveOwnerProfiles([session.userId]);
@@ -432,6 +431,40 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           });
         }
         return c.json({ removed: true });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/visibility', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body = (await c.req.json().catch(() => undefined)) as { visibility?: unknown } | undefined;
+        const visibility = body?.visibility;
+        if (visibility !== 'private' && visibility !== 'org') {
+          return c.json({ error: "visibility must be 'private' or 'org'" }, 400);
+        }
+        const sessionId = c.req.param('sessionId');
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const row = match?.session;
+        // Only the owner may share or unshare; everyone else gets the same 404
+        // as a missing session so org-visible ids are not confirmed either.
+        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        // Only sessions a person started in the UI can change. Factory runs and
+        // Slack threads keep the visibility they were created with: runs and
+        // channel threads stay with the team, Slack DMs stay private.
+        if (
+          row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
+          (await options.workItems?.hasRunBindingForSession({ orgId: row.orgId, sessionId }))
+        ) {
+          return c.json({ error: 'Only user sessions can change visibility' }, 409);
+        }
+        const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
+        if (!updated) return c.json({ error: 'Session not found' }, 404);
+        const owners = await resolveOwnerProfiles([updated.userId]);
+        return c.json({ session: withOwnerProfile(updated, owners) });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {
