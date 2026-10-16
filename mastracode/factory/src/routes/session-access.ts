@@ -41,8 +41,11 @@ function decodeSegment(segment: string): string {
   }
 }
 
-/** Every session resource a request addresses, for routes that resolve a session or its memory by resourceId. */
-async function addressedResourceIds(c: Context): Promise<string[]> {
+/**
+ * Every session resource a request addresses, for routes that resolve a session or its memory by resourceId.
+ * `null` when the query and body name different resources: handlers read one or the other, so the request is ambiguous.
+ */
+async function addressedResourceIds(c: Context): Promise<string[] | null> {
   const path = c.req.path;
   const method = c.req.method;
   const sessionMatch = SESSION_PATH.exec(path);
@@ -57,9 +60,11 @@ async function addressedResourceIds(c: Context): Promise<string[]> {
     return resourceId ? [resourceId] : [];
   }
   if (!OM_CONFIG_PATH.test(path) && !MEMORY_PATH.test(path)) return [];
-  // Handlers read the query or the body, so authorize every resourceId the request carries.
-  const ids = [c.req.query('resourceId'), method === 'GET' ? undefined : await bodyField(c, 'resourceId')];
-  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  const fromQuery = c.req.query('resourceId') || undefined;
+  const fromBody = method === 'GET' ? undefined : await bodyField(c, 'resourceId');
+  if (fromQuery && fromBody && fromQuery !== fromBody) return null;
+  const resourceId = fromQuery ?? fromBody;
+  return resourceId ? [resourceId] : [];
 }
 
 /** Drops runs on sessions the caller cannot view from the controller-wide active-runs list. */
@@ -74,10 +79,16 @@ async function filterActiveRuns(
     .json()
     .catch(() => undefined)) as { runs?: Array<{ resourceId?: unknown }> } | undefined;
   if (!body || !Array.isArray(body.runs)) return;
+  const resourceIds = [
+    ...new Set(body.runs.flatMap(run => (typeof run.resourceId === 'string' ? [run.resourceId] : []))),
+  ];
+  const sessionById = new Map(
+    await Promise.all(resourceIds.map(async id => [id, await sessions.getBySessionId(id)] as const)),
+  );
   let viewer: ReturnType<RouteAuth['tenant']> | null = null;
   const runs = [];
   for (const run of body.runs) {
-    const session = typeof run.resourceId === 'string' ? await sessions.getBySessionId(run.resourceId) : null;
+    const session = typeof run.resourceId === 'string' ? sessionById.get(run.resourceId) : null;
     if (session) {
       if (viewer === null) {
         await auth.ensureUser(c);
@@ -116,6 +127,7 @@ export function createSessionAccessGuard({
   return async (c, next) => {
     const ctx = c as unknown as Context;
     const resourceIds = await addressedResourceIds(ctx);
+    if (!resourceIds) return c.json({ error: 'resourceId in the query and body must match' }, 400);
     for (const resourceId of resourceIds) {
       const session = await sessions.getBySessionId(resourceId);
       if (!session) continue;
