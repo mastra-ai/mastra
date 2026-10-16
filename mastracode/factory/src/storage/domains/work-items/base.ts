@@ -2978,9 +2978,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /** Every session a run was ever bound to, revoked bindings included. */
-  async listRunBoundSessionIds(): Promise<Set<string>> {
+  /** Every session with a run binding, mapped to the work items its runs were bound to. */
+  async listRunBoundSessions(): Promise<Map<string, WorkItemRow[]>> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {});
-    return new Set(rows.map(row => String(row.session_id)));
+    const items = new Map<string, Promise<WorkItemRow | null>>();
+    const sessions = new Map<string, WorkItemRow[]>();
+    for (const row of rows) {
+      const orgId = String(row.org_id);
+      const id = String(row.work_item_id);
+      const key = `${orgId}:${id}`;
+      if (!items.has(key)) items.set(key, this.get({ orgId, id }));
+      const item = await items.get(key)!;
+      const bound = sessions.get(String(row.session_id)) ?? [];
+      if (item) bound.push(item);
+      sessions.set(String(row.session_id), bound);
+    }
+    return sessions;
   }
 
   /**

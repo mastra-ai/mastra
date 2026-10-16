@@ -1,7 +1,9 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
 
+import { externallyAuthoredWorkItem } from '../rules/types.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 
 /** Slack-started sessions live on a `slack/<thread>` branch (see `threadBranch` in the Slack integration). */
 const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
@@ -16,7 +18,7 @@ const MOVE_PENDING_KEY = 'factoryResourceMovePending';
 export interface SessionResourceMigrationDeps {
   sessions: { listAllSessions(): Promise<SourceControlSession[]> };
   workItems: {
-    listRunBoundSessionIds(): Promise<Set<string>>;
+    listRunBoundSessions(): Promise<Map<string, Pick<WorkItemRow, 'externalSource' | 'metadata'>[]>>;
     moveRunBindingsToResource(input: { sessionId: string; resourceId: string }): Promise<number>;
   };
   /** Absent when the integrations domain is not ready; subscriptions then stay where they are. */
@@ -35,6 +37,8 @@ export interface SessionResourceMigrationReport {
   sessions: number;
   factorySessions: number;
   userSessions: number;
+  /** Runs on untrusted content; they keep their own resource. */
+  isolatedSessions: number;
   /** Factory-owned sessions with no Factory to move them onto; left untouched. */
   skipped: string[];
   /** Sessions whose move threw; the next startup retries them. */
@@ -49,20 +53,26 @@ export interface SessionResourceMigrationReport {
 /**
  * The memory resource a session belongs to: its Factory for runs, side
  * sessions and Slack channel threads, its owner for sessions a person opened
- * and for Slack DMs. `null` when a
- * Factory-owned session has no Factory recorded — guessing would merge it
- * into the wrong resource.
+ * and for Slack DMs. A run on untrusted content (a pull request, or a card
+ * written outside the write-access circle) keeps its own resource, like a new
+ * run would. `null` when a Factory-owned session has no Factory recorded —
+ * guessing would merge it into the wrong resource.
  */
 export function sessionMemoryResource(
   session: SourceControlSession,
-  runBound: boolean,
-): { owner: 'factory' | 'user'; resourceId: string | null } {
+  boundItems: Pick<WorkItemRow, 'externalSource' | 'metadata'>[] | undefined,
+): { owner: 'factory' | 'user' | 'isolated'; resourceId: string | null } {
+  if (boundItems?.some(untrustedWorkItem)) return { owner: 'isolated', resourceId: session.sessionId };
   // A Slack DM is private to its sender, so it belongs with their own sessions.
   const slackChannelThread = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && session.visibility !== 'private';
-  const factoryOwned = runBound || session.originSessionId !== null || slackChannelThread;
+  const factoryOwned = boundItems !== undefined || session.originSessionId !== null || slackChannelThread;
   return factoryOwned
     ? { owner: 'factory', resourceId: session.factoryProjectId }
     : { owner: 'user', resourceId: session.userId };
+}
+
+function untrustedWorkItem(item: Pick<WorkItemRow, 'externalSource' | 'metadata'>): boolean {
+  return item.externalSource?.type === 'pull-request' || externallyAuthoredWorkItem(item);
 }
 
 /**
@@ -86,6 +96,7 @@ export async function migrateSessionResources(
     sessions: 0,
     factorySessions: 0,
     userSessions: 0,
+    isolatedSessions: 0,
     skipped: [],
     failed: [],
     threads: 0,
@@ -113,18 +124,19 @@ export async function migrateSessionResources(
 
   const [sessions, runBound] = await Promise.all([
     deps.sessions.listAllSessions(),
-    deps.workItems.listRunBoundSessionIds(),
+    deps.workItems.listRunBoundSessions(),
   ]);
 
   for (const session of sessions) {
     report.sessions += 1;
     const { sessionId } = session;
-    const { owner, resourceId } = sessionMemoryResource(session, runBound.has(sessionId));
+    const { owner, resourceId } = sessionMemoryResource(session, runBound.get(sessionId));
     if (!resourceId) {
       report.skipped.push(sessionId);
       continue;
     }
     if (owner === 'factory') report.factorySessions += 1;
+    else if (owner === 'isolated') report.isolatedSessions += 1;
     else report.userSessions += 1;
     if (resourceId === sessionId) continue;
 

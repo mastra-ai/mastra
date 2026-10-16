@@ -17,3 +17,5 @@ curl "$FACTORY_URL/web/github/subscriptions?sessionId=$SESSION_ID&threadId=$SESS
 ```
 
 The `resourceId` form still works.
+
+Runs on a pull request, or on a GitHub or GitLab card whose author has no write access, keep their own resource before and after the upgrade, so untrusted content never reaches the shared Factory memory.
