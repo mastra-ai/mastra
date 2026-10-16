@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs';
-import { dirname, join, sep } from 'node:path';
+import { dirname, isAbsolute, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
@@ -10,58 +10,42 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import * as pkg from 'empathic/package';
 import { rollup } from 'rollup';
 import type { Plugin, RollupOutput } from 'rollup';
-import { getWorkspaceInformation } from '../../bundler/workspaceDependencies';
 import { esbuild } from '../plugins/esbuild';
 import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
 import { recursiveRemoveNonReferencedNodes } from '../plugins/remove-unused-references';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getNodeResolveOptions, getPackageName, isBareModuleSpecifier } from '../utils';
+import { getNodeResolveOptions, isBareModuleSpecifier } from '../utils';
 
 const TS_SOURCE = /\.tsx?$/;
+const NODE_MODULES = `${sep}node_modules${sep}`;
 
 /**
- * Workspace packages may ship raw TypeScript (e.g. `exports` pointing to `src/index.ts`), which Node cannot load
- * from the extracted config. Inline those so esbuild transpiles them. Bare imports made from inside a workspace
- * package stay external but are pinned to the file they resolve to from that package: the extracted config lives in
- * `.mastra/output` and can't see the package's own `node_modules` (e.g. pnpm isolated installs).
+ * Packages outside node_modules, such as workspace packages, may ship raw TypeScript (e.g. `exports` pointing to
+ * `src/index.ts`), which Node cannot load from the extracted config. Inline those so esbuild transpiles them. Bare
+ * imports made from inlined sources stay external but are pinned to the file they resolve to from that source: the
+ * extracted config lives in `.mastra/output` and can't see the package's own `node_modules` (e.g. pnpm isolated
+ * installs). The app's own imports keep resolving by name.
  */
-async function workspacePackagesResolver(entryFile: string): Promise<Plugin | null> {
-  const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({
-    dir: dirname(entryFile),
-    mastraEntryFile: entryFile,
-  });
-  if (workspaceMap.size === 0) {
-    return null;
-  }
-
-  const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
-  const appRoot = realpathSync(closestPkgJson ? dirname(closestPkgJson) : process.cwd()) + sep;
-  // Resolved ids are real paths, so compare against real workspace locations; the app's own files keep today's behaviour
-  const workspaceLocations = [...workspaceMap.values()]
-    .map(({ location }) => realpathSync(location) + sep)
-    .filter(location => location !== appRoot);
-  const isInsideWorkspacePackage = (file: string) =>
-    !file.includes(`${sep}node_modules${sep}`) && workspaceLocations.some(location => file.startsWith(location));
+function typescriptSourcesResolver(entryFile: string): Plugin {
+  const appPackageJson = pkg.up({ cwd: dirname(entryFile) });
+  const appDir = appPackageJson ? dirname(appPackageJson) : dirname(entryFile);
+  // App files keep the entry's path, files resolved by node-resolve are real paths
+  const appRoots = [appDir + sep, realpathSync(appDir) + sep];
+  const isInlinedSource = (file: string) =>
+    isAbsolute(file) && !file.includes(NODE_MODULES) && !appRoots.some(root => file.startsWith(root));
 
   const resolver = nodeResolve({
     ...getNodeResolveOptions('node'),
     extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.tsx'],
-    modulePaths: workspaceRoot ? [join(workspaceRoot, 'node_modules')] : [],
   });
   const resolveHook = resolver.resolveId!;
   const resolve = typeof resolveHook === 'function' ? resolveHook : resolveHook.handler;
 
   return {
     ...resolver,
-    name: 'workspace-packages-resolver',
+    name: 'typescript-sources-resolver',
     async resolveId(id, importer, options) {
       if (!importer || !isBareModuleSpecifier(id)) {
-        return null;
-      }
-
-      const isWorkspacePackage = workspaceMap.has(getPackageName(id) ?? '');
-      const fromWorkspacePackage = isInsideWorkspacePackage(importer);
-      if (!isWorkspacePackage && !fromWorkspacePackage) {
         return null;
       }
 
@@ -70,21 +54,16 @@ async function workspacePackagesResolver(entryFile: string): Promise<Plugin | nu
         return null;
       }
 
-      if (isWorkspacePackage && TS_SOURCE.test(resolved.id)) {
+      if (TS_SOURCE.test(resolved.id) && !resolved.id.includes(NODE_MODULES)) {
         return resolved.id;
       }
 
-      if (fromWorkspacePackage) {
-        return { id: pathToFileURL(resolved.id).href, external: true };
-      }
-
-      // Built workspace packages imported by the app itself stay external like any other dependency
-      return null;
+      return isInlinedSource(importer) ? { id: pathToFileURL(resolved.id).href, external: true } : null;
     },
   };
 }
 
-export async function extractMastraOptionBundler(
+export function extractMastraOptionBundler(
   name: keyof MastraConfig,
   entryFile: string,
   result: {
@@ -92,8 +71,6 @@ export async function extractMastraOptionBundler(
   },
   logger?: IMastraLogger,
 ) {
-  const workspaceResolver = await workspacePackagesResolver(entryFile);
-
   return rollup({
     logLevel: 'silent',
     input: {
@@ -102,7 +79,7 @@ export async function extractMastraOptionBundler(
     treeshake: 'smallest',
     plugins: [
       tsConfigPaths(),
-      ...(workspaceResolver ? [workspaceResolver] : []),
+      typescriptSourcesResolver(entryFile),
       // transpile typescript to something we understand
       esbuild(),
       optimizeLodashImports({
