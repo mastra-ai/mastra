@@ -206,8 +206,9 @@ export function CardActions({
   );
 }
 
+// A routine move stays quiet so the one urgent pill on the board is the only raised control.
 function pillVariant(action: CardAction, main: boolean) {
-  return main && action.urgent && !action.disabled ? 'primary' : 'default';
+  return main && action.urgent && !action.disabled ? 'primary' : 'ghost';
 }
 
 function CardActionButton({
