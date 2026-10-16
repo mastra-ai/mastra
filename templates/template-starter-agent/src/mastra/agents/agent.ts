@@ -70,6 +70,8 @@ const localFilesNote = usePlatformFilesystem
  * channel connections.
  */
 export const agentName = process.env.AGENT_NAME?.trim() || 'Starter Agent';
+const agentInstructions = process.env.AGENT_INSTRUCTIONS?.trim();
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-6-luna';
 
 export const agent = new Agent({
   id: 'agent',
@@ -95,9 +97,9 @@ Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`no
 
 ## How to work
 
-Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}
+Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}${agentInstructions ? `\n\n## Instructions from your team\n\n${agentInstructions}` : ''}
 `,
-  model: 'mastra/openai/gpt-6-luna',
+  model: agentModel,
   defaultOptions: {
     maxSteps: 100,
     autoResumeSuspendedTools: true,
@@ -106,7 +108,7 @@ Ask concise questions when something is unclear or a good question could surface
     options: {
       generateTitle: true,
       observationalMemory: {
-        model: 'mastra/openai/gpt-6-luna',
+        model: 'auto',
       },
     },
   }),
