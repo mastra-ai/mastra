@@ -156,4 +156,38 @@ describe('createBackgroundCompletionCallbacks', () => {
 
     expect(sendSignalToThread).not.toHaveBeenCalled();
   });
+
+  it('delivers to a live session that switched to the task resource after it was created', async () => {
+    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true as const }) }));
+    // Created as 'resource-0', then switched with `/resource`: still registered under 'resource-0'.
+    const switched = {
+      sendSignalToThread,
+      identity: { getResourceId: () => 'resource-1' },
+      thread: { getId: () => 'thread-1' },
+    } as unknown as Session<unknown>;
+    const getSession = vi.fn(async (sessionId: string) => (sessionId === 'resource-0' ? switched : undefined));
+    const callbacks = createBackgroundCompletionCallbacks(() => ({ getSession, listLiveSessions: () => [switched] }));
+
+    await callbacks.onTaskComplete?.(createTask('completed'));
+
+    expect(sendSignalToThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('never borrows another live session on the shared resource', async () => {
+    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true as const }) }));
+    const neighbour = (thread: string) =>
+      ({
+        sendSignalToThread,
+        identity: { getResourceId: () => 'resource-1' },
+        thread: { getId: () => thread },
+      }) as unknown as Session<unknown>;
+    const callbacks = createBackgroundCompletionCallbacks(() => ({
+      getSession: async () => undefined,
+      listLiveSessions: () => [neighbour('run-a'), neighbour('run-b')],
+    }));
+
+    await callbacks.onTaskComplete?.(createTask('completed'));
+
+    expect(sendSignalToThread).not.toHaveBeenCalled();
+  });
 });

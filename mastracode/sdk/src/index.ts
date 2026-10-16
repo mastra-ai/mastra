@@ -552,6 +552,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Every session this controller has live, whose resources this process
   // dispatches notifications for.
   const liveSessions = new Set<Session<MastraCodeState>>();
+  const sessionRouter = {
+    getSession: (sessionId: string) => controller.getSession(sessionId),
+    listLiveSessions: () => liveSessions,
+  };
   // Same trick for the controller, which plugins reach through a lazy accessor.
   // Plugins load well before the controller is constructed, and a closure over
   // the `controller` binding itself would throw on early access rather than
@@ -940,7 +944,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // another session: every Mastra Code process shares one database, so the
     // target thread may belong to another project, and running it with this
     // session's workspace would act on the wrong project.
-    const session = await findSessionForThread(controller, { resourceId, threadId });
+    const session = await findSessionForThread(sessionRouter, { resourceId, threadId });
     // No session here owns the thread. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
     if (!session) return undefined;
@@ -1630,7 +1634,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
-            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+            ...createBackgroundCompletionCallbacks(() => sessionRouter, backgroundCompletionEvents),
           },
         }
       : {}),

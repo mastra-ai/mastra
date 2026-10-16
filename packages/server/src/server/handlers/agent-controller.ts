@@ -94,17 +94,6 @@ function getAgentControllerOrThrow(
 }
 
 /**
- * Get-or-create the session addressed by `sessionId`.
- *
- * A live session is returned as-is. A session that is not live (never created
- * on this server, or lost on restart) is materialized from storage:
- * - when a thread with the session's id exists, the session resumes on that
- *   thread under the thread's resource (hosts that use `sessionId === threadId`
- *   recover their own thread even when many sessions share one resource);
- * - otherwise the session is created with `resourceId = sessionId`, the same
- *   default `POST /sessions` applies when no `sessionId` is sent.
- */
-/**
  * The resource of the session addressed by `sessionId`, without materializing
  * it: the live session's resource, else the resource of the thread sharing the
  * session's id, else `sessionId` itself (the default when a session is created
@@ -117,6 +106,17 @@ async function resolveSessionResourceId(controller: AgentController<any>, sessio
   return thread?.resourceId ?? sessionId;
 }
 
+/**
+ * Get-or-create the session addressed by `sessionId`.
+ *
+ * A live session is returned as-is. A session that is not live (never created
+ * on this server, or lost on restart) is materialized from storage:
+ * - when a thread with the session's id exists, the session resumes on that
+ *   thread under the thread's resource (hosts that use `sessionId === threadId`
+ *   recover their own thread even when many sessions share one resource);
+ * - otherwise the session is created with `resourceId = sessionId`, the same
+ *   default `POST /sessions` applies when no `sessionId` is sent.
+ */
 async function getSession(
   controller: AgentController<any>,
   sessionId: string,
@@ -212,7 +212,7 @@ const sessionStateQuerySchema = z.object({ threadId: z.string().optional() });
 const createSessionBodySchema = z.object({
   /** Whose threads and memory the session works on. */
   resourceId: z.string(),
-  /** Address of the session. Defaults to `threadId`, then to `resourceId`. */
+  /** Address of the session. Defaults to `resourceId`. */
   sessionId: z.string().optional(),
   tags: z.record(z.string(), z.string()).optional(),
   threadId: z.string().optional(),
@@ -554,7 +554,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   responseSchema: createSessionResponseSchema,
   summary: 'Create or resume a controller session',
   description:
-    'Creates the session addressed by `sessionId` on the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Without a `sessionId` the session is addressed by `threadId`, or by `resourceId` when neither is sent.',
+    'Creates the session addressed by `sessionId` on the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Without a `sessionId` the session is addressed by `resourceId`.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
@@ -563,7 +563,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       await controller.init();
       const session = await controller.createSession({
-        id: sessionId ?? threadId ?? resourceId,
+        id: sessionId ?? resourceId,
         resourceId,
         ownerId: controller.id,
         tags,
