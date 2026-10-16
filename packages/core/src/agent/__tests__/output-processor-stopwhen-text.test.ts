@@ -1,11 +1,13 @@
 import { convertArrayToReadableStream, MockLanguageModelV3 } from '@internal/ai-v6/test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { Processor } from '../../processors';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 // Regression for https://github.com/mastra-ai/mastra/issues/24917
+
+afterEach(() => vi.restoreAllMocks());
 
 const usage = {
   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
@@ -413,7 +415,9 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('FIRSTMORE');
   });
 
-  it('keeps rewritten text attributed across three feedback continuation steps', async () => {
+  it('keeps rewritten text attributed across three feedback continuation steps when the clock does not advance', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
       [...textPart('t2', 'second'), finish('stop')],

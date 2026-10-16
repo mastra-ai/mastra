@@ -1,8 +1,14 @@
 import type { MastraDBMessage, MastraMessagePart, MessageSource } from '../state/types';
 
+let lastPartCreatedAt = 0;
+
 export function stampPart<T extends MastraMessagePart>(part: T): T {
   if (part.createdAt == null) {
-    part.createdAt = Date.now();
+    lastPartCreatedAt = Math.max(Date.now(), lastPartCreatedAt + 1);
+    part.createdAt = lastPartCreatedAt;
+  } else {
+    const createdAt = Number(part.createdAt);
+    if (Number.isFinite(createdAt)) lastPartCreatedAt = Math.max(lastPartCreatedAt, createdAt);
   }
 
   return part;
