@@ -57,6 +57,43 @@ describe('applyStoredOverrides', () => {
     expect(instructions).toBe('You are a stored-config agent with updated instructions.');
   });
 
+  it('overrides a code model list when the editor owns the model', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: [
+        { id: 'primary', model: 'openai/gpt-4o' },
+        { id: 'fallback', model: 'openai/gpt-4o-mini', maxRetries: 1 },
+      ],
+      editor: { model: true },
+    });
+    new Mastra({ storage, editor, agents: { 'my-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        modelList: [
+          { id: 'fallback', provider: 'openai', modelId: 'gpt-4.1', enabled: true, maxRetries: 4 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: false, maxRetries: 0 },
+        ],
+      } as never,
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getModelList()).toMatchObject([
+      { id: 'fallback', model: { modelId: 'gpt-4.1' }, enabled: true, maxRetries: 4 },
+      { id: 'primary', model: { modelId: 'gpt-4o' }, enabled: false, maxRetries: 0 },
+    ]);
+  });
+
   it('does not override anything when code agent disables editor overrides', async () => {
     const storage = new InMemoryStore();
     const editor = new MastraEditor();
