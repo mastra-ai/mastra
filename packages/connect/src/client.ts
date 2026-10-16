@@ -282,6 +282,13 @@ const integrationCatalogResponseSchema = z.object({
   integrations: z.array(integrationCatalogEntrySchema),
 });
 
+const projectIntegrationSettingsResponseSchema = z.object({
+  /** Null inherits the full public catalog; an empty array explicitly disables end-user connections. */
+  endUserProviders: z.array(z.string()).nullable(),
+});
+
+export type ProjectIntegrationSettings = z.infer<typeof projectIntegrationSettingsResponseSchema>;
+
 /**
  * Secondary access token minted by the vendor alongside the primary oauth2
  * credential (e.g. `devPortalAccessToken` on Microsoft Teams connections).
@@ -357,6 +364,26 @@ export async function listIntegrations(client: ResolvedClient): Promise<Integrat
     throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
   }
   return parsed.data.integrations;
+}
+
+export async function getProjectIntegrationSettings(
+  client: ResolvedClient,
+  projectId: string,
+): Promise<ProjectIntegrationSettings> {
+  const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/integration-settings`);
+  if (!response.ok) {
+    await throwPlatformError(response, `retrieving integration settings for project ${projectId}`);
+  }
+  const parsed = projectIntegrationSettingsResponseSchema.safeParse(
+    await parsePlatformJson(response, `retrieving integration settings for project ${projectId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected integration settings shape for project ${projectId}.`,
+    );
+  }
+  return parsed.data;
 }
 
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {

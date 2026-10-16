@@ -36,6 +36,8 @@ export interface ConnectPromptPayload {
 export interface ConnectPromptInputs {
   catalog: IntegrationCatalogEntry[];
   connections: ProjectConnection[];
+  /** Effective code or project allowlist; undefined means the full catalog. */
+  allowlist: Set<string> | undefined;
 }
 
 /**
@@ -44,22 +46,19 @@ export interface ConnectPromptInputs {
  * resolutions: without an end-user identity there is nobody to scope a new
  * connection to.
  *
- * The connectable set respects the developer's configuration: the `providers`
- * allowlist from `tools()` when one was given, otherwise every provider in
- * the platform catalog.
+ * The connectable set respects the effective project policy: an explicit
+ * `tools({ providers })` allowlist wins, otherwise the project's provider
+ * configuration is loaded from Mastra Platform.
  *
- * `loadInputs` is called per tool invocation so connection state is fresh —
+ * `loadInputs` is called per tool invocation so provider policy and connection state are fresh —
  * after the user connects through the rendered card, the agent can call the
  * tool again and see `connected: true` without waiting out the snapshot TTL.
  */
 export function buildConnectPromptTool({
   loadInputs,
-  only,
   resourceId,
 }: {
   loadInputs: () => Promise<ConnectPromptInputs>;
-  /** Allowlisted provider ids from the `providers` array option; undefined = full catalog. */
-  only: Set<string> | undefined;
   resourceId: string;
 }) {
   return createTool({
@@ -77,11 +76,11 @@ export function buildConnectPromptTool({
         .describe('Provider id to request (e.g. "linear"). Omit to list all connectable providers.'),
     }),
     execute: async (input): Promise<ConnectPromptPayload> => {
-      const { catalog, connections } = await loadInputs();
+      const { catalog, connections, allowlist } = await loadInputs();
 
-      // Provider ids are compared case-insensitively: the allowlist keeps the
-      // caller's casing while catalog ids are platform-defined.
-      const allow = only === undefined ? undefined : new Set(Array.from(only, id => id.toLowerCase()));
+      // Provider ids are compared case-insensitively because catalog ids are
+      // platform-defined while code configuration may use different casing.
+      const allow = allowlist === undefined ? undefined : new Set(Array.from(allowlist, id => id.toLowerCase()));
       const connectable = catalog.filter(entry => allow === undefined || allow.has(entry.id.toLowerCase()));
       const toProvider = (entry: IntegrationCatalogEntry): ConnectPromptProvider => {
         const usable = connections.filter(

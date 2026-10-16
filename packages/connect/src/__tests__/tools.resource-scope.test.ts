@@ -272,7 +272,10 @@ describe('resource-scoped resolution', () => {
  * Platform fetch fixture with a real catalog, for connect-prompt behavior.
  * Connection scoping matches {@link scopedPlatform}.
  */
-function catalogPlatform(connections: () => Array<Record<string, unknown>>) {
+function catalogPlatform(
+  connections: () => Array<Record<string, unknown>>,
+  endUserProviders: () => string[] | null = () => null,
+) {
   const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
     const url = new URL(String(input));
     if (url.pathname === '/v2/integrations') {
@@ -282,6 +285,9 @@ function catalogPlatform(connections: () => Array<Record<string, unknown>>) {
           { id: 'notion', capabilities: {}, displayName: 'Notion', authType: 'OAUTH2' },
         ],
       });
+    }
+    if (url.pathname === '/v2/projects/proj_1/integration-settings') {
+      return Response.json({ endUserProviders: endUserProviders() });
     }
     const resourceId = url.searchParams.get('resourceId');
     const rows = connections().filter(connection =>
@@ -329,9 +335,28 @@ describe('built-in connect-prompt tool', () => {
     expect(second.providers).toEqual([expect.objectContaining({ id: 'notion', connected: true, scope: 'user' })]);
   });
 
-  it('respects the providers allowlist and falls back to the full set for unknown requests', async () => {
+  it('uses fresh project provider configuration when code omits providers', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const platform = catalogPlatform(() => [makeConnection()]);
+    let configured: string[] | null = ['notion'];
+    const platform = catalogPlatform(
+      () => [makeConnection()],
+      () => configured,
+    );
+    const record = await connect({ ...platform.options, resourceId: 'end-user-42' })();
+
+    const prompt = record.request_connection as unknown as PromptTool;
+    expect((await prompt.execute({})).providers.map(provider => provider.id)).toEqual(['notion']);
+
+    configured = [];
+    expect((await prompt.execute({})).providers).toEqual([]);
+  });
+
+  it('lets the code providers allowlist override project provider configuration', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const platform = catalogPlatform(
+      () => [makeConnection()],
+      () => ['notion'],
+    );
     const record = await connect({ ...platform.options, providers: ['linear'], resourceId: 'end-user-42' })();
 
     const prompt = record.request_connection as unknown as PromptTool;

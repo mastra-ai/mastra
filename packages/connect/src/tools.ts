@@ -3,6 +3,7 @@ import { MCPClient } from '@mastra/mcp';
 
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import {
+  getProjectIntegrationSettings,
   listIntegrations,
   listProjectConnections,
   platformMcpTransport,
@@ -467,6 +468,20 @@ async function loadSnapshotInputs(
   return { connections, catalog: [], catalogAvailable: false };
 }
 
+/** Loads fresh prompt inputs and resolves project policy only when code did not provide an allowlist. */
+async function loadConnectPromptInputs(state: SharedToolsState, client: ResolvedClient) {
+  const codeAllowlist = state.normalizedProviders.only;
+  const [inputs, settings] = await Promise.all([
+    loadSnapshotInputs(state, client),
+    codeAllowlist === undefined ? getProjectIntegrationSettings(client, state.projectId) : Promise.resolve(undefined),
+  ]);
+  const projectProviders = settings?.endUserProviders;
+  const allowlist =
+    codeAllowlist ??
+    (projectProviders === null || projectProviders === undefined ? undefined : new Set(projectProviders));
+  return { catalog: inputs.catalog, connections: inputs.connections, allowlist };
+}
+
 /**
  * Fetches a fresh snapshot for one scope, deduplicating concurrent calls per
  * scope. Rejects on failure. A refresh requested while the state is closing
@@ -502,8 +517,7 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
           }
           const client = scope.client;
           record[CONNECT_PROMPT_TOOL_KEY] = buildConnectPromptTool({
-            loadInputs: () => loadSnapshotInputs(state, client),
-            only: state.normalizedProviders.only,
+            loadInputs: () => loadConnectPromptInputs(state, client),
             resourceId: scope.resourceId,
           }) as ResolvedToolsRecord[string];
         }

@@ -36,6 +36,7 @@ function makeConnection(overrides?: Record<string, unknown>) {
 function fakePlatform(options?: {
   connections?: Array<Record<string, unknown>>;
   integrations?: Array<Record<string, unknown>>;
+  endUserProviders?: string[] | null;
 }) {
   const connections = options?.connections ?? [makeConnection()];
   const integrations = options?.integrations ?? [
@@ -61,6 +62,9 @@ function fakePlatform(options?: {
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     });
     if (url.pathname === '/v2/integrations') return Response.json({ integrations });
+    if (url.pathname === '/v2/projects/proj_1/integration-settings') {
+      return Response.json({ endUserProviders: options?.endUserProviders ?? null });
+    }
     if (url.pathname.endsWith('/connections') && method === 'GET') {
       const resourceId = url.searchParams.get('resourceId');
       const rows = connections.filter(connection =>
@@ -302,14 +306,38 @@ describe('GET /providers', () => {
     });
   });
 
-  it('returns the full catalog when no allowlist is configured', async () => {
-    const { fetchMock } = fakePlatform();
+  it('inherits the full catalog when project configuration is null', async () => {
+    const { fetchMock, requests } = fakePlatform();
     const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
     const response = await (findRoute(routes, 'GET', '/connect/providers') as any).handler(
       makeCtx({ resourceId: 'end-user-42' }),
     );
     const body = await json(response);
     expect(body.providers.map((provider: { id: string }) => provider.id)).toEqual(['linear', 'slack', 'github']);
+    expect(requests.some(request => request.url.pathname.endsWith('/integration-settings'))).toBe(true);
+  });
+
+  it('uses project provider configuration when code omits providers', async () => {
+    const { fetchMock } = fakePlatform({ endUserProviders: ['github', 'linear'] });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const response = await (findRoute(routes, 'GET', '/connect/providers') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    const body = await json(response);
+    expect(body.providers.map((provider: { id: string }) => provider.id)).toEqual(['github', 'linear']);
+  });
+
+  it('lets the code allowlist override project provider configuration without fetching it', async () => {
+    const { fetchMock, requests } = fakePlatform({ endUserProviders: ['github'] });
+    const routes = userConnectRoutes(
+      routeOptions(fetchMock as unknown as typeof fetch, { providers: ['slack', 'linear'] }),
+    );
+    const response = await (findRoute(routes, 'GET', '/connect/providers') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    const body = await json(response);
+    expect(body.providers.map((provider: { id: string }) => provider.id)).toEqual(['slack', 'linear']);
+    expect(requests.some(request => request.url.pathname.endsWith('/integration-settings'))).toBe(false);
   });
 });
 
@@ -365,7 +393,7 @@ describe('POST /:provider/sessions', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('without an allowlist, accepts any catalog provider and 404s unknown ids', async () => {
+  it('with inherited project configuration, accepts any catalog provider and 404s unknown ids', async () => {
     const { fetchMock } = fakePlatform();
     const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
     const handler = (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler;
@@ -377,6 +405,16 @@ describe('POST /:provider/sessions', () => {
 
     const unknown = await handler(makeCtx({ resourceId: 'end-user-42', params: { provider: 'nope' } }));
     expect(unknown.status).toBe(404);
+  });
+
+  it('treats an empty project provider list as disabling new end-user connections', async () => {
+    const { fetchMock, requests } = fakePlatform({ endUserProviders: [] });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const response = await (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { provider: 'linear' } }),
+    );
+    expect(response.status).toBe(404);
+    expect(requests.some(request => request.url.pathname.includes('/connect-sessions'))).toBe(false);
   });
 });
 
