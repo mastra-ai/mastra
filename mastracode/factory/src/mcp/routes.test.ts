@@ -220,6 +220,8 @@ describe('Factory MCP server', () => {
       ]),
     );
     expect(Object.keys(tools)).not.toContain('factory_factory_message_origin');
+    // No connected repository, so the connector session has no row to start sub-sessions under.
+    expect(Object.keys(tools)).not.toContain('factory_factory_start_session');
 
     const result = (await tools.factory_search!.execute!({ query: 'login' }, {} as never)) as {
       content: Array<{ text: string }>;
