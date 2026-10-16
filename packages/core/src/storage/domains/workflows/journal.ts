@@ -17,13 +17,6 @@ export type WorkflowRunEntry =
   | { seq: number; kind: 'state'; state: Record<string, any> };
 
 /**
- * Which entries a storage v2 write appends. Omit it to write a checkpoint, which replaces
- * all of the run's entries with one per `context` key plus the state.
- * @experimental
- */
-export type WorkflowRunChanges = { stepIds: string[]; state: boolean };
-
-/**
  * A successful step result without its data (`output`, `payload` and the suspend/resume
  * payloads).
  * @experimental

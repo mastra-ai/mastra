@@ -250,11 +250,6 @@ function addOne(id: string, onRun?: (ctx: { setState: (state: z.infer<typeof mar
 function recordV2Writes(storage: InstanceType<typeof MockStore>) {
   const store = storage.stores.workflows!;
   const writes: { status: string; changes?: { stepIds: string[]; state: boolean } }[] = [];
-  const persist = store.persistWorkflowSnapshot.bind(store);
-  store.persistWorkflowSnapshot = async args => {
-    if (args.storageVersion === 2) writes.push({ status: args.snapshot.status, changes: args.changes });
-    return persist(args);
-  };
   const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
   store.writeWorkflowRunCheckpoint = async args => {
     writes.push({ status: args.header.status });
@@ -516,6 +511,52 @@ function recordStepReads(storage: InstanceType<typeof MockStore>) {
   return reads;
 }
 
+const V1_METHODS = [
+  'loadWorkflowSnapshot',
+  'getWorkflowRunById',
+  'updateWorkflowState',
+  'persistWorkflowSnapshot',
+] as const;
+const V2_METHODS = [
+  'loadWorkflowRunHeader',
+  'loadWorkflowRun',
+  'loadWorkflowRunSteps',
+  'updateWorkflowRunHeader',
+  'writeWorkflowRunCheckpoint',
+  'appendWorkflowRunEntries',
+] as const;
+type StoreMethod = (typeof V1_METHODS)[number] | (typeof V2_METHODS)[number];
+
+/** Records each call to `methods` as `method`, plus ` v<n>` when it passes a storage version. */
+function recordStoreCalls(storage: InstanceType<typeof MockStore>, methods: readonly StoreMethod[]) {
+  const store = storage.stores.workflows!;
+  const calls: { call: string; workflowName: string; args: any }[] = [];
+  for (const method of methods) {
+    const original = (store[method] as (args: any) => unknown).bind(store);
+    (store as any)[method] = (args: any) => {
+      const call = args.storageVersion ? `${method} v${args.storageVersion}` : method;
+      calls.push({ call, workflowName: args.workflowName, args });
+      return original(args);
+    };
+  }
+  return calls;
+}
+
+/** Like `addOne`, but suspends until resumed. */
+function approveAddOne(id: string) {
+  return createStep({
+    id,
+    inputSchema: num,
+    outputSchema: num,
+    stateSchema: marks,
+    resumeSchema: z.boolean(),
+    execute: async ({ inputData, resumeData, suspend }) => {
+      if (resumeData === undefined) return suspend({});
+      return { n: inputData.n + 1 };
+    },
+  });
+}
+
 /** A step that returns its input after `onRun`, which can read other steps' results. */
 function passThrough(id: string, onRun: (read: (stepId: string) => Promise<any>) => Promise<unknown>) {
   return createStep({
@@ -695,10 +736,10 @@ describe('storage v2 memory', () => {
     [1, 2],
     [2, 1],
   ] as const)(
-    'checks whether a nested workflow finished by its own storage version (parent v%i, child v%i)',
+    'reads and writes a nested workflow by its own storage version (parent v%i, child v%i)',
     async (parentVersion, childVersion) => {
       const storage = new MockStore();
-      const store = storage.stores.workflows!;
+      const calls = recordStoreCalls(storage, childVersion === 2 ? V1_METHODS : V2_METHODS);
       const inner = createWorkflow({
         id: 'inner',
         inputSchema: z.object({}),
@@ -720,7 +761,6 @@ describe('storage v2 memory', () => {
       const run = await outer.createRun();
       expect((await run.start({ inputData: {} })).status).toBe('suspended');
 
-      const headerReads = vi.spyOn(store, 'loadWorkflowRunHeader');
       const result = await (
         await outer.createRun({ runId: run.runId })
       ).resume({
@@ -729,8 +769,203 @@ describe('storage v2 memory', () => {
       });
 
       expect(result.status).toBe('success');
-      const innerHeaderReads = headerReads.mock.calls.filter(([args]) => args.workflowName === 'inner');
-      expect(innerHeaderReads).toHaveLength(childVersion === 2 ? 1 : 0);
+      // A nested run reuses the parent's runId, so its first createRun probes v1 for the
+      // version-mismatch error. That probe is the only other-version call.
+      expect(calls.filter(c => c.workflowName === 'inner').map(c => c.call)).toEqual(
+        childVersion === 2 ? ['loadWorkflowSnapshot v1'] : [],
+      );
     },
   );
+
+  it('resumes a parallel entry with one summary read of the run and one read of the steps it needs', async () => {
+    const build = (storageVersion: 1 | 2) =>
+      createWorkflow({ id: 'fork', inputSchema: num, outputSchema: z.any(), options: { storageVersion } })
+        .then(addOne('a'))
+        .parallel([addOne('done'), approveAddOne('gate')])
+        .commit();
+    const startThenResume = async (
+      storageVersion: 1 | 2,
+      storage: InstanceType<typeof MockStore>,
+      onSuspended = () => {},
+    ) => {
+      const workflow = build(storageVersion);
+      new Mastra({ logger: false, storage, workflows: { fork: workflow } });
+      const run = await workflow.createRun({ runId: 'run-1' });
+      expect((await run.start({ inputData: { n: 0 } })).status).toBe('suspended');
+      onSuspended();
+      return (await workflow.createRun({ runId: 'run-1' })).resume({ step: 'gate', resumeData: true });
+    };
+
+    const v1 = await startThenResume(1, new MockStore());
+    const storage = new MockStore();
+    let calls: ReturnType<typeof recordStoreCalls> = [];
+    const v2 = await startThenResume(2, storage, () => {
+      calls = recordStoreCalls(storage, [...V1_METHODS, 'loadWorkflowRun', 'loadWorkflowRunSteps']);
+    });
+
+    expect(v2.status).toBe('success');
+    expect(
+      calls.map(c => (c.call === 'loadWorkflowRun' ? `loadWorkflowRun ${c.args.successfulSteps}` : c.call)),
+    ).toEqual(['loadWorkflowRun summary', 'loadWorkflowRunSteps']);
+    // The finished sibling and the previous entry, read before the entry runs.
+    expect([...calls[1]!.args.stepIds].sort()).toEqual(['a', 'done']);
+    expect(withoutTimestamps(v2)).toEqual(withoutTimestamps(v1));
+  });
+
+  it('gives a concurrent resume WORKFLOW_RESUME_ALREADY_CLAIMED', async () => {
+    let releaseDownstream!: () => void;
+    const downstreamReleased = new Promise<void>(resolve => (releaseDownstream = resolve));
+    let downstreamRuns = 0;
+    const workflow = createWorkflow({
+      id: 'gated',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(gateStep())
+      .then(
+        createStep({
+          id: 'downstream',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async () => {
+            downstreamRuns++;
+            await downstreamReleased;
+            return {};
+          },
+        }),
+      )
+      .commit();
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { gated: workflow } });
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+    const settled = Promise.allSettled([
+      run.resume({ step: 'gate', resumeData: true }),
+      run.resume({ step: 'gate', resumeData: true }),
+    ]);
+    await vi.waitFor(() => expect(downstreamRuns).toBe(1));
+    releaseDownstream();
+    const results = await settled;
+
+    expect(results.map(r => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect((results.find(r => r.status === 'rejected') as PromiseRejectedResult).reason.id).toBe(
+      'WORKFLOW_RESUME_ALREADY_CLAIMED',
+    );
+    expect(downstreamRuns).toBe(1);
+  });
+
+  it('releases the claim of a failed resume only while no entry was written since the claim', async () => {
+    const storage = new MockStore();
+    const workflow = gateWorkflow(2);
+    host(storage, workflow);
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    const store = storage.stores.workflows!;
+    const status = async () =>
+      (await store.loadWorkflowRunHeader({ workflowName: 'gated', runId: run.runId }))?.header.status;
+    const execute = vi.spyOn((run as any).executionEngine, 'execute');
+
+    execute.mockRejectedValueOnce(new Error('engine boom'));
+    await expect(run.resume({ step: 'gate', resumeData: true })).rejects.toThrow('engine boom');
+    expect(await status()).toBe('suspended');
+
+    // An entry written under the claim keeps it, even when the header still looks as claimed:
+    // only `lastSeq` shows the write.
+    execute.mockImplementationOnce(async () => {
+      const current = (await store.loadWorkflowRunHeader({ workflowName: 'gated', runId: run.runId }))!;
+      await store.appendWorkflowRunEntries({
+        workflowName: 'gated',
+        runId: run.runId,
+        header: current.header,
+        steps: { gate: { status: 'success', output: { approved: true }, payload: {}, startedAt: 1, endedAt: 2 } },
+      });
+      throw new Error('engine boom');
+    });
+    await expect(run.resume({ step: 'gate', resumeData: true })).rejects.toThrow('engine boom');
+    expect(await status()).toBe('running');
+  });
+
+  it('releases a v2 parent whose resume fails before writing, after a nested child claimed it', async () => {
+    const storage = new MockStore();
+    const inner = createWorkflow({
+      id: 'inner',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(gateStep())
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(inner)
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { outer } });
+    const run = await outer.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+    const store = storage.stores.workflows!;
+    const parentHeader = () => store.loadWorkflowRunHeader({ workflowName: 'outer', runId: run.runId });
+    const lastSeqBefore = (await parentHeader())!.lastSeq;
+    const calls = recordStoreCalls(storage, [...V1_METHODS, 'loadWorkflowRun']);
+    const parentExecute = vi
+      .spyOn((run as any).executionEngine, 'execute')
+      .mockRejectedValueOnce(new Error('parent boom'));
+
+    const child = await inner.createRun({ runId: run.runId });
+    expect((await child.resume({ step: 'gate', resumeData: true })).status).toBe('success');
+
+    // The child claims the parent and hands the claimed snapshot to the parent's resume, whose
+    // own RunStorage must find the `lastSeq` the claim loaded it at.
+    await vi.waitFor(() => expect(parentExecute).toHaveBeenCalledTimes(1));
+    await vi.waitFor(async () => expect((await parentHeader())?.header.status).toBe('suspended'));
+    expect((await parentHeader())?.lastSeq).toBe(lastSeqBefore);
+    // The claim loads the parent the way the parent's resume would.
+    expect(
+      calls
+        .filter(c => c.workflowName === 'outer')
+        .map(c => (c.call === 'loadWorkflowRun' ? `loadWorkflowRun ${c.args.successfulSteps}` : c.call)),
+    ).toEqual(['loadWorkflowRun summary']);
+  });
+
+  it('cancels a suspended run with one header read and one header update', async () => {
+    const storage = new MockStore();
+    const workflow = gateWorkflow(2);
+    host(storage, workflow);
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+    const calls = recordStoreCalls(storage, [...V1_METHODS, ...V2_METHODS]);
+    await run.cancel();
+
+    expect(calls.map(c => c.call)).toEqual(['loadWorkflowRunHeader', 'updateWorkflowRunHeader']);
+    expect(calls[1]!.args.opts).toEqual({ status: 'canceled' });
+    const stored = await storage.stores.workflows!.loadWorkflowRunHeader({ workflowName: 'gated', runId: run.runId });
+    expect(stored?.header.status).toBe('canceled');
+  });
+
+  it('creates runs with one header read, probing v1 only for a caller-given id it has not stored', async () => {
+    const storage = new MockStore();
+    const workflow = gateWorkflow(2);
+    host(storage, workflow);
+    const calls = recordStoreCalls(storage, [...V1_METHODS, 'loadWorkflowRunHeader', 'loadWorkflowRun']);
+    const createRunCalls = async (options?: { runId: string }) => {
+      calls.length = 0;
+      const run = await workflow.createRun(options);
+      return { run, calls: calls.map(c => c.call) };
+    };
+
+    const fresh = await createRunCalls();
+    expect(fresh.calls).toEqual(['loadWorkflowRunHeader']);
+    expect((await createRunCalls({ runId: fresh.run.runId })).calls).toEqual(['loadWorkflowRunHeader']);
+    expect((await createRunCalls({ runId: 'unstored' })).calls).toEqual([
+      'loadWorkflowRunHeader',
+      'loadWorkflowSnapshot v1',
+    ]);
+  });
 });

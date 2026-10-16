@@ -12,6 +12,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
+import { seedWorkflowRun } from '../seed-run';
 
 /**
  * Create all workflows needed for restart tests.
@@ -473,7 +474,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const runId = `restart-completed-${Date.now()}`;
 
       // Simulate a workflow that was interrupted mid-execution (status: 'running')
-      await workflowsStore.persistWorkflowSnapshot({
+      await seedWorkflowRun(workflowsStore, {
         workflowName: workflow.id,
         storageVersion: workflow.options.storageVersion,
         runId,
@@ -524,7 +525,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const runId = `restart-multistep-${Date.now()}`;
 
       // Simulate a workflow that completed step1 but was interrupted during step2
-      await workflowsStore.persistWorkflowSnapshot({
+      await seedWorkflowRun(workflowsStore, {
         workflowName: workflow.id,
         storageVersion: workflow.options.storageVersion,
         runId,
@@ -584,7 +585,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const runId = `restart-failed-${Date.now()}`;
 
       // Simulate a workflow that was interrupted while running (before it could fail)
-      await workflowsStore.persistWorkflowSnapshot({
+      await seedWorkflowRun(workflowsStore, {
         workflowName: workflow.id,
         storageVersion: workflow.options.storageVersion,
         runId,
@@ -641,7 +642,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         const nestedRunId = `nested-wflow-rstart-nested-${Date.now()}`;
 
         // Simulate a workflow where step1 completed and nested workflow is running step3
-        await workflowsStore.persistWorkflowSnapshot({
+        await seedWorkflowRun(workflowsStore, {
           workflowName: workflow.id,
           storageVersion: workflow.options.storageVersion,
           runId,
@@ -676,7 +677,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         });
 
         // Also simulate the nested workflow state
-        await workflowsStore.persistWorkflowSnapshot({
+        await seedWorkflowRun(workflowsStore, {
           workflowName: 'restart-nestedWorkflow',
           storageVersion: workflow.options.storageVersion,
           runId: nestedRunId,
@@ -771,7 +772,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         const runId = `restart-suspend-${Date.now()}`;
 
         // Simulate a workflow that was running promptAgent step
-        await workflowsStore.persistWorkflowSnapshot({
+        await seedWorkflowRun(workflowsStore, {
           workflowName: workflow.id,
           storageVersion: workflow.options.storageVersion,
           runId,
@@ -896,7 +897,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const runId = `restart-parallel-${Date.now()}`;
 
       // Simulate a workflow that was interrupted during parallel execution
-      await workflowsStore.persistWorkflowSnapshot({
+      await seedWorkflowRun(workflowsStore, {
         workflowName: workflow.id,
         storageVersion: workflow.options.storageVersion,
         runId,

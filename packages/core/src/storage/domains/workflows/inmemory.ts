@@ -21,13 +21,7 @@ import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../work
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
 import { materializeWorkflowRun, summarizeStepResult } from './journal';
-import type {
-  StoredWorkflowRun,
-  StoredWorkflowRunHeader,
-  WorkflowRunChanges,
-  WorkflowRunEntry,
-  WorkflowRunHeader,
-} from './journal';
+import type { StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunEntry, WorkflowRunHeader } from './journal';
 import { getSnapshotMemoryInfo } from './snapshot-memory-info';
 
 /**
@@ -597,8 +591,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
-    storageVersion,
-    changes,
   }: {
     workflowName: string;
     runId: string;
@@ -607,40 +599,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-    storageVersion?: 1 | 2;
-    changes?: WorkflowRunChanges;
   }): Promise<void> {
     this.assertFence(fence, runId, 'persistWorkflowSnapshot');
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
-
-    if (storageVersion === 2) {
-      const existing = this.db.workflowRunHeaders.get(key);
-      const { context, value, ...header } = snapshot;
-      // An append to a run that isn't stored (e.g. deleted mid-run) writes a checkpoint instead,
-      // since the snapshot holds everything.
-      const append = !!changes && !!existing;
-      let seq = existing?.lastSeq ?? 0;
-      const entries: WorkflowRunEntry[] = append ? (this.db.workflowRunEntries.get(key) ?? []) : [];
-      for (const stepId of append ? changes!.stepIds : Object.keys(context)) {
-        entries.push({ seq: ++seq, kind: 'step', stepId, result: cloneRunData(context[stepId]) });
-      }
-      if (!append || changes!.state) {
-        entries.push({ seq: ++seq, kind: 'state', state: cloneRunData(value) });
-      }
-      this.db.workflowRunHeaders.set(key, {
-        workflow_name: workflowName,
-        run_id: runId,
-        resourceId: resourceId ?? existing?.resourceId,
-        header: cloneRunData(header),
-        lastSeq: seq,
-        createdAt: createdAt ?? existing?.createdAt ?? now,
-        updatedAt: updatedAt ?? now,
-      });
-      this.db.workflowRunEntries.set(key, entries);
-      return;
-    }
-
     const existing = this.db.workflows.get(key);
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,

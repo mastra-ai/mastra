@@ -70,18 +70,48 @@ function storageV2WriteMismatch(
   return extra.length ? `stored steps missing from the snapshot: ${extra.join(', ')}` : undefined;
 }
 
+/**
+ * Makes the store's v1 run methods throw when asked for a storage v2 run, so any v2 path that
+ * still reaches them fails the suite. Engine errors can end up in a failed result instead of
+ * failing the test, so the calls are also returned for `afterEach`.
+ */
+function rejectV1MethodsForStorageV2(storage: MockStore): string[] {
+  const calls: string[] = [];
+  const store = storage.stores.workflows!;
+  for (const method of [
+    'loadWorkflowSnapshot',
+    'getWorkflowRunById',
+    'updateWorkflowState',
+    'persistWorkflowSnapshot',
+  ] as const) {
+    const original = (store[method] as (args: { workflowName: string; storageVersion?: 1 | 2 }) => unknown).bind(store);
+    (store as any)[method] = (args: { workflowName: string; storageVersion?: 1 | 2 }) => {
+      if (args.storageVersion === 2) {
+        calls.push(`${method}(${args.workflowName})`);
+        throw new Error(`${method} was called with storageVersion: 2`);
+      }
+      return original(args);
+    };
+  }
+  return calls;
+}
+
 const storageV2Mismatches = checkStorageV2Writes();
+const storage = new MockStore();
+const v1MethodCalls = rejectV1MethodsForStorageV2(storage);
 
 createDefaultEngineTestSuite({
   name: 'Workflow (Default Engine, storage v2)',
-  storage: new MockStore(),
+  storage,
   storageVersion: 2,
   skipTests: {
     // Sync getStepResult throws on storage v2 runs.
     getStepResultSync: true,
   },
   afterEach: async () => {
+    const calls = v1MethodCalls.splice(0);
     const found = storageV2Mismatches.splice(0);
+    if (calls.length) throw new Error(`Storage v2 runs reached v1 store methods:\n${calls.join('\n')}`);
     if (found.length) throw new Error(`Storage v2 writes didn't match their snapshots:\n${found.join('\n')}`);
   },
 });

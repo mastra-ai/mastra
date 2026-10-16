@@ -11,7 +11,7 @@ import type {
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import { StorageDomain } from '../base';
-import type { StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunChanges, WorkflowRunHeader } from './journal';
+import type { StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
 
 function runJournalNotSupportedError(adapter: string): MastraError {
   return new MastraError({
@@ -59,7 +59,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * Whether this adapter stores storage v2 runs (`storageVersion: 2`): a header plus
-   * append-only entries, written by `persistWorkflowSnapshot` with `storageVersion: 2`.
+   * append-only entries, written and read by the storage v2 methods below.
    * Reads without a `storageVersion` hint must find runs of either version.
    * @experimental
    */
@@ -242,12 +242,6 @@ export abstract class WorkflowsStorage extends StorageDomain {
     storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | undefined>;
 
-  /**
-   * With `storageVersion: 2`, the run is stored as a header plus entries. A call without
-   * `changes` is a checkpoint that replaces the run's entries with one per `snapshot.context`
-   * key plus the state. A call with `changes` appends only the listed step results, and the
-   * state when `changes.state` is set. Either way, the header is rewritten from `snapshot`.
-   */
   abstract persistWorkflowSnapshot(_: {
     workflowName: string;
     runId: string;
@@ -256,10 +250,6 @@ export abstract class WorkflowsStorage extends StorageDomain {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-    /** @experimental */
-    storageVersion?: 1 | 2;
-    /** @experimental */
-    changes?: WorkflowRunChanges;
   }): Promise<void>;
 
   /**
