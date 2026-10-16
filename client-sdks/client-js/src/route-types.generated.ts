@@ -242,12 +242,12 @@ type InputShared_Auxiliary_766 = {
   children?: InputShared_Auxiliary_766[] | undefined;
 };
 
-type Shared_Auxiliary_767 = {
+type Shared_Auxiliary_764 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_767[] | undefined;
+  children?: Shared_Auxiliary_764[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -4236,7 +4236,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_767[] | undefined;
+  files?: Shared_Auxiliary_764[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -10749,26 +10749,29 @@ export type PostObservabilitySpansQuery_Response = {
     entityType: string | null;
     entityId: string | null;
     entityName: string | null;
+    entityVersionId: string | null;
+    parentEntityType: string | null;
+    parentEntityId: string | null;
+    parentEntityName: string | null;
+    parentEntityVersionId: string | null;
+    rootEntityType: string | null;
+    rootEntityId: string | null;
+    rootEntityName: string | null;
+    rootEntityVersionId: string | null;
+    threadId: string | null;
+    runId: string | null;
+    sessionId: string | null;
+    userId: string | null;
+    requestId: string | null;
+    serviceName: string | null;
+    experimentId: string | null;
+    environment: string | null;
+    executionSource: string | null;
     model: string | null;
     provider: string | null;
     inputPreview: string | null;
-    inputTruncated: boolean;
     outputPreview: string | null;
-    outputTruncated: boolean;
     errorPreview: string | null;
-    errorTruncated: boolean;
-    cost:
-      | {
-          state: 'available';
-          amount: number;
-          currency: string;
-        }
-      | {
-          state: 'missing';
-        }
-      | {
-          state: 'unavailable';
-        };
   }[];
   page: {
     next: string | null;
