@@ -43,7 +43,7 @@ import { relatedWorkItemIndex } from '../../domains/factory/services/relationshi
 import { workItemHumanActorIds } from '../../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../../domains/workspaces/services/github';
 
-import { ColumnReveal } from '../../domains/factory/components/ColumnReveal';
+import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
 import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
@@ -288,8 +288,10 @@ export function BoardContent({
             )
           }
         >
-          <ColumnReveal
+          <VirtualBoardItems
             items={stageWorkItems}
+            itemKey={item => item.id}
+            layout={layout}
             pinned={item => item.id === targetItemId}
             renderItem={item => (
               <WorkItemCard
