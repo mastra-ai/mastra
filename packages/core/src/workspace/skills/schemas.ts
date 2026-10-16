@@ -6,7 +6,7 @@
  * version compatibility issues between Zod 3 and Zod 4.
  */
 
-import { parseFrontmatter } from '../../utils/frontmatter';
+import { parseFrontmatter } from '@internal/core/frontmatter';
 
 // =============================================================================
 // Constants

@@ -10,7 +10,7 @@
  * - references/<file> (from the skill's `references` map)
  */
 
-import { stringifyFrontmatter } from '../utils/frontmatter';
+import { stringifyFrontmatter } from '@internal/core/frontmatter';
 
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '../workspace/skills/skill-source';
 import type { InlineSkill } from './types';

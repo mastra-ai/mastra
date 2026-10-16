@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseFrontmatter, stringifyFrontmatter } from './frontmatter';
+import { parseFrontmatter, stringifyFrontmatter } from './index';
 
 describe('parseFrontmatter', () => {
   it('splits YAML frontmatter from the body', () => {
