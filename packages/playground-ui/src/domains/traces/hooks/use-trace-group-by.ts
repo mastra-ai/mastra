@@ -86,7 +86,7 @@ export function useTraceGroupBy({
     },
   });
 
-  // Runs only once the grouped response has an unnamed group, and reads only those traces.
+  // Runs once the grouped response has an unnamed group, or a group filter is set; reads only unnamed traces.
   const fallbackRequest = entityIdFallback ? buildTraceGroupEntityIdFallbackRequest(request, result.data) : undefined;
   const fallback = useTraceAggregate({
     request: fallbackRequest ?? request,

@@ -327,14 +327,15 @@ const UNNAMED = { op: 'notExists', path: 'entityName' } as const;
 
 /**
  * When grouping by `entityName` returned a group of traces with no name, the request that splits those traces by
- * `entityId` instead. It only runs when such a group exists and reads only the unnamed traces.
+ * `entityId` instead. It reads only the unnamed traces, and runs when such a group exists or a group filter is set:
+ * the filter applies to all unnamed traces together, so it can drop that group while a single entity would pass.
  */
 export function buildTraceGroupEntityIdFallbackRequest(
   request: AggregateTracesArgs,
   response: AggregateTracesResponse | undefined,
 ): AggregateTracesArgs | undefined {
   if (!request.groupBy?.includes('entityName')) return undefined;
-  if (!response?.rows.some(row => !row.dimensions?.entityName)) return undefined;
+  if (!request.having && !response?.rows.some(row => !row.dimensions?.entityName)) return undefined;
   return {
     ...request,
     where: request.where ? { op: 'and', args: [request.where, UNNAMED] } : UNNAMED,
@@ -350,13 +351,20 @@ const compareMeasure = (a: TraceGroupRow, b: TraceGroupRow, { measure, direction
   return direction === 'asc' ? left - right : right - left;
 };
 
-/** Replace the unnamed groups with their per-`entityId` split, re-sorted and cut to the view's limit. */
+/**
+ * Replace the unnamed groups with their per-`entityId` split, re-sorted and cut to the view's limit.
+ *
+ * When the named groups were truncated, the ones not returned rank at or below the last one returned, so split
+ * groups ranked below it are dropped: they could be outranked by a group that was never fetched.
+ */
 export function mergeTraceGroupEntityIdFallback(
   response: AggregateTracesResponse,
   fallback: AggregateTracesResponse,
   sort: TraceGroupSort,
 ): AggregateTracesResponse {
-  const rows = [...response.rows.filter(row => row.dimensions?.entityName), ...fallback.rows].sort((a, b) =>
+  const cutoff = response.truncated ? response.rows.at(-1) : undefined;
+  const split = cutoff ? fallback.rows.filter(row => compareMeasure(row, cutoff, sort) <= 0) : fallback.rows;
+  const rows = [...response.rows.filter(row => row.dimensions?.entityName), ...split].sort((a, b) =>
     compareMeasure(a, b, sort),
   );
   return {

@@ -70,6 +70,7 @@ export function createTraceGroupByFilterBarFields({
     suggestions: dimensions.map(dimension => ({ value: dimension, label: TRACE_GROUP_BY_DIMENSION_LABELS[dimension] })),
     strict: true,
     hidden: disabled,
+    section: 'Group traces',
   };
   const havingFields = TRACE_GROUP_BY_MEASURES.filter(measure => measures.includes(measure)).map<FilterBarField>(
     measure => ({
@@ -80,6 +81,7 @@ export function createTraceGroupByFilterBarFields({
       type: 'number',
       operators: [...TRACE_GROUP_HAVING_OPERATORS],
       hidden: disabled || !grouped,
+      section: 'Filter groups',
     }),
   );
   return [groupByField, ...havingFields];

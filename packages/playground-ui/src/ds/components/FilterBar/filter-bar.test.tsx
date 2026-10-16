@@ -126,6 +126,28 @@ describe('FilterBar', () => {
       expect(getChips()).toHaveLength(1);
     });
 
+    it('lists sectioned fields under their headings and picks across them', async () => {
+      const onChange = vi.fn();
+      const fields: FilterBarField[] = [
+        { id: 'groupCount', label: 'Group count', type: 'number', operators: ['gt'], section: 'Filter groups' },
+        ...FIELDS.map(field => ({ ...field, section: 'Filter rows' })),
+      ];
+      render(<Harness fields={fields} onChange={onChange} />);
+
+      getInput().focus();
+      type('dur');
+      await screen.findByRole('option', { name: 'Duration' });
+      expect(screen.getByText('Filter rows')).toBeTruthy();
+      expect(screen.queryByText('Filter groups')).toBeNull();
+      type('');
+      expect(await screen.findByText('Filter groups')).toBeTruthy();
+      fireEvent.click(screen.getByRole('option', { name: 'Group count' }));
+      type('5');
+      key('Enter');
+
+      expect(onChange.mock.lastCall?.[0]).toMatchObject([{ fieldId: 'groupCount', operatorId: 'gt', value: 5 }]);
+    });
+
     it('commits a free-text value from the inline Apply button', async () => {
       const onChange = vi.fn();
       render(<Harness onChange={onChange} />);

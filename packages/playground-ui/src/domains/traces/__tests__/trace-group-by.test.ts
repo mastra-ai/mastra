@@ -441,6 +441,21 @@ describe('entityId fallback', () => {
     });
   });
 
+  describe('when a group filter is set', () => {
+    it('splits the unnamed traces even when their combined group was filtered out', () => {
+      const filtered = buildTraceGroupByRequest(
+        { timeRange, where: environmentFilter },
+        { groupBy: ['entityName'], having: [{ measure: 'errorRate', operatorId: 'gt', value: 0.25 }] },
+        DEFAULT_TRACE_GROUP_SORT,
+      );
+      const named = { rows: [group({ entityName: 'Code Agent' }, 5)], truncated: false };
+      expect(buildTraceGroupEntityIdFallbackRequest(filtered, named)).toMatchObject({
+        groupBy: ['entityId'],
+        having: filtered.having,
+      });
+    });
+  });
+
   describe('when every group has an entityName, or grouping is not by entityName', () => {
     it('sends no follow-up request', () => {
       const named = { rows: [group({ entityName: 'Code Agent', status: 'success' }, 5)], truncated: false };
@@ -486,6 +501,20 @@ describe('entityId fallback', () => {
       expect(getTraceGroupDrillDown(['entityName'], first)).toEqual({
         filters: [{ param: 'filterEntityId', value: 'mastracode-outcome', operatorId: 'is' }],
       });
+    });
+
+    it('drops split groups that a group the truncated response left out could outrank', () => {
+      const truncated = {
+        rows: [group({ entityName: null }, 7), group({ entityName: 'Code Agent' }, 5)],
+        truncated: true,
+      };
+      const split = {
+        rows: [group({ entityId: 'big-scorer' }, 6), group({ entityId: 'small-scorer' }, 1)],
+        truncated: false,
+      };
+      const merged = mergeTraceGroupEntityIdFallback(truncated, split, DEFAULT_TRACE_GROUP_SORT);
+      expect(merged.rows.map(entry => getTraceGroupValue(entry, 'entityName'))).toEqual(['big-scorer', 'Code Agent']);
+      expect(merged.truncated).toBe(true);
     });
 
     it('reports truncation when the split pushes groups past the limit', () => {

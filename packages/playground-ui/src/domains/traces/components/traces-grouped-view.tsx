@@ -1,6 +1,5 @@
 import {
   TRACE_GROUP_BY_DIMENSION_LABELS,
-  TRACE_GROUP_BY_LIMIT,
   DEFAULT_TRACE_GROUP_COLUMNS,
   TRACE_GROUP_BY_MEASURE_LABELS,
   formatTraceGroupMeasure,
@@ -148,7 +147,7 @@ export function TracesGroupedView({
       </DataList>
       {truncated && !isLoading && (
         <Txt variant="body-sm" tone="muted" className="px-2">
-          Showing the top {TRACE_GROUP_BY_LIMIT} groups by {sortPhrase(sort.measure)}. Narrow the filters to see others.
+          Showing the top {rows.length} groups by {sortPhrase(sort.measure)}. Narrow the filters to see others.
         </Txt>
       )}
     </div>

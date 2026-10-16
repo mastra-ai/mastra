@@ -1867,6 +1867,41 @@ describe('Traces page group by', () => {
       expect(counts.reduce((sum, count) => sum + count, 0)).toBe(groupedTraceQueryPage.traces.length);
     });
 
+    describe('after the grouped view has been open a while', () => {
+      afterEach(() => vi.useRealTimers());
+
+      it('ends the window at the current time when the preset changes, and on Refresh', async () => {
+        vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+        const opened = new Date('2026-10-16T09:00:00Z');
+        vi.setSystemTime(opened);
+        setGroupByHandlers(traceAggregateCapabilities);
+        renderPage('/traces?datePreset=last-7d&groupBy=entityName');
+        await screen.findByRole('button', { name: 'Show traces for support-agent' });
+
+        const later = new Date(opened.getTime() + 60 * 60_000);
+        vi.setSystemTime(later);
+        onAggregateRequest.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Value: Last 7 days' }));
+        fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
+        await waitFor(() => expect(onAggregateRequest).toHaveBeenCalled());
+        const { from, to } = onAggregateRequest.mock.lastCall![0].timeRange;
+        expect(new Date(to!).getTime() - new Date(from!).getTime()).toBeCloseTo(24 * 60 * 60_000, -4);
+        expect(new Date(to!).getTime()).toBeGreaterThanOrEqual(later.getTime());
+
+        await waitFor(() =>
+          expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Refresh' }).disabled).toBe(false),
+        );
+        const refreshed = new Date(later.getTime() + 60 * 60_000);
+        vi.setSystemTime(refreshed);
+        onAggregateRequest.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => expect(onAggregateRequest).toHaveBeenCalled());
+        expect(new Date(onAggregateRequest.mock.lastCall![0].timeRange.to!).getTime()).toBeGreaterThanOrEqual(
+          refreshed.getTime(),
+        );
+      });
+    });
+
     it('lets the user pick the measure columns, requests only those, and remembers them', async () => {
       setGroupByHandlers(traceAggregateCapabilities);
       const { unmount } = renderPage('/traces?groupBy=entityName');

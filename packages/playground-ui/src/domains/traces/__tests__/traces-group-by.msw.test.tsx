@@ -301,7 +301,7 @@ describe('Traces group by', () => {
     serveAggregate(() => groupedByStatus);
     renderHarness('?groupBy=status&groupSort=duration.p95:desc');
 
-    expect(await screen.findByText(/Showing the top 50 groups by p95 duration/)).not.toBeNull();
+    expect(await screen.findByText(/Showing the top \d+ groups by p95 duration/)).not.toBeNull();
     expect(onAggregate).toHaveBeenCalledWith(
       expect.objectContaining({ groupBy: ['status'], orderBy: { field: 'duration.p95', direction: 'desc' } }),
     );

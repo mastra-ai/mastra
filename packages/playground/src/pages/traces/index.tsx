@@ -1,5 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
@@ -78,6 +79,7 @@ import {
   useTraceOrBranchSpans,
   useTraceUsage,
 } from '@mastra/react/hooks/traces';
+import { RefreshCwIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -253,6 +255,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       createTraceQueryValuesResolver(client, discoveryTimeRange, scope, path),
     [client, discoveryTimeRange],
   );
+
+  // The grouped view holds `now` until told otherwise; a preset computes its start from the current time,
+  // so a date change must move the grouped window's end too or the two drift apart.
+  const withGroupRefresh =
+    <Args extends unknown[]>(handler: (...args: Args) => void) =>
+    (...args: Args) => {
+      handler(...args);
+      groupView.refresh();
+    };
 
   const buildListQuery = (now: Date) =>
     buildTraceQueryRequest({
@@ -470,11 +481,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
                 <TraceTimeRangeChip
                   preset={url.datePreset}
-                  onPresetChange={url.handleDatePresetChange}
+                  onPresetChange={withGroupRefresh(url.handleDatePresetChange)}
                   dateFrom={url.selectedDateFrom}
                   dateTo={url.selectedDateTo}
-                  onDateChange={url.handleDateChange}
-                  onDateRangeChange={url.handleDateRangeChange}
+                  onDateChange={withGroupRefresh(url.handleDateChange)}
+                  onDateRangeChange={withGroupRefresh(url.handleDateRangeChange)}
                   disabled={isTracesLoading}
                   presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
                 />
@@ -487,7 +498,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         </FilterBar>
       </ActionRow.Start>
       <ActionRow.End>
-        {/* The grouped view picks its own measure columns and doesn't poll. */}
+        {/* The grouped view picks its own measure columns and doesn't poll: Refresh moves its window to now. */}
+        {groupView.grouped && (
+          <Button size="sm" onClick={groupView.refresh} disabled={groupView.isFetching}>
+            <RefreshCwIcon />
+            Refresh
+          </Button>
+        )}
         {groupView.grouped && (
           <TraceGroupColumnsMenu
             columns={groupColumns}

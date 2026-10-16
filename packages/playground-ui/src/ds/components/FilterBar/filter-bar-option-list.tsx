@@ -6,6 +6,7 @@ import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { cn } from '@/lib/utils';
 
 export type FilterBarOptionListProps<T> = {
@@ -18,7 +19,12 @@ export type FilterBarOptionListProps<T> = {
   emptyText?: string;
   'aria-label': string;
   'aria-multiselectable'?: boolean;
+  /** The root's `items` are sections (`{ value: heading, items }`): render each under its heading. */
+  sectioned?: boolean;
 };
+
+/** A section of the root's `items` when the list is `sectioned`; an empty heading renders none. */
+export type FilterBarOptionSection<T> = { value: string; items: T[] };
 
 /** Default value row: the option's leading node (avatar, swatch…) followed by its label. */
 export function FilterBarOptionLabel({ option }: { option: FilterBarOption }) {
@@ -49,10 +55,35 @@ export function FilterBarOptionList<T>({
   emptyText = 'No results.',
   'aria-label': ariaLabel,
   'aria-multiselectable': multiselectable,
+  sectioned = false,
 }: FilterBarOptionListProps<T>) {
   const { describeSuggestionsError } = useFilterBarContext();
   const idle = !isLoading && error === undefined;
   const menu = useFluidMenu<HTMLDivElement>();
+  const renderItem = (option: T) => {
+    const selected = isSelected?.(option) ?? false;
+    return (
+      <FluidItem
+        key={getKey(option)}
+        value={option}
+        data-selected={selected || undefined}
+        className={cn(comboboxStyles.item, 'min-w-0')}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">{renderOption(option)}</span>
+        <span className={comboboxStyles.itemRightSlot}>
+          <span className={comboboxStyles.checkContainer}>
+            {isSelected ? (
+              selected && <CheckIcon className={comboboxStyles.checkIcon} />
+            ) : (
+              <ComboboxPrimitive.ItemIndicator>
+                <CheckIcon className={comboboxStyles.checkIcon} />
+              </ComboboxPrimitive.ItemIndicator>
+            )}
+          </span>
+        </span>
+      </FluidItem>
+    );
+  };
   return (
     <>
       {isLoading && (
@@ -81,30 +112,19 @@ export function FilterBarOptionList<T>({
             aria-multiselectable={multiselectable}
             className={comboboxStyles.list}
           >
-            {(option: T) => {
-              const selected = isSelected?.(option) ?? false;
-              return (
-                <FluidItem
-                  key={getKey(option)}
-                  value={option}
-                  data-selected={selected || undefined}
-                  className={cn(comboboxStyles.item, 'min-w-0')}
-                >
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">{renderOption(option)}</span>
-                  <span className={comboboxStyles.itemRightSlot}>
-                    <span className={comboboxStyles.checkContainer}>
-                      {isSelected ? (
-                        selected && <CheckIcon className={comboboxStyles.checkIcon} />
-                      ) : (
-                        <ComboboxPrimitive.ItemIndicator>
-                          <CheckIcon className={comboboxStyles.checkIcon} />
-                        </ComboboxPrimitive.ItemIndicator>
-                      )}
-                    </span>
-                  </span>
-                </FluidItem>
-              );
-            }}
+            {sectioned
+              ? (section: FilterBarOptionSection<T>, index: number) => (
+                  <ComboboxPrimitive.Group key={section.value || index} items={section.items}>
+                    {index > 0 && <ComboboxPrimitive.Separator className={menuSeparatorClass} />}
+                    {section.value && (
+                      <ComboboxPrimitive.GroupLabel className={menuLabelClass}>
+                        {section.value}
+                      </ComboboxPrimitive.GroupLabel>
+                    )}
+                    <ComboboxPrimitive.Collection>{renderItem}</ComboboxPrimitive.Collection>
+                  </ComboboxPrimitive.Group>
+                )
+              : renderItem}
           </ComboboxPrimitive.List>
         </FluidMenuItems>
       </div>
