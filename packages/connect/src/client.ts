@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { extractProblemDetail, MastraConnectError } from './errors.js';
+import { extractProblemDetail, MastraConnectError, providerErrorHint } from './errors.js';
 import {
   describePlatformCall,
   endPlatformCallSpan,
@@ -471,7 +471,7 @@ export async function proxyRequestWithResponse(
   const response = await platformFetch(client, url, init);
 
   if (!response.ok) {
-    const { detail, isProblemJson } = await extractProblemDetail(response);
+    const { detail, code, isProblemJson } = await extractProblemDetail(response);
     if (isProblemJson) {
       // Platform-originated error (bad path, unknown connection, auth, limits).
       if (response.status === 401 || response.status === 403) {
@@ -497,10 +497,13 @@ export async function proxyRequestWithResponse(
         },
       );
     }
-    // Provider-originated error passed through the proxy.
+    // Provider-originated error passed through the proxy. Some providers
+    // misreport the cause (e.g. Graph's workbook-on-consumer-OneDrive 401);
+    // append the clarifying hint so tool callers see the real problem.
+    const hint = providerErrorHint({ status: response.status, path: cleanPath, code, detail });
     throw new MastraConnectError(
       'proxy_error',
-      `Provider request failed (${response.status})${detail ? `: ${detail}` : '.'}`,
+      `Provider request failed (${response.status})${detail ? `: ${detail}` : '.'}${hint ? ` ${hint}` : ''}`,
       { status: response.status, detail },
     );
   }

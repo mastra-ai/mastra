@@ -82,7 +82,7 @@ interface ProblemJson {
   status?: number;
   detail?: string;
   code?: string;
-  error?: string | { message?: unknown };
+  error?: string | { message?: unknown; code?: unknown };
   // GitHub-style bodies surface a top-level `message` string.
   message?: string;
   // Jira surfaces human-readable messages as `errorMessages: string[]`.
@@ -116,11 +116,15 @@ export async function extractProblemDetail(
         if (typeof value === 'string' && value) {
           return { detail: truncate(value), code, isProblemJson };
         }
-        // OpenAI and similar providers nest the message: `{ "error": { "message": "..." } }`.
+        // OpenAI and Microsoft Graph nest both fields:
+        // `{ "error": { "code": "...", "message": "..." } }`. The nested code
+        // is the stable machine-readable identifier (Graph's top level has
+        // none), so surface it when no top-level `code` exists.
         if (field === 'error' && value && typeof value === 'object') {
           const message = value.message;
+          const nestedCode = typeof value.code === 'string' ? value.code : undefined;
           if (typeof message === 'string' && message) {
-            return { detail: truncate(message), code, isProblemJson };
+            return { detail: truncate(message), code: code ?? nestedCode, isProblemJson };
           }
         }
       }
@@ -143,4 +147,38 @@ export async function extractProblemDetail(
     // Non-JSON body: fall through without echoing it.
   }
   return { isProblemJson };
+}
+
+/**
+ * Clarifies provider errors that are known to misreport their cause, so the
+ * message an agent sees explains the real problem instead of inviting the
+ * wrong recovery.
+ *
+ * Microsoft Graph's Excel workbook API does not exist for personal Microsoft
+ * accounts (workbooks on consumer OneDrive), but Graph reports that gap as a
+ * 401 `FileOpenUserUnauthorized` — indistinguishable in shape from a dead
+ * credential or a file-sharing problem. Without the hint, agents respond by
+ * reconnecting or chasing file permissions, neither of which can work.
+ */
+export function providerErrorHint(options: {
+  status: number;
+  path: string;
+  code?: string;
+  detail?: string;
+}): string | undefined {
+  const { status, path, code, detail } = options;
+  if (
+    status === 401 &&
+    /\/workbook(\/|\b)/.test(path) &&
+    (code === 'FileOpenUserUnauthorized' || (detail?.includes('permission to open this file') ?? false))
+  ) {
+    return (
+      "Microsoft Graph's Excel workbook API is not available for personal Microsoft accounts: " +
+      'workbooks stored on consumer OneDrive are unsupported (only OneDrive for Business and SharePoint are). ' +
+      'The connection and its credentials are still valid, so do not reconnect. ' +
+      'File-level tools (list/create/copy/delete workbook) still work on this account; ' +
+      'worksheet, range, table, and chart tools require a work or school Microsoft account.'
+    );
+  }
+  return undefined;
 }

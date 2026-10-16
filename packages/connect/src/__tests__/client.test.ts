@@ -446,6 +446,72 @@ describe('proxyRequest', () => {
     });
   });
 
+  it('explains the Graph workbook 401 on consumer OneDrive instead of implying a credential failure', async () => {
+    // Graph misreports "workbook API does not exist for personal accounts" as
+    // a 401 FileOpenUserUnauthorized. The message must tell the agent the
+    // connection is fine and which tools still work.
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json(
+        {
+          error: {
+            code: 'FileOpenUserUnauthorized',
+            message: 'You do not have permission to open this file in the browser.',
+          },
+        },
+        { status: 401 },
+      ),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(
+      proxyRequest(client, 'c_1', {
+        method: 'GET',
+        path: 'v1.0/drives/d1/items/i1/workbook/worksheets',
+      }),
+    ).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 401,
+      message: expect.stringContaining('not available for personal Microsoft accounts'),
+    });
+  });
+
+  it('does not append the workbook hint to Graph 401s outside workbook paths', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: { code: 'InvalidAuthenticationToken', message: 'Access token has expired.' } },
+          { status: 401 },
+        ),
+      );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(
+      proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/me/drive/root/children' }),
+    ).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 401,
+      message: 'Provider request failed (401): Access token has expired.',
+    });
+  });
+
+  it('does not append the workbook hint to workbook 401s with unrelated error codes', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: { code: 'InvalidAuthenticationToken', message: 'Access token has expired.' } },
+          { status: 401 },
+        ),
+      );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(
+      proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/drives/d1/items/i1/workbook/worksheets' }),
+    ).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 401,
+      message: 'Provider request failed (401): Access token has expired.',
+    });
+  });
+
   it('never echoes the access token in proxy error messages', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'boom' }, { status: 500 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
