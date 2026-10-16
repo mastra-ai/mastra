@@ -30,6 +30,20 @@ describe('single leading system message for OpenAI-compatible providers', () => 
     expect(prompt.filter(m => m.role === 'system')).toHaveLength(2);
   });
 
+  it('keeps the last providerOptions when merging', () => {
+    const cache = { openrouter: { cacheControl: { type: 'ephemeral' } } };
+    const out = normalizeSystemMessagesForProvider(
+      [
+        { role: 'system', content: 'a', providerOptions: { x: { y: 1 } } },
+        { role: 'system', content: 'b', providerOptions: cache },
+        { role: 'system', content: 'c' },
+        { role: 'user', content: 'u' },
+      ],
+      'openrouter.chat',
+    );
+    expect(out[0]).toEqual({ role: 'system', content: 'a\n\nb\n\nc', providerOptions: cache });
+  });
+
   it('demotes mid-conversation system messages to user reminders', () => {
     const out = normalizeSystemMessagesForProvider(
       [

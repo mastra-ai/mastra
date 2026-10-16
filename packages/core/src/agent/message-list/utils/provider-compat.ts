@@ -448,12 +448,14 @@ export function normalizeSystemMessagesForProvider<T extends ModelMessage>(
   const result: T[] = [];
   if (leading > 0) {
     if (needsMerge) {
-      const text = messages
-        .slice(0, leading)
+      const leadingMessages = messages.slice(0, leading);
+      const text = leadingMessages
         .map(systemText)
         .filter(t => t.length > 0)
         .join('\n\n');
-      result.push({ role: 'system', content: text } as T);
+      // Keep the last cache breakpoint so it still covers the whole merged prefix.
+      const providerOptions = leadingMessages.findLast(m => m.providerOptions)?.providerOptions;
+      result.push({ role: 'system', content: text, ...(providerOptions ? { providerOptions } : {}) } as T);
     } else {
       result.push(messages[0]!);
     }
