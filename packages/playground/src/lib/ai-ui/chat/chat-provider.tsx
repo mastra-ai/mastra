@@ -49,7 +49,7 @@ import type { ChatProps } from '@/types';
  *
  * Replaces the assistant-ui `MastraRuntimeProvider` (`useExternalStoreRuntime`)
  * and `ToolCallProvider`. It drives `useChat` from `@mastra/react`, preserves the
- * full streaming / generate / network behaviour (OM lifecycle, working-memory
+ * full streaming / generate behaviour (OM lifecycle, working-memory
  * refresh, thread-list refresh, stream errors, approvals, cancel), and exposes a
  * plain-prop context consumed by `MessageRow`/`MessageFactory` and the composer.
  */
@@ -113,9 +113,6 @@ export function ChatProvider({
     approveToolCallGenerate,
     declineToolCallGenerate,
     toolCallApprovals,
-    approveNetworkToolCall,
-    declineNetworkToolCall,
-    networkToolCallApprovals,
   } = useChat({
     agentId,
     threadId,
@@ -265,7 +262,6 @@ export function ChatProvider({
     topP,
     seed,
     chatWithGenerate,
-    chatWithNetwork,
     chatWithLegacyStream,
     providerOptions,
     requireToolApproval,
@@ -292,7 +288,6 @@ export function ChatProvider({
     threadId,
     modelSettingsArgs,
     model: modelOverride,
-    chatWithNetwork,
     chatWithGenerate,
     maxSteps,
     isOMEnabled,
@@ -333,7 +328,7 @@ export function ChatProvider({
   );
 
   const isRunning = isRunningStream || isAwaitingToolApproval;
-  const usesSignalStreamTransport = !chatWithGenerate && !chatWithNetwork && !chatWithLegacyStream;
+  const usesSignalStreamTransport = !chatWithGenerate && !chatWithLegacyStream;
   const canSendWhileStreaming = getCanSendWhileStreaming({
     isSupportedModel,
     threadSignalsEnabled: threadSignalsEnabled && usesSignalStreamTransport,
@@ -364,11 +359,8 @@ export function ChatProvider({
                 declineToolcall={declineToolCall}
                 approveToolcallGenerate={approveToolCallGenerate}
                 declineToolcallGenerate={declineToolCallGenerate}
-                approveNetworkToolcall={approveNetworkToolCall}
-                declineNetworkToolcall={declineNetworkToolCall}
                 isRunning={isRunningStream}
                 toolCallApprovals={toolCallApprovals}
-                networkToolCallApprovals={networkToolCallApprovals}
               >
                 {children}
               </ToolCallProvider>

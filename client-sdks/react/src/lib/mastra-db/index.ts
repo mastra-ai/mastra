@@ -1,10 +1,5 @@
-export {
-  accumulateChunk,
-  accumulateNetworkChunk,
-  finishStreamingAssistantMessage,
-  mapWorkflowStreamChunkToWatchResult,
-} from './accumulator';
-export type { AccumulateChunkArgs, AccumulateNetworkChunkArgs } from './accumulator';
+export { accumulateChunk, finishStreamingAssistantMessage, mapWorkflowStreamChunkToWatchResult } from './accumulator';
+export type { AccumulateChunkArgs } from './accumulator';
 export { fromCoreUserMessageToMastraDBMessage, fromCoreUserMessagesToMastraDBMessage } from './fromCoreUserMessage';
 export { CLIENT_MESSAGE_ID_KEY } from './types';
 export type {

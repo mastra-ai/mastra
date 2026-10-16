@@ -235,36 +235,6 @@ describe('streamLegacy', () => {
   });
 });
 
-describe('network', () => {
-  it('should return Response with processDataStream method', async () => {
-    const result = await agent.network('Analyze this task', {});
-    expectTypeOf(result).toExtend<Response>();
-    expectTypeOf(result).toHaveProperty('processDataStream');
-  });
-
-  it('should accept NetworkStreamParams', async () => {
-    const result = await agent.network('Analyze', {
-      maxSteps: 20,
-      autoResumeSuspendedTools: true,
-    });
-    expectTypeOf(result).toExtend<Response>();
-  });
-
-  it('should accept structuredOutput (zod v3)', async () => {
-    const result = await agent.network('Analyze', {
-      structuredOutput: { schema: sentimentSchema },
-    });
-    expectTypeOf(result).toExtend<Response>();
-  });
-
-  it('should accept structuredOutput (zod v4)', async () => {
-    const result = await agent.network('Analyze', {
-      structuredOutput: { schema: sentimentSchemaV4 },
-    });
-    expectTypeOf(result).toExtend<Response>();
-  });
-});
-
 describe('StreamParams typing', () => {
   it('should type StreamParams without structured output', () => {
     const params: StreamParams = {

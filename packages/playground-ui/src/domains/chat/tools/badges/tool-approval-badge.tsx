@@ -16,12 +16,11 @@ export interface ToolApprovalRequest {
         runId?: string;
       }
     | undefined;
-  isNetwork: boolean;
   isGenerateMode?: boolean;
 }
 
 function useToolApproval(request: ToolApprovalRequest) {
-  const { toolCallId, toolApprovalMetadata, toolName, isNetwork, isGenerateMode } = request;
+  const { toolCallId, toolApprovalMetadata, toolName, isGenerateMode } = request;
   const toolCall = useOptionalToolCall();
   if (!toolCall) return undefined;
 
@@ -32,15 +31,10 @@ function useToolApproval(request: ToolApprovalRequest) {
     declineToolcallGenerate,
     isRunning,
     toolCallApprovals,
-    approveNetworkToolcall,
-    declineNetworkToolcall,
-    networkToolCallApprovals,
   } = toolCall;
 
   const handleApprove = () => {
-    if (isNetwork) {
-      approveNetworkToolcall(toolName, toolApprovalMetadata?.runId);
-    } else if (isGenerateMode) {
+    if (isGenerateMode) {
       approveToolcallGenerate(toolCallId);
     } else {
       approveToolcall(toolCallId);
@@ -48,19 +42,14 @@ function useToolApproval(request: ToolApprovalRequest) {
   };
 
   const handleDecline = () => {
-    if (isNetwork) {
-      declineNetworkToolcall(toolName, toolApprovalMetadata?.runId);
-    } else if (isGenerateMode) {
+    if (isGenerateMode) {
       declineToolcallGenerate(toolCallId);
     } else {
       declineToolcall(toolCallId);
     }
   };
 
-  const status = isNetwork
-    ? networkToolCallApprovals?.[toolApprovalMetadata?.runId ? `${toolApprovalMetadata.runId}-${toolName}` : toolName]
-        ?.status
-    : toolCallApprovals?.[toolCallId]?.status;
+  const status = toolCallApprovals?.[toolCallId]?.status;
 
   if (!awaitsToolApproval(request) && !status) return undefined;
 

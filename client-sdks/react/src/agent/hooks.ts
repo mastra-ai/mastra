@@ -6,11 +6,10 @@ import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
-  accumulateNetworkChunk,
   CLIENT_MESSAGE_ID_KEY,
   finishStreamingAssistantMessage,
   fromCoreUserMessagesToMastraDBMessage,
@@ -224,7 +223,6 @@ interface SharedArgs {
 export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMessage[] } & (
   | ({ mode: 'generate' } & Omit<GenerateArgs, 'coreUserMessages'>)
   | ({ mode: 'stream' } & Omit<StreamArgs, 'coreUserMessages'>)
-  | ({ mode: 'network' } & Omit<NetworkArgs, 'coreUserMessages'>)
   | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
 );
 
@@ -244,10 +242,6 @@ export type StreamArgs = SharedArgs & {
    * and the outgoing message metadata so the server echo can reconcile them.
    */
   clientMessageId?: string;
-};
-
-export type NetworkArgs = SharedArgs & {
-  onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
@@ -317,8 +311,6 @@ export const useChat = ({
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
-  const _networkRunId = useRef<string | undefined>(undefined);
-  const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
   const _activeContinuation = useRef<ActiveContinuation>({ requestContext: propsRequestContext });
   // Tracks the active stream (untilIdle) request so a subsequent stream() call
   // can abort the previous one. Without this, a still-open prior stream keeps
@@ -338,9 +330,6 @@ export const useChat = ({
   const liveTasks = useRef<TaskItem[] | undefined>(undefined);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
-  }>({});
-  const [networkToolCallApprovals, setNetworkToolCallApprovals] = useState<{
-    [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
   const pendingToolApprovalIdsRef = useRef(new Set<string>());
   const liveApprovalIds = useRef(new Set<string>());
@@ -1020,73 +1009,6 @@ export const useChat = ({
     }
   };
 
-  const network = async ({
-    coreUserMessages,
-    model,
-    requestContext,
-    threadId,
-    onNetworkChunk,
-    modelSettings,
-    signal,
-    tracingOptions,
-  }: NetworkArgs) => {
-    const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
-      modelSettings || {};
-
-    const resolvedRequestContext = requestContext ?? propsRequestContext;
-    _activeContinuation.current = {
-      model,
-      requestContext: resolvedRequestContext,
-    };
-    setIsRunning(true);
-
-    const clientWithAbort = new MastraClient({
-      ...baseClient!.options,
-      abortSignal: signal,
-    });
-
-    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
-
-    const runId = uuid();
-    _currentRunId.current = runId;
-
-    const response = await agent.network(coreUserMessages, {
-      model,
-      maxSteps,
-      modelSettings: {
-        frequencyPenalty,
-        presencePenalty,
-        maxRetries,
-        maxOutputTokens: maxTokens,
-        temperature,
-        topK,
-        topP,
-      },
-      runId,
-      requestContext: resolvedRequestContext,
-      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
-      tracingOptions,
-    });
-
-    _onNetworkChunk.current = onNetworkChunk;
-    _networkRunId.current = runId;
-
-    // Accumulate network chunks into `messages` as `MastraDBMessage` (temporary
-    // bridge until the next major), while still forwarding chunks to the
-    // consumer for side-effects (OM, working memory, thread list, errors).
-    await response.processDataStream({
-      onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev =>
-          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId } }),
-        );
-        void onNetworkChunk?.(chunk);
-      },
-    });
-
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
-  };
-
   const handleCancelRun = () => {
     _streamAbortRef.current?.abort();
     _streamAbortRef.current = null;
@@ -1102,8 +1024,6 @@ export const useChat = ({
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
-    _networkRunId.current = undefined;
-    _onNetworkChunk.current = undefined;
     _activeContinuation.current = {};
   };
 
@@ -1284,78 +1204,6 @@ export const useChat = ({
     setIsRunning(false);
   };
 
-  const approveNetworkToolCall = async (toolName: string, runId?: string) => {
-    const onNetworkChunk = _onNetworkChunk.current;
-    const networkRunId = runId || _networkRunId.current;
-    const continuation = _activeContinuation.current;
-
-    if (!networkRunId)
-      return console.info(
-        '[approveNetworkToolCall] approveNetworkToolCall can only be called after a network stream has started',
-      );
-
-    _currentRunId.current = networkRunId;
-    setIsRunning(true);
-    setNetworkToolCallApprovals(prev => ({
-      ...prev,
-      [runId ? `${runId}-${toolName}` : toolName]: { status: 'approved' },
-    }));
-
-    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    const response = await agent.approveNetworkToolCall({
-      runId: networkRunId,
-      ...continuation,
-    });
-
-    await response.processDataStream({
-      onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev =>
-          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
-        );
-        void onNetworkChunk?.(chunk);
-      },
-    });
-
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
-  };
-
-  const declineNetworkToolCall = async (toolName: string, runId?: string) => {
-    const onNetworkChunk = _onNetworkChunk.current;
-    const networkRunId = runId || _networkRunId.current;
-    const continuation = _activeContinuation.current;
-
-    if (!networkRunId)
-      return console.info(
-        '[declineNetworkToolCall] declineNetworkToolCall can only be called after a network stream has started',
-      );
-
-    _currentRunId.current = networkRunId;
-    setIsRunning(true);
-    setNetworkToolCallApprovals(prev => ({
-      ...prev,
-      [runId ? `${runId}-${toolName}` : toolName]: { status: 'declined' },
-    }));
-
-    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    const response = await agent.declineNetworkToolCall({
-      runId: networkRunId,
-      ...continuation,
-    });
-
-    await response.processDataStream({
-      onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev =>
-          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
-        );
-        void onNetworkChunk?.(chunk);
-      },
-    });
-
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
-  };
-
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     if (!isRunning && !isAwaitingToolApproval) _currentRunId.current = undefined;
     const coreUserMessages = [createUserMessage(args.message, args.coreUserMessages)];
@@ -1391,8 +1239,6 @@ export const useChat = ({
         await generate({ ...args, coreUserMessages });
       } else if (mode === 'stream') {
         await stream({ ...args, coreUserMessages, signalId, clientMessageId });
-      } else if (mode === 'network') {
-        await network({ ...args, coreUserMessages });
       }
     } catch (error) {
       // A failed send (subscription setup, request, or stream) must not leave
@@ -1423,8 +1269,5 @@ export const useChat = ({
     declineToolCallGenerate,
     cancelRun: handleCancelRun,
     toolCallApprovals,
-    approveNetworkToolCall,
-    declineNetworkToolCall,
-    networkToolCallApprovals,
   };
 };

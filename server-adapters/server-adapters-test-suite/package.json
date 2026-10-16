@@ -36,7 +36,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.64.0-0 <2.0.0-0",
+    "@mastra/core": ">=2.0.0-0 <3.0.0-0",
     "@mastra/mcp": ">=1.18.0-0 <3.0.0-0",
     "@mastra/server": ">=1.64.0-0 <2.0.0-0",
     "vitest": ">=4.0.0 <5.0.0",

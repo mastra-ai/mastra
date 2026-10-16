@@ -2,7 +2,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 import {
   Agent,
   MemoryThread,
-  memoryMessagesQuery,
   Tool,
   Processor,
   Workflow,
@@ -433,45 +432,33 @@ export class MastraClient extends BaseResource {
   /**
    * Lists messages for a thread.
    * @param threadId - ID of the thread
-   * @param opts - Optional parameters including agentId, networkId, and requestContext
+   * @param opts - Optional parameters including agentId and requestContext
    *   - When agentId is provided, uses the agent's memory
-   *   - When networkId is provided, uses the network endpoint
-   *   - When neither is provided, uses storage directly
+   *   - Otherwise, uses storage directly
    * @returns Promise containing the thread messages
    */
   public listThreadMessages(
     threadId: string,
     opts: ListMemoryThreadMessagesParams = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    if (opts.networkId) {
-      const query = memoryMessagesQuery(opts);
-      query.set('networkId', opts.networkId);
-      return this.request(
-        `/memory/network/threads/${threadId}/messages?${query.toString()}${requestContextQueryString(opts.requestContext, '&')}`,
-      );
-    }
     return this.getMemoryThread({ threadId, agentId: opts.agentId }).listMessages(opts);
   }
 
   public deleteThread(
     threadId: PathParams<'DELETE /memory/threads/:threadId'>['threadId'],
-    opts:
-      | { agentId: string; networkId?: never; requestContext?: RequestContext | Record<string, any> }
-      | { networkId: string; agentId?: never; requestContext?: RequestContext | Record<string, any> },
+    opts: { agentId: string; requestContext?: RequestContext | Record<string, any> },
   ): Promise<RouteResponse<'DELETE /memory/threads/:threadId'>> {
-    if (!opts || !!opts.agentId === !!opts.networkId) {
+    if (!opts?.agentId) {
       throw new Error(
-        'MastraClient.deleteThread() requires exactly one of agentId or networkId. ' +
-          'The server cannot resolve which memory store owns the thread without one, ' +
-          'and passing both is ambiguous.',
+        'MastraClient.deleteThread() requires agentId. ' +
+          'The server cannot resolve which memory store owns the thread without it.',
       );
     }
 
-    const url = opts.agentId
-      ? `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`
-      : `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
-
-    return this.request(url, { method: 'DELETE' });
+    return this.request(
+      `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`,
+      { method: 'DELETE' },
+    );
   }
 
   /**

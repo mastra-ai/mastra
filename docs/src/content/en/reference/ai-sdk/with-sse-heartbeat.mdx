@@ -11,7 +11,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 Wraps a server-sent events `Response` so it emits periodic `: heartbeat` comments while the underlying stream is idle. Proxies and load balancers often close connections that send no bytes for a while, which drops responses during long reasoning bursts or slow tool calls.
 
-Use this when you build the response yourself with [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream), [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream), or [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream). [`chatRoute()`](/reference/ai-sdk/chat-route) applies the same wrapper internally through its `heartbeatMs` option.
+Use this when you build the response yourself with [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) or [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream). [`chatRoute()`](/reference/ai-sdk/chat-route) applies the same wrapper internally through its `heartbeatMs` option.
 
 ## Usage example
 

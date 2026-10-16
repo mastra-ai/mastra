@@ -681,16 +681,6 @@
         "default": "./dist/workflows/constants.cjs"
       }
     },
-    "./network/vNext": {
-      "import": {
-        "types": "./dist/network/vNext/index.d.ts",
-        "default": "./dist/network/vNext/index.js"
-      },
-      "require": {
-        "types": "./dist/network/vNext/index.d.ts",
-        "default": "./dist/network/vNext/index.cjs"
-      }
-    },
     "./observability/context-storage": {
       "import": {
         "types": "./dist/observability/context-storage.d.ts",

@@ -11,7 +11,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useAgent } from '@mastra/react/hooks/agents';
-import { useMemory } from '@mastra/react/hooks/memory';
 import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
@@ -23,45 +22,6 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 export interface ComposerModelSettingsProps {
   agentId: string;
 }
-
-interface NetworkRadioProps {
-  hasMemory: boolean;
-  hasSubAgents: boolean;
-  disabled: boolean;
-}
-
-const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) => {
-  const isNetworkAvailable = hasMemory && hasSubAgents;
-  const itemDisabled = disabled || !isNetworkAvailable;
-
-  const radio = (
-    <FieldItem disabled={itemDisabled}>
-      <RadioGroupItem value="network" className="text-foreground" />
-      <FieldLabel>Network</FieldLabel>
-    </FieldItem>
-  );
-
-  if (isNetworkAvailable) {
-    return radio;
-  }
-
-  const requirements: string[] = [];
-  if (!hasMemory) {
-    requirements.push('memory enabled');
-  }
-  if (!hasSubAgents) {
-    requirements.push('at least one sub-agent');
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{radio}</TooltipTrigger>
-      <TooltipContent>
-        <p>Network is not available. Please make sure you have {requirements.join(' and ')}.</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-};
 
 interface StreamSubscriptionRadioProps {
   supported: boolean;
@@ -98,11 +58,6 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
-  const { data: memory, isLoading: isMemoryLoading } = useMemory({
-    agentId: agentId,
-    requestContext: useEntityRequestContext('agent', agentId)[0],
-    queryOptions: { enabled: Boolean(agentId) },
-  });
   const { settings, setSettings, resetAll } = useAgentSettings();
   const { canEdit } = usePermissions();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -121,8 +76,6 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
     return null;
   }
 
-  const hasMemory = Boolean(memory?.result);
-  const hasSubAgents = Boolean(agent && Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent?.modelVersion;
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
   const supportsThreadSubscription = agent?.supportsMemory !== false;
@@ -131,9 +84,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
   if (agent) {
     if (isSupportedModel) {
-      if (settings?.modelSettings?.chatWithNetwork) {
-        radioValue = 'network';
-      } else if (settings?.modelSettings?.chatWithGenerate) {
+      if (settings?.modelSettings?.chatWithGenerate) {
         radioValue = 'generate';
       } else if (settings?.modelSettings?.chatWithLegacyStream || !supportsThreadSubscription) {
         radioValue = 'stream';
@@ -173,7 +124,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-4">
-          {isLoading || isMemoryLoading ? (
+          {isLoading ? (
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (
             <section className="@container space-y-5">
@@ -190,7 +141,6 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         chatWithGenerateLegacy: value === 'generateLegacy',
                         chatWithGenerate: value === 'generate',
                         chatWithLegacyStream: value === 'stream',
-                        chatWithNetwork: value === 'network',
                       },
                     })
                   }
@@ -222,9 +172,6 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       <RadioGroupItem value="stream" className="text-foreground" />
                       <FieldLabel>Stream</FieldLabel>
                     </FieldItem>
-                  )}
-                  {isSupportedModel && (
-                    <NetworkRadio hasMemory={hasMemory} hasSubAgents={hasSubAgents} disabled={!canEditSettings} />
                   )}
                 </RadioGroup>
               </Entry>

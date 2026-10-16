@@ -84,7 +84,7 @@
     "tailwind-merge": "^3.5.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.67.0-0 <2.0.0-0",
+    "@mastra/core": ">=2.0.0-0 <3.0.0-0",
     "@tanstack/react-query": "^5.90.21",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",

@@ -72,7 +72,7 @@ import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentExecutionOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
@@ -786,31 +786,6 @@ interface AgentConfigBase<
    * Default options used when calling `stream()` in vNext mode.
    */
   defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
-  /**
-   * Default options used when calling `network()`.
-   * These are merged with options passed to each network() call.
-   *
-   * @example
-   * ```typescript
-   * const agent = new Agent({
-   *   // ...
-   *   defaultNetworkOptions: {
-   *     maxSteps: 20,
-   *     routing: {
-   *       verboseIntrospection: true,
-   *     },
-   *     completion: {
-   *       scorers: [testsScorer, buildScorer],
-   *       strategy: 'all',
-   *     },
-   *     onIterationComplete: ({ iteration, isComplete }) => {
-   *       console.log(`Iteration ${iteration} complete: ${isComplete}`);
-   *     },
-   *   },
-   * });
-   * ```
-   */
-  defaultNetworkOptions?: DynamicArgument<NetworkOptions, TRequestContext>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */

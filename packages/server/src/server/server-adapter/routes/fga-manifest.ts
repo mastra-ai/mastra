@@ -105,11 +105,11 @@ export function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | n
     return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
   }
 
-  if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
+  if (path.startsWith('/memory/threads/:threadId')) {
     return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
   }
 
-  if (path === '/memory/threads' || path === '/memory/network/threads') {
+  if (path === '/memory/threads') {
     return {
       resourceType: 'thread',
       resourceId: ({ threadId, resourceId }) => {
@@ -120,7 +120,7 @@ export function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | n
     };
   }
 
-  if (path === '/memory/save-messages' || path === '/memory/network/save-messages') {
+  if (path === '/memory/save-messages') {
     return {
       resourceType: 'thread',
       resourceId: ({ messages }) => {

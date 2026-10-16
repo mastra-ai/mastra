@@ -1,6 +1,6 @@
 import { expectTypeOf, describe, it } from 'vitest';
 import { Agent } from '@mastra/core/agent';
-import { type FullOutput, MastraModelOutput, MastraAgentNetworkStream } from '@mastra/core/stream';
+import { type FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { GenerateTextResult, GenerateObjectResult, StreamTextResult, StreamObjectResult } from '@mastra/core/llm';
 import { openai as openaiV4 } from 'openai-v4';
 import { openai as openaiV5 } from 'openai-v5';
@@ -124,32 +124,6 @@ describe('Agent with defaultOption', () => {
     });
   });
 
-  describe('network with defaultOption', () => {
-    it('should infer TOutput from agent generic when no structuredOutput is passed', async () => {
-      const result = await typedAgent.network('Analyze this');
-      expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<TypedOutput>>();
-    });
-
-    it('should override TOutput when structuredOutput is explicitly provided', async () => {
-      const overrideSchema = zv3.object({
-        networkResult: zv3.string(),
-      });
-
-      const result = await typedAgent.network('Override', {
-        structuredOutput: { schema: overrideSchema },
-      });
-
-      expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<{ networkResult: string }>>();
-    });
-
-    it('should provide correctly typed object promise', async () => {
-      const result = await typedAgent.network('Get answer');
-      const obj = await result.object;
-
-      expectTypeOf(obj).toExtend<TypedOutput>();
-    });
-  });
-
   // Test with zod v4 schema
   describe('Agent with defaultOption(zod-v4)', () => {
     const typedOutputSchemaV4 = zv4.object({
@@ -180,11 +154,6 @@ describe('Agent with defaultOption', () => {
     it('should infer TOutput from zod v4 schema in stream', async () => {
       const result = await typedAgentV4.stream('Get result');
       expectTypeOf(result).toEqualTypeOf<MastraModelOutput<TypedOutputV4>>();
-    });
-
-    it('should infer TOutput from zod v4 schema in network', async () => {
-      const result = await typedAgentV4.network('Get result');
-      expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<TypedOutputV4>>();
     });
   });
 });
@@ -398,94 +367,5 @@ describe('streamLegacy', () => {
     });
 
     expectTypeOf(result).toExtend<StreamObjectResult<typeof analysisSchema>>();
-  });
-});
-
-describe('network', () => {
-  it('should return MastraAgentNetworkStream<undefined> when called without structuredOutput', async () => {
-    const result = await agent.network('Hello');
-    expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<undefined>>();
-  });
-
-  it('should return MastraAgentNetworkStream<OUTPUT> when structuredOutput is provided (zod v3)', async () => {
-    const result = await agent.network('Analyze this task', {
-      structuredOutput: {
-        schema: sentimentSchema,
-      },
-    });
-    expectTypeOf(result).toEqualTypeOf<
-      MastraAgentNetworkStream<{ sentiment: 'positive' | 'negative' | 'neutral'; confidence: number }>
-    >();
-  });
-
-  it('should return MastraAgentNetworkStream<OUTPUT> when structuredOutput is provided (zod v4)', async () => {
-    const result = await agent.network('Analyze this task', {
-      structuredOutput: {
-        schema: sentimentSchemaV4,
-      },
-    });
-    expectTypeOf(result).toEqualTypeOf<
-      MastraAgentNetworkStream<{ sentiment: 'positive' | 'negative' | 'neutral'; confidence: number }>
-    >();
-  });
-
-  it('should provide typed object promise from network result', async () => {
-    const result = await agent.network('Analyze', {
-      structuredOutput: { schema: sentimentSchema },
-    });
-
-    const obj = await result.object;
-    expectTypeOf(obj).toExtend<{ sentiment: 'positive' | 'negative' | 'neutral'; confidence: number }>();
-  });
-
-  it('should infer OUTPUT type from complex schema', async () => {
-    const reportSchema = zv3.object({
-      title: zv3.string(),
-      sections: zv3.array(
-        zv3.object({
-          heading: zv3.string(),
-          content: zv3.string(),
-          importance: zv3.enum(['high', 'medium', 'low']),
-        }),
-      ),
-      metadata: zv3.object({
-        author: zv3.string(),
-        createdAt: zv3.string(),
-      }),
-    });
-
-    const result = await agent.network('Generate a report', {
-      structuredOutput: { schema: reportSchema },
-    });
-
-    expectTypeOf(result).toEqualTypeOf<
-      MastraAgentNetworkStream<{
-        title: string;
-        sections: Array<{
-          heading: string;
-          content: string;
-          importance: 'high' | 'medium' | 'low';
-        }>;
-        metadata: {
-          author: string;
-          createdAt: string;
-        };
-      }>
-    >();
-  });
-
-  it('should accept network options', async () => {
-    const result = await agent.network('Do something', {
-      maxSteps: 10,
-      autoResumeSuspendedTools: true,
-      runId: 'custom-run-id',
-    });
-    expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<undefined>>();
-  });
-
-  it('should extend ReadableStream for streaming', async () => {
-    const result = await agent.network('Hello');
-    // MastraAgentNetworkStream extends ReadableStream
-    expectTypeOf(result).toExtend<ReadableStream>();
   });
 });

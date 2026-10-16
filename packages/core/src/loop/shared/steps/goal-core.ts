@@ -22,8 +22,8 @@ import { RequestContext } from '../../../request-context';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
 import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { runStreamCompletionScorers } from '../../network/validation';
-import type { StreamCompletionContext } from '../../network/validation';
+import { runStreamCompletionScorers } from '../completion';
+import type { StreamCompletionContext } from '../completion';
 
 /** Outcome of a goal evaluation, projected back onto engine state by the glue. */
 export type GoalOutcome =

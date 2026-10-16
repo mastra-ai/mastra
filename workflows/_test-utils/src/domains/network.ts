@@ -1,7 +1,7 @@
 /**
  * Network-equivalent delegation tests for DurableAgent
  *
- * `Agent.network()` itself is a plain-Agent surface: the network loop is
+ * The removed `Agent.network()` mode was a plain-Agent surface: its loop was
  * built directly on the default in-process workflow engine
  * (loop/network/index.ts → createWorkflow → default engine), and neither
  * DurableAgent nor EventedAgent exposes a network() method — so the literal
@@ -20,10 +20,7 @@
  * - bail() from onDelegationComplete stops the loop in the same iteration
  * - a sub-agent failure surfaces to the supervisor without killing the run
  *
- * Observational-memory × network guards
- * (AGENT_NETWORK_OBSERVATIONAL_MEMORY_UNSUPPORTED etc.) stay in
- * packages/core/src/agent/agent-network.test.ts: they gate the plain-Agent
- * network() entry point, which no other leg has. The durable OM surface
+ * The durable OM surface
  * (serialized flag, title-generation guard) is pinned by
  * agent/durable/utils/serialize-state.test.ts and
  * agent/durable/workflows/__tests__/finalize-run.test.ts.

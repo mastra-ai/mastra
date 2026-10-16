@@ -6,11 +6,8 @@ export interface ToolCallContextValue {
   declineToolcall: (toolCallId: string) => void;
   approveToolcallGenerate: (toolCallId: string) => void;
   declineToolcallGenerate: (toolCallId: string) => void;
-  approveNetworkToolcall: (toolName: string, runId?: string) => void;
-  declineNetworkToolcall: (toolName: string, runId?: string) => void;
   isRunning: boolean;
   toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
-  networkToolCallApprovals: { [toolName: string]: { status: 'approved' | 'declined' } };
 }
 
 const ToolCallContext = createContext<ToolCallContextValue | undefined>(undefined);
@@ -25,11 +22,8 @@ export function ToolCallProvider({
   declineToolcall,
   approveToolcallGenerate,
   declineToolcallGenerate,
-  approveNetworkToolcall,
-  declineNetworkToolcall,
   isRunning,
   toolCallApprovals,
-  networkToolCallApprovals,
 }: ToolCallProviderProps) {
   const value = useMemo<ToolCallContextValue>(
     () => ({
@@ -37,23 +31,10 @@ export function ToolCallProvider({
       declineToolcall,
       approveToolcallGenerate,
       declineToolcallGenerate,
-      approveNetworkToolcall,
-      declineNetworkToolcall,
       isRunning,
       toolCallApprovals,
-      networkToolCallApprovals,
     }),
-    [
-      approveToolcall,
-      declineToolcall,
-      approveToolcallGenerate,
-      declineToolcallGenerate,
-      approveNetworkToolcall,
-      declineNetworkToolcall,
-      isRunning,
-      toolCallApprovals,
-      networkToolCallApprovals,
-    ],
+    [approveToolcall, declineToolcall, approveToolcallGenerate, declineToolcallGenerate, isRunning, toolCallApprovals],
   );
 
   return <ToolCallContext.Provider value={value}>{children}</ToolCallContext.Provider>;

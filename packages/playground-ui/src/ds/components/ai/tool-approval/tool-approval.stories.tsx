@@ -135,22 +135,16 @@ export const Decision: Story = {
   },
 };
 
-// Exercise Studio's real adapter here; its stream/generate/network dispatch is covered by its unit tests.
-function StudioApproval({
-  mode = 'stream',
-  ...props
-}: ToolApprovalProps & { mode?: 'stream' | 'generate' | 'network' }) {
+// Exercise Studio's real adapter here; its stream/generate dispatch is covered by its unit tests.
+function StudioApproval({ mode = 'stream', ...props }: ToolApprovalProps & { mode?: 'stream' | 'generate' }) {
   return (
     <ToolCallProvider
       approveToolcall={props.onApprove}
       declineToolcall={props.onDecline}
       approveToolcallGenerate={props.onApprove}
       declineToolcallGenerate={props.onDecline}
-      approveNetworkToolcall={props.onApprove}
-      declineNetworkToolcall={props.onDecline}
       isRunning={props.disabled ?? false}
       toolCallApprovals={props.status ? { 'write-file-1': { status: props.status } } : {}}
-      networkToolCallApprovals={props.status ? { [`run-1-${props.toolName}`]: { status: props.status } } : {}}
     >
       <ToolBadge
         toolCallId="write-file-1"
@@ -165,7 +159,6 @@ function StudioApproval({
           args: toolArguments,
           runId: 'run-1',
         }}
-        isNetwork={mode === 'network'}
         metadata={{ mode: mode === 'generate' ? 'generate' : 'stream' }}
       />
     </ToolCallProvider>
@@ -188,15 +181,6 @@ export const StudioGenerate: Story = {
   play: Pending.play,
 };
 
-export const StudioNetwork: Story = {
-  render: args => <StudioApproval {...args} mode="network" />,
-  play: async ({ canvasElement, args }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: `Decline ${args.toolName}` }));
-    await expect(args.onDecline).toHaveBeenCalledOnce();
-    await expect(args.onApprove).not.toHaveBeenCalled();
-  },
-};
-
 export const StudioSubmitting: Story = {
   args: { disabled: true },
   render: EmbeddedInToolDetails.render,
@@ -215,8 +199,8 @@ export const StudioApproved: Story = {
   },
 };
 
-export const StudioNetworkDeclined: Story = {
+export const StudioDeclined: Story = {
   args: { status: 'declined' },
-  render: StudioNetwork.render,
+  render: EmbeddedInToolDetails.render,
   play: Declined.play,
 };

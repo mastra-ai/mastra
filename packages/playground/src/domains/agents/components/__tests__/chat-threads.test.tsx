@@ -231,17 +231,6 @@ describe('ChatThreads — thread actions', () => {
     });
   });
 
-  describe('when the threads belong to a network', () => {
-    it('only offers Delete in the menu', async () => {
-      renderWithThread({ resourceType: 'network' });
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Thread actions' }));
-
-      expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeTruthy();
-      expect(screen.queryByRole('menuitem', { name: 'Rename' })).toBeNull();
-    });
-  });
-
   describe('when the user can only read memory', () => {
     beforeEach(() => {
       server.use(http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(writeDeniedCapabilities)));

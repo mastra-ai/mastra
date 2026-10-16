@@ -91,8 +91,6 @@ export const ToolCardInner = ({
     toolCallId,
   );
   const status = badgeStatus(state, isRunning);
-  const isNetwork = metadata?.mode === 'network';
-  const toolCalled = isNetwork && metadata?.hasMoreMessages ? true : undefined;
   const agentToolName = stripPrefix(toolName, 'agent-');
   const workflowToolName = stripPrefix(toolName, 'workflow-');
 
@@ -131,8 +129,6 @@ export const ToolCardInner = ({
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
           suspendPayload={suspendedToolMetadata?.suspendPayload}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
           withoutArgs={isAgent || isWorkflow}
           status={status}
         />
@@ -147,9 +143,7 @@ export const ToolCardInner = ({
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
           toolName={toolName}
-          isNetwork={isNetwork}
           suspendPayload={suspendedToolMetadata?.suspendPayload}
-          toolCalled={toolCalled}
           isComplete={isSettledState(state)}
           status={status}
           errorText={errorText}
@@ -159,15 +153,13 @@ export const ToolCardInner = ({
       return (
         <WorkflowBadge
           workflowId={workflowToolName}
-          isStreaming={metadata?.mode === 'stream' || isNetwork}
+          isStreaming={metadata?.mode === 'stream'}
           result={output}
           metadata={metadata}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
           suspendPayload={suspendedToolMetadata?.suspendPayload}
           toolName={toolName}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
         />
       );
     case 'file_tree':
@@ -179,8 +171,6 @@ export const ToolCardInner = ({
           metadata={metadata}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
           dataParts={dataParts}
           status={status}
         />
@@ -194,8 +184,6 @@ export const ToolCardInner = ({
           metadata={metadata}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
           dataParts={dataParts}
           status={status}
         />
@@ -211,8 +199,6 @@ export const ToolCardInner = ({
             metadata={metadata}
             toolCallId={toolCallId}
             toolApprovalMetadata={toolApprovalMetadata}
-            isNetwork={isNetwork}
-            toolCalled={toolCalled}
           />
         );
       }
@@ -236,8 +222,6 @@ export const ToolCardInner = ({
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
         suspendPayload={suspendedToolMetadata?.suspendPayload}
-        isNetwork={isNetwork}
-        toolCalled={toolCalled}
         status={status}
       />
       <ToolResultMedia modelOutput={modelOutput} />

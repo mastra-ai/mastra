@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
-import * as validation from '../../network/validation';
+import * as validation from '../../shared/completion';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 
 function baseParams() {

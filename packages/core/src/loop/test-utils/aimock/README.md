@@ -453,7 +453,7 @@ The assertions are pinned to real loop behavior. To prove it:
 - Corrupt the tool-result mapping in `tool-call-step.ts` (e.g. drop a tool-result from the
   message list) and the **multi-step-tool-loop**, **cross-turn-message-ordering**, and
   **structured-output** scenarios go red while unrelated ones stay green.
-- Corrupt the completion-feedback header in `loop/network/validation.ts` (`formatStreamCompletionFeedback`
+- Corrupt the completion-feedback header in `loop/shared/completion.ts` (`formatStreamCompletionFeedback`
   pushes `#### Completion Check Results`) and the **is-task-complete-gating** scenario goes red.
 - Corrupt the error-chunk emission path and the **provider-error** scenario goes red.
 - Corrupt the goal scoring result in `goal-step.ts` (e.g. force `passed: false`) and the

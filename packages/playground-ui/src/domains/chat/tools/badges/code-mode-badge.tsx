@@ -25,7 +25,6 @@ export const CodeModeBadge = ({
   metadata,
   toolCallId,
   toolApprovalMetadata,
-  isNetwork,
   toolCalled: toolCalledProp,
 }: CodeModeBadgeProps) => {
   const logs = result?.logs ?? [];
@@ -60,7 +59,6 @@ export const CodeModeBadge = ({
         toolCallId,
         toolApprovalMetadata,
         toolName,
-        isNetwork,
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="code-mode-badge"

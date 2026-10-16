@@ -70,7 +70,6 @@ describe('AgentBadgeWrapper', () => {
         toolCallId: 'tool-call-1',
         toolName: 'subagent-tool',
         toolApprovalMetadata: undefined,
-        isNetwork: false,
       });
 
       expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
@@ -94,7 +93,6 @@ describe('AgentBadgeWrapper', () => {
         toolCallId: 'tool-call-1',
         toolName: 'subagent-tool',
         toolApprovalMetadata: undefined,
-        isNetwork: false,
       });
 
       expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
@@ -120,7 +118,6 @@ describe('AgentBadgeWrapper', () => {
         toolCallId: 'tool-call-1',
         toolName: 'subagent-tool',
         toolApprovalMetadata: undefined,
-        isNetwork: false,
       });
 
       expect(mockResolveToChildMessages).not.toHaveBeenCalled();
@@ -172,7 +169,6 @@ describe('AgentBadgeWrapper', () => {
         toolCallId: 'tool-call-1',
         toolName: 'subagent-tool',
         toolApprovalMetadata: undefined,
-        isNetwork: false,
       });
 
       const firstProps = mockAgentBadge.mock.calls.at(-1)?.[0] as {

@@ -16,4 +16,4 @@
  *
  * See {@link RunCommandToolOptions} for configuration details.
  */
-export { createRunCommandTool, type RunCommandToolOptions } from './network/run-command-tool';
+export { createRunCommandTool, type RunCommandToolOptions } from './run-command-tool';

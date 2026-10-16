@@ -54,15 +54,6 @@ const formatBaseCompletionFeedback = (
   return lines.join('\n');
 };
 
-export const formatCompletionFeedback = (result: CompletionResult, maxIterationReached: boolean): string => {
-  return formatBaseCompletionFeedback(
-    result,
-    maxIterationReached,
-    scorer => `###### ${scorer.scorerName} (${scorer.scorerId})`,
-    '🔄 Will continue working on the task.',
-  );
-};
-
 export const formatStreamCompletionFeedback = (result: CompletionResult, maxIterationReached: boolean): string => {
   return formatBaseCompletionFeedback(
     result,

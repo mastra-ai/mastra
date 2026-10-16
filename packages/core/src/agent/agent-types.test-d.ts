@@ -435,14 +435,12 @@ describe('Agent Type Tests', () => {
     it('accepts scopes on every entry point and on the Agent config', () => {
       type Stream = AgentExecutionOptions<undefined>;
       type Generate = PublicAgentExecutionOptions<undefined>;
-      type Network = NonNullable<Parameters<Agent['network']>[1]>;
       type SendMessage = Parameters<Agent['sendMessage']>[1];
       type QueueMessage = Parameters<Agent['queueMessage']>[1];
       type SendSignal = Parameters<Agent['sendSignal']>[1];
 
       expectTypeOf<Stream['scopes']>().toEqualTypeOf<string[] | undefined>();
       expectTypeOf<Generate['scopes']>().toEqualTypeOf<string[] | undefined>();
-      expectTypeOf<Network['scopes']>().toEqualTypeOf<string[] | undefined>();
       expectTypeOf<SendMessage['scopes']>().toEqualTypeOf<string[] | undefined>();
       expectTypeOf<QueueMessage['scopes']>().toEqualTypeOf<string[] | undefined>();
       expectTypeOf<SendSignal['scopes']>().toEqualTypeOf<string[] | undefined>();

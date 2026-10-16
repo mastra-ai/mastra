@@ -13,10 +13,10 @@ import type { AiMessageType } from '@mastra/core/memory';
  * `useChat().messages` directly should use `MastraDBMessage`.
  *
  * Carries the playground-specific stream metadata (mode, approval/suspension,
- * background task, network, status, tripwire) the runtime stamps onto messages.
+ * background task, status, tripwire) the runtime stamps onto messages.
  */
 export type AISdkUIMessageMetadata = {
-  mode?: 'generate' | 'stream' | 'network';
+  mode?: 'generate' | 'stream';
   status?: 'warning' | 'error' | 'tripwire';
   [key: string]: unknown;
 };
@@ -67,7 +67,6 @@ export interface ModelSettings {
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
   chatWithLegacyStream?: boolean;
-  chatWithNetwork?: boolean;
   requireToolApproval?: boolean;
 }
 

@@ -27,6 +27,5 @@ export interface ModelSettings {
   providerOptions?: ProviderOptionsInput;
   chatWithGenerate?: boolean;
   chatWithStream?: boolean;
-  chatWithNetwork?: boolean;
   requireToolApproval?: boolean;
 }

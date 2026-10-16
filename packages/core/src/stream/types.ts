@@ -34,7 +34,6 @@ export enum ChunkFrom {
   USER = 'USER',
   SYSTEM = 'SYSTEM',
   WORKFLOW = 'WORKFLOW',
-  NETWORK = 'NETWORK',
 }
 
 /**
@@ -611,219 +610,6 @@ export interface BackgroundTaskResumedPayload {
 }
 
 // Network-specific payload interfaces
-interface RoutingAgentStartPayload {
-  agentId: string;
-  networkId: string;
-  runId: string;
-  inputData: {
-    task: string;
-    primitiveId: string;
-    primitiveType: string;
-    result?: string;
-    iteration: number;
-    threadId?: string;
-    threadResourceId?: string;
-    isOneOff: boolean;
-    verboseIntrospection: boolean;
-  };
-}
-
-interface RoutingAgentEndPayload {
-  task: string;
-  primitiveId: string;
-  primitiveType: string;
-  prompt: string;
-  result: string;
-  isComplete?: boolean;
-  selectionReason: string;
-  iteration: number;
-  runId: string;
-  usage: LanguageModelUsage;
-}
-
-interface RoutingAgentTextDeltaPayload {
-  text: string;
-}
-
-interface RoutingAgentTextStartPayload {
-  runId: string;
-}
-
-interface AgentExecutionStartPayload {
-  agentId: string;
-  args: {
-    task: string;
-    primitiveId: string;
-    primitiveType: string;
-    prompt: string;
-    result: string;
-    isComplete?: boolean;
-    selectionReason: string;
-    iteration: number;
-  };
-  runId: string;
-}
-
-interface AgentExecutionApprovalPayload extends ToolCallApprovalPayload {
-  agentId: string;
-  usage: LanguageModelUsage;
-  runId: string;
-  selectionReason: string;
-}
-
-interface AgentExecutionSuspendedPayload extends ToolCallSuspendedPayload {
-  agentId: string;
-  suspendPayload: any;
-  usage: LanguageModelUsage;
-  runId: string;
-  selectionReason: string;
-}
-
-interface AgentExecutionEndPayload {
-  task: string;
-  agentId: string;
-  result: string;
-  isComplete: boolean;
-  iteration: number;
-  usage: LanguageModelUsage;
-  runId: string;
-}
-
-interface WorkflowExecutionStartPayload {
-  name: string;
-  workflowId: string;
-  args: {
-    task: string;
-    primitiveId: string;
-    primitiveType: string;
-    prompt: string;
-    result: string;
-    isComplete?: boolean;
-    selectionReason: string;
-    iteration: number;
-  };
-  runId: string;
-}
-
-interface WorkflowExecutionEndPayload {
-  name: string;
-  workflowId: string;
-  task: string;
-  primitiveId: string;
-  primitiveType: string;
-  result: string;
-  isComplete: boolean;
-  iteration: number;
-  usage: LanguageModelUsage;
-  runId: string;
-}
-
-interface WorkflowExecutionSuspendPayload extends ToolCallSuspendedPayload {
-  name: string;
-  workflowId: string;
-  suspendPayload: any;
-  usage: LanguageModelUsage;
-  runId: string;
-  selectionReason: string;
-}
-
-interface ToolExecutionStartPayload {
-  args: Record<string, unknown> & {
-    toolName?: string;
-    toolCallId?: string;
-    args?: Record<string, unknown>; // The actual tool arguments are nested here
-    selectionReason?: string;
-    __mastraMetadata?: MastraMetadata;
-    // Other inputData fields spread here
-    [key: string]: unknown;
-  };
-  runId: string;
-}
-
-interface ToolExecutionApprovalPayload extends ToolCallApprovalPayload {
-  selectionReason: string;
-  runId: string;
-}
-
-interface ToolExecutionSuspendedPayload extends ToolCallSuspendedPayload {
-  selectionReason: string;
-  runId: string;
-}
-
-interface ToolExecutionEndPayload {
-  task: string;
-  primitiveId: string;
-  primitiveType: string;
-  result: unknown;
-  isComplete: boolean;
-  iteration: number;
-  toolCallId: string;
-  toolName: string;
-}
-
-interface NetworkStepFinishPayload {
-  task: string;
-  result: string;
-  isComplete: boolean;
-  iteration: number;
-  runId: string;
-}
-
-interface NetworkFinishPayload<OUTPUT = undefined> {
-  task: string;
-  primitiveId: string;
-  primitiveType: string;
-  prompt: string;
-  result: string;
-  /** Structured output object when structuredOutput option is provided */
-  object?: OUTPUT;
-  isComplete?: boolean;
-  completionReason: string;
-  iteration: number;
-  threadId?: string;
-  threadResourceId?: string;
-  isOneOff: boolean;
-  usage: LanguageModelUsage;
-}
-
-interface NetworkValidationStartPayload {
-  runId: string;
-  iteration: number;
-  checksCount: number;
-}
-
-interface NetworkValidationEndPayload {
-  runId: string;
-  iteration: number;
-  passed: boolean;
-  results: ScorerResult[];
-  duration: number;
-  timedOut: boolean;
-  reason?: string;
-  maxIterationReached: boolean;
-  suppressFeedback: boolean;
-}
-
-interface RoutingAgentAbortPayload {
-  primitiveType: 'routing';
-  primitiveId: string;
-}
-
-interface AgentExecutionAbortPayload {
-  primitiveType: 'agent';
-  primitiveId: string;
-}
-
-interface WorkflowExecutionAbortPayload {
-  primitiveType: 'workflow';
-  primitiveId: string;
-}
-
-interface ToolExecutionAbortPayload {
-  primitiveType: 'tool';
-  primitiveId: string;
-}
-
 interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
@@ -867,35 +653,6 @@ export function isDataChunk<T>(value: T): value is T & { type: `data-${string}` 
   const type = (value as { type?: unknown } | null | undefined)?.type;
   return typeof type === 'string' && type.startsWith('data-');
 }
-
-export type NetworkChunkType<OUTPUT = undefined> =
-  | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
-  | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
-  | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
-  | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
-  | (BaseChunkType & { type: 'routing-agent-abort'; payload: RoutingAgentAbortPayload })
-  | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
-  | (BaseChunkType & { type: 'agent-execution-approval'; payload: AgentExecutionApprovalPayload })
-  | (BaseChunkType & { type: 'agent-execution-suspended'; payload: AgentExecutionSuspendedPayload })
-  | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
-  | (BaseChunkType & { type: 'agent-execution-abort'; payload: AgentExecutionAbortPayload })
-  | (BaseChunkType & { type: 'workflow-execution-start'; payload: WorkflowExecutionStartPayload })
-  | (BaseChunkType & { type: 'workflow-execution-end'; payload: WorkflowExecutionEndPayload })
-  | (BaseChunkType & { type: 'workflow-execution-suspended'; payload: WorkflowExecutionSuspendPayload })
-  | (BaseChunkType & { type: 'workflow-execution-abort'; payload: WorkflowExecutionAbortPayload })
-  | (BaseChunkType & { type: 'tool-execution-start'; payload: ToolExecutionStartPayload })
-  | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
-  | (BaseChunkType & { type: 'tool-execution-approval'; payload: ToolExecutionApprovalPayload })
-  | (BaseChunkType & { type: 'tool-execution-suspended'; payload: ToolExecutionSuspendedPayload })
-  | (BaseChunkType & { type: 'tool-execution-abort'; payload: ToolExecutionAbortPayload })
-  | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
-  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload<OUTPUT> })
-  | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })
-  | (BaseChunkType & { type: 'network-validation-end'; payload: NetworkValidationEndPayload })
-  | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
-  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent })
-  | (BaseChunkType & { type: 'network-object'; payload: { object: Partial<OUTPUT> } })
-  | (BaseChunkType & { type: 'network-object-result'; payload: { object: OUTPUT } });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
@@ -1088,7 +845,6 @@ export type WorkflowStreamEvent =
 export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
-  | NetworkChunkType<OUTPUT>
   | (DataChunkType & {
       from: never;
       runId: never;

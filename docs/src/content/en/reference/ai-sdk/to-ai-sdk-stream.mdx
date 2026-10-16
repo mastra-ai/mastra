@@ -1,6 +1,6 @@
 ---
 title: "Reference: toAISdkStream() | AI SDK"
-description: "Converts Mastra streams (agent, network, or workflow) to AI SDK-compatible streams."
+description: "Converts Mastra streams (agent or workflow) to AI SDK-compatible streams."
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/client-js"
@@ -11,7 +11,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # toAISdkStream()
 
-Converts Mastra streams (agent, network, or workflow) to AI SDK-compatible streams. Use this function when you need to manually transform Mastra streams for use with AI SDK's `createUIMessageStream()` and `createUIMessageStreamResponse()`.
+Converts Mastra streams (agent or workflow) to AI SDK-compatible streams. Use this function when you need to manually transform Mastra streams for use with AI SDK's `createUIMessageStream()` and `createUIMessageStreamResponse()`.
 
 This is useful when building custom streaming endpoints outside Mastra's provided route helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) or [`workflowRoute()`](/reference/ai-sdk/workflow-route).
 
@@ -72,7 +72,6 @@ Pass `messages` to `originalMessages` in `createUIMessageStream()` to avoid dupl
 The first parameter is the Mastra stream to convert. It can be one of:
 
 - `MastraModelOutput` - An agent stream from `agent.stream()`
-- `MastraAgentNetworkStream` - A network stream from `agent.network()`
 - `MastraWorkflowStream` or `WorkflowRunOutput` - A workflow stream
 
 The second parameter is an options object:
@@ -89,7 +88,7 @@ The second parameter is an options object:
   },
   {
     name: 'from',
-    type: "'agent' | 'network' | 'workflow'",
+    type: "'agent' | 'workflow'",
     description: 'The type of Mastra stream being converted.',
     isOptional: false,
     defaultValue: "'agent'",
@@ -179,32 +178,6 @@ export async function POST(req: Request) {
   const uiMessageStream = createUIMessageStream({
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, { from: 'workflow' })) {
-        await writer.write(part)
-      }
-    },
-  })
-
-  return createUIMessageStreamResponse({
-    stream: uiMessageStream,
-  })
-}
-```
-
-### Converting a network stream
-
-```typescript title="app/api/network/route.ts" {12}
-import { mastra } from '../../mastra'
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
-import { toAISdkStream } from '@mastra/ai-sdk'
-
-export async function POST(req: Request) {
-  const { messages } = await req.json()
-  const routingAgent = mastra.getAgent('routingAgent')
-  const stream = await routingAgent.network(messages)
-
-  const uiMessageStream = createUIMessageStream({
-    execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(stream, { from: 'network' })) {
         await writer.write(part)
       }
     },

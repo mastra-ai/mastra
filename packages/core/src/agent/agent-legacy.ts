@@ -196,8 +196,6 @@ export interface AgentLegacyCapabilities {
   tracingPolicy?: any;
   /** Resolved version ID from stored config */
   resolvedVersionId?: string;
-  /** Agent network append flag */
-  _agentNetworkAppend?: boolean;
   /** List resolved output processors */
   listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   /** Run output processors */
@@ -355,8 +353,6 @@ export class AgentLegacyHandler {
           threadId,
           resourceId,
           generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-expect-error Flag for agent network messages
-          _agentNetworkAppend: this.capabilities._agentNetworkAppend,
         })
           .addSystem(instructions || (await this.capabilities.getInstructions({ requestContext })))
           .add(context || [], 'context');

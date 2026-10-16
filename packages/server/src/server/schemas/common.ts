@@ -131,7 +131,7 @@ export const tracingOptionsSchema = z.object({
  */
 // Runtime validation stays permissive (z.unknown()) so generated route types
 // don't leak `any`; typedPermissive gives handlers the concrete message type
-// expected by agent APIs (agent.generate/stream/network).
+// expected by agent APIs (agent.generate/stream).
 export const coreMessageSchema = typedPermissive<MessageInput>(z.unknown());
 // .object({
 //   role: z.enum(['system', 'user', 'assistant', 'tool']),

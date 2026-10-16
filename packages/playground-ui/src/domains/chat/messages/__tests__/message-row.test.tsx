@@ -45,11 +45,8 @@ const Providers = ({ children }: { children: ReactNode }) => {
             declineToolcall={() => {}}
             approveToolcallGenerate={() => {}}
             declineToolcallGenerate={() => {}}
-            approveNetworkToolcall={() => {}}
-            declineNetworkToolcall={() => {}}
             isRunning={false}
             toolCallApprovals={{}}
-            networkToolCallApprovals={{}}
           >
             {children}
           </ToolCallProvider>

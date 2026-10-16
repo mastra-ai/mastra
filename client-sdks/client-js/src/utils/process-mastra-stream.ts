@@ -1,4 +1,4 @@
-import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType } from '@mastra/core/stream';
 
 async function sharedProcessMastraStream({
   stream,
@@ -53,22 +53,6 @@ async function sharedProcessMastraStream({
     signal?.removeEventListener('abort', abort);
     reader.releaseLock();
   }
-}
-
-export async function processMastraNetworkStream({
-  stream,
-  onChunk,
-  signal,
-}: {
-  stream: globalThis.ReadableStream<Uint8Array>;
-  onChunk: (chunk: NetworkChunkType) => void | Promise<void>;
-  signal?: AbortSignal;
-}) {
-  return sharedProcessMastraStream({
-    stream,
-    onChunk,
-    signal,
-  });
 }
 
 export async function processMastraStream({

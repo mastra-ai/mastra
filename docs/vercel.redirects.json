@@ -817,7 +817,7 @@
     },
     {
       "source": "/docs/agents/network-approval",
-      "destination": "/docs/agents/networks",
+      "destination": "/docs/subagents",
       "permanent": true
     },
     {
@@ -2223,6 +2223,31 @@
     {
       "source": "/reference/agents/getTools",
       "destination": "/reference/agents/listTools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/networks",
+      "destination": "/docs/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/network",
+      "destination": "/docs/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/reference/ai-sdk/network-route",
+      "destination": "/reference/ai-sdk/chat-route",
+      "permanent": true
+    },
+    {
+      "source": "/reference/ai-sdk/handle-network-stream",
+      "destination": "/reference/ai-sdk/handle-chat-stream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/migrations/agentnetwork",
+      "destination": "/reference/migrations/network-to-supervisor",
       "permanent": true
     }
   ]

@@ -49,11 +49,8 @@ function renderSubmitPlan(
           declineToolcall={vi.fn()}
           approveToolcallGenerate={vi.fn()}
           declineToolcallGenerate={vi.fn()}
-          approveNetworkToolcall={vi.fn()}
-          declineNetworkToolcall={vi.fn()}
           isRunning={false}
           toolCallApprovals={toolCallApprovals}
-          networkToolCallApprovals={{}}
         >
           <SubmitPlanTool {...props} />
         </ToolCallProvider>

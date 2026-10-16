@@ -15,7 +15,6 @@ export type {
   ThreadHistoryChunk,
   ThreadHistoryPayload,
   DataChunkType,
-  NetworkChunkType,
   WorkflowStreamEvent,
   FileChunk,
   ReasoningChunk,
@@ -71,7 +70,6 @@ export type { FullOutput } from './base/output';
 // Enums & Classes
 // ============================================================================
 export { ChunkFrom } from './types';
-export { MastraAgentNetworkStream } from './MastraAgentNetworkStream';
 export { MastraModelOutput } from './base/output';
 export { WorkflowRunOutput } from './RunOutput';
 export { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './aisdk/v5/file';

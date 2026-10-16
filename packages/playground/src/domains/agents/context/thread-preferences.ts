@@ -21,7 +21,6 @@ const modelSettingsSchema = z.object({
   chatWithGenerateLegacy: clearable(z.boolean()),
   chatWithGenerate: clearable(z.boolean()),
   chatWithLegacyStream: clearable(z.boolean()),
-  chatWithNetwork: clearable(z.boolean()),
   requireToolApproval: clearable(z.boolean()),
 });
 const selectionSchema = z.object({ provider: z.string(), model: z.string() });

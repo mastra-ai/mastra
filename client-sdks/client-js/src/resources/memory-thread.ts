@@ -15,8 +15,7 @@ import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
 /**
- * Serializes the message-listing filters both memory message routes accept. The network route
- * takes the same filters under a different path, so the two callers share one serializer.
+ * Serializes the message-listing filters the memory message route accepts.
  */
 export const memoryMessagesQuery = ({
   agentId,

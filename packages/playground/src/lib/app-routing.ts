@@ -60,9 +60,6 @@ export const paths: LinkComponentProviderProps['paths'] = {
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => `/workflows/schedules`,
   scheduleLink: (scheduleId: string) => `/workflows/schedules/${encodeURIComponent(scheduleId)}`,
-  networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
-  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
-  networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string, params?: { scoreId?: string; entity?: string }) => {
     const search = new URLSearchParams();
     if (params?.entity) search.set('entity', params.entity);

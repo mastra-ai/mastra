@@ -13,7 +13,7 @@
  */
 import type { TripwireMetadata } from '@mastra/react';
 
-export type MessageMode = 'generate' | 'stream' | 'network';
+export type MessageMode = 'generate' | 'stream';
 
 export interface BackgroundTaskEntry {
   taskId: string;
@@ -47,17 +47,6 @@ export interface MessageMetadata {
     };
     [key: string]: unknown;
   };
-  selectionReason?: string;
-  agentInput?: unknown;
-  hasMoreMessages?: boolean;
-  from?: string;
-  routingDecision?: {
-    isNetwork?: boolean;
-    agentId?: string;
-    selectionReason?: string;
-    [key: string]: unknown;
-  };
-  routingDecisionText?: string;
   backgroundTasks?: Record<string, BackgroundTaskEntry>;
   completionResult?: {
     passed?: boolean;

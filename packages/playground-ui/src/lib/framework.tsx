@@ -21,10 +21,6 @@ export type LinkComponentPaths = {
   schedulesLink: () => string;
   scheduleLink: (scheduleId: string) => string;
 
-  networkLink: (networkId: string) => string;
-  networkNewThreadLink: (networkId: string) => string;
-  networkThreadLink: (networkId: string, threadId: string) => string;
-
   scorerLink: (scorerId: string, params?: { scoreId?: string; entity?: string }) => string;
   cmsScorersCreateLink: () => string;
   cmsScorerEditLink: (scorerId: string) => string;
@@ -77,9 +73,6 @@ const LinkComponentContext = createContext<{
     workflowLink: () => '',
     schedulesLink: () => '',
     scheduleLink: () => '',
-    networkLink: () => '',
-    networkNewThreadLink: () => '',
-    networkThreadLink: () => '',
     scorerLink: () => '',
     cmsScorersCreateLink: () => '',
     cmsScorerEditLink: () => '',

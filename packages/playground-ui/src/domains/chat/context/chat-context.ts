@@ -52,7 +52,7 @@ export interface AgentContextValue {
   requestContext?: Record<string, unknown>;
 }
 
-// NOTE: Tool/network approvals are NOT exposed here. They live in a separate
+// NOTE: Tool approvals are NOT exposed here. They live in a separate
 // slice (`./tool-call-context`) for the same churn reasons, and the badge
 // approval buttons read it via `useToolCall()`.
 

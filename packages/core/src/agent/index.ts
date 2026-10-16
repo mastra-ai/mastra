@@ -42,7 +42,6 @@ export type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
   InnerAgentExecutionOptions,
-  MultiPrimitiveExecutionOptions,
   // Delegation hook types
   DelegationStartContext,
   DelegationStartResult,
@@ -67,8 +66,6 @@ export type {
   CompletionConfig,
   CompletionRunResult,
   // Network options
-  NetworkOptions,
-  NetworkRoutingConfig,
 } from './agent.types';
 
 export type { SubAgent, SubAgentGenerateResult, SubAgentStreamResult } from './subagent';

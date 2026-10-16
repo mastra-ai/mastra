@@ -56,11 +56,8 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
           declineToolcall={noop}
           approveToolcallGenerate={noop}
           declineToolcallGenerate={noop}
-          approveNetworkToolcall={noop}
-          declineNetworkToolcall={noop}
           isRunning={false}
           toolCallApprovals={{}}
-          networkToolCallApprovals={{}}
         >
           {messages.map(message => {
             const action =

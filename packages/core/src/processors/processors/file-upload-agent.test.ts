@@ -870,7 +870,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     ['the sandbox cannot write files', createFakeSandbox({ writeFiles: undefined, executeCommand: undefined }).sandbox],
   ];
 
-  // Scorers, agent networks and calls without a thread run input processors too: without a file, the processor stays out of the way.
+  // Scorers and calls without a thread run input processors too: without a file, the processor stays out of the way.
   describe('turns without a file', () => {
     it.each(withoutWritableMemory)('reach the model when %s', async (_label, harnessOptions, callOptions) => {
       const { sandbox } = createFakeSandbox();
@@ -889,72 +889,6 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
       expect(result.tripwire).toBeUndefined();
       expect(textsIn(prompts.at(-1))).toEqual(['No file here']);
-    });
-  });
-
-  // The routing agent of a network inherits the agent's input processors and runs with read-only memory.
-  describe('in an agent network', () => {
-    it('uploads the file of a network message instead of stopping the routing call', async () => {
-      const { sandbox, writes } = createFakeSandbox();
-      const prompts: LanguageModelV2Prompt[] = [];
-      const answers = [
-        { primitiveId: 'none', primitiveType: 'none', prompt: '', selectionReason: 'I can read the file myself.' },
-        { isComplete: true, completionReason: 'Answered directly.', finalResult: 'Done.' },
-      ];
-      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-      const respond = (prompt: LanguageModelV2Prompt) => {
-        prompts.push(prompt);
-        return JSON.stringify(answers[Math.min(prompts.length, answers.length) - 1]);
-      };
-      const model = new MockLanguageModelV2({
-        doGenerate: async ({ prompt }) => ({
-          content: [{ type: 'text', text: respond(prompt) }],
-          finishReason: 'stop',
-          usage,
-          warnings: [],
-        }),
-        doStream: async ({ prompt }) => {
-          const answer = respond(prompt);
-          return {
-            stream: new ReadableStream({
-              start(controller) {
-                controller.enqueue({ type: 'stream-start', warnings: [] });
-                controller.enqueue({ type: 'text-start', id: 'text-1' });
-                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: answer });
-                controller.enqueue({ type: 'text-end', id: 'text-1' });
-                controller.enqueue({ type: 'finish', finishReason: 'stop', usage });
-                controller.close();
-              },
-            }),
-          };
-        },
-      });
-      const workspace = new Workspace({ sandbox });
-      const agent = new Agent({
-        id: 'file-upload-network-agent',
-        name: 'file-upload-network-agent',
-        instructions: 'Answer questions about the files the user sends.',
-        model,
-        memory: new MockMemory(),
-        workspace,
-        inputProcessors: [new FileUploadProcessor({ workspace })],
-      });
-      const bytes = Buffer.from('a,b');
-
-      const stream = await agent.network(
-        [userMessage(text('What is in this file?'), file(bytes, 'data.csv', 'text/csv'))],
-        {
-          memory: MEMORY,
-        },
-      );
-      const chunks: Array<{ type: string; payload?: { primitiveType?: string } }> = [];
-      for await (const chunk of stream) chunks.push(chunk);
-
-      expect(chunks.find(chunk => chunk.type === 'routing-agent-end')?.payload?.primitiveType).toBe('none');
-      expect(chunks.filter(chunk => chunk.type.includes('tripwire'))).toEqual([]);
-      expect(writes.flat().map(written => written.content)).toEqual([bytes]);
-      expect(prompts.map(prompt => filePartsIn(prompt))).toEqual(prompts.map(() => []));
-      expect(JSON.stringify(prompts[0])).toMatch(uploadedPath('\\.csv'));
     });
   });
 

@@ -9,17 +9,15 @@ import type {
   UIMessageStreamOptions as UIMessageStreamOptionsV6,
 } from '@internal/ai-v6';
 import type { UIMessage as UIMessageV7, UIMessageStreamOptions as UIMessageStreamOptionsV7 } from '@internal/ai-v7';
-import type { MastraModelOutput, ChunkType, MastraAgentNetworkStream, WorkflowRunOutput } from '@mastra/core/stream';
+import type { MastraModelOutput, ChunkType, WorkflowRunOutput } from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
 import type { ZodObject, ZodType } from 'zod/v4';
 import type { V6UIMessageStream, V7UIMessageStream, WithTraceId } from './public-types';
 import { applyMastraStreamTransforms } from './smooth-stream';
 import type { MastraStreamTransformOptions } from './smooth-stream';
 import {
-  AgentNetworkToAISDKTransformer,
   AgentStreamToAISDKTransformer,
   WorkflowStreamToAISDKTransformer,
-  AgentNetworkToAISDKV6Transformer,
   AgentStreamToAISDKV6Transformer,
   WorkflowStreamToAISDKV6Transformer,
 } from './transformers';
@@ -40,22 +38,6 @@ type WorkflowStreamOptionsV6 = WorkflowStreamOptionsBase & {
 };
 
 type WorkflowStreamOptionsV7 = WorkflowStreamOptionsBase & {
-  version: 'v7';
-};
-
-type NetworkStreamOptionsBase = {
-  from: 'network';
-};
-
-type NetworkStreamOptionsV5 = NetworkStreamOptionsBase & {
-  version?: 'v5';
-};
-
-type NetworkStreamOptionsV6 = NetworkStreamOptionsBase & {
-  version: 'v6';
-};
-
-type NetworkStreamOptionsV7 = NetworkStreamOptionsBase & {
   version: 'v7';
 };
 
@@ -90,9 +72,9 @@ type AgentStreamOptionsV7 = AgentStreamOptionsBase & {
   onError?: UIMessageStreamOptionsV7<UIMessageV7>['onError'];
 };
 
-type ToAISDKStreamOptionsV5 = WorkflowStreamOptionsV5 | NetworkStreamOptionsV5 | AgentStreamOptionsV5;
-type ToAISDKStreamOptionsV6 = WorkflowStreamOptionsV6 | NetworkStreamOptionsV6 | AgentStreamOptionsV6;
-type ToAISDKStreamOptionsV7 = WorkflowStreamOptionsV7 | NetworkStreamOptionsV7 | AgentStreamOptionsV7;
+type ToAISDKStreamOptionsV5 = WorkflowStreamOptionsV5 | AgentStreamOptionsV5;
+type ToAISDKStreamOptionsV6 = WorkflowStreamOptionsV6 | AgentStreamOptionsV6;
+type ToAISDKStreamOptionsV7 = WorkflowStreamOptionsV7 | AgentStreamOptionsV7;
 type ToAISDKStreamOptions = ToAISDKStreamOptionsV5 | ToAISDKStreamOptionsV6 | ToAISDKStreamOptionsV7;
 
 export function toAISdkV5Stream<
@@ -113,10 +95,6 @@ export function toAISdkV5Stream<
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
   options: WorkflowStreamOptionsV5,
 ): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
-export function toAISdkV5Stream<OUTPUT = undefined>(
-  stream: MastraAgentNetworkStream<OUTPUT>,
-  options: NetworkStreamOptionsV5,
-): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 export function toAISdkV5Stream<TOutput>(
   stream: MastraModelOutput<TOutput>,
   options: AgentStreamOptionsV5,
@@ -125,7 +103,6 @@ export function toAISdkV5Stream(
   stream:
     | WorkflowRunOutput<WorkflowResult<any, any, any, any>>
     | MastraWorkflowStream<any, any, any, any>
-    | MastraAgentNetworkStream
     | MastraModelOutput,
   options: ToAISDKStreamOptionsV5 = {
     from: 'agent',
@@ -149,12 +126,6 @@ export function toAISdkV5Stream(
         sendSources: options.sendSources,
       }),
     ) as ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
-  }
-
-  if (from === 'network') {
-    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKTransformer()) as ReadableStream<
-      InferUIMessageChunkV5<UIMessageV5>
-    >;
   }
 
   const agentReadable: ReadableStream<ChunkType<any>> =
@@ -191,10 +162,6 @@ export function toAISdkStream<
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
   options: WorkflowStreamOptionsV5,
 ): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
-export function toAISdkStream<OUTPUT = undefined>(
-  stream: MastraAgentNetworkStream<OUTPUT>,
-  options: NetworkStreamOptionsV5,
-): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 export function toAISdkStream<TOutput>(
   stream: MastraModelOutput<TOutput>,
   options: AgentStreamOptionsV5,
@@ -213,10 +180,6 @@ export function toAISdkStream<
 >(
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
   options: WorkflowStreamOptionsV6,
-): V6UIMessageStream;
-export function toAISdkStream<OUTPUT = undefined>(
-  stream: MastraAgentNetworkStream<OUTPUT>,
-  options: NetworkStreamOptionsV6,
 ): V6UIMessageStream;
 export function toAISdkStream<TOutput>(
   stream: MastraModelOutput<TOutput>,
@@ -237,10 +200,6 @@ export function toAISdkStream<
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
   options: WorkflowStreamOptionsV7,
 ): V7UIMessageStream;
-export function toAISdkStream<OUTPUT = undefined>(
-  stream: MastraAgentNetworkStream<OUTPUT>,
-  options: NetworkStreamOptionsV7,
-): V7UIMessageStream;
 export function toAISdkStream<TOutput>(
   stream: MastraModelOutput<TOutput>,
   options: AgentStreamOptionsV7,
@@ -249,7 +208,6 @@ export function toAISdkStream(
   stream:
     | WorkflowRunOutput<WorkflowResult<any, any, any, any>>
     | MastraWorkflowStream<any, any, any, any>
-    | MastraAgentNetworkStream
     | MastraModelOutput,
   options: ToAISDKStreamOptions = {
     from: 'agent',
@@ -278,10 +236,6 @@ export function toAISdkStream(
           sendSources: options.sendSources,
         }),
       ) as V6UIMessageStream;
-    }
-
-    if (from === 'network') {
-      return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKV6Transformer()) as V6UIMessageStream;
     }
 
     const agentReadable: ReadableStream<ChunkType<any>> =
@@ -318,12 +272,6 @@ export function toAISdkStream(
         sendSources: options.sendSources,
       }),
     ) as ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
-  }
-
-  if (from === 'network') {
-    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKTransformer()) as ReadableStream<
-      InferUIMessageChunkV5<UIMessageV5>
-    >;
   }
 
   const agentReadable: ReadableStream<ChunkType<any>> =

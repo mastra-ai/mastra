@@ -1,4 +1,4 @@
-import type { ChunkType, DataChunkType, NetworkChunkType, OutputSchema } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, OutputSchema } from '@mastra/core/stream';
 
 export const isDataChunkType = (chunk: any): chunk is DataChunkType => {
   return chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type?.startsWith('data-');
@@ -70,36 +70,6 @@ export function safeParseErrorObject(obj: unknown): string {
     return String(obj);
   }
 }
-
-export const isAgentExecutionDataChunkType = (
-  chunk: any,
-): chunk is Omit<NetworkChunkType, 'payload'> & { payload: DataChunkType } => {
-  return (
-    chunk &&
-    typeof chunk === 'object' &&
-    'type' in chunk &&
-    chunk.type?.startsWith('agent-execution-event-') &&
-    'payload' in chunk &&
-    typeof chunk.payload === 'object' &&
-    'type' in chunk.payload &&
-    chunk.payload.type?.startsWith('data-')
-  );
-};
-
-export const isWorkflowExecutionDataChunkType = (
-  chunk: any,
-): chunk is Omit<NetworkChunkType, 'payload'> & { payload: DataChunkType } => {
-  return (
-    chunk &&
-    typeof chunk === 'object' &&
-    'type' in chunk &&
-    chunk.type?.startsWith('workflow-execution-event-') &&
-    'payload' in chunk &&
-    typeof chunk.payload === 'object' &&
-    'type' in chunk.payload &&
-    chunk.payload.type?.startsWith('data-')
-  );
-};
 
 export const toUIDataChunk = ({ type, data, id, transient }: DataChunkType): DataChunkType => ({
   type,

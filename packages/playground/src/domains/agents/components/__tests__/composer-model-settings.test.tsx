@@ -119,7 +119,6 @@ describe('ComposerModelSettings', () => {
     const stored = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
     expect(stored.modelSettings.chatWithLegacyStream).toBe(true);
     expect(stored.modelSettings.chatWithGenerate).toBe(false);
-    expect(stored.modelSettings.chatWithNetwork).toBe(false);
   });
 
   it('falls back to stream and disables stream subscription for agents without memory support', async () => {

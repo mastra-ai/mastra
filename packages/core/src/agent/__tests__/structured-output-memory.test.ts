@@ -10,8 +10,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model'
  * Regression test for issue #12800:
  * "Your API request included an `assistant` message in the final position"
  *
- * The network loop's routing agent prompt is constructed as an assistant-role message
- * (see packages/core/src/loop/network/index.ts line 574-607). When the routing agent
+ * A caller can build its prompt as an assistant-role message. When such an agent
  * calls generate/stream with structuredOutput + memory, the prompt ends up being:
  *   [system] [memory user] [memory assistant] [assistant: routing prompt]
  *

@@ -154,7 +154,7 @@ const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMe
   const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
   if (!metadata || typeof metadata !== 'object') return undefined;
   const { mode } = metadata;
-  if (mode !== 'stream' && mode !== 'network' && mode !== 'generate') return undefined;
+  if (mode !== 'stream' && mode !== 'generate') return undefined;
   return metadata.requireApprovalMetadata;
 };
 

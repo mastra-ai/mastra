@@ -71,7 +71,6 @@ const sidebars = {
         { type: 'doc', id: 'agents/listSuspendedRuns', label: '.listSuspendedRuns()' },
         { type: 'doc', id: 'agents/listTools', label: '.listTools()' },
         { type: 'doc', id: 'agents/listWorkflows', label: '.listWorkflows()' },
-        { type: 'doc', id: 'agents/network', label: '.network()' },
       ],
     },
     {
@@ -82,9 +81,7 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/overview', label: 'Overview' },
         { type: 'doc', id: 'ai-sdk/chat-route', label: 'chatRoute()' },
         { type: 'doc', id: 'ai-sdk/handle-chat-stream', label: 'handleChatStream()' },
-        { type: 'doc', id: 'ai-sdk/handle-network-stream', label: 'handleNetworkStream()' },
         { type: 'doc', id: 'ai-sdk/handle-workflow-stream', label: 'handleWorkflowStream()' },
-        { type: 'doc', id: 'ai-sdk/network-route', label: 'networkRoute()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-messages', label: 'toAISdkMessages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-stream', label: 'toAISdkStream()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v4-messages', label: 'toAISdkV4Messages()' },
@@ -434,7 +431,6 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'migrations/mcp-v2', label: '@mastra/mcp v1 to v2' },
-        { type: 'doc', id: 'migrations/agentnetwork', label: 'AgentNetwork to .network()' },
         { type: 'doc', id: 'migrations/ai-sdk-v4-to-v5', label: 'AI SDK v4 to v5' },
         { type: 'doc', id: 'migrations/mastra-cloud', label: 'Mastra Cloud to Mastra platform' },
         { type: 'doc', id: 'migrations/vnext-to-standard-apis', label: 'VNext to Standard APIs' },

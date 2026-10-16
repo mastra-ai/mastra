@@ -35,7 +35,7 @@ export interface ChatThreadsProps {
   threadId: string;
   onDelete: (threadId: string) => void;
   resourceId: string;
-  resourceType: 'agent' | 'network';
+  resourceType: 'agent';
   embedded?: boolean;
   /** While true, only the header is rendered so it stays in place until the list arrives. */
   isLoading?: boolean;
@@ -68,12 +68,10 @@ export const ChatThreads = ({
   const otherThreads = threads.filter(thread => !pinnedIdSet.has(thread.id));
 
   const canDeleteThread = canDelete('memory');
-  const canRenameThread = resourceType === 'agent' && canEdit('memory');
+  const canRenameThread = canEdit('memory');
   const closeDialog = () => setDialog(null);
-  const threadLink = (id: string) =>
-    resourceType === 'agent' ? paths.agentThreadLink(resourceId, id) : paths.networkThreadLink(resourceId, id);
-  const newThreadLink =
-    resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
+  const threadLink = (id: string) => paths.agentThreadLink(resourceId, id);
+  const newThreadLink = paths.agentNewThreadLink(resourceId);
 
   const recentList = (
     <ThreadListItems>

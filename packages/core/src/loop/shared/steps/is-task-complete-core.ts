@@ -3,8 +3,8 @@ import type { IsTaskCompleteConfig } from '../../../agent/agent.types';
 import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import { ChunkFrom } from '../../../stream/types';
-import type { StreamCompletionContext } from '../../network/validation';
-import { formatStreamCompletionFeedback, runStreamCompletionScorers } from '../../network/validation';
+import type { StreamCompletionContext } from '../completion';
+import { formatStreamCompletionFeedback, runStreamCompletionScorers } from '../completion';
 
 export type TaskCompletionOutcome = { evaluated: false } | { evaluated: true; complete: boolean };
 
