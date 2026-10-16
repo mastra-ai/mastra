@@ -535,7 +535,7 @@ export const environmentRoute = registerApiRoute('/environment', {
     it('should load an api route that imports a raw TypeScript workspace package (#26540)', async () => {
       const res = await fetch(`http://localhost:${port}/raw-ts`);
       expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toEqual({ value: 'hello workspace' });
+      await expect(res.json()).resolves.toEqual({ value: 'hello workspace c' });
     });
 
     it('layers development dotenv files without overriding the shell environment', async () => {

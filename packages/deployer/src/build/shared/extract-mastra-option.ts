@@ -1,4 +1,5 @@
-import { dirname } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { dirname, join, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
@@ -6,6 +7,7 @@ import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
+import * as pkg from 'empathic/package';
 import { rollup } from 'rollup';
 import type { Plugin, RollupOutput } from 'rollup';
 import { getWorkspaceInformation } from '../../bundler/workspaceDependencies';
@@ -13,11 +15,15 @@ import { esbuild } from '../plugins/esbuild';
 import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
 import { recursiveRemoveNonReferencedNodes } from '../plugins/remove-unused-references';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName } from '../utils';
+import { getNodeResolveOptions, getPackageName, isBareModuleSpecifier } from '../utils';
+
+const TS_SOURCE = /\.tsx?$/;
 
 /**
- * Workspace packages may ship raw TypeScript (e.g. `exports` pointing to `src/index.ts`).
- * Leaving them external makes the extracted config unloadable by Node, so inline the ones that resolve to TypeScript sources.
+ * Workspace packages may ship raw TypeScript (e.g. `exports` pointing to `src/index.ts`), which Node cannot load
+ * from the extracted config. Inline those so esbuild transpiles them. Bare imports made from inside a workspace
+ * package stay external but are pinned to the file they resolve to from that package: the extracted config lives in
+ * `.mastra/output` and can't see the package's own `node_modules` (e.g. pnpm isolated installs).
  */
 async function workspacePackagesResolver(entryFile: string): Promise<Plugin | null> {
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({
@@ -28,30 +34,52 @@ async function workspacePackagesResolver(entryFile: string): Promise<Plugin | nu
     return null;
   }
 
+  const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
+  const appRoot = realpathSync(closestPkgJson ? dirname(closestPkgJson) : process.cwd()) + sep;
+  // Resolved ids are real paths, so compare against real workspace locations; the app's own files keep today's behaviour
+  const workspaceLocations = [...workspaceMap.values()]
+    .map(({ location }) => realpathSync(location) + sep)
+    .filter(location => location !== appRoot);
+  const isInsideWorkspacePackage = (file: string) =>
+    !file.includes(`${sep}node_modules${sep}`) && workspaceLocations.some(location => file.startsWith(location));
+
   const resolver = nodeResolve({
-    preferBuiltins: true,
-    exportConditions: ['node'],
+    ...getNodeResolveOptions('node'),
     extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.tsx'],
-    modulePaths: workspaceRoot ? [`${workspaceRoot}/node_modules`] : [],
+    modulePaths: workspaceRoot ? [join(workspaceRoot, 'node_modules')] : [],
   });
+  const resolveHook = resolver.resolveId!;
+  const resolve = typeof resolveHook === 'function' ? resolveHook : resolveHook.handler;
 
   return {
     ...resolver,
     name: 'workspace-packages-resolver',
     async resolveId(id, importer, options) {
-      const pkgName = getPackageName(id);
-      if (!pkgName || !workspaceMap.has(pkgName)) {
+      if (!importer || !isBareModuleSpecifier(id)) {
         return null;
       }
-      const hook = resolver.resolveId;
-      const handler = typeof hook === 'function' ? hook : hook?.handler;
-      const resolved = await handler?.call(this, id, importer, options);
-      const resolvedId = typeof resolved === 'string' ? resolved : resolved ? resolved.id : undefined;
-      // Built workspace packages (plain JS) stay external like any other dependency
-      if (!resolvedId || !/\.tsx?$/.test(resolvedId)) {
+
+      const isWorkspacePackage = workspaceMap.has(getPackageName(id) ?? '');
+      const fromWorkspacePackage = isInsideWorkspacePackage(importer);
+      if (!isWorkspacePackage && !fromWorkspacePackage) {
         return null;
       }
-      return resolved;
+
+      const resolved = await resolve.call(this, id, importer, options);
+      if (!resolved || typeof resolved !== 'object' || resolved.external) {
+        return null;
+      }
+
+      if (isWorkspacePackage && TS_SOURCE.test(resolved.id)) {
+        return resolved.id;
+      }
+
+      if (fromWorkspacePackage) {
+        return { id: pathToFileURL(resolved.id).href, external: true };
+      }
+
+      // Built workspace packages imported by the app itself stay external like any other dependency
+      return null;
     },
   };
 }
