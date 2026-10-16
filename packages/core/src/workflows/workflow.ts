@@ -5717,7 +5717,11 @@ export class Run<
 
     const releaseClaimIfUnused = async () => {
       // Only roll the claim back when the engine never persisted anything: the snapshot is still
-      // `running` (our claim) and every step result is exactly as it was before the claim.
+      // `running` (our claim) and every step result and execution path is exactly as it was before
+      // the claim. An engine that already accepted the run (e.g. a publish that failed after
+      // delivery) writes its active paths before any step result, so those must match too.
+      // The reload and the release are not one atomic operation; closing that window fully needs
+      // a per-snapshot revision in every storage adapter.
       try {
         const current = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
@@ -5730,7 +5734,10 @@ export class Run<
         const engineNeverStarted =
           current?.status === 'running' &&
           currentStepIds.length === claimedStepIds.length &&
-          claimedStepIds.every(stepId => currentContext[stepId]?.status === claimedContext[stepId]?.status);
+          claimedStepIds.every(stepId => currentContext[stepId]?.status === claimedContext[stepId]?.status) &&
+          JSON.stringify(current?.activePaths ?? []) === JSON.stringify(snapshot.activePaths ?? []) &&
+          JSON.stringify(current?.activeStepsPath ?? {}) === JSON.stringify(snapshot.activeStepsPath ?? {}) &&
+          JSON.stringify(current?.suspendedPaths ?? {}) === JSON.stringify(snapshot.suspendedPaths ?? {});
 
         if (!engineNeverStarted) {
           return;

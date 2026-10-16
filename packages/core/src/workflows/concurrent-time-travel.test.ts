@@ -223,4 +223,31 @@ describe('concurrent time travel', () => {
     expect(retried.status).toBe('suspended');
     expect(harness.getWorkExecutions()).toBe(1);
   });
+  it('keeps the claim when the engine fails after it already started tracking the run', async () => {
+    const harness = createHarness({ suspendAtEnd: true });
+    const { run, storage } = await startRun(harness);
+    const workflowsStore = (await storage.getStore('workflows'))!;
+
+    const executeSpy = vi.spyOn((run as any).executionEngine, 'execute').mockImplementationOnce(async () => {
+      const current = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: 'concurrent-time-travel-wf',
+        runId: run.runId,
+      });
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'concurrent-time-travel-wf',
+        runId: run.runId,
+        snapshot: { ...current!, activePaths: [0], activeStepsPath: { work: [0] } },
+      });
+      throw new Error('engine boom');
+    });
+
+    await expect(run.timeTravel({ step: 'work', inputData: {} })).rejects.toThrow('engine boom');
+    executeSpy.mockRestore();
+
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: 'concurrent-time-travel-wf',
+      runId: run.runId,
+    });
+    expect(snapshot?.status).toBe('running');
+  });
 });
