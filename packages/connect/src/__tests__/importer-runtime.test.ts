@@ -15,12 +15,14 @@ import {
   readHighWater,
   readResumeCursor,
   readWatermark,
+  reconcileImporterNodes,
   walkPages,
   writeHighWater,
   writeResumeCursor,
   writeWatermark,
 } from '../importer-runtime.js';
-import { createFakeState } from './fixtures/importer-harness.js';
+import type { ImporterNodeProbeResult } from '../importer-runtime.js';
+import { createFakeImporter, createFakeState } from './fixtures/importer-harness.js';
 
 function conn(id: string) {
   return { id, integrationId: 'test', status: 'active' } as never;
@@ -268,6 +270,192 @@ describe('importer-runtime helpers', () => {
     it('exposes sensible defaults for record and page bounds', () => {
       expect(DEFAULT_MAX_RECORDS_PER_RUN).toBeGreaterThan(0);
       expect(DEFAULT_MAX_PAGES_PER_RUN).toBeGreaterThan(0);
+    });
+  });
+
+  describe('reconcileImporterNodes', () => {
+    const PREFIX = 'linear:document:';
+    const KEY = 'linear:reconcile:cursor';
+
+    async function seed(
+      role: 'owner' | 'edit' = 'owner',
+      addresses = ['linear:document:a', 'linear:document:b', 'linear:document:c'],
+    ) {
+      const importer = createFakeImporter(role);
+      for (const address of addresses) {
+        const handle = await importer.upsertNode(address, { name: address, metadata: nodeSelfMetadata(address) });
+        await handle.appendKnowledge({ id: `${address}#r`, text: 'body' });
+      }
+      return { importer, state: createFakeState() };
+    }
+
+    function run(
+      fixtures: Awaited<ReturnType<typeof seed>>,
+      probe: (address: string) => Promise<ImporterNodeProbeResult>,
+      overrides: { limit?: number; signal?: AbortSignal; canRemove?: boolean } = {},
+    ) {
+      return reconcileImporterNodes({
+        importer: fixtures.importer,
+        state: fixtures.state,
+        cursorKey: KEY,
+        addressPrefixes: [PREFIX],
+        canRemove: overrides.canRemove ?? fixtures.importer.role === 'owner',
+        probe,
+        signal: overrides.signal ?? new AbortController().signal,
+        limit: overrides.limit ?? 50,
+      });
+    }
+
+    const records = (f: Awaited<ReturnType<typeof seed>>, address: string) =>
+      f.importer.nodes.get(address)!.records.size;
+
+    it('probes metadata addresses, never handle ids, and harness ids differ from addresses', async () => {
+      const f = await seed();
+      const handles = await f.importer.listNodes();
+      expect(handles.every(h => !h.id.startsWith(PREFIX))).toBe(true);
+      expect(handles.map(h => h.node.metadata)).toEqual([
+        { address: 'linear:document:a' },
+        { address: 'linear:document:b' },
+        { address: 'linear:document:c' },
+      ]);
+      const seen: string[] = [];
+      await run(f, async address => {
+        seen.push(address);
+        return 'present';
+      });
+      expect(seen).toEqual(['linear:document:a', 'linear:document:b', 'linear:document:c']);
+    });
+
+    it('removes records only on a positive removed verdict and keeps the node', async () => {
+      const f = await seed();
+      const result = await run(f, async a => (a === 'linear:document:b' ? 'removed' : 'present'));
+      expect(result).toEqual({ probed: 3, removedRecords: 1, wrapped: true });
+      expect(records(f, 'linear:document:b')).toBe(0);
+      expect(f.importer.nodes.has('linear:document:b')).toBe(true);
+      expect(records(f, 'linear:document:a')).toBe(1);
+      expect(await readResumeCursor(f.state, KEY)).toBeUndefined();
+    });
+
+    it('keeps records on uncertain and advances past it', async () => {
+      const f = await seed();
+      await run(f, async () => 'uncertain', { limit: 1 });
+      expect(records(f, 'linear:document:a')).toBe(1);
+      expect(await readResumeCursor(f.state, KEY)).toBe('linear:document:a');
+    });
+
+    it('keeps records and does not advance the cursor when the probe throws, then resumes there', async () => {
+      const f = await seed();
+      await expect(
+        run(f, async a => {
+          if (a === 'linear:document:b') throw new Error('503');
+          return 'removed';
+        }),
+      ).rejects.toThrow('503');
+      expect(records(f, 'linear:document:a')).toBe(0);
+      expect(records(f, 'linear:document:b')).toBe(1);
+      expect(await readResumeCursor(f.state, KEY)).toBe('linear:document:a');
+
+      const seen: string[] = [];
+      await run(f, async a => {
+        seen.push(a);
+        return 'removed';
+      });
+      expect(seen).toEqual(['linear:document:b', 'linear:document:c']);
+      expect(records(f, 'linear:document:b')).toBe(0);
+    });
+
+    it('never deletes or advances when aborted, including mid-probe', async () => {
+      const f = await seed();
+      const pre = new AbortController();
+      pre.abort();
+      expect(await run(f, async () => 'removed', { signal: pre.signal })).toEqual({
+        probed: 0,
+        removedRecords: 0,
+        wrapped: false,
+      });
+
+      const mid = new AbortController();
+      await run(
+        f,
+        async () => {
+          mid.abort();
+          return 'removed';
+        },
+        { signal: mid.signal },
+      );
+      expect([...f.importer.nodes.values()].every(n => n.records.size === 1)).toBe(true);
+      expect(f.state.entries.has(KEY)).toBe(false);
+    });
+
+    it('leaves foreign-prefix, metadata-less, and id-mismatched nodes untouched', async () => {
+      const f = await seed('owner', ['linear:document:a']);
+      const project = await f.importer.upsertNode('linear:project:p', {
+        name: 'p',
+        metadata: nodeSelfMetadata('linear:project:p'),
+      });
+      await project.appendKnowledge({ id: 'p#r', text: 'x' });
+      const bare = await f.importer.upsertNode('linear:document:z', { name: 'z' });
+      await bare.appendKnowledge({ id: 'z#r', text: 'x' });
+      // Metadata claims an address whose binding resolves to a different node.
+      const liar = await f.importer.upsertNode('linear:document:y', {
+        name: 'y',
+        metadata: nodeSelfMetadata('linear:document:a'),
+      });
+      await liar.appendKnowledge({ id: 'y#r', text: 'x' });
+
+      const seen: string[] = [];
+      const result = await run(f, async a => {
+        seen.push(a);
+        return 'removed';
+      });
+      expect(seen).toEqual(['linear:document:a']);
+      expect(result.removedRecords).toBe(1);
+      expect(records(f, 'linear:project:p')).toBe(1);
+      expect(records(f, 'linear:document:z')).toBe(1);
+      expect(records(f, 'linear:document:y')).toBe(1);
+    });
+
+    it('is a no-op without owner authority', async () => {
+      const f = await seed('edit');
+      let probes = 0;
+      const result = await run(f, async () => {
+        probes++;
+        return 'removed';
+      });
+      expect(result).toEqual({ probed: 0, removedRecords: 0, wrapped: false });
+      expect(probes).toBe(0);
+      expect(f.state.entries.has(KEY)).toBe(false);
+    });
+
+    it('walks in bounded address-ordered slices and wraps deterministically', async () => {
+      const f = await seed('owner', ['linear:document:c', 'linear:document:a', 'linear:document:b']);
+      const seen: string[][] = [];
+      for (let i = 0; i < 3; i++) {
+        const batch: string[] = [];
+        const result = await run(
+          f,
+          async a => {
+            batch.push(a);
+            return 'present';
+          },
+          { limit: 2 },
+        );
+        seen.push(batch);
+        expect(result.wrapped).toBe(i === 1);
+      }
+      expect(seen).toEqual([
+        ['linear:document:a', 'linear:document:b'],
+        ['linear:document:c'],
+        ['linear:document:a', 'linear:document:b'],
+      ]);
+    });
+
+    it('replays idempotently after a crash between removal and checkpoint', async () => {
+      const f = await seed();
+      await run(f, async () => 'removed');
+      await clearResumeCursor(f.state, KEY);
+      const result = await run(f, async () => 'removed');
+      expect(result).toEqual({ probed: 3, removedRecords: 0, wrapped: true });
     });
   });
 });
