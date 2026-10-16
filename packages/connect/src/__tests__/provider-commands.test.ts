@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -355,10 +355,14 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'paginate-only.ts'), paginateOnlyTemplate);
       }
     }
-    const excelActionDir = resolve(packageRoot, '.templates', 'integrations', 'microsoft-excel-oauth2-cc', 'actions');
+    const integrationsDir = resolve(packageRoot, '.templates', 'integrations');
+    symlinkSync('first-provider', resolve(integrationsDir, 'first-provider-alias'), 'dir');
+
+    const excelActionDir = resolve(integrationsDir, 'microsoft-excel-oauth2-cc', 'actions');
     mkdirSync(excelActionDir, { recursive: true });
     writeFileSync(resolve(excelActionDir, 'list-users.ts'), graphCursorTemplate);
-    const openaiActionDir = resolve(packageRoot, '.templates', 'integrations', 'openai', 'actions');
+
+    const openaiActionDir = resolve(integrationsDir, 'openai', 'actions');
     mkdirSync(openaiActionDir, { recursive: true });
     writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
 
@@ -615,6 +619,27 @@ export default action;
     expect(listProviders({ installedOnly: false, search: 'second' })).toEqual([
       'second-provider (11 action templates)',
     ]);
+  });
+
+  it('discovers and generates providers exposed as template symlinks', async () => {
+    expect(listProviders({ installedOnly: false, search: 'first-provider-alias' })).toEqual([
+      'first-provider-alias (1 action templates)',
+    ]);
+
+    await addProvider({
+      providerId: 'first-provider-alias',
+      localId: 'first-provider-alias',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const manifest = JSON.parse(
+      readFileSync(resolve(packageRoot, 'src/providers/first-provider-alias/.manifest.json'), 'utf8'),
+    ) as { providerId: string; localId: string };
+    expect(manifest).toMatchObject({
+      providerId: 'first-provider-alias',
+      localId: 'first-provider-alias',
+    });
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
