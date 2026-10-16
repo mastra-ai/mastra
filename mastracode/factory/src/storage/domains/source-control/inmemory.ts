@@ -474,7 +474,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         ...input,
         factoryProjectId,
         title: input.title ?? null,
-        visibility: input.visibility ?? 'org',
+        visibility: input.visibility ?? 'private',
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
