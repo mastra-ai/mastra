@@ -7,8 +7,20 @@ export const TOOL_NOT_STARTED_TEXT = 'The run was interrupted before this tool s
 export const SUPERSEDED_APPROVAL_REASON = 'superseded by new input';
 
 const OUTCOMES = new Set(['tool-result', 'tool-error', 'tool-denied']);
-/** Actions that close, rather than continue, a run: anything else after a run's end means it was resumed. */
-const CLOSING = new Set([...OUTCOMES, 'turn-end', 'run-end', 'run-aborted']);
+/**
+ * Actions that mean a run is under way. One of these after a run's end means it was resumed; other rows a
+ * run writes after its end (titles, memory and goal events, outcomes) leave it closed.
+ */
+const OPENING = new Set([
+  'run-start',
+  'turn-start',
+  'text',
+  'reasoning',
+  'file',
+  'tool-call',
+  'tool-started',
+  'tool-approval-responded',
+]);
 
 export type RepairCloser = { runId: string | undefined; action: ActionDraft };
 
@@ -41,7 +53,7 @@ export function repairOpenRun(
       const run = runs.get(a.runId) ?? { open: false, turnOpen: false };
       runs.set(a.runId, run);
       if (a.type === 'run-end' || a.type === 'run-aborted') run.open = run.turnOpen = false;
-      else if (!CLOSING.has(a.type)) run.open = true;
+      else if (OPENING.has(a.type)) run.open = true;
       if (a.type === 'turn-start') run.turnOpen = true;
       else if (a.type === 'turn-end') run.turnOpen = false;
     }

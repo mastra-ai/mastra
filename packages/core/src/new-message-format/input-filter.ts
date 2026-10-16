@@ -43,7 +43,9 @@ export function trimResentInput(input: AgentInput, log: PersistableAction[]): To
       messages.slice(last).flatMap(m => m.actions),
       log,
     );
-    return { system, actions: outcomes.length > 0 ? outcomes : messages[last]!.actions };
+    // The input's last message matched the log's last assistant turn: it is an echo, so only its open
+    // outcomes are new.
+    return { system, actions: outcomes };
   }
 
   const tail = messages.slice(boundary + 1).flatMap(m => (m.role === 'tool' ? [] : m.actions));
