@@ -30,6 +30,7 @@ import {
   MASTRACODE_GATEWAY_ID,
   MastraCodeGateway,
   getGlobalAuthStorage,
+  hasProviderEnvironmentKey,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
 } from './mastracode-gateway.js';
@@ -310,26 +311,28 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
 
 /**
  * Whether `resolveModel` can authenticate a provider for this request, using the
- * same credential lookup (tenant store in deployed Factory, otherwise local auth
- * and environment keys).
+ * same credential lookup: the tenant store in deployed Factory (no environment
+ * keys), otherwise local auth and then the provider's environment keys.
  */
 export function canUseProvider(providerId: string, options?: { requestContext?: RequestContext }): boolean {
   reloadAuthStorage();
   const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
   const gateway = createMastraCodeGateway({
     mastraGatewayBaseUrl: '',
     routeThroughMastraGateway: false,
     customProviders: resolveCustomProviders(options?.requestContext) ?? loadSettings().customProviders,
-    credentialStore: createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext),
+    credentialStore,
   });
-  return Boolean(
-    gateway.resolveAuth({
-      gatewayId: MASTRACODE_GATEWAY_ID,
-      providerId,
-      modelId: '',
-      routerId: `${MASTRACODE_GATEWAY_ID}/${providerId}`,
-    }),
-  );
+  const auth = gateway.resolveAuth({
+    gatewayId: MASTRACODE_GATEWAY_ID,
+    providerId,
+    modelId: '',
+    routerId: `${MASTRACODE_GATEWAY_ID}/${providerId}`,
+  });
+  if (auth) return true;
+  // resolveModel lets the models.dev gateway read environment keys only when the store allows it.
+  return credentialStore.allowEnvironmentFallback !== false && hasProviderEnvironmentKey(providerId);
 }
 
 export interface ThinkingRequestContext {
