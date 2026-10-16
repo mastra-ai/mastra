@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
     "gpt-oss-120b",
     "llama-3.3-70b-instruct",
@@ -11,6 +12,7 @@
   ],
   "temperature": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
     "glm-5.3",
@@ -27,6 +29,7 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
     "glm-5.3",
@@ -43,6 +46,12 @@
       }
     ],
     "deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

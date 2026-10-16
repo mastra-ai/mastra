@@ -24,6 +24,7 @@
     "step-5-preview-free"
   ],
   "temperature": [
+    "beam-free",
     "cat-jam-free",
     "deepseek-v4-pro",
     "deepseek-v4.1-flash",
@@ -48,6 +49,7 @@
     "qwen3.8-max"
   ],
   "structuredOutput": [
+    "beam-free",
     "cat-jam-free",
     "claude-haiku-5-5",
     "deepseek-v4-pro",
@@ -179,6 +181,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "beam-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "claude-haiku-5-5": [
