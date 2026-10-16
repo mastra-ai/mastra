@@ -322,12 +322,17 @@ describe('MCPClient.events', () => {
 
       const listError = await mcp.events.list('plain').catch((e: unknown) => e);
       expect(listError).toBeInstanceOf(MastraError);
-      expect(listError).toMatchObject({ id: 'MCP_CLIENT_LIST_EVENTS_FAILED', details: { serverName: 'plain' } });
+      expect(listError).toMatchObject({
+        id: 'MCP_CLIENT_LIST_EVENTS_FAILED',
+        details: { serverName: 'plain' },
+        cause: { id: 'MCP_EVENTS_NOT_SUPPORTED' },
+      });
       expect(String((listError as MastraError).message)).toContain('does not support events');
 
       await expect(mcp.events.subscribe('plain', 'repo.push')).rejects.toMatchObject({
         id: 'MCP_CLIENT_SUBSCRIBE_EVENT_FAILED',
         details: { serverName: 'plain', eventName: 'repo.push' },
+        cause: { id: 'MCP_EVENTS_NOT_SUPPORTED' },
       });
     } finally {
       await mcp?.disconnect().catch(() => {});
