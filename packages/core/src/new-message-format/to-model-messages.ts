@@ -34,6 +34,7 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
   const assistant = (part: AssistantPart) => (open('assistant').content as AssistantPart[]).push(part);
   const tool = (part: ToolPart) => open('tool').content.push(part);
 
+  const outcomeFor = new Set<string>();
   for (const action of actions) {
     if (!isReadableAction(action)) continue;
     const providerOptions = action.providerMetadata as ProviderOptions | undefined;
@@ -87,6 +88,10 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
       case 'tool-result':
       case 'tool-error':
       case 'tool-denied': {
+        // One outcome per call. A second can only come from two writers on one thread (repair closing a run
+        // that was still live); the contract is one writer, and a duplicate result would fail the prompt.
+        if (outcomeFor.has(action.toolCallId)) break;
+        outcomeFor.add(action.toolCallId);
         const part = {
           type: 'tool-result',
           toolCallId: action.toolCallId,

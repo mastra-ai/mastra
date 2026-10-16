@@ -1,9 +1,15 @@
 import type { LanguageModelUsage, ProviderMetadata, TextStreamPart, ToolSet } from '@internal/ai-v7';
 import type { ActionBase, MastraAction, Usage } from './types';
+import { ToolNotStartedError } from './types';
 
 type Context = Pick<ActionBase, 'threadId' | 'resourceId' | 'runId'> & {
   modelId: string;
   generateId: () => string;
+  /**
+   * Set by the converter: returns the text and reasoning blocks still open, marked `interrupted`, and
+   * closes them. For a consumer that stops reading early, so the text streamed so far isn't lost.
+   */
+  open?: { drain?: () => MastraAction[] };
 };
 
 /**
@@ -22,10 +28,21 @@ export async function* streamActions(
     ...(ctx.runId !== undefined ? { runId: ctx.runId } : {}),
   });
   // AI SDK part id -> { contentId, accumulated text }
-  const open = new Map<string, { contentId: string; text: string }>();
+  const open = new Map<string, { contentId: string; text: string; kind: 'text' | 'reasoning' }>();
   const toolNames = new Map<string, string>();
+  // Blocks the stream left open when it stopped (abort, error): stored with the text that arrived.
+  function* interrupted(): Generator<MastraAction> {
+    for (const [partId, block] of open) {
+      open.delete(partId);
+      if (!block.text) continue;
+      const { contentId, text, kind } = block;
+      yield { ...base(), type: kind, role: 'assistant', text, contentId, interrupted: true };
+    }
+  }
+  if (ctx.open) ctx.open.drain = () => [...interrupted()];
+  const failed: { error?: unknown } = {};
 
-  for await (const part of stream) {
+  for await (const part of untilError(stream, failed)) {
     switch (part.type) {
       case 'start-step':
         yield { ...base(), type: 'turn-start', modelId: ctx.modelId };
@@ -33,7 +50,7 @@ export async function* streamActions(
       case 'text-start':
       case 'reasoning-start': {
         const start = base();
-        open.set(part.id, { contentId: start.id, text: '' });
+        open.set(part.id, { contentId: start.id, text: '', kind: part.type === 'text-start' ? 'text' : 'reasoning' });
         yield { ...start, type: part.type, transient: true, contentId: start.id };
         break;
       }
@@ -133,6 +150,7 @@ export async function* streamActions(
           toolCallId: part.toolCallId,
           toolName: part.toolName,
           errorText: part.error instanceof Error ? part.error.message : String(part.error),
+          ...(part.error instanceof ToolNotStartedError ? { code: 'TOOL_NOT_STARTED' as const } : {}),
         };
         break;
       case 'source':
@@ -160,6 +178,7 @@ export async function* streamActions(
         break;
       case 'error': {
         const error = part.error instanceof Error ? part.error : new Error(String(part.error));
+        yield* interrupted();
         yield {
           ...base(),
           type: 'error',
@@ -194,6 +213,7 @@ export async function* streamActions(
         yield { ...base(), type: 'run-end', finishReason: part.finishReason, usage: toUsage(part.totalUsage) };
         break;
       case 'abort':
+        yield* interrupted();
         yield { ...base(), type: 'run-aborted', ...(part.reason !== undefined ? { reason: part.reason } : {}) };
         break;
       case 'custom':
@@ -214,6 +234,19 @@ export async function* streamActions(
         break;
       }
     }
+  }
+  if ('error' in failed) {
+    yield* interrupted();
+    throw failed.error;
+  }
+}
+
+/** Iterates `stream`, ending quietly on an error and leaving it in `failed` for the caller to rethrow. */
+async function* untilError<T>(stream: AsyncIterable<T>, failed: { error?: unknown }): AsyncGenerator<T> {
+  try {
+    yield* stream;
+  } catch (error) {
+    failed.error = error;
   }
 }
 

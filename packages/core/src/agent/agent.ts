@@ -9569,10 +9569,17 @@ export class Agent<
     }
     const log = (await store.listActions({ threadId, runId: options.runId })).filter(isReadableAction);
     const answered = new Set(log.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
+    // A call closed without an answer (superseded by new input, repaired) is no longer pending.
+    const closed = new Set(
+      log.flatMap(a =>
+        a.type === 'tool-result' || a.type === 'tool-error' || a.type === 'tool-denied' ? [a.toolCallId] : [],
+      ),
+    );
     const request = log.findLast(
       a =>
         a.type === 'tool-approval-requested' &&
         !answered.has(a.approvalId) &&
+        !closed.has(a.toolCallId) &&
         (!options.toolCallId || a.toolCallId === options.toolCallId),
     );
     if (request?.type !== 'tool-approval-requested') {

@@ -51,7 +51,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('runAgent (live gpt-4o-mini, in-mem
 
     const start = types.indexOf('text-start');
     const end = types.lastIndexOf('text');
-    expect(types[0]).toBe('text'); // user input
+    expect(types.slice(0, 2)).toEqual(['run-start', 'text']); // run-start, then the user input
     expect(start).toBeGreaterThan(0);
     expect(types.slice(start + 1, end).every(t => t === 'text-delta')).toBe(true);
     expect(types.slice(-2)).toEqual(['turn-end', 'run-end']);
@@ -64,7 +64,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('runAgent (live gpt-4o-mini, in-mem
     expect(text).toMatchObject({ role: 'assistant', text: deltas });
 
     const stored = await expectStoredMatchesStream(streamed, 'r1');
-    expect(stored.map(a => a.type)).toEqual(['text', 'turn-start', 'text', 'turn-end', 'run-end']);
+    expect(stored.map(a => a.type)).toEqual(['run-start', 'text', 'turn-start', 'text', 'turn-end', 'run-end']);
   });
 
   it('tools: tool input deltas then tool-call, tool-result, and a second turn', async () => {
@@ -79,9 +79,11 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('runAgent (live gpt-4o-mini, in-mem
 
     const stored = await expectStoredMatchesStream(streamed, 'r2');
     expect(stored.map(a => a.type)).toEqual([
+      'run-start',
       'text',
       'turn-start',
       'tool-call',
+      'tool-started',
       'tool-result',
       'turn-end',
       'turn-start',

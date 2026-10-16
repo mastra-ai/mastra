@@ -33,9 +33,22 @@ type Role = 'user' | 'assistant' | 'system';
 // Content
 
 /** `contentId` links a streamed block to its transient deltas. */
-export type TextAction = ActionBase & { type: 'text'; role: Role; text: string; contentId?: string };
+/** `interrupted`: the stream stopped mid-block (abort or error); `text` is what arrived before it did. */
+export type TextAction = ActionBase & {
+  type: 'text';
+  role: Role;
+  text: string;
+  contentId?: string;
+  interrupted?: boolean;
+};
 
-export type ReasoningAction = ActionBase & { type: 'reasoning'; role: 'assistant'; text: string; contentId?: string };
+export type ReasoningAction = ActionBase & {
+  type: 'reasoning';
+  role: 'assistant';
+  text: string;
+  contentId?: string;
+  interrupted?: boolean;
+};
 
 export type FileAction = ActionBase & {
   type: 'file';
@@ -358,7 +371,21 @@ export type ToolResumedAction = ActionBase & ToolRef & { type: 'tool-resumed'; r
 
 export type ToolResultAction = ActionBase & ToolRef & { type: 'tool-result'; output: unknown; modelOutput?: unknown };
 
-export type ToolErrorAction = ActionBase & ToolRef & { type: 'tool-error'; errorText: string };
+/**
+ * Set when repair closed the call: `TOOL_OUTCOME_UNKNOWN` if it had started (it may have run; never retried
+ * automatically), `TOOL_NOT_STARTED` if it had not.
+ */
+export type ToolErrorCode = 'TOOL_OUTCOME_UNKNOWN' | 'TOOL_NOT_STARTED';
+
+/** Thrown in place of a tool's execute when the run can't record that it started (or was stopped first). */
+export class ToolNotStartedError extends Error {
+  constructor() {
+    super('The run stopped before this tool started. It did not run.');
+    this.name = 'ToolNotStartedError';
+  }
+}
+
+export type ToolErrorAction = ActionBase & ToolRef & { type: 'tool-error'; errorText: string; code?: ToolErrorCode };
 
 export type ToolDeniedAction = ActionBase & ToolRef & { type: 'tool-denied'; reason?: string };
 
