@@ -732,18 +732,16 @@ export async function createSourceControlTools({
         if (!publishCommitCheck) {
           throw new Error(`${target.provider.id} does not support publishing commit checks; nothing was published.`);
         }
-        if (boundChangeRequestId) {
-          const bound = await boundChangeRequestId();
-          if (bound === undefined) {
-            throw new Error(
-              'Only a Review session bound to this change request can publish test checks; nothing was published.',
-            );
-          }
-          if (bound !== changeRequestId(input.changeRequestId)) {
-            throw new Error(
-              `This session reviews change request ${bound}, not ${input.changeRequestId}; nothing was published.`,
-            );
-          }
+        const bound = boundChangeRequestId ? await boundChangeRequestId() : undefined;
+        if (bound === undefined) {
+          throw new Error(
+            'Only a Review session bound to this change request can publish test checks; nothing was published.',
+          );
+        }
+        if (bound !== changeRequestId(input.changeRequestId)) {
+          throw new Error(
+            `This session reviews change request ${bound}, not ${input.changeRequestId}; nothing was published.`,
+          );
         }
         const ref = await reference(target);
         const pullRequest = await target.provider.versionControl.getPullRequest({

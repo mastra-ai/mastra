@@ -936,7 +936,11 @@ describe('createSourceControlTools', () => {
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl }],
         audit: setup.audit,
         ...(overrides.testChecksEnabled ? { testChecksEnabled: overrides.testChecksEnabled } : {}),
-        ...(overrides.boundChangeRequestId ? { boundChangeRequestId: overrides.boundChangeRequestId } : {}),
+        ...('boundChangeRequestId' in overrides
+          ? overrides.boundChangeRequestId
+            ? { boundChangeRequestId: overrides.boundChangeRequestId }
+            : {}
+          : { boundChangeRequestId: async () => '17' }),
       });
       const tool = tools.source_control_publish_test_check!;
       return {
@@ -970,6 +974,12 @@ describe('createSourceControlTools', () => {
 
     it('refuses to publish from a session that is not Review-bound, such as a builder', async () => {
       const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => undefined });
+      await expect(run()).rejects.toThrow(/Only a Review session bound to this change request/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish when the host cannot say which change request the session reviews', async () => {
+      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: undefined });
       await expect(run()).rejects.toThrow(/Only a Review session bound to this change request/);
       expect(publishCommitCheck).not.toHaveBeenCalled();
     });
