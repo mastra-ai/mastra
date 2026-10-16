@@ -254,10 +254,7 @@ export class LocalSandbox extends MastraSandbox<string> {
     });
 
     this.timeout = options.timeout ?? 30_000;
-    // Apply the foreground default without limiting background process lifetimes.
-    const executeCommand = this.executeCommand!;
-    this.executeCommand = (command, args, options) =>
-      executeCommand.call(this, command, args, { ...options, timeout: options?.timeout ?? this.timeout });
+    this.defaultCommandTimeout = this.timeout;
 
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();

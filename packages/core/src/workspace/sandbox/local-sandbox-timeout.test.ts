@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
 
@@ -32,30 +32,43 @@ describe('LocalSandbox foreground timeout defaults', () => {
     expect(result.stdout.trim()).toBe('done');
   });
 
-  it('times out foreground commands after 30 seconds when no timeout is supplied', async () => {
-    const result = await createSandbox().executeCommand(waitCommand(31_000));
-    expect(result).toMatchObject({ success: false, exitCode: 124, timedOut: true });
-    expect(result.stderr).toContain('Process timed out after 30000ms');
-  }, 40_000);
+  it.each([
+    { configured: undefined, override: undefined, expected: 30_000, clone: false },
+    { configured: 60_000, override: undefined, expected: 60_000, clone: false },
+    { configured: 60_000, override: undefined, expected: 60_000, clone: true },
+    { configured: 60_000, override: 5_000, expected: 5_000, clone: false },
+    { configured: 60_000, override: 0, expected: 0, clone: false },
+    { configured: 0, override: undefined, expected: 0, clone: false },
+  ])(
+    'forwards timeout $expected (configured=$configured, override=$override, clone=$clone)',
+    async ({ configured, override, expected, clone }) => {
+      let sandbox = createSandbox(configured);
+      if (clone) {
+        sandbox = sandbox.clone();
+        sandboxes.push(sandbox);
+      }
+      const result = { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 0 };
+      const spawn = vi.spyOn(sandbox.processes, 'spawn').mockResolvedValue({
+        pid: 'test-process',
+        wait: async () => result,
+      } as Awaited<ReturnType<typeof sandbox.processes.spawn>>);
 
-  it('honors the configured default in a cloned sandbox', async () => {
-    const sandbox = createSandbox(100).clone();
-    sandboxes.push(sandbox);
-    const result = await sandbox.executeCommand(waitCommand(1_000));
+      await sandbox.executeCommand('echo done', [], { timeout: override });
+
+      expect(spawn).toHaveBeenCalledWith('echo done', expect.objectContaining({ timeout: expected }));
+    },
+  );
+
+  it('kills a foreground command that exceeds its timeout', async () => {
+    const result = await createSandbox().executeCommand(waitCommand(60_000), [], { timeout: 100 });
     expect(result).toMatchObject({ success: false, exitCode: 124, timedOut: true });
     expect(result.stderr).toContain('Process timed out after 100ms');
   });
 
-  it.each([2_000, 0])('allows a per-command timeout of %i to override the default', async timeout => {
-    const result = await createSandbox(100).executeCommand(waitCommand(250), [], { timeout });
+  it('disables the configured timeout when a command sets zero', async () => {
+    const result = await createSandbox(100).executeCommand(waitCommand(250), [], { timeout: 0 });
     expect(result).toMatchObject({ success: true, exitCode: 0 });
     expect(result.timedOut).not.toBe(true);
-  });
-
-  it('honors a shorter per-command timeout', async () => {
-    const result = await createSandbox().executeCommand(waitCommand(1_000), [], { timeout: 100 });
-    expect(result).toMatchObject({ success: false, exitCode: 124, timedOut: true });
-    expect(result.stderr).toContain('Process timed out after 100ms');
   });
 
   it('does not apply the foreground default to background processes', async () => {
