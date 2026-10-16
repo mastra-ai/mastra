@@ -28,6 +28,7 @@ describe('createPlatformProxy request context binding', () => {
 
   it('keeps the full proxy surface on the bound copy', () => {
     const bound = createPlatformProxy({ connectionId: 'conn-1' }).withRequestContext(new RequestContext());
+    expect(typeof bound.proxy).toBe('function');
     expect(typeof bound.get).toBe('function');
     expect(typeof bound.post).toBe('function');
     expect(typeof bound.getConnection).toBe('function');
@@ -70,6 +71,17 @@ describe('createPlatformProxy request context binding', () => {
 
     expect(response.status).toBe(202);
     expect(response.data).toEqual({ statementHandle: 'h-1' });
+  });
+
+  it('supports the upstream generic proxy helper with GET as the default method', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(Response.json({ ok: true })));
+    const proxy = makeProxy(fetchMock);
+
+    await proxy.proxy({ endpoint: '/items' });
+    await proxy.proxy({ method: 'POST', endpoint: '/items', data: { name: 'example' } });
+
+    expect(fetchMock.mock.calls[0]![1].method).toBe('GET');
+    expect(fetchMock.mock.calls[1]![1].method).toBe('POST');
   });
 
   it('forwards template baseUrlOverride values to the platform proxy request', async () => {
