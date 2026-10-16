@@ -1071,6 +1071,7 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendSignal = capture;
       (mockAgent as any).sendMessage = capture;
       (mockAgent as any).queueMessage = capture;
+      (mockAgent as any).queueSignal = capture;
 
       const ifIdle = { streamOptions: { scopes: forged, requestContext: { [MASTRA_SCOPES_KEY]: forged } } };
       await (SEND_AGENT_SIGNAL_ROUTE.handler as any)({
@@ -1093,8 +1094,18 @@ describe('Agent Routes Authorization', () => {
         scopes: forged,
         ifIdle,
       });
+      await (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: middlewareContext(),
+        signal: { type: 'reactive', tagName: 'review', contents: 'Review it.' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+        scopes: forged,
+        ifIdle,
+      });
 
-      expect(targets).toHaveLength(2);
+      expect(targets).toHaveLength(3);
       for (const target of targets) {
         expect(target).not.toHaveProperty('scopes');
         expect(target.ifIdle.streamOptions).not.toHaveProperty('scopes');
@@ -4314,6 +4325,7 @@ describe('Agent Routes Authorization', () => {
     it.each([
       { route: SEND_AGENT_MESSAGE_ROUTE, method: 'sendMessage' },
       { route: QUEUE_AGENT_MESSAGE_ROUTE, method: 'queueMessage' },
+      { route: QUEUE_AGENT_SIGNAL_ROUTE, method: 'queueSignal' },
     ] as const)('should normalize idle stream options for $method', async ({ route, method }) => {
       await mockMemory.createThread({
         threadId: 'queue-message-thread-with-context',
@@ -4335,6 +4347,7 @@ describe('Agent Routes Authorization', () => {
         agentId: 'test-agent',
         requestContext,
         message: 'hello',
+        signal: { type: 'reactive', tagName: 'review', contents: 'Review it.' },
         resourceId: 'user-a',
         threadId: 'queue-message-thread-with-context',
         ifIdle: {
@@ -4426,6 +4439,67 @@ describe('Agent Routes Authorization', () => {
       });
       expect(capturedTarget).toMatchObject({ resourceId: 'user-a', threadId: 'queue-signal-thread' });
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
+    });
+
+    it('keeps an exact queued-signal root ahead of the graph default and forwards dependency selectors', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      const applyStoredOverrides = vi.fn(async () => {
+        mockAgent.__setRawConfig({ resolvedVersionId: 'root-v1' });
+        return mockAgent;
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const queueSignal = vi.spyOn(mockAgent, 'queueSignal').mockReturnValue({
+        accepted: Promise.resolve({ action: 'wake', runId: 'queued-version-run' }),
+      } as never);
+      const versions = {
+        defaultLabel: 'candidate',
+        agents: { 'test-agent': { versionId: 'root-v1' }, dependency: { label: 'stable' } },
+      };
+      const signal = { type: 'reactive' as const, tagName: 'review', contents: 'Review the pinned version.' };
+
+      const result = await QUEUE_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal,
+        resourceId: 'user-a',
+        threadId: 'queued-version-thread',
+        ifIdle: { streamOptions: { versions } },
+      } as never);
+
+      expect(result).toEqual({ accepted: true, runId: 'queued-version-run' });
+      expect(applyStoredOverrides).toHaveBeenCalledExactlyOnceWith(mockAgent, { versionId: 'root-v1' }, requestContext);
+      expect(queueSignal).toHaveBeenCalledWith(signal, {
+        resourceId: 'user-a',
+        threadId: 'queued-version-thread',
+        ifIdle: { streamOptions: { versions, requestContext } },
+      });
+      expect(queueSignal.mock.calls[0]?.[1].ifIdle?.streamOptions?.requestContext).toBe(requestContext);
+      expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual(versions);
+    });
+
+    it('rejects conflicting queued-signal selectors before resolving or invoking an agent', async () => {
+      const applyStoredOverrides = vi.fn();
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const queueSignal = vi.spyOn(mockAgent, 'queueSignal');
+
+      await expect(
+        QUEUE_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          signal: { type: 'reactive', tagName: 'review', contents: 'Review it.' },
+          resourceId: 'user-a',
+          threadId: 'queued-version-thread',
+          ifIdle: {
+            streamOptions: {
+              versions: { agents: { 'test-agent': { versionId: 'root-v1', label: 'candidate' } } },
+            },
+          },
+        } as never),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(applyStoredOverrides).not.toHaveBeenCalled();
+      expect(queueSignal).not.toHaveBeenCalled();
     });
 
     it('should reject queueing a signal on a thread owned by another resource', async () => {

@@ -84,14 +84,14 @@ function toolCallingModel(toolName: string) {
 
 /**
  * Every reserved key the server refuses from a request body. Each one is forged
- * in a request body below and must never reach the tool's request context.
+ * below; only trusted runtime-generated values may reach the tool's context.
  */
 const RESERVED_KEYS = RESERVED_REQUEST_CONTEXT_KEYS;
 
 type ToolSighting = {
   scopes: unknown;
-  /** Reserved keys present in the tool-visible request context. Must stay empty. */
-  reservedLeaks: string[];
+  /** Reserved values visible to tools, checked against trusted runtime state. */
+  reservedValues: Record<string, unknown>;
   /** Non-reserved body requestContext entries must still flow through. */
   harmless: unknown;
   /** The run's resolved memory identity, as the tool sees it. */
@@ -112,7 +112,7 @@ function buildApp(agentScopes?: string[]) {
       const requestContext = context?.requestContext ?? new RequestContext();
       sightings.push({
         scopes: requestContext.get(MASTRA_SCOPES_KEY),
-        reservedLeaks: RESERVED_KEYS.filter(key => requestContext.get(key) !== undefined),
+        reservedValues: Object.fromEntries(RESERVED_KEYS.map(key => [key, requestContext.get(key)])),
         harmless: requestContext.get('harmless'),
         runResourceId: agentContext?.resourceId,
         runThreadId: agentContext?.threadId,
@@ -180,9 +180,13 @@ describe('agent scope security over real server routes', () => {
 
     expect(response.status).toBe(200);
     expect(sightings).toHaveLength(1);
-    // Every reserved key must be dropped individually — a regression that
-    // selectively lets one through must fail here.
-    expect(sightings[0]!.reservedLeaks).toEqual([]);
+    // Every forged key must be dropped individually. Core then creates its own
+    // frozen code-only graph; assert that exact state rather than mistaking it
+    // for the caller's forged pin value or permitting arbitrary private data.
+    expect(sightings[0]!.reservedValues).toEqual({
+      ...Object.fromEntries(RESERVED_KEYS.map(key => [key, undefined])),
+      mastra__agentVersionPins: { resolvedAgentIds: ['scoped-agent'] },
+    });
     expect(sightings[0]!.scopes).toBeUndefined();
     expect(sightings[0]!.runResourceId).toBeUndefined();
     expect(sightings[0]!.runThreadId).toBeUndefined();

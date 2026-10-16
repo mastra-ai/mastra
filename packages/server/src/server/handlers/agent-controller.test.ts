@@ -580,6 +580,7 @@ describe('agent-controller routes', () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
       const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+      const requestContext = makeRequestContext();
 
       await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -587,9 +588,16 @@ describe('agent-controller routes', () => {
         resourceId: 'user-rc',
         message: 'look at this instead',
         files,
+        requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'look at this instead', files, requestContext: undefined });
+      expect(spy).toHaveBeenCalledWith({
+        content: 'look at this instead',
+        files,
+        requestContext,
+        author: { id: 'user-123' },
+      });
+      expect(spy.mock.calls[0]?.[0].requestContext).toBe(requestContext);
     });
 
     it('forwards requestContext to session.followUp', async () => {
@@ -612,6 +620,7 @@ describe('agent-controller routes', () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
       const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+      const requestContext = makeRequestContext();
 
       await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -619,9 +628,11 @@ describe('agent-controller routes', () => {
         resourceId: 'user-rc',
         message: 'also this',
         files,
+        requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'also this', files, requestContext: undefined });
+      expect(spy).toHaveBeenCalledWith({ content: 'also this', files, requestContext });
+      expect(spy.mock.calls[0]?.[0].requestContext).toBe(requestContext);
     });
 
     it.each([

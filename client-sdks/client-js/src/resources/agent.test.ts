@@ -270,6 +270,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-signal', {
       method: 'POST',
       body: routeBody,
+      retries: 0,
     });
   });
 
