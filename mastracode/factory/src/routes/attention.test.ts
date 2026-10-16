@@ -136,85 +136,42 @@ beforeEach(async () => {
   PROJECT_ID = project.id;
 });
 
-describe('supervisor finding attention items', () => {
-  it('surfaces persisted findings in the badge and supports receipt actions', async () => {
-    const item = await seedWorkItem('Repair stuck card');
-    await seed.workItems.syncSupervisorFindings({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      findings: [
-        {
-          id: `decision-stuck:${item.id}`,
-          kind: 'decision-stuck',
-          workItemId: item.id,
-          workItemNumber: null,
-          title: 'A decision is stuck',
-          evidence: 'decision-1 has been retrying past its backoff.',
-          beganAt: '2029-12-31T23:50:00.000Z',
-          suggestedRepair: null,
-        },
-      ],
-      now: new Date('2030-01-01T00:00:00.000Z'),
-    });
-
-    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
-    expect(open).toMatchObject({
-      items: [
-        {
-          kind: 'supervisor-finding',
-          findingKey: `decision-stuck:${item.id}`,
-          findingTitle: 'A decision is stuck',
-          evidence: 'decision-1 has been retrying past its backoff.',
-          workItemId: item.id,
-          read: false,
-        },
-      ],
-      kinds: { 'supervisor-finding': { open: 1, unread: 1, latest: { unread: true } } },
-    });
-    expect(FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse(open).success).toBe(true);
-
-    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/supervisor-finding/${encodeURIComponent(`decision-stuck:${item.id}`)}/0`;
-    expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
-    await expect(
-      (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], kinds: { 'supervisor-finding': { open: 1, unread: 0 } } });
-
-    expect((await request('POST', `${receiptPath}/archive`)).status).toBe(200);
-    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], kinds: { 'supervisor-finding': { open: 0 } } },
-    );
-  });
-
-  it('keeps a finding at the moment it opened when a later tick refreshes its evidence', async () => {
-    const item = await seedWorkItem('Repair stuck card');
-    const finding = {
-      id: `decision-stuck:${item.id}`,
-      kind: 'decision-stuck' as const,
+describe('receipts of retired attention kinds', () => {
+  it('keeps listing, counting and read-all working when stored receipts name a kind that no longer exists', async () => {
+    const item = await seedWorkItem('Fix the loader');
+    const comment = await seedMention({
       workItemId: item.id,
-      workItemNumber: null,
-      title: 'A decision is stuck',
-      evidence: 'decision-1 has retried 2 times.',
-      beganAt: '2029-12-31T23:50:00.000Z',
-      suggestedRepair: null,
-    };
-    const openedAt = new Date('2030-01-01T00:00:00.000Z');
-    await seed.workItems.syncSupervisorFindings({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      findings: [finding],
-      now: openedAt,
+      body: '@u1 look',
+      occurredAt: new Date('2030-01-01T00:00:00.000Z'),
     });
-    await seed.workItems.syncSupervisorFindings({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      findings: [{ ...finding, evidence: 'decision-1 has retried 3 times.' }],
-      now: new Date('2030-01-01T00:05:00.000Z'),
+    // Rows written before a kind was removed stay in the table; nothing deletes them.
+    // Sharing the mention's source id leaves the kind as the only thing telling them apart.
+    const now = new Date('2030-01-01T00:01:00.000Z');
+    await seed.storage.ops.insertOne('factory_attention_receipts', {
+      org_id: 'org1',
+      factory_project_id: PROJECT_ID,
+      user_id: 'u1',
+      kind: 'retired-finding',
+      source_id: comment.id,
+      occurrence: 0,
+      state: 'read',
+      read_at: now,
+      archived_at: null,
+      created_at: now,
+      updated_at: now,
     });
 
-    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
-    expect(open.items).toMatchObject([
-      { evidence: 'decision-1 has retried 3 times.', occurredAt: openedAt.toISOString() },
-    ]);
+    const open = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`);
+    expect(open.status).toBe(200);
+    const body = await open.json();
+    expect(body.items).toMatchObject([{ kind: 'mention', commentId: comment.id, read: false }]);
+    expect(Object.keys(body.kinds)).not.toContain('retired-finding');
+    expect(FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse(body).success).toBe(true);
+
+    expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
+    const unread = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`);
+    expect(unread.status).toBe(200);
+    await expect(unread.json()).resolves.toMatchObject({ items: [], kinds: { mention: { open: 1, unread: 0 } } });
   });
 });
 

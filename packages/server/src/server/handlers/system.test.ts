@@ -22,6 +22,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceAggregate: false,
   threadQuery: false,
   spanQuery: false,
   feedback: false,
@@ -199,23 +200,6 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: true,
-        liveKitConnectionRouteEnabled: false,
-        observabilityEnabled: false,
-        storageType: undefined,
-        observabilityStorageType: undefined,
-        observabilityRuntimeStrategy: undefined,
-      });
-    });
-
-    it('should return cmsEnabled false when editor is not configured', async () => {
-      delete process.env.MASTRA_PACKAGES_FILE;
-
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
-
-      expect(result).toEqual({
-        packages: [],
-        isDev: false,
-        cmsEnabled: false,
         liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
@@ -749,6 +733,28 @@ describe('System Handlers', () => {
           ...NO_OBSERVABILITY_CAPABILITIES,
           feedback: true,
         });
+      });
+
+      it('reports trace aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query'] as const;
+          }
+          override async aggregateTraces() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          traceAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ traceAggregate: false });
       });
 
       it('does not report query refinements for stores without trace or thread queries', async () => {

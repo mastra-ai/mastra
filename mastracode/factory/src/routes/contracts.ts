@@ -49,6 +49,7 @@ const decisionResponseSchema = z.object({ decision: entitySchema });
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
+  modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
 });
 
 export const updateProjectBodySchema = z
@@ -57,7 +58,6 @@ export const updateProjectBodySchema = z
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
-    slackWorkItemsEnabled: z.boolean().optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
   })
@@ -381,7 +381,6 @@ const attentionKindSchema = z.enum([
   'automation-proposed',
   'mention',
   'activity',
-  'supervisor-finding',
   'agent-waiting',
 ]);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
@@ -456,13 +455,10 @@ const attentionActionPathSchema = z
         return z.NEVER;
       }),
   })
-  .refine(
-    input =>
-      input.kind === 'supervisor-finding'
-        ? /^[a-z0-9:_-]{1,256}$/i.test(input.sourceId)
-        : new RegExp(UUID_PATTERN).test(input.sourceId),
-    { message: 'Invalid attention source id', path: ['sourceId'] },
-  );
+  .refine(input => new RegExp(UUID_PATTERN).test(input.sourceId), {
+    message: 'Invalid attention source id',
+    path: ['sourceId'],
+  });
 
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
@@ -734,24 +730,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Restore an archived Factory attention receipt',
     pathSchema: attentionActionPathSchema,
     responseSchema: z.object({ receipt: entitySchema }),
-  },
-  supervisorSession: {
-    method: 'POST',
-    path: '/web/factory/projects/:id/supervisor/session',
-    description: 'Get the deterministic Factory supervisor session address',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({ sessionId: z.string(), threadId: z.string(), factoryProjectId: uuidSchema }),
-  },
-  supervisorHealth: {
-    method: 'GET',
-    path: '/web/factory/projects/:id/supervisor/health',
-    description: 'Run the deterministic Factory supervisor health check',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      checkedAt: z.string(),
-      findings: z.array(entitySchema),
-      counts: z.record(z.string(), z.number().int().nonnegative()),
-    }),
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

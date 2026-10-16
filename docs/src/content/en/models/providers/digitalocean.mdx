@@ -7,7 +7,7 @@ description: "Browse DigitalOcean model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/digitalocean.svg" alt="DigitalOcean logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DigitalOcean
 
-Access 102 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
+Access 103 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
 
 Learn more in the [DigitalOcean documentation](https://docs.digitalocean.com/products/gradient-ai-platform/details/models/).
 
@@ -126,8 +126,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 0.5,
-    "outputCost": 2.5
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
     "model": "digitalocean/anthropic-claude-fable-5",
@@ -728,6 +728,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.9,
     "outputCost": 1.7
+  },
+  {
+    "model": "digitalocean/nemotron-3.5-super-vl",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 0.65
   },
   {
     "model": "digitalocean/nemotron-nano-12b-v2-vl",

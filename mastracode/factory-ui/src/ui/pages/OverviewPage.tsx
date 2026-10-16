@@ -7,7 +7,6 @@ import { Check, ChevronDown } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import { useSupervisorHealth } from '../../hooks/useSupervisorHealth';
 import { useRunningSessions, useWorkItemsQuery } from '../../hooks/useWorkItems';
 import { CommitRail } from '../domains/factory/components/CommitRail';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
@@ -64,7 +63,6 @@ export function OverviewContent({
   const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   const itemsQuery = useWorkItemsQuery(factoryProjectId);
   const activeSessions = useRunningSessions(factoryProjectId);
-  const supervisorHealth = useSupervisorHealth(factoryProjectId);
   const items = itemsQuery.data;
 
   // The board refetches on a timer; recomputing off its identity re-ages every
@@ -144,25 +142,7 @@ export function OverviewContent({
         )}
       </Block>
 
-      <Block
-        title="Needs you"
-        action={
-          <div className="flex items-center gap-3">
-            {supervisorHealth.data?.findings.length ? (
-              <Link
-                to={`/factories/${factoryProjectId ?? ''}/supervisor`}
-                className="text-badge-green-indicator hover:text-badge-red-indicator"
-              >
-                <Txt as="span" variant="meta" className="block">
-                  {supervisorHealth.data.findings.length} supervisor{' '}
-                  {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
-                </Txt>
-              </Link>
-            ) : null}
-            <ViewAll to={`/factories/${factoryProjectId ?? ''}/attention`} />
-          </div>
-        }
-      >
+      <Block title="Needs you" action={<ViewAll to={`/factories/${factoryProjectId ?? ''}/attention`} />}>
         <AttentionPreview factoryProjectId={factoryProjectId} />
       </Block>
     </div>

@@ -178,8 +178,6 @@ const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine
   const to = new Date(timeRange.to);
   if (from >= to) {
     context.addIssue({ code: 'custom', path: [], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', path: [], message: 'The time range cannot exceed 31 days' });
   }
 });
 const traceQueryDiscoverySearchSchema = z.string().trim().max(TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH).optional();
@@ -238,11 +236,37 @@ export const traceQueryObservedFieldDescriptorSchema = z
     occurrences: z.number().int().nonnegative(),
   })
   .strict();
+export const traceAggregateDimensionDescriptorSchema = z
+  .object({
+    path: z.string(),
+    valueKind: z.literal('string'),
+  })
+  .strict();
+export const traceAggregateMeasureDescriptorSchema = z
+  .object({
+    name: z.string(),
+    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost']),
+    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum']).optional(),
+    unit: z.enum(['count', 'milliseconds', 'ratio', 'tokens', 'currency']),
+    approximate: z.boolean(),
+  })
+  .strict();
+export const traceAggregateDiscoverySchema = z
+  .object({
+    dimensions: z.array(traceAggregateDimensionDescriptorSchema),
+    measures: z.array(traceAggregateMeasureDescriptorSchema),
+  })
+  .strict()
+  .describe(
+    'What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. ' +
+      'Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`.',
+  );
 export const getTraceQueryFieldsResponseSchema = z
   .object({
     canonicalFields: z.array(traceQueryCanonicalFieldDescriptorSchema),
     observedFields: z.array(traceQueryObservedFieldDescriptorSchema).max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     observedFieldsTruncated: z.boolean(),
+    aggregate: traceAggregateDiscoverySchema.optional(),
   })
   .strict();
 export const getTraceQueryValuesResponseSchema = z
@@ -383,6 +407,8 @@ export const traceQueryTraceSchema = z
     createdAt: z.string().datetime({ offset: true }),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     inputPreview: z.string().nullable(),
+    outputPreview: z.string().nullable(),
+    errorPreview: z.string().nullable(),
     threadId: z.string().nullable(),
     resourceId: z.string().nullable(),
     startedAt: z.string().datetime({ offset: true }),
@@ -628,6 +654,7 @@ export type NormalizedGetTraceQueryValuesArgs = z.output<typeof getTraceQueryVal
 export type TraceQueryCanonicalFieldDescriptor = z.infer<typeof traceQueryCanonicalFieldDescriptorSchema>;
 export type TraceQueryObservedFieldDescriptor = z.infer<typeof traceQueryObservedFieldDescriptorSchema>;
 export type GetTraceQueryFieldsResponse = z.infer<typeof getTraceQueryFieldsResponseSchema>;
+export type TraceAggregateDiscovery = z.infer<typeof traceAggregateDiscoverySchema>;
 export type GetTraceQueryValuesResponse = z.infer<typeof getTraceQueryValuesResponseSchema>;
 
 export type TrustedTraceQueryScalarPredicate =
@@ -1064,12 +1091,6 @@ export function planTraceQuery(
   const to = new Date(request.timeRange.to);
   if (from >= to) {
     issues.push({ code: 'invalid_time_range', path: ['timeRange'], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['timeRange'],
-      message: 'The time range cannot exceed 31 days',
-    });
   }
 
   if (request.group && request.orderBy) {
@@ -1189,12 +1210,6 @@ export function planThreadQuery(
       code: 'invalid_time_range',
       path: ['traces', 'timeRange'],
       message: '`from` must be earlier than `to`',
-    });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['traces', 'timeRange'],
-      message: 'The time range cannot exceed 31 days',
     });
   }
 

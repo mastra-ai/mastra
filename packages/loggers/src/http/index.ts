@@ -96,13 +96,18 @@ export class HttpTransport extends LoggerTransport {
     this.flushIntervalId = setInterval(() => this.requestFlush(), this.flushInterval);
   }
 
-  private async makeHttpRequest(data: any, retryCount = 0): Promise<Response> {
+  private async makeHttpRequest(data: any): Promise<Response> {
+    // Serialize once, outside the retry loop: serialization failures are not retryable,
+    // and every retry must send the exact same payload.
+    const body = JSON.stringify({ logs: data });
+    return this.sendWithRetry(body);
+  }
+
+  private async sendWithRetry(body: string, retryCount = 0): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      const body = JSON.stringify({ logs: data });
-
       const response = await fetch(this.url, {
         method: this.method,
         headers: this.headers,
@@ -130,7 +135,7 @@ export class HttpTransport extends LoggerTransport {
         const delay = Math.max(backoff, Math.min(retryAfter, this.timeout));
 
         await new Promise(resolve => setTimeout(resolve, delay));
-        return this.makeHttpRequest(data, retryCount + 1);
+        return this.sendWithRetry(body, retryCount + 1);
       }
 
       throw error;

@@ -81,7 +81,6 @@
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v3.2:thinking",
     "deepseek/deepseek-v4-flash-vision-exp",
-    "deepseek/deepseek-v4-flash-vision-exp-cybersecurity",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash:thinking",
     "doubao-1.5-vision-pro-32k",
@@ -288,6 +287,7 @@
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
     "qwen3-vl-235b-a22b-instruct-original",
+    "reka/reka-edge-2603",
     "sakana/fugu-max",
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v1.1",
@@ -297,8 +297,8 @@
     "thinkingmachines/Inkling-Small:thinking",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling:thinking",
-    "unbiased/pareto",
     "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "undi95/remm-slerp-l2-13b",
     "unsloth/gemma-3-12b-it",
     "unsloth/gemma-3-27b-it",
@@ -360,6 +360,7 @@
     "aion-labs/aion-3.0",
     "aion-labs/aion-3.0-mini",
     "aion-labs/aion-rp-llama-3.1-8b",
+    "aisingapore/Gemma-SEA-LION-v4-27B-IT",
     "amazon/nova-2-lite-v1",
     "amazon/nova-lite-v1",
     "amazon/nova-pro-v1",
@@ -557,7 +558,6 @@
     "thinkingmachines/Inkling-Small:thinking",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling:thinking",
-    "unbiased/pareto",
     "undi95/remm-slerp-l2-13b",
     "upstage/solar-pro4",
     "upstage/solar-pro4:thinking",
@@ -719,9 +719,11 @@
     "holo3-35b-a3b:thinking",
     "ibm-granite/granite-4.2-8b",
     "inception/mercury-2.5-preview",
+    "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b",
+    "liquid/lfm-2.5-24b-a2b",
     "mercury-2",
     "meta-llama/llama-3.3-70b-instruct",
     "meta-llama/llama-4-maverick",
@@ -822,6 +824,8 @@
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
+    "reka/reka-edge-2603",
+    "reka/reka-flash-3",
     "sakana/fugu-max",
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v1.1",
@@ -1320,12 +1324,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-vision-exp-cybersecurity": [
-      {
-        "type": "effort",
-        "values": ["none", "xhigh"]
-      }
-    ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
@@ -1662,7 +1660,7 @@
     "google/gemini-4-argon": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [

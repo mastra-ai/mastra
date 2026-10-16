@@ -43,6 +43,7 @@ import type {
   SendAgentMessageParams,
   SendAgentSignalParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SubscribeAgentThreadParams,
   AbortAgentThreadParams,
   CancelQueuedAgentMessagesParams,
@@ -633,6 +634,10 @@ export class Agent extends BaseResource {
 
   sendSignal(params: SendAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/signals'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
+  }
+
+  queueSignal(params: QueueAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/queue-signal'>> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-signal`, params);
   }
 
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
@@ -1637,7 +1642,8 @@ export class Agent extends BaseResource {
         const toolInvocations = message.toolInvocations;
 
         if (toolInvocations == null) {
-          throw new Error('tool_result must be preceded by a tool_call');
+          // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+          return;
         }
 
         // find if there is any tool invocation with the same toolCallId
@@ -1645,7 +1651,7 @@ export class Agent extends BaseResource {
         const toolInvocationIndex = toolInvocations.findIndex(invocation => invocation.toolCallId === value.toolCallId);
 
         if (toolInvocationIndex === -1) {
-          throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+          return;
         }
 
         const invocation = {
@@ -2116,7 +2122,8 @@ export class Agent extends BaseResource {
             const toolInvocations = message.toolInvocations;
 
             if (toolInvocations == null) {
-              throw new Error('tool_result must be preceded by a tool_call');
+              // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+              break;
             }
 
             // find if there is any tool invocation with the same toolCallId
@@ -2126,7 +2133,7 @@ export class Agent extends BaseResource {
             );
 
             if (toolInvocationIndex === -1) {
-              throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+              break;
             }
 
             const invocation = {

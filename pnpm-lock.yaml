@@ -2529,6 +2529,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../../packages/server
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -4966,8 +4969,8 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
       tokenx:
-        specifier: ^1.3.0
-        version: 1.3.0
+        specifier: ^1.6.0
+        version: 1.6.0
       ts-morph:
         specifier: ^27.0.2
         version: 27.0.2
@@ -5704,8 +5707,8 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
       tokenx:
-        specifier: ^1.3.0
-        version: 1.3.0
+        specifier: ^1.6.0
+        version: 1.6.0
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@6.0.3))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@6.0.3)
@@ -32239,6 +32242,9 @@ packages:
 
   tokenx@1.3.0:
     resolution: {integrity: sha512-NLdXTEZkKiO0gZuLtMoZKjCXTREXeZZt8nnnNeyoXtNZAfG/GKGSbQtLU5STspc0rMSwcA+UJfWZkbNU01iKmQ==}
+
+  tokenx@1.6.0:
+    resolution: {integrity: sha512-CKTjk345ajvBAUp5xUI9a5KKN0zU0lBueVHQbCskH1Hp6WkUKsPW2qGCYNs0pxNyfzxfo+IIjdt2W4sMbw/qBw==}
 
   toml@4.2.0:
     resolution: {integrity: sha512-TvAJjbHZlYmI323+srtqHQFyJsoWy6mI09ppkuj9+iRsqsVKG9fvTcOP7FHF2UCb0QSYtjEavffrKzdd0XgClg==}
@@ -59622,6 +59628,8 @@ snapshots:
       ieee754: 1.2.1
 
   tokenx@1.3.0: {}
+
+  tokenx@1.6.0: {}
 
   toml@4.2.0: {}
 

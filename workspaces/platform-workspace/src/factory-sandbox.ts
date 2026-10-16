@@ -40,11 +40,17 @@ const SETTINGS_SCHEMA = {
     },
     memoryMb: {
       type: 'integer',
-      title: 'Memory (MB)',
-      description: 'Memory in MB for the sandbox template',
+      title: 'Memory',
+      description: 'Memory for the sandbox template',
       default: DEFAULT_SETTINGS.memoryMb,
-      minimum: 512,
-      maximum: 65536,
+      // E2B caps sandbox memory at 8 GiB by default.
+      oneOf: [
+        { const: 512, title: '512 MB' },
+        { const: 1024, title: '1 GB' },
+        { const: 2048, title: '2 GB' },
+        { const: 4096, title: '4 GB' },
+        { const: 8192, title: '8 GB' },
+      ],
     },
     idleTimeoutMinutes: {
       type: 'integer',

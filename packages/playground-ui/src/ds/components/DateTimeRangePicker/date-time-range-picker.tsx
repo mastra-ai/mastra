@@ -32,6 +32,10 @@ export interface DateTimeRangePickerProps {
    */
   onDateRangeChange?: (from: Date | undefined, to: Date | undefined) => void;
   disabled?: boolean;
+  /** Widest custom range that can be applied, in milliseconds. Presets are unaffected. */
+  maxRangeMs?: number;
+  /** Earliest day a custom range can start on, e.g. the oldest data still kept. Earlier days are disabled. */
+  minDate?: Date;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
   /** Size passed through to the trigger Button. Defaults to 'md'. */
@@ -51,6 +55,8 @@ export function DateTimeRangePicker({
   onDateChange,
   onDateRangeChange,
   disabled,
+  maxRangeMs,
+  minDate,
   presets,
   size = 'md',
   renderTrigger,
@@ -130,6 +136,8 @@ export function DateTimeRangePicker({
             dateFrom={dateFrom}
             dateTo={dateTo}
             disabled={disabled}
+            maxRangeMs={maxRangeMs}
+            minDate={minDate}
             onApply={applyCustomRange}
             onShowPresets={showPresets}
           />

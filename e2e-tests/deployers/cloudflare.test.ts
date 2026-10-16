@@ -46,6 +46,11 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
     });
   }
 
+  it('stubs the optional @opentelemetry/api peer that wrangler cannot resolve (#27037)', async () => {
+    const config = JSON.parse(await readFile(join(fixturePath, '.mastra', 'output', 'wrangler.json'), 'utf-8'));
+    expect(config.alias['@opentelemetry/api']).toBe('./opentelemetry-api-stub.mjs');
+  });
+
   describe('wrangler dev', async () => {
     const port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;

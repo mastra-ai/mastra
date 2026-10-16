@@ -17,11 +17,45 @@ describe('FactoryProjectsStorage', () => {
       createdBy: 'user-1',
       name: 'Platform',
       description: 'Internal platform work',
-      modelScope: 'factory',
-      slackWorkItemsEnabled: false,
+      modelScope: 'hybrid',
     });
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toEqual(project);
     expect(await seed.projects.get({ orgId: 'other-org', id: project.id })).toBeNull();
+  });
+
+  it('stores an explicit model scope at creation', async () => {
+    const seed = await createFactoryStorageForTests();
+    const factory = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Org', modelScope: 'factory' },
+    });
+    const user = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Mine', modelScope: 'user' },
+    });
+
+    expect((await seed.projects.get({ orgId: 'org-1', id: factory.id }))?.modelScope).toBe('factory');
+    expect((await seed.projects.get({ orgId: 'org-1', id: user.id }))?.modelScope).toBe('user');
+  });
+
+  it('round-trips the hybrid scope and reads unknown stored scopes as hybrid', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Split', modelScope: 'user' },
+    });
+
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'hybrid' } });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+
+    // A value written by an older or newer build must not leak through as an unknown scope.
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'factory' } });
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'org' as never } });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
   });
 
   it('lists, updates, and deletes projects within their organization', async () => {
@@ -35,13 +69,9 @@ describe('FactoryProjectsStorage', () => {
     const updated = await seed.projects.update({
       orgId: 'org-1',
       id: first.id,
-      input: { name: 'Renamed', description: 'Now documented', slackWorkItemsEnabled: true },
+      input: { name: 'Renamed', description: 'Now documented' },
     });
-    expect(updated).toMatchObject({
-      name: 'Renamed',
-      description: 'Now documented',
-      slackWorkItemsEnabled: true,
-    });
+    expect(updated).toMatchObject({ name: 'Renamed', description: 'Now documented' });
     expect(await seed.projects.update({ orgId: 'org-2', id: first.id, input: { name: 'Nope' } })).toBeNull();
 
     const scoped = await seed.projects.update({

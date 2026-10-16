@@ -227,7 +227,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.get(`${AGENT_CONTROLLER_API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${AGENT_CONTROLLER_API}/models`, () =>
       HttpResponse.json({
         models: [
@@ -442,7 +441,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/work`);
 
-    await screen.findByLabelText('Board columns');
+    await screen.findByLabelText('Board stages');
     await user.keyboard('{Control>}k{/Control}');
 
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();

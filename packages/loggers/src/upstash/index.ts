@@ -1,5 +1,6 @@
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
+import { normalizePagination } from '../pagination';
 
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;
@@ -236,6 +237,7 @@ export class UpstashTransport extends LoggerTransport {
     perPage: number;
     hasMore: boolean;
   }> {
+    const { page, perPage, start, end } = normalizePagination(params?.page, params?.perPage);
     try {
       const {
         fromDate,
@@ -243,18 +245,12 @@ export class UpstashTransport extends LoggerTransport {
         logLevel,
         filters,
         returnPaginationResults: returnPaginationResultsInput,
-        page: pageInput,
-        perPage: perPageInput,
       } = params || {};
 
-      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput || 100;
       const returnPaginationResults = returnPaginationResultsInput ?? true;
       const hasFilters = Boolean(fromDate || toDate || logLevel || (filters && Object.keys(filters).length > 0));
 
       if (returnPaginationResults && !hasFilters) {
-        const start = (page - 1) * perPage;
-        const end = start + perPage;
         const response = await this.executeUpstashCommands([
           ['LLEN', this.listName],
           ['LRANGE', this.listName, start, end - 1],
@@ -287,8 +283,6 @@ export class UpstashTransport extends LoggerTransport {
       }
 
       const total = filteredLogs.length;
-      const start = (page - 1) * perPage;
-      const end = start + perPage;
 
       return {
         logs: filteredLogs.slice(start, end),
@@ -302,8 +296,8 @@ export class UpstashTransport extends LoggerTransport {
       return {
         logs: [],
         total: 0,
-        page: params?.page === 0 ? 1 : (params?.page ?? 1),
-        perPage: params?.perPage ?? 100,
+        page,
+        perPage,
         hasMore: false,
       };
     }
@@ -332,15 +326,11 @@ export class UpstashTransport extends LoggerTransport {
     perPage: number;
     hasMore: boolean;
   }> {
+    const { page, perPage, start, end } = normalizePagination(pageInput, perPageInput);
     try {
-      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput || 100;
-
       const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
       const logs = allLogs.logs.filter(log => this.matchesLog(log, { runId }));
       const total = logs.length;
-      const start = (page - 1) * perPage;
-      const end = start + perPage;
 
       return {
         logs: logs.slice(start, end),
@@ -354,8 +344,8 @@ export class UpstashTransport extends LoggerTransport {
       return {
         logs: [],
         total: 0,
-        page: pageInput === 0 ? 1 : (pageInput ?? 1),
-        perPage: perPageInput ?? 100,
+        page,
+        perPage,
         hasMore: false,
       };
     }

@@ -44,7 +44,6 @@ interface DraftRoute {
 
 interface DraftRouteOptions {
   factoryProjectGate?: Promise<void>;
-  failModeSwitch?: boolean;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
@@ -57,7 +56,6 @@ function readSentMessage(body: unknown): string {
 
 function stubDraftRoute({
   factoryProjectGate,
-  failModeSwitch = false,
   defaultModelId = null,
   persistedMessages = [],
 }: DraftRouteOptions = {}): DraftRoute {
@@ -137,19 +135,9 @@ function stubDraftRoute({
       await workspaceReady;
       return HttpResponse.json({ controllerId: 'code', resourceId: DRAFT_SESSION_ID, threadId: DRAFT_SESSION_ID });
     }),
-    http.get(`${AGENT_CONTROLLER_API}/modes`, () =>
-      HttpResponse.json({
-        modes: [
-          { id: 'build', name: 'Build' },
-          { id: 'plan', name: 'Plan' },
-        ],
-      }),
-    ),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/mode`, async ({ request }) => {
       route.bindings.push(`mode:${readBody(await request.json(), 'modeId')}`);
-      return failModeSwitch
-        ? HttpResponse.json({ message: 'Mode unavailable' }, { status: 500 })
-        : HttpResponse.json({ ok: true });
+      return HttpResponse.json({ ok: true });
     }),
     http.get(`${AGENT_CONTROLLER_API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId`, ({ params }) =>
@@ -204,7 +192,7 @@ function stubDraftRoute({
 }
 
 describe('a user session draft on the real thread route', () => {
-  it('creates the session on the first prompt and posts it while the workspace still prepares', async () => {
+  it('given a new draft, when the first prompt is sent, then the session starts without a mode picker or mode switch', async () => {
     const route = stubDraftRoute();
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
@@ -214,8 +202,7 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByLabelText('Session mode'));
-    await user.click(await screen.findByRole('option', { name: 'Plan' }));
+    expect(screen.queryByLabelText('Session mode')).not.toBeInTheDocument();
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
 
@@ -226,7 +213,7 @@ describe('a user session draft on the real thread route', () => {
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(route.bindingsBeforePrompt).toEqual(['mode:plan', 'model:openai/gpt-4o-mini']);
+    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
     const thread = within(screen.getByRole('main'));
     // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
     await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
@@ -279,7 +266,7 @@ describe('a user session draft on the real thread route', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(route.posted).toEqual(['keep the default']));
-    expect(route.bindingsBeforePrompt).toEqual(['mode:build']);
+    expect(route.bindingsBeforePrompt).toEqual([]);
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);
@@ -303,7 +290,7 @@ describe('a user session draft on the real thread route', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(route.posted).toEqual(['think harder']));
-    expect(route.bindingsBeforePrompt).toEqual(['mode:build', 'model:openai/gpt-4o-mini thinking:high']);
+    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini thinking:high']);
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);
@@ -329,7 +316,7 @@ describe('a user session draft on the real thread route', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(route.posted).toEqual(['use the default']));
-    expect(route.bindingsBeforePrompt).toEqual(['mode:build']);
+    expect(route.bindingsBeforePrompt).toEqual([]);
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);
@@ -362,34 +349,5 @@ describe('a user session draft on the real thread route', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(message).toHaveValue('fix the login bug');
-  });
-
-  it('does not lose the prompt when the mode bind fails', async () => {
-    const route = stubDraftRoute({ failModeSwitch: true });
-    const user = userEvent.setup();
-    const router = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
-    });
-    const { client } = renderWithProviders(<RouterProvider router={router} />);
-
-    const message = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(message).toBeEnabled());
-    await user.type(message, 'fix the login bug');
-    await user.keyboard('{Enter}');
-
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
-    );
-    await waitFor(() => expect(route.bindings).toContain('mode:build'));
-    await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(
-      await screen.findByText(/Mode unavailable|Could not start in/, undefined, { timeout: 5000 }),
-    ).toBeInTheDocument();
-    // the handoff state is dropped up front so a reload can never resend the prompt
-    expect(router.state.location.state).toBeNull();
-
-    route.finishWorkspace();
-    await waitForMutationsIdle(client);
-    expect(route.posted).toEqual(['fix the login bug']);
   });
 });

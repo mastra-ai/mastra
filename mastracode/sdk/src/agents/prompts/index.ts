@@ -26,6 +26,10 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   /** The subconscious knowledge tools are registered on the agent. */
   hasSubconscious?: boolean;
   hostInstructions?: string;
+  /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
+  disabledBuiltinTools?: readonly string[];
+  /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
+  submitPlanAvailable?: boolean;
   currentDate: string;
   workingDir: string;
 }
@@ -95,6 +99,9 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     }
   }
 
+  // Disabled built-ins are never registered, so they are denied for guidance too.
+  for (const name of ctx.disabledBuiltinTools ?? []) deniedTools.add(name);
+
   // LSP is opt-in — when it is off the tool is never registered, so its
   // guidance must not be advertised either.
   if (resolveLspSetting(loadSettings().lsp) === false) deniedTools.add(MC_TOOLS.LSP_INSPECT);
@@ -128,7 +135,9 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
 
   const base = buildBasePrompt(baseCtx);
   const entry = modePrompts[ctx.modeId] || modePrompts.build;
-  const modeSpecific = (typeof entry === 'function' ? entry(ctx) : entry) ?? '';
+  const modeSpecific =
+    (typeof entry === 'function' ? entry({ ...ctx, submitPlanAvailable: !deniedTools.has('submit_plan') }) : entry) ??
+    '';
   const modelSpecific = ctx.modelId
     ? (modelSpecificPrompts[ctx.modelId as keyof typeof modelSpecificPrompts] ?? '')
     : '';

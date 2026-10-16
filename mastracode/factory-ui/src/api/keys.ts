@@ -15,6 +15,13 @@
  */
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
+export interface AvailableModelsFilter {
+  factoryProjectId?: string;
+  scope?: 'org' | 'user';
+  resourceId?: string;
+  threadId?: string;
+}
+
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
@@ -123,15 +130,14 @@ export const queryKeys = {
     ['factory', 'attention', factoryProjectId ?? null] as const,
   factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, group = 'all') =>
     [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, group] as const,
-  factorySupervisorHealth: (factoryProjectId: string | undefined) =>
-    ['factory', 'supervisor', 'health', factoryProjectId ?? null] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
-  availableModels: () => ['available-models'] as const,
+  availableModels: (filter?: AvailableModelsFilter) =>
+    filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
   om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
@@ -157,8 +163,6 @@ export const queryKeys = {
     filePath: string | undefined,
     previousFilePath: string | undefined,
   ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
-  agentControllerModes: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'modes'] as const,
   // Sessions are scoped per worktree (projectPath), so every session-derived key
   // includes the projectPath — two worktrees over the same resourceId are
   // independent sessions with independent state.

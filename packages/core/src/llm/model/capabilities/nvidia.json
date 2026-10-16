@@ -34,6 +34,7 @@
     "nvidia/magpie-tts-zeroshot",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
     "nvidia/nemotron-3.5-content-safety",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b",
     "nvidia/nemotron-nano-12b-v2-vl",
     "nvidia/nemotron-voicechat",
     "nvidia/sparsedrive",
@@ -100,10 +101,10 @@
     "nvidia/llama-3.3-nemotron-super-49b-v1.5",
     "nvidia/nemotron-3-nano-30b-a3b",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-    "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-content-safety",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b",
     "nvidia/nemotron-mini-4b-instruct",
     "nvidia/nemotron-nano-12b-v2-vl",
     "nvidia/nemotron-voicechat",
@@ -294,11 +295,6 @@
         "type": "toggle"
       }
     ],
-    "nvidia/nemotron-3-super-120b-a12b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "toggle"
@@ -315,6 +311,11 @@
       }
     ],
     "nvidia/llama-3.1-nemotron-nano-8b-v1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
       {
         "type": "toggle"
       }

@@ -1134,12 +1134,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return settleOrAbort(lookup, signal, undefined);
   }
 
-  async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
+  async listInstallationRepos(installationId: number, options?: { fresh?: boolean }): Promise<RepoSummary[]> {
     // Hot in two places — the repos route and token minting (which re-lists
     // only to validate the 1–10 repo rule). A short TTL collapses repeat
-    // Platform round trips within one UI interaction.
+    // Platform round trips within one UI interaction; `fresh` skips it so an
+    // explicit refresh picks up repositories just granted on GitHub.
     const cached = this.#installationReposCache.get(installationId);
-    if (cached && cached.expiresAt > Date.now()) return cached.repos;
+    if (!options?.fresh && cached && cached.expiresAt > Date.now()) return cached.repos;
     this.#installationReposCache.delete(installationId);
 
     const result = await this.#client.request<{

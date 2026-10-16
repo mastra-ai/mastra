@@ -22,7 +22,7 @@
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -96,6 +96,7 @@ import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
@@ -134,12 +135,6 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
-import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
-import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
-import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
-import { messageWorkerSession } from './supervisor/session-messaging.js';
-import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
-import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -221,6 +216,13 @@ export interface MastraFactoryConfig {
    * (`'eager'`), so the boot overlaps the model's own latency.
    */
   sandboxStart?: FactorySandboxStart;
+  /**
+   * Agent controller built-in tools (e.g. `submit_plan`) removed from every
+   * Factory session, along with their prompt guidance. Use this when a custom
+   * board gates planning with its own phase transition, so the in-session plan
+   * approval cannot bypass that gate.
+   */
+  disableBuiltinTools?: BuiltinToolId[];
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -666,10 +668,6 @@ export class MastraFactory {
     // fallback) and break chat with "Not logged in". Leaving it unregistered
     // lets the SDK fall back to the file-backed AuthStorage (auth.json) — the
     // same store the local /login and Settings pages read and write.
-    if (auth) {
-      registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders);
-    }
-
     // Custom providers: DB-backed in both modes (org rows in tenant mode, the
     // sentinel `local` org in no-auth mode). Once registered, model resolution
     // and the gateway catalog never read settings.json custom providers.
@@ -697,6 +695,15 @@ export class MastraFactory {
     ];
     const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
     const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
+    if (auth) {
+      registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders, requestContext =>
+        resolveFactoryCredentialTenant(requestContext, {
+          projects: factoryProjectsStorage,
+          sourceControl: sourceControlSessions,
+          workItems: workItemsStorage,
+        }),
+      );
+    }
 
     // Every integration uses generic integration storage. Version-control
     // providers additionally require the source-control storage domain. Readiness
@@ -1053,14 +1060,16 @@ export class MastraFactory {
         : [],
     );
 
-    // Build the real production controller (agents, modes, tools, memory, OM,
-    // MCP, providers) — identical to the terminal app. Agent state lives in
+    // Build the real production controller (agents, tools, memory, OM, MCP,
+    // providers) — the terminal app's, minus modes. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
+        ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
+        modes: false,
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -1095,7 +1104,6 @@ export class MastraFactory {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
           // only initialState, and a partially persisted one can keep
@@ -1246,67 +1254,6 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
-                  // The supervisor session has no seat, so it never gets the
-                  // transition tool above; it gets the read surface instead,
-                  // and only once the caller's org is shown to own the project.
-                  const supervisorScope = await resolveSupervisorScope({
-                    requestContext,
-                    projects: factoryProjectsStorage,
-                  });
-                  if (supervisorScope) {
-                    const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
-                    mergeTools(
-                      'factory-supervisor',
-                      createFactorySupervisorReadTools({
-                        scope: supervisorScope,
-                        workItems: workItemsStorage,
-                        boards: this.#boards,
-                        comments: workItemCommentsStorage,
-                        audit: auditStorage,
-                        messageReader: {
-                          listMessages: async input => {
-                            const memory = await storage.getMastraStorage().getStore('memory');
-                            return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
-                          },
-                        },
-                      }),
-                    );
-                    if (userId) {
-                      mergeTools(
-                        'factory-supervisor-write',
-                        createFactorySupervisorWriteTools({
-                          scope: supervisorScope,
-                          userId,
-                          workItems: workItemsStorage,
-                          boards: this.#boards,
-                          audit: auditDomain,
-                          transitionService,
-                          ...(githubIntegration
-                            ? {
-                                reconcileAcceptanceLabels: (args: {
-                                  orgId: string;
-                                  factoryProjectId: string;
-                                  item: WorkItemRow;
-                                }) =>
-                                  reconcileGithubAcceptanceLabels(
-                                    githubIntegration,
-                                    sourceControlStorage.forIntegration(githubIntegration.id),
-                                    args,
-                                  ),
-                              }
-                            : {}),
-                          messageSession: ({ sessionId, message, delivery }) =>
-                            messageWorkerSession({
-                              controller: prepared.base.controller,
-                              sessionId,
-                              message,
-                              delivery,
-                              ...(requestContext ? { requestContext } : {}),
-                            }),
-                        }),
-                      );
-                    }
-                  }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
                   if (!ready && ensureReady) {
@@ -1534,21 +1481,6 @@ export class MastraFactory {
       observeSessionRunEnd(session, { audit: auditDomain });
     });
 
-    // Supervisor sessions carry their project in the resourceId; re-stamp
-    // scope, instructions and factory defaults on every (re)creation so a
-    // restarted server heals the in-memory state.
-    prepared.base.controller.onSessionCreated(
-      session =>
-        hydrateSupervisorSession(session, {
-          projects: factoryProjectsStorage,
-        }).catch(error => {
-          console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }),
-      { blocking: true },
-    );
-
     // Blocking: `createSession` awaits the organization seed so per-invocation
     // memory settings and knowledge capture use the correct tenant immediately.
     prepared.base.controller.onSessionCreated(
@@ -1564,7 +1496,8 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionDefaultModel(session, {
-          sourceControl: { sessions: sourceControlSessions },
+          sourceControl: sourceControlSessions,
+          projects: factoryProjectsStorage,
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
         }),
@@ -1655,43 +1588,32 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = [
-      ...(factoryReady
-        ? [
-            new FactorySupervisorHealthWorker({
-              projects: factoryProjectsStorage,
-              workItems: workItemsStorage,
-              boards: this.#boards,
-            }),
-          ]
-        : []),
-      ...integrationRegistrations
-        .filter(({ integration, ready }) => ready && integration.workers)
-        .flatMap(({ integration }) =>
-          integration.workers!(
-            buildIntegrationContext(
-              {
-                controller: prepared.base.controller,
-                publicOrigin,
-                auth: routeAuth,
-                stateSigner,
-                sandbox: sandboxConfig,
-                factoryStorage: storage,
-                integrationStorage,
-                sourceControlStorage,
-                integrations: integrationRegistrations,
-                configVersion,
-                boardRegistry: this.#boards,
-                factoryReady,
-                domains,
-                feed: commentsDomain,
-                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-              },
-              integration.id,
-            ),
+    const integrationWorkers = integrationRegistrations
+      .filter(({ integration, ready }) => ready && integration.workers)
+      .flatMap(({ integration }) =>
+        integration.workers!(
+          buildIntegrationContext(
+            {
+              controller: prepared.base.controller,
+              publicOrigin,
+              auth: routeAuth,
+              stateSigner,
+              sandbox: sandboxConfig,
+              factoryStorage: storage,
+              integrationStorage,
+              sourceControlStorage,
+              integrations: integrationRegistrations,
+              configVersion,
+              boardRegistry: this.#boards,
+              factoryReady,
+              domains,
+              feed: commentsDomain,
+              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+            },
+            integration.id,
           ),
         ),
-    ];
+      );
 
     return {
       ...prepared.mastraArgs,
