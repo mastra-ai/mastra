@@ -21,30 +21,3 @@ try {
   console.error('An error occurred:', error.message)
 }
 ```
-
-## Business error codes
-
-Failed requests throw a `MastraClientError`. Its `problem` property holds the business error the server returned, with a `code` and optional `metadata`. See [error responses](/docs/server/overview#error-responses) for the full contract.
-
-```typescript
-import { MastraClientError } from '@mastra/client-js'
-import { SERVER_ERROR_CODES } from '@mastra/server/error-codes'
-
-try {
-  await mastraClient.getAgent('support-agent').details()
-} catch (error) {
-  if (
-    error instanceof MastraClientError &&
-    error.problem?.code === SERVER_ERROR_CODES.AGENT_NOT_FOUND
-  ) {
-    console.error(`Unknown agent: ${error.problem.metadata?.agentId}`)
-  }
-}
-```
-
-`MastraClientError` has these properties:
-
-- `status`: HTTP status code
-- `statusText`: HTTP status text
-- `body`: Parsed response body, if any
-- `problem`: `{ code: string; metadata?: Record<string, unknown> }`, or `undefined` when the response has no valid `problem` object
