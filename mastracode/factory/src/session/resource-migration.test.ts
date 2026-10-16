@@ -1,5 +1,7 @@
+import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -17,6 +19,36 @@ const SLACK_SESSION = 'aaaaaaaa-0000-4000-8000-000000000003';
 const ORPHAN_SESSION = 'aaaaaaaa-0000-4000-8000-000000000004';
 /** Started by an agent from the user session, to work for the Factory. */
 const SIDE_SESSION = 'aaaaaaaa-0000-4000-8000-000000000005';
+
+const OBSERVATION_INDEX = 'memory_observations_384';
+
+/** A vector store that honours metadata filters and, like LibSQL, replaces metadata on update. */
+function createVectorStore() {
+  const entries = new Map<string, Record<string, unknown>>();
+  const matches = (metadata: Record<string, unknown>, filter: Record<string, unknown> = {}) =>
+    Object.entries(filter).every(([key, expected]) =>
+      expected && typeof expected === 'object' && '$ne' in expected
+        ? metadata[key] !== (expected as { $ne: unknown }).$ne
+        : metadata[key] === expected,
+    );
+  return {
+    entries,
+    store: {
+      id: 'legacy-vector',
+      listIndexes: vi.fn(async () => [OBSERVATION_INDEX]),
+      describeIndex: vi.fn(async () => ({ dimension: 384, count: entries.size, metric: 'cosine' })),
+      query: vi.fn(async ({ filter, topK }: { filter?: Record<string, unknown>; topK: number }) =>
+        [...entries]
+          .filter(([, metadata]) => matches(metadata, filter))
+          .slice(0, topK)
+          .map(([id, metadata]) => ({ id, score: 1, metadata })),
+      ),
+      updateVector: vi.fn(async ({ id, update }: { id: string; update: { metadata: Record<string, unknown> } }) => {
+        entries.set(id, update.metadata);
+      }),
+    },
+  };
+}
 
 async function seedLegacyFactory() {
   const seed = await createFactoryStorageForTests();
@@ -107,20 +139,40 @@ async function seedLegacyFactory() {
     thread: { id: 'user-second-thread', resourceId: USER_SESSION, title: 'Second', createdAt: now, updatedAt: now },
   });
 
+  // An observation the run session made before the upgrade, indexed for recall search.
+  const vector = createVectorStore();
+  vector.entries.set('observation-run', {
+    group_id: 'group-1',
+    range: 'message-1:message-2',
+    thread_id: RUN_SESSION,
+    resource_id: RUN_SESSION,
+    text: 'The deploy target is staging',
+  });
+  // The user session ran with resource-scoped observational memory.
+  await memory.initializeObservationalMemory({
+    threadId: null,
+    resourceId: USER_SESSION,
+    scope: 'resource',
+    config: {},
+  });
+
+  const sessionMemory = getDynamicMemory(memoryStore, vector.store as never)({ requestContext: new RequestContext() });
   const migrate = () =>
     migrateSessionResources({
       sessions: seed.sourceControl,
       workItems: seed.workItems,
       integrations: seed.integrations,
       memory,
+      threads: sessionMemory,
     });
-  return { seed, memoryStore, memory, ops, migrate };
+  return { seed, memoryStore, memory, ops, vector, migrate };
 }
 
 describe('migrateSessionResources', () => {
   it('moves each legacy session onto its Factory or owner, and leaves sessions without a Factory alone', async () => {
-    const { memory, ops, migrate } = await seedLegacyFactory();
+    const { memory, ops, vector, migrate } = await seedLegacyFactory();
     vi.spyOn(console, 'info').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const report = await migrate();
 
@@ -133,6 +185,19 @@ describe('migrateSessionResources', () => {
       threads: 5,
       runBindings: 1,
       subscriptions: 1,
+      resourceObservationsLeft: [USER_SESSION],
+    });
+    // Resource-scoped observational memory stays under the old resource; the log says so.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`session ${USER_SESSION} has resource-scoped`));
+    expect(await memory.getObservationalMemory(null, USER_SESSION)).toMatchObject({ resourceId: USER_SESSION });
+
+    // Recall search filters observations by resource, so the run's past observation follows it.
+    expect(vector.entries.get('observation-run')).toEqual({
+      group_id: 'group-1',
+      range: 'message-1:message-2',
+      thread_id: RUN_SESSION,
+      resource_id: FACTORY_ID,
+      text: 'The deploy target is staging',
     });
 
     const thread = (id: string) => memory.getThreadById({ threadId: id });
@@ -179,9 +244,11 @@ describe('migrateSessionResources', () => {
   });
 
   it('changes nothing when it runs again', async () => {
-    const { memory, ops, migrate } = await seedLegacyFactory();
+    const { memory, ops, vector, migrate } = await seedLegacyFactory();
     vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     await migrate();
+    vector.store.updateVector.mockClear();
     const snapshot = async () => ({
       threads: (await memory.listThreads({ perPage: false })).threads.map(({ id, resourceId, metadata }) => ({
         id,
@@ -196,8 +263,15 @@ describe('migrateSessionResources', () => {
 
     const second = await migrate();
 
-    expect(second).toMatchObject({ threads: 0, runBindings: 0, subscriptions: 0, failed: [] });
+    expect(second).toMatchObject({
+      threads: 0,
+      runBindings: 0,
+      subscriptions: 0,
+      failed: [],
+      resourceObservationsLeft: [],
+    });
     expect(await snapshot()).toEqual(before);
+    expect(vector.store.updateVector).not.toHaveBeenCalled();
   });
 
   it('resumes a session after a crash between tagging and moving a thread', async () => {
@@ -217,6 +291,32 @@ describe('migrateSessionResources', () => {
     for (const id of [USER_SESSION, RUN_SESSION, SLACK_SESSION]) {
       expect((await memory.getThreadById({ threadId: id }))?.resourceId).not.toBe(id);
     }
+  });
+
+  it('finishes moving the observations of a thread that storage moved before a crash', async () => {
+    const { memory, vector, migrate } = await seedLegacyFactory();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vector.store.updateVector.mockRejectedValueOnce(new Error('vector store unavailable'));
+
+    const first = await migrate();
+
+    // Storage moved the thread, so it is no longer listed under its session id.
+    expect(first.failed).toEqual([RUN_SESSION]);
+    expect(await memory.getThreadById({ threadId: RUN_SESSION })).toMatchObject({
+      resourceId: FACTORY_ID,
+      metadata: { factoryResourceMovePending: true },
+    });
+    expect(vector.entries.get('observation-run')).toMatchObject({ resource_id: RUN_SESSION });
+
+    const second = await migrate();
+
+    expect(second).toMatchObject({ failed: [], threads: 1 });
+    expect(vector.entries.get('observation-run')).toMatchObject({ resource_id: FACTORY_ID });
+    expect(await memory.getThreadById({ threadId: RUN_SESSION })).toMatchObject({
+      resourceId: FACTORY_ID,
+      metadata: { factorySessionId: RUN_SESSION, factoryResourceMovePending: false },
+    });
   });
 
   it('opens a migrated session by its id with its old conversation', async () => {
