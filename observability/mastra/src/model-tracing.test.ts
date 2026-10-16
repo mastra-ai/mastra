@@ -2125,6 +2125,38 @@ describe('ModelSpanTracker', () => {
       expect(inferenceSpan!.attributes?.toolChoice).toEqual('required');
     });
 
+    it('startInference(payload) records the prompt the call received as the span input', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+      const inputMessages = [
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: [{ type: 'text', text: 'Weather in Paris?' }] },
+      ];
+
+      tracker.startStep();
+      tracker.startInference({ inputMessages, messageId: 'msg-1' });
+
+      const chunks = [
+        { type: 'text-delta', payload: { text: 'ok' } },
+        {
+          type: 'step-finish',
+          payload: { output: {}, stepResult: { reason: 'stop', warnings: [] }, metadata: {} },
+        },
+      ];
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan!.input).toEqual([
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: 'Weather in Paris?' },
+      ]);
+    });
+
     it('MODEL_INFERENCE.startTime excludes work between startStep and startInference', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

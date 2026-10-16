@@ -1,20 +1,14 @@
-import { useState } from 'react';
-import type { OnboardingConnectionChoice } from '../services/onboardingFlow';
-import { Button } from '@mastra/playground-ui/components/Button';
+import type { OnboardingModelChoice } from '../services/onboardingFlow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CONNECTION_METHOD_LABEL, useProviderConnection } from '../hooks/useProviderConnection';
+import { useProviderConnection } from '../hooks/useProviderConnection';
 import type { PreviewProvider } from '../hooks/useProviderConnection';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
 import { ModelProviderPicker } from './ModelProviderPicker';
-import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';
-import { ProviderBrandIcon } from './ProviderBrandIcon';
 import { ProviderConnectionDialogs } from './ProviderConnectionDialogs';
 
 export interface PersonalProviderFactoryStepProps {
-  onContinue: (choice?: OnboardingConnectionChoice) => void;
-  initialChoice?: OnboardingConnectionChoice;
-  requireModel?: boolean;
+  onContinue: (choice: OnboardingModelChoice) => void;
+  initialChoice?: OnboardingModelChoice;
   onPreviewModel?: (modelId: string | undefined) => void;
   onPreviewProvider?: PreviewProvider;
 }
@@ -23,19 +17,13 @@ export function PersonalProviderFactoryStep({
   onContinue,
   onPreviewProvider,
   initialChoice,
-  requireModel,
   onPreviewModel,
 }: PersonalProviderFactoryStepProps) {
   const connection = useProviderConnection({ scope: 'user', initialSelection: initialChoice });
   const connectedProvider = connection.connected ? connection.provider : undefined;
-  const connectedChoice =
-    connectedProvider && connection.method
-      ? { providerId: connectedProvider.provider, method: connection.method }
-      : undefined;
-  const [previouslyConnectedChoice, setPreviouslyConnectedChoice] = useState<OnboardingConnectionChoice>();
   return (
     <section aria-label="Personal provider setup" className="flex max-w-xl flex-col gap-6">
-      {connectedProvider && requireModel && (
+      {connectedProvider ? (
         <FactoryDefaultModelForm
           key={connectedProvider.provider}
           scope="user"
@@ -49,42 +37,17 @@ export function PersonalProviderFactoryStep({
             onPreviewModel?.(undefined);
           }}
           onContinue={modelId => {
-            if (connectedChoice) onContinue({ ...connectedChoice, modelId });
+            if (connection.method)
+              onContinue({ providerId: connectedProvider.provider, method: connection.method, modelId });
           }}
         />
+      ) : (
+        <ModelProviderPicker connection={connection} onPreviewProvider={onPreviewProvider} />
       )}
-      {connectedProvider && !requireModel && (
-        <OnboardingConnectionRow
-          icon={<ProviderBrandIcon provider={connectedProvider.provider} />}
-          name={providerDisplayName(connectedProvider.provider)}
-          description={`${CONNECTION_METHOD_LABEL[connection.method ?? 'api_key']} · only you.`}
-          connected
-          action={
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setPreviouslyConnectedChoice(connectedChoice);
-                connection.clear();
-                onPreviewProvider?.(undefined);
-              }}
-            >
-              Add another
-            </Button>
-          }
-        />
-      )}
-      {!connectedProvider && <ModelProviderPicker connection={connection} onPreviewProvider={onPreviewProvider} />}
       {connection.error && (
         <Txt role="alert" variant="caption" className="text-destructive-foreground">
           {connection.error}
         </Txt>
-      )}
-      {!requireModel && (
-        <div>
-          <Button variant="primary" size="lg" onClick={() => onContinue(connectedChoice ?? previouslyConnectedChoice)}>
-            Review setup
-          </Button>
-        </div>
       )}
       <ProviderConnectionDialogs
         keyProvider={connection.keyDialogProvider}

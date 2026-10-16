@@ -81,11 +81,11 @@
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v3.2:thinking",
     "deepseek/deepseek-v4-flash-vision-exp",
-    "deepseek/deepseek-v4-flash-vision-exp-cybersecurity",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash:thinking",
     "doubao-1.5-vision-pro-32k",
     "ernie-5.0-thinking-preview",
+    "fireworks/ember-1",
     "gemini-2.0-pro-exp-02-05",
     "gemini-2.0-pro-reasoner",
     "gemini-2.5-flash",
@@ -186,6 +186,7 @@
     "moonshotai/kimi-k2.7-code-highspeed",
     "moonshotai/kimi-k3",
     "moonshotai/kimi-latest",
+    "nvidia/nemotron-3.5-super-vl",
     "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
@@ -288,6 +289,7 @@
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
     "qwen3-vl-235b-a22b-instruct-original",
+    "reka/reka-edge-2603",
     "sakana/fugu-max",
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v1.1",
@@ -360,6 +362,7 @@
     "aion-labs/aion-3.0",
     "aion-labs/aion-3.0-mini",
     "aion-labs/aion-rp-llama-3.1-8b",
+    "aisingapore/Gemma-SEA-LION-v4-27B-IT",
     "amazon/nova-2-lite-v1",
     "amazon/nova-lite-v1",
     "amazon/nova-pro-v1",
@@ -686,6 +689,7 @@
     "deepseek/deepseek-v4-pro:thinking",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash:thinking",
+    "fireworks/ember-1",
     "gemini-2.5-flash-lite-preview-09-2025",
     "gemini-2.5-flash-lite-preview-09-2025-thinking",
     "gemini-2.5-flash-preview-09-2025",
@@ -756,6 +760,7 @@
     "nanogpt/coding-router:low",
     "nanogpt/coding-router:max",
     "nanogpt/coding-router:medium",
+    "nvidia/nemotron-3.5-super-vl",
     "openai/gpt-4.1",
     "openai/gpt-5",
     "openai/gpt-5.1",
@@ -823,6 +828,8 @@
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
+    "reka/reka-edge-2603",
+    "reka/reka-flash-3",
     "sakana/fugu-max",
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v1.1",
@@ -1321,12 +1328,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-vision-exp-cybersecurity": [
-      {
-        "type": "effort",
-        "values": ["none", "xhigh"]
-      }
-    ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
@@ -1749,6 +1750,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "fireworks/ember-1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "mistralai/mistral-large-4": [
       {
         "type": "effort",
@@ -1835,6 +1842,12 @@
     "nvidia/nemotron-3-super-120b-a12b": [
       {
         "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3.5-super-vl": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3.5-lightning:thinking": [

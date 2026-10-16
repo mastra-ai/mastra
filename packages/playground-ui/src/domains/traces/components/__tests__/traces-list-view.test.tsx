@@ -76,13 +76,14 @@ describe('TracesListView columns', () => {
         'Primitive type',
         'Primitive name',
         'Input',
+        'Output',
         'Status',
         'Duration',
         'Est. cost',
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 

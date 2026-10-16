@@ -374,6 +374,16 @@
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You validate input messages"
+                              },
+                              {
+                                "role": "user",
+                                "content": "Validate:   Hello! How are you?  "
+                              }
+                            ],
                             "output": {
                               "text": "Mock V2 generate response",
                               "toolCalls": []
@@ -660,6 +670,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a helpful assistant"
+                      },
+                      {
+                        "role": "user",
+                        "content": "  Hello! How are you?  "
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []
@@ -1025,6 +1045,16 @@
                               "runId": "<runId-3>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You summarize text concisely"
+                              },
+                              {
+                                "role": "user",
+                                "content": "Summarize: Mock V2 stream response"
+                              }
+                            ],
                             "output": {
                               "text": "Mock V2 generate response",
                               "toolCalls": []

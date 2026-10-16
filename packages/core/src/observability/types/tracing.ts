@@ -166,6 +166,13 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
   /** The resolved agent version ID used for this execution */
   resolvedVersionId?: string;
+  /** The agent signal that started this run, when the run input was a signal */
+  signal?: {
+    id: string;
+    type: string;
+    tagName?: string;
+    attributes?: Record<string, string | number | boolean | null>;
+  };
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */
@@ -647,8 +654,9 @@ export interface ProcessorPipelineAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk of the stream. Only set on output stream processor spans. The
-   * span's own duration covers the whole stream, model latency included, so
-   * this is what separates a slow processor from a slow model.
+   * span's own duration covers its step, from the first chunk to the step's
+   * end with model latency and tool calls included, so this is what separates
+   * a slow processor from the rest of the step.
    */
   hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
@@ -1640,6 +1648,7 @@ export interface IModelSpanTracker {
    * Open the MODEL_INFERENCE span for the current step. Call this immediately
    * before invoking the model so the span's startTime excludes input processor
    * work (and `setInferenceContext` reflects the post-processor tool set).
+   * Pass the prompt (`inputMessages`) so the span records what this call sent.
    * Falls back to auto-creation on first chunk if the caller forgets.
    */
   startInference?(payload?: StepStartPayload): void;
