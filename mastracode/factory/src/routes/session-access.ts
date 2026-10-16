@@ -51,12 +51,14 @@ async function addressedResourceIds(c: Context): Promise<string[]> {
     const target = method === 'POST' && SET_RESOURCE_PATH.test(path) ? await bodyField(c, 'newResourceId') : undefined;
     return target ? [resourceId, target] : [resourceId];
   }
-  const fromRequest = async () =>
-    c.req.query('resourceId') || (method === 'GET' ? undefined : await bodyField(c, 'resourceId'));
-  let resourceId: string | undefined;
-  if (method === 'POST' && CREATE_SESSION_PATH.test(path)) resourceId = await bodyField(c, 'resourceId');
-  else if (OM_CONFIG_PATH.test(path) || MEMORY_PATH.test(path)) resourceId = await fromRequest();
-  return resourceId ? [resourceId] : [];
+  if (method === 'POST' && CREATE_SESSION_PATH.test(path)) {
+    const resourceId = await bodyField(c, 'resourceId');
+    return resourceId ? [resourceId] : [];
+  }
+  if (!OM_CONFIG_PATH.test(path) && !MEMORY_PATH.test(path)) return [];
+  // Handlers read the query or the body, so authorize every resourceId the request carries.
+  const ids = [c.req.query('resourceId'), method === 'GET' ? undefined : await bodyField(c, 'resourceId')];
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
 }
 
 /**
