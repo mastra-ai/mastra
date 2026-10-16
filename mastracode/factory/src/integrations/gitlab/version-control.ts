@@ -408,6 +408,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const body = {
       state: GITLAB_COMMIT_STATUS_STATE[input.status],
       name: input.name,
+      ...(input.ref !== undefined ? { ref: input.ref } : {}),
       // GitLab commit statuses carry a single short description, so the title is the only text published.
       description: input.title.slice(0, GITLAB_COMMIT_STATUS_DESCRIPTION_LIMIT),
     };

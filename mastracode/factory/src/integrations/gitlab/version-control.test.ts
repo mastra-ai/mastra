@@ -787,6 +787,7 @@ describe('buildGitLabVersionControl', () => {
       connection: CONNECTION,
       sourceId: 'acme/app',
       headSha: 'a'.repeat(40),
+      ref: 'feature/tests',
       name: 'Factory Review / tests',
       summary: 'ignored by GitLab',
     };
@@ -802,6 +803,7 @@ describe('buildGitLabVersionControl', () => {
       ['acme/app', 'a'.repeat(40), 'running'],
       ['acme/app', 'a'.repeat(40), 'skipped'],
     ]);
+    expect(setCommitStatus.mock.calls[0]![2].ref).toBe('feature/tests');
     expect(setCommitStatus.mock.calls[0]![2].description).toHaveLength(255);
   });
 });

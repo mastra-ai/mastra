@@ -762,6 +762,7 @@ export async function createSourceControlTools({
           sourceId: ref.sourceId,
           actingUserId: ref.actingUserId,
           headSha,
+          ref: pullRequest.headBranch,
           name: FACTORY_TEST_CHECK_NAME,
           status: input.status,
           title: input.title,

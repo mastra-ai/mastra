@@ -244,6 +244,8 @@ export interface PublishCommitCheckInput {
   sourceId: string;
   /** Full commit SHA the check is attached to. */
   headSha: string;
+  /** Source branch of the change request; GitLab needs it to show the status on the merge request. */
+  ref?: string;
   /** Stable check name; publishing again with the same name updates the existing check. */
   name: string;
   status: CommitCheckStatus;

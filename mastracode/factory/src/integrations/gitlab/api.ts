@@ -502,7 +502,7 @@ export class GitLabApiClient {
   async setCommitStatus(
     projectId: string,
     sha: string,
-    status: { state: GitLabCommitStatusState; name: string; description?: string; targetUrl?: string },
+    status: { state: GitLabCommitStatusState; name: string; ref?: string; description?: string; targetUrl?: string },
   ): Promise<GitLabCommitStatus> {
     return this.#request<GitLabCommitStatus>(
       'POST',
@@ -511,6 +511,7 @@ export class GitLabApiClient {
         body: {
           state: status.state,
           name: status.name,
+          ref: status.ref,
           description: status.description,
           target_url: status.targetUrl,
         },

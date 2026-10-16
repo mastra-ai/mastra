@@ -928,7 +928,9 @@ describe('createSourceControlTools', () => {
               url: null,
             }));
       setup.getPullRequest.mockResolvedValue(
-        ('pullRequest' in overrides ? overrides.pullRequest : { id: '17', state: 'open', headSha: head }) as any,
+        ('pullRequest' in overrides
+          ? overrides.pullRequest
+          : { id: '17', state: 'open', headSha: head, headBranch: 'factory/issue-1' }) as any,
       );
       const versionControl = { ...setup.versionControl, publishCommitCheck } as VersionControl;
       const tools = await createSourceControlTools({
@@ -1003,6 +1005,7 @@ describe('createSourceControlTools', () => {
         sourceId: 'acme/repo',
         actingUserId: 'user-1',
         headSha: head,
+        ref: 'factory/issue-1',
         name: FACTORY_TEST_CHECK_NAME,
         status: 'success',
         title: 'All planned tests passed',
