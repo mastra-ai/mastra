@@ -351,7 +351,14 @@ async function relaunch(): Promise<void> {
     process.removeAllListeners(signal);
     process.on(signal, () => {});
   }
+  // Release stdin so the child is the only reader of terminal input.
+  process.stdin.removeAllListeners('data');
+  process.stdin.pause();
   const child = spawn(process.execPath, args, { stdio: 'inherit', env });
+  child.on('error', error => {
+    console.error(`Failed to restart Mastra Code: ${error.message}`);
+    process.exit(1);
+  });
   child.on('exit', code => process.exit(code ?? 0));
 }
 

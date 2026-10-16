@@ -794,6 +794,33 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith(expect.objectContaining({ decision: 'always_allow_category' }));
     });
 
+    it('passes "always allow" to an approval restored from history', async () => {
+      const session = await getRouteSession('user-ar');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
+      const persisted = vi.spyOn(session, 'respondToPersistedToolApproval').mockResolvedValue(undefined);
+
+      await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ar',
+        toolCallId: 'restored-call',
+        approved: true,
+        alwaysAllowCategory: true,
+      } as any);
+
+      expect(persisted).toHaveBeenCalledWith(expect.objectContaining({ approved: true, alwaysAllowCategory: true }));
+    });
+
+    it('rejects "always allow" on a declined approval', () => {
+      const result = AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.bodySchema!.safeParse({
+        toolCallId: 'call-1',
+        approved: false,
+        alwaysAllowCategory: true,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual(['alwaysAllowCategory']);
+    });
+
     it('answers an approval with no parked gate through the stored suspended run', async () => {
       const session = await getRouteSession('user-rc');
       const gate = vi.spyOn(session, 'respondToToolApproval');
@@ -811,7 +838,12 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(gate).not.toHaveBeenCalled();
-      expect(persisted).toHaveBeenCalledWith({ toolCallId: 'restored-call', approved: false, requestContext });
+      expect(persisted).toHaveBeenCalledWith({
+        toolCallId: 'restored-call',
+        approved: false,
+        alwaysAllowCategory: undefined,
+        requestContext,
+      });
     });
 
     it('forwards requestContext to session.respondToToolSuspension', async () => {

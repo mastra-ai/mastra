@@ -121,6 +121,8 @@ async function connect(ctx: SlashCommandContext): Promise<void> {
       );
       if (!orgId) return;
       session = { ...session, orgId };
+    } else if (orgs.length === 1 && orgs[0]!.id !== session.orgId) {
+      session = { ...session, orgId: orgs[0]!.id };
     }
 
     const projects = await fetchPlatformProjects(session);

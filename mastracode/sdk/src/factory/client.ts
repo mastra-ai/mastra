@@ -122,12 +122,20 @@ export function refreshingFetch(
     for (const [key, value] of Object.entries(factoryHeaders(address))) headers.set(key, value);
     return { ...init, headers };
   };
+  // Concurrent 401s share one refresh so the token is not rotated repeatedly.
+  let refreshing: Promise<PlatformSession | null> | undefined;
   return async (input, init) => {
+    const sentToken = address.session.token;
     const res = await baseFetch(input, withAuth(init));
     if (res.status !== 401) return res;
-    const session = await refresh();
-    if (!session || session.token === address.session.token) return res;
-    address.session = session;
+    if (address.session.token === sentToken) {
+      refreshing ??= refresh().finally(() => {
+        refreshing = undefined;
+      });
+      const session = await refreshing;
+      if (!session || session.token === sentToken) return res;
+      address.session = session;
+    }
     return baseFetch(input, withAuth(init));
   };
 }
