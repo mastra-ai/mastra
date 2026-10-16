@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { describe, expect, it } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
@@ -30,14 +31,15 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
       sessions: { getBySessionId: async id => rows.get(id) ?? null },
     }),
   );
-  // Downstream handlers echo what they received, proving the guard let the
-  // request (and its already-read body) through intact.
+  // Downstream handlers echo the body the way the Mastra server adapter reads
+  // it (`request.raw.clone()` in getParams), proving the guard left it unread.
+  const adapterBody = async (c: Context) => JSON.parse(await c.req.raw.clone().text());
   app.post('/api/agent-controller/:controllerId/sessions', async c =>
-    c.json({ reached: true, body: await c.req.json() }),
+    c.json({ reached: true, body: await adapterBody(c) }),
   );
   app.all('/api/agent-controller/:controllerId/sessions/*', c => c.json({ reached: true }));
   app.get('/web/config/om', c => c.json({ reached: true }));
-  app.post('/web/config/om/:role/model', async c => c.json({ reached: true, body: await c.req.json() }));
+  app.post('/web/config/om/:role/model', async c => c.json({ reached: true, body: await adapterBody(c) }));
   return app;
 }
 

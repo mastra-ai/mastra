@@ -18,8 +18,12 @@ const CREATE_SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/?$/;
 const OM_CONFIG_PATH = /^\/web\/config\/om(\/|$)/;
 
 async function bodyResourceId(c: Context): Promise<string | undefined> {
-  // Hono caches the parsed body, so the route handler can still read it.
-  const body = await c.req.json().catch(() => undefined);
+  // Read a clone: the Mastra adapter clones `c.req.raw` again to parse params,
+  // which throws once anything has consumed the original body.
+  const body = await c.req.raw
+    .clone()
+    .json()
+    .catch(() => undefined);
   const resourceId = (body as { resourceId?: unknown } | undefined)?.resourceId;
   return typeof resourceId === 'string' && resourceId ? resourceId : undefined;
 }
