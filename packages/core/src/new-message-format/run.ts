@@ -63,8 +63,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   const modelId = typeof model === 'object' && 'modelId' in model ? model.modelId : 'unknown';
 
   const stored = memory ? await memory.listActions({ threadId }) : [];
-  // Rows this reader can't read (a newer format version) are skipped, as projection skips them; a required
-  // one throws here, as it would there.
+  // Rows this reader can't read (a newer format version) are skipped, as projection skips them.
   const history = stored.filter(isReadableAction);
   const { system, actions: drafts } = trimResentInput(options.input ?? [], history);
   const stamp = (forRunId: string | undefined = runId): ActionBase => ({

@@ -6,7 +6,7 @@ import type {
   ProviderOptions,
 } from '@internal/ai-v7';
 import type { PersistableAction, SignalAction, ToolResultAction } from './types';
-import { UnsupportedActionError, isReadableAction } from './types';
+import { isReadableAction } from './types';
 
 type AssistantPart = Exclude<AssistantModelMessage['content'], string>[number];
 type ToolPart = ToolModelMessage['content'][number];
@@ -128,7 +128,7 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
       case 'goal-started':
       case 'goal-changed':
       case 'goal-ended':
-      // Not projected until the goal loop runs on actions; see IGNORABLE_ACTION_TYPES for why it isn't skippable.
+      // Not projected until the goal loop runs on actions.
       case 'goal-evaluated':
       case 'tool-started':
       case 'provider-event':
@@ -153,12 +153,9 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
       case 'background-tool-error':
       case 'background-tool-ended':
         break;
-      default: {
-        // A row from a newer writer: skip it if it's marked skippable, refuse it otherwise.
-        const unknown = action as { type: string; ignorable?: boolean; formatVersion?: number };
-        if (unknown.type.startsWith('data-') || unknown.ignorable) break;
-        throw new UnsupportedActionError(unknown.type, unknown.formatVersion);
-      }
+      default:
+        // A type from a newer writer, or a custom `data-*` row: skipped.
+        break;
     }
   }
   return messages;

@@ -4,13 +4,7 @@ import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import { InMemoryActionStorage } from './storage';
 import { toModelMessages } from './to-model-messages';
 import type { PersistableAction } from './types';
-import {
-  ACTION_FORMAT_VERSION,
-  UnsupportedActionError,
-  isIgnorableActionType,
-  isReadableAction,
-  toStoredAction,
-} from './types';
+import { ACTION_FORMAT_VERSION, isReadableAction, toStoredAction } from './types';
 import { createUlid } from './ulid';
 
 const id = createUlid();
@@ -94,28 +88,14 @@ const goalLifecycle = (): PersistableAction[] => [
 ];
 
 describe('action format', () => {
-  it('stamps the format version and marks only non-prompt types ignorable', () => {
-    const userText = toStoredAction({ ...base(), type: 'text', role: 'user', text: 'hi' });
-    expect(userText).toMatchObject({ formatVersion: ACTION_FORMAT_VERSION });
-    expect(userText).not.toHaveProperty('ignorable');
-
-    const stored = threadEvents().map(toStoredAction);
-    expect(stored.filter(a => !a.ignorable).map(a => a.type)).toEqual(['goal-evaluated']);
-    for (const type of ['background-tool-result', 'background-tool-error'] as const) {
-      expect(isIgnorableActionType(type)).toBe(false);
-    }
-    expect(toStoredAction({ ...base(), type: 'data-progress', role: 'assistant', data: 1 }).ignorable).toBe(true);
+  it('stamps the format version and nothing else', () => {
+    const userText: PersistableAction = { ...base(), type: 'text', role: 'user', text: 'hi' };
+    expect(toStoredAction(userText)).toEqual({ ...userText, formatVersion: ACTION_FORMAT_VERSION });
     expect(toStoredAction({ ...base(), type: 'text', role: 'user', text: 'x', formatVersion: 7 }).formatVersion).toBe(
       7,
     );
-  });
-
-  it('toStoredAction adds only the format fields to goal changes and verdicts', () => {
-    for (const action of goalLifecycle()) {
-      const { formatVersion, ignorable, ...rest } = toStoredAction(action);
-      expect(rest).toEqual(action);
-      expect(formatVersion).toBe(ACTION_FORMAT_VERSION);
-      expect(ignorable).toBe(action.type === 'goal-evaluated' ? undefined : true);
+    for (const action of [...threadEvents(), ...goalLifecycle()]) {
+      expect(toStoredAction(action)).toEqual({ ...action, formatVersion: ACTION_FORMAT_VERSION });
     }
   });
 
@@ -124,31 +104,19 @@ describe('action format', () => {
     expect(prompt).toEqual([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
   });
 
-  it('skips unknown ignorable rows and refuses unknown required ones', () => {
+  it('skips rows of a type this reader does not know', () => {
     const user = { ...base(), type: 'text', role: 'user', text: 'hello' } as PersistableAction;
-    const futureSkippable = {
-      ...base(),
-      type: 'usage',
-      ignorable: true,
-      formatVersion: 2,
-    } as unknown as PersistableAction;
-    expect(toModelMessages([user, futureSkippable])).toEqual([
+    const future = { ...base(), type: 'retract', formatVersion: 2 } as unknown as PersistableAction;
+    const sameVersion = { ...base(), type: 'usage' } as unknown as PersistableAction;
+    expect(toModelMessages([user, future, sameVersion])).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'hello' }] },
     ]);
-
-    const futureRequired = { ...base(), type: 'retract', formatVersion: 2 } as unknown as PersistableAction;
-    expect(() => toModelMessages([user, futureRequired])).toThrow(UnsupportedActionError);
-    expect(() => toModelMessages([user, futureRequired])).toThrow(/"retract" \(format version 2/);
   });
 
-  it('refuses a known type from a newer format version unless it is ignorable', () => {
+  it('skips a known type from a newer format version', () => {
     const user = { ...base(), type: 'text', role: 'user', text: 'hello' } as PersistableAction;
     const newer = { ...base(), type: 'text', role: 'user', text: 'v2 text', formatVersion: 2 } as PersistableAction;
-    expect(() => toModelMessages([user, newer])).toThrow(UnsupportedActionError);
-    expect(() => toModelMessages([user, newer])).toThrow(/"text" \(format version 2/);
-    expect(toModelMessages([user, { ...newer, ignorable: true }])).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
-    ]);
+    expect(toModelMessages([user, newer])).toEqual([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
     // A row with no version reads as version 1.
     const { formatVersion: _, ...unversioned } = { ...user, formatVersion: undefined };
     expect(toModelMessages([unversioned as PersistableAction])).toHaveLength(1);
@@ -156,15 +124,15 @@ describe('action format', () => {
 
   it('isReadableAction gates on the version only', () => {
     expect(isReadableAction({ ...base(), type: 'text', role: 'user', text: 'x', formatVersion: 1 })).toBe(true);
-    expect(isReadableAction({ ...base(), type: 'turn-start', formatVersion: 2, ignorable: true })).toBe(false);
-    expect(() => isReadableAction({ ...base(), type: 'turn-start', formatVersion: 2 })).toThrow(UnsupportedActionError);
+    expect(isReadableAction({ ...base(), type: 'text', role: 'user', text: 'x' })).toBe(true);
+    expect(isReadableAction({ ...base(), type: 'turn-start', formatVersion: 2 })).toBe(false);
   });
 
   describe.each([
     ['InMemoryActionStorage', () => new InMemoryActionStorage()],
     ['InMemoryMemory', () => new InMemoryMemory({ db: new InMemoryDB() })],
   ])('%s', (_name, create) => {
-    it('round-trips thread events with format version and the ignorable flag', async () => {
+    it('round-trips thread events with the format version', async () => {
       const store = create();
       const actions = threadEvents();
       await store.saveActions({ actions });

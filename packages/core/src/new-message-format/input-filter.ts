@@ -94,7 +94,6 @@ const inputKey = (a: object) => {
     runId: _run,
     createdAt: _c,
     formatVersion: _f,
-    ignorable: _i,
     ...rest
   } = a as Record<string, unknown>;
   return JSON.stringify(canonical(rest));

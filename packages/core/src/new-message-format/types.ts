@@ -21,11 +21,6 @@ export type ActionBase = {
   transient?: boolean;
   /** Format version of the writer. Storage stamps `ACTION_FORMAT_VERSION` when unset. */
   formatVersion?: number;
-  /**
-   * A reader that doesn't know this action's type may skip it. Readers refuse unknown types without it.
-   * Storage sets it for the types in `IGNORABLE_ACTION_TYPES`.
-   */
-  ignorable?: boolean;
 };
 
 type Role = 'user' | 'assistant' | 'system';
@@ -556,77 +551,19 @@ export const isPersistable = (action: MastraAction): action is PersistableAction
 /** Current action format. Bump when a reader of an older version would misread new rows. */
 export const ACTION_FORMAT_VERSION = 1;
 
-/**
- * Types a reader may skip when it doesn't know them: skipping them doesn't change what the model should see.
- * The rule is what the model should see, not what the projection renders today: `goal-evaluated`
- * (judge feedback) and `background-tool-result`/`-error` (a backgrounded call's outcome) are model-visible.
- */
-export const IGNORABLE_ACTION_TYPES: ReadonlySet<string> = new Set<MastraActionType>([
-  'run-start',
-  'turn-end',
-  'run-end',
-  'run-aborted',
-  'settings-changed',
-  'task-changed',
-  'goal-started',
-  'goal-changed',
-  'goal-ended',
-  'provider-event',
-  'model-changed',
-  'structured-output',
-  'thread-title-changed',
-  'error',
-  'file-unavailable',
-  'source-url',
-  'source-document',
-  'memory-cycle-start',
-  'memory-cycle-end',
-  'memory-activated',
-  'tool-started',
-  'tool-suspended',
-  'tool-resumed',
-  'tool-delegated',
-  'background-tool-dispatched',
-  'background-tool-started',
-  'background-tool-suspended',
-  'background-tool-resumed',
-  'background-tool-ended',
-]);
-
-export const isIgnorableActionType = (type: string): boolean =>
-  IGNORABLE_ACTION_TYPES.has(type) || type.startsWith('data-');
-
-/** The row as stored: `formatVersion` stamped, `ignorable` set for skippable types. Every store writes through this. */
+/** The row as stored, with `formatVersion` stamped. Every store writes through this. */
 export function toStoredAction<A extends PersistableAction>(action: A): A {
   return {
     ...action,
     formatVersion: action.formatVersion ?? ACTION_FORMAT_VERSION,
-    ...(action.ignorable || isIgnorableActionType(action.type) ? { ignorable: true } : {}),
   };
 }
 
 /**
- * Whether this reader can read a stored row. Rows from a newer format version (missing reads as 1) are
- * unreadable even when their type is known, because the fields may mean something else there.
- * Unreadable rows are skipped when `ignorable` and refused with `UnsupportedActionError` otherwise.
- * Unknown types are judged by the caller, which knows its own type set.
+ * Whether this reader can read a stored row. Rows from a newer format version (missing reads as 1) are skipped
+ * even when their type is known, because the fields may mean something else there. Unknown types are skipped
+ * by the caller, which knows its own type set.
  */
 export function isReadableAction(action: PersistableAction): boolean {
-  if ((action.formatVersion ?? 1) <= ACTION_FORMAT_VERSION) return true;
-  if (action.ignorable) return false;
-  throw new UnsupportedActionError(action.type, action.formatVersion);
-}
-
-/** A stored action this reader can't read and that isn't marked ignorable. */
-export class UnsupportedActionError extends Error {
-  constructor(
-    readonly actionType: string,
-    readonly formatVersion: number | undefined,
-  ) {
-    super(
-      `Unsupported action type "${actionType}" (format version ${formatVersion ?? 'unknown'}, ` +
-        `this reader supports ${ACTION_FORMAT_VERSION}). Upgrade @mastra/core to read this thread.`,
-    );
-    this.name = 'UnsupportedActionError';
-  }
+  return (action.formatVersion ?? 1) <= ACTION_FORMAT_VERSION;
 }

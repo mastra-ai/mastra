@@ -223,7 +223,7 @@ describe('reading the log', () => {
       actions: [
         row('01J00000000000000000000001', { type: 'run-start', agentId: 'a', modelId: 'm', settings: {} }),
         row('01J00000000000000000000002', { type: 'text', role: 'user', text: 'hi' }),
-        // A newer writer's ignorable row this reader can't read: it must not reopen or close anything.
+        // A newer writer's row this reader can't read: it must not reopen or close anything.
         row('01J00000000000000000000003', { type: 'run-end', finishReason: 'stop', usage: {}, formatVersion: 2 }),
       ],
     });

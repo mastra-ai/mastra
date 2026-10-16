@@ -91,7 +91,7 @@ describe('MemoryLibSQL actions', () => {
     expect(await store.listActions({ threadId: 't1' })).toEqual([stored(a)]);
   });
 
-  it('round-trips thread events with format version and the ignorable flag', async () => {
+  it('round-trips thread events with the format version', async () => {
     const base = { threadId: 't1', runId: 'r1', createdAt: new Date('2026-10-15T10:00:00.000Z') };
     const actions: PersistableAction[] = [
       {
@@ -138,18 +138,7 @@ describe('MemoryLibSQL actions', () => {
     const listed = await store.listActions({ threadId: 't1' });
     expect(listed.map(a => a.type)).toEqual(actions.map(a => a.type));
     expect(listed.every(a => a.formatVersion === 1)).toBe(true);
-    // Model-visible types stay required; the rest are marked skippable for older readers.
-    expect(listed.filter(a => a.ignorable).map(a => a.type)).toEqual([
-      'run-start',
-      'tool-started',
-      'goal-started',
-      'settings-changed',
-      'task-changed',
-      'run-end',
-    ]);
-    expect(listed).toEqual(
-      actions.map(a => ({ ...stored(a), ...(a.type === 'goal-evaluated' ? {} : { ignorable: true }) })),
-    );
+    expect(listed).toEqual(actions.map(stored));
   });
 
   it('stores goal changes and verdicts exactly as written, with no merging or defaults', async () => {
@@ -173,9 +162,7 @@ describe('MemoryLibSQL actions', () => {
     await store.saveActions({ actions });
 
     const listed = await store.listActions({ threadId: 't1' });
-    expect(listed).toEqual(
-      actions.map(a => ({ ...stored(a), ...(a.type === 'goal-evaluated' ? {} : { ignorable: true }) })),
-    );
+    expect(listed).toEqual(actions.map(stored));
     expect(listed[0]).not.toHaveProperty('status');
     expect((listed[1] as { options: object }).options).toEqual({ maxRuns: 3 });
     expect(listed[2]).not.toHaveProperty('pausedReason');
