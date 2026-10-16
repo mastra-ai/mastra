@@ -113,10 +113,14 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
-      // Linear's default orderBy: updatedAt walks newest→oldest. On truncation
-      // (maxPages/maxRecords) we persist endCursor so the next run resumes further into
-      // the tail. Only when the source exhausts pagination do we advance the watermark
-      // and clear the resume cursor.
+      // Every sweep lists ALL documents, unfiltered. Linear does not bump Document.updatedAt on
+      // content edits (FACT-466, proven live), so an `updatedAt gte watermark` filter silently
+      // drops edited docs once any other doc advances the watermark. Records are content-hashed,
+      // so unchanged docs replay as no-ops and edited docs replace their record.
+      // orderBy: updatedAt walks newest→oldest. On truncation (maxPages/maxRecords) we persist
+      // endCursor so the next run continues the same sweep; only when the source exhausts
+      // pagination is the sweep complete — then the resume cursor is cleared and the watermark
+      // (high-water of the completed sweep, not a filter) is written.
       const collected: LinearDocument[] = [];
       let cursor: string | undefined = resumeCursor;
       let nextCursorAfterLastPage: string | undefined;
@@ -128,7 +132,6 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
         if (context.signal.aborted) break;
         const variables: Record<string, unknown> = { after: cursor };
-        if (previousWatermark) variables.filter = { updatedAt: { gte: previousWatermark } };
         const parsed = documentsResponseSchema.parse(
           await ctx.request({
             method: 'POST',

@@ -132,6 +132,36 @@ describe('linear importer', () => {
     expect(secondIds[0]).not.toBe(firstIds[0]);
   });
 
+  // FACT-466: live Linear proof showed `documentUpdate { content }` leaves Document.updatedAt
+  // unchanged. The fake honours the `updatedAt gte` filter the way the provider does, so an
+  // importer that relies on that filter never re-lists the edited document.
+  it('re-imports a content edit that does not bump updatedAt after another doc advanced the watermark', async () => {
+    const store = new Map<string, LinearDocumentFixture>([
+      ['alpha', { id: 'alpha', title: 'Alpha', content: 'alpha-v1', updatedAt: '2026-09-01T00:00:00Z' }],
+      ['beta', { id: 'beta', title: 'Beta', content: 'beta-v1', updatedAt: '2026-09-05T00:00:00Z' }],
+    ]);
+    const request = vi.fn(async (input: { body: { variables: { filter?: { updatedAt?: { gte?: string } } } } }) => {
+      const gte = input.body.variables.filter?.updatedAt?.gte;
+      const listed = [...store.values()]
+        .filter(document => !gte || document.updatedAt >= gte)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      return documentsResponse(listed);
+    });
+    const { ctx, importer, state } = makeContext({ request });
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    expect(await state.get('linear:documents:watermark')).toBe(JSON.stringify({ watermark: '2026-09-05T00:00:00Z' }));
+
+    store.set('alpha', { ...store.get('alpha')!, content: 'alpha-v2' });
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+
+    const alphaRecords = [...importer.nodes.get('linear:document:alpha')!.records.values()];
+    expect(alphaRecords).toHaveLength(1);
+    expect(alphaRecords[0]!.text).toContain('alpha-v2');
+    expect(alphaRecords[0]!.text).not.toContain('alpha-v1');
+    const betaIds = [...importer.nodes.get('linear:document:beta')!.records.keys()];
+    expect(betaIds).toHaveLength(1);
+  });
+
   it('watermark advances only on success — mid-run failure leaves it untouched', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockRejectedValueOnce(new Error('platform down'));
