@@ -130,6 +130,8 @@ export interface CommitFactoryRuleEvaluationInput {
   decisions: Record<string, unknown>[];
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   now: Date;
+  /** Consent-bearing actor behind the evaluation; their id pre-approves the skill runs it queues. */
+  consentedBy?: string;
 }
 
 export type CommitFactoryRuleEvaluationResult =
@@ -2002,6 +2004,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           created_at: input.now,
         });
         for (const [effectOrdinal, decision] of decisions.entries()) {
+          const approvedBy = decision.type === 'invokeSkill' ? (input.consentedBy ?? null) : null;
           await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
             org_id: input.orgId,
             factory_project_id: input.factoryProjectId,
@@ -2022,6 +2025,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             lease_expires_at: null,
             last_error: null,
             completed_at: null,
+            approved_at: approvedBy ? input.now : null,
+            approved_by: approvedBy,
             created_at: new Date(input.now.getTime() + effectOrdinal),
             updated_at: input.now,
           });

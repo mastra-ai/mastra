@@ -94,18 +94,19 @@ describe('AppLayout', () => {
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
   });
 
-  it('lists exactly the Factory pages in the Factory nav', async () => {
+  it('links Activity from the sidebar and leaves retired Factory pages out of the Factory nav', async () => {
     stubFactory();
     renderApp();
 
-    const nav = await screen.findByRole('navigation', { name: 'Factory' });
-    const [pages] = within(nav).getAllByRole('list');
-    if (!pages) throw new Error('Expected the Factory page list');
-    expect(
-      within(pages)
-        .getAllByRole('link')
-        .map(link => link.textContent),
-    ).toEqual(['Overview', 'Activity', 'Audit log']);
+    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
+    expect(await within(sidebar).findByRole('link', { name: /^Activity/ })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/activity`,
+    );
+    const nav = within(sidebar).getByRole('navigation', { name: 'Factory' });
+    for (const retired of ['Overview', 'Audit log', 'Supervisor']) {
+      expect(within(nav).queryByRole('link', { name: retired })).not.toBeInTheDocument();
+    }
   });
 
   it('keeps the shell mounted when switching between draft sessions', async () => {

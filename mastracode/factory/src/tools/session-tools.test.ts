@@ -565,7 +565,7 @@ describe('the side session it starts', () => {
   });
 
   it("is allowed to report with factory_message_origin by the session-created listener's persisted rules", async () => {
-    const { childId, sessions, seed } = await started();
+    const { childId, sessions } = await started();
     let rules: PermissionRules = { categories: {}, tools: {} };
     const childSession = {
       identity: { getResourceId: () => childId },
@@ -577,7 +577,7 @@ describe('the side session it starts', () => {
       },
     };
 
-    await applyFactoryToolPermissions(childSession, { sessions, workItems: seed.workItems });
+    await applyFactoryToolPermissions(childSession, { sessions });
     expect(rules.tools.factory_message_origin).toBe('allow');
   });
 });
@@ -943,7 +943,7 @@ describe('factory_start_session in work-item mode', () => {
   });
 
   it('lets the spawned session report with factory_message_origin without approval', async () => {
-    const { start, item, sessions, seed } = await withItem();
+    const { start, item, sessions } = await withItem();
     const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
     let rules: PermissionRules = { categories: {}, tools: {} };
     await applyFactoryToolPermissions(
@@ -956,7 +956,7 @@ describe('factory_start_session in work-item mode', () => {
           },
         },
       },
-      { sessions, workItems: seed.workItems },
+      { sessions },
     );
     expect(rules.tools.factory_message_origin).toBe('allow');
     expect(FACTORY_TOOLS_WITHOUT_APPROVAL).toContain('factory_message_origin');

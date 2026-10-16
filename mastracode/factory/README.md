@@ -707,7 +707,7 @@ Progress reports from one session replace each other while unread. `done`, `fail
 
 Every run of a work session or side session ends with exactly one final report, however the run started: the board, a person typing into the session, a wake from another session's message, or a run after a server restart. Each Factory session gets a listener when it is created. A session with an active run binding reports to everyone following its work item, including for the run that moved the item to a finished stage and so ended its own binding; a side session reports to the session that started it; a person's own session reports to nobody. When a run ends, Factory checks each recipient's thread for a final report the agent sent since the run started, and sends one itself to the recipients that lack it: `done` when the run completed, `failed` when it ended in error (quoting the error), and `blocked`, naming the tool, when the run stopped waiting for an answer or for someone to approve a tool call. A reply with a final `status` counts as the final report, and any reply counts for a completed run. A run that completes after the agent reported `blocked` is waiting for an answer, so it gets no `done`; a run someone stopped gets no report. A board run that fails before it ever runs (no session, a configuration the run can't succeed with) reports `failed` once no retry remains. These backstop reports carry a `backstop` attribute.
 
-A role session's own stage moves (`factory_transition_work_item`) always ask, and work and side sessions only get `factory_message_origin` allowed, so those prompts aren't waved through by the user-session allow list. A run that holds a tool call for approval stays open, so the same listener tells those sessions right away: an urgent `approval` notification names the session, the tool, its arguments and the `toolCallId`, once per call. A session that follows the work item, or started the side session, can answer it with `factory_answer_approval`, as the person signed in to it; the answer is audited as `factory.run.approved` or `factory.run.dismissed`. Other people's private sessions can't be answered, and an approval whose run already ended can't be either: the tool says so, and the session can be messaged to try again.
+A run that holds a tool call for approval stays open, so the same listener tells those sessions right away: an urgent `approval` notification names the session, the tool, its arguments and the `toolCallId`, once per call. A session that follows the work item, or started the side session, can answer it with `factory_answer_approval`, as the person signed in to it; the answer is audited as `factory.run.approved` or `factory.run.dismissed`. Other people's private sessions can't be answered, and an approval whose run already ended can't be either: the tool says so, and the session can be messaged to try again.
 
 When a followed work item changes stage, subscribers whose session is running get a `low` priority `stage` notice. A stage change never wakes an offline session; it sees the current stage in its state signal instead.
 
@@ -724,21 +724,7 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
-### Development
-
-Run focused package checks from the repository root:
-
-```bash
-pnpm --filter ./mastracode/factory test
-pnpm --filter ./mastracode/factory check
-pnpm --filter ./mastracode/factory lint
-pnpm --filter ./mastracode/factory build:lib
-pnpm --filter ./mastracode/factory smoke:dist
-```
-
-Tests are colocated with source as `*.test.ts`. Use `smoke:dist` after building to verify that the published entry point can be imported successfully.
-
-## MCP server (ChatGPT and other MCP clients)
+### MCP server (ChatGPT and other MCP clients)
 
 Every Factory with an auth provider serves an MCP endpoint over Streamable HTTP:
 
@@ -760,6 +746,20 @@ new MastraFactory({
 ```
 
 or set `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`. Pass `mcp: false` to turn the endpoint off.
+
+### Development
+
+Run focused package checks from the repository root:
+
+```bash
+pnpm --filter ./mastracode/factory test
+pnpm --filter ./mastracode/factory check
+pnpm --filter ./mastracode/factory lint
+pnpm --filter ./mastracode/factory build:lib
+pnpm --filter ./mastracode/factory smoke:dist
+```
+
+Tests are colocated with source as `*.test.ts`. Use `smoke:dist` after building to verify that the published entry point can be imported successfully.
 
 ## Changelog
 

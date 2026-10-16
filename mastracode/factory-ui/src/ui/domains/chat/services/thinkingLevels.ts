@@ -29,9 +29,9 @@ export function thinkingLevelOptionsForModel(
   }));
 }
 
-export type ThinkingLevelOrigin = 'session' | 'global';
+export type ThinkingLevelOrigin = 'session' | 'factory';
 
-export const GLOBAL_THINKING_SOURCE_LABEL = 'global default';
+export const FACTORY_THINKING_SOURCE_LABEL = 'Factory default';
 
 export interface EffectiveThinkingLevel {
   level: ThinkingLevelSetting;
@@ -40,25 +40,25 @@ export interface EffectiveThinkingLevel {
 
 function chosenThinkingLevel(
   override: ThinkingLevelSetting | undefined,
-  globalDefault: ThinkingLevelSetting | undefined,
+  factoryDefault: ThinkingLevelSetting | undefined,
 ): EffectiveThinkingLevel | undefined {
   if (override) return { level: override, origin: 'session' };
-  if (!globalDefault) return undefined;
-  return { level: globalDefault, origin: 'global' };
+  if (!factoryDefault) return undefined;
+  return { level: factoryDefault, origin: 'factory' };
 }
 
 export function resolveEffectiveThinkingLevel({
   modelId,
   reasoningOptions,
   override,
-  globalDefault,
+  factoryDefault,
 }: {
   modelId: string | undefined;
   reasoningOptions: readonly ModelReasoningOption[] | undefined;
   override: ThinkingLevelSetting | undefined;
-  globalDefault: ThinkingLevelSetting | undefined;
+  factoryDefault: ThinkingLevelSetting | undefined;
 }): EffectiveThinkingLevel | undefined {
-  const chosen = chosenThinkingLevel(override, globalDefault);
+  const chosen = chosenThinkingLevel(override, factoryDefault);
   if (!chosen || !modelId) return chosen;
   return { ...chosen, level: runThinkingLevel(modelId, chosen.level, reasoningOptions) };
 }

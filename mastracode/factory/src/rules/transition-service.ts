@@ -119,6 +119,8 @@ export interface FactoryTransitionServiceOptions {
    * a plan without explicit approval is a plan a person must review.
    */
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
+  selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
 
 function rejection(
@@ -245,6 +247,7 @@ export class FactoryTransitionService {
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
   readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
+  readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
@@ -257,6 +260,7 @@ export class FactoryTransitionService {
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
     this.#autoApprovePlans = options.autoApprovePlans;
+    this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -519,6 +523,10 @@ export class FactoryTransitionService {
                 'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
             };
           }
+          const selfReviewEnabled =
+            request.board === 'work' && this.#selfReviewEnabled
+              ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false;
           const decisions: FactoryCommitDecision[] = [];
           for (const rule of resolveFactoryStageRules(this.#boards, {
             board: request.board,
@@ -530,6 +538,7 @@ export class FactoryTransitionService {
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
+              selfReviewEnabled,
               stage: rule.phase === 'exit' ? fromStage : request.stage,
             });
             const raw = await rule.handler(context);

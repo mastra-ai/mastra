@@ -226,7 +226,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Investigate issue 1', pin: false });
     expect(session.permissions.setForTool).toHaveBeenCalledWith({
       toolName: 'factory_transition_work_item',
-      policy: 'ask',
+      policy: 'allow',
     });
     expect(session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({

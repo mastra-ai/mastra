@@ -1,7 +1,7 @@
 {
   "name": "@mastra/factory",
-  "version": "0.23.0",
-  "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory \u2014 storage domains, integrations, and surfaces for agent-powered software delivery",
+  "version": "0.24.0-alpha.1",
+  "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
     "access": "public"
