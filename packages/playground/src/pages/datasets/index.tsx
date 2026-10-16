@@ -121,7 +121,7 @@ export default function Datasets() {
   // With a target filter active, keep the toolbar so the user can remove it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Datasets</h1>
         <NoDatasetsInfo onCreateClick={openCreatePage} />
       </PageLayout>
