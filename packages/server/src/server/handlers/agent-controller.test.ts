@@ -261,6 +261,26 @@ describe('agent-controller routes', () => {
 
       expect(state).toMatchObject({ sessionId: 'run-recover', resourceId: 'factory-recover', threadId: 'run-recover' });
     });
+
+    it('resumes a session created by id alone on the resource its thread already has', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      await controller.createSession({
+        id: 'run-cold',
+        resourceId: 'factory-cold',
+        threadId: 'run-cold',
+        ownerId: controller.id,
+      });
+      await controller.deleteSession({ sessionId: 'run-cold' });
+
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'run-cold',
+      } as any)) as { sessionId: string; resourceId: string; threadId?: string };
+
+      expect(created).toMatchObject({ sessionId: 'run-cold', resourceId: 'factory-cold', threadId: 'run-cold' });
+    });
   });
 
   describe('ABORT_AGENT_CONTROLLER_SESSION_ROUTE', () => {
@@ -890,7 +910,7 @@ describe('agent-controller routes', () => {
       await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
         mastra,
         controllerId: 'code',
-        resourceId: 'user-aa',
+        sessionId: 'user-aa',
         toolCallId: 'call-1',
         approved: true,
         alwaysAllowCategory: true,
@@ -907,7 +927,7 @@ describe('agent-controller routes', () => {
       await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
         mastra,
         controllerId: 'code',
-        resourceId: 'user-ar',
+        sessionId: 'user-ar',
         toolCallId: 'restored-call',
         approved: true,
         alwaysAllowCategory: true,

@@ -347,7 +347,9 @@ export class AgentControllerSession extends BaseResource {
 
   /**
    * Create or resume this session. `resourceId` names whose threads and memory
-   * the session works on and defaults to the sessionId. Pass `tags` to scope
+   * the session works on. Without it the server resumes the session on the
+   * resource it already has (the live session's, or the resource of the thread
+   * with the session's id), falling back to the sessionId. Pass `tags` to scope
    * initial thread selection — a thread is a resume candidate only when its
    * metadata matches every tag. Pass `threadId` to bind the session to one
    * exact thread, creating it with that id when it does not exist.
@@ -360,7 +362,7 @@ export class AgentControllerSession extends BaseResource {
     return this.request(`/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`, {
       method: 'POST',
       body: {
-        resourceId: options?.resourceId ?? this.sessionId,
+        resourceId: options?.resourceId,
         sessionId: this.sessionId,
         tags: options?.tags,
         threadId: options?.threadId,

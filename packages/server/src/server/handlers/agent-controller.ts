@@ -210,14 +210,23 @@ const controllerIdPathParams = z.object({ controllerId: z.string() });
 const sessionPathParams = z.object({ controllerId: z.string(), sessionId: z.string() });
 const sessionStateQuerySchema = z.object({ threadId: z.string().optional() });
 
-const createSessionBodySchema = z.object({
-  /** Whose threads and memory the session works on. */
-  resourceId: z.string(),
-  /** Address of the session. Defaults to `resourceId`. */
-  sessionId: z.string().optional(),
-  tags: z.record(z.string(), z.string()).optional(),
-  threadId: z.string().optional(),
-});
+const createSessionBodySchema = z
+  .object({
+    /**
+     * Whose threads and memory the session works on. Optional when `sessionId` is
+     * sent: the session then resumes on the resource it already has (the live
+     * session's, or the resource of the thread with the session's id), falling
+     * back to the session id.
+     */
+    resourceId: z.string().optional(),
+    /** Address of the session. Defaults to `resourceId`. */
+    sessionId: z.string().optional(),
+    tags: z.record(z.string(), z.string()).optional(),
+    threadId: z.string().optional(),
+  })
+  .refine(body => body.resourceId !== undefined || body.sessionId !== undefined, {
+    message: 'resourceId or sessionId is required',
+  });
 // Server-side attachment limits mirroring the web composer caps (10MB per
 // file, 20MB total), adjusted for base64 overhead (~4/3x).
 const MAX_FILE_DATA_LENGTH = 14 * 1024 * 1024;
@@ -555,7 +564,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   responseSchema: createSessionResponseSchema,
   summary: 'Create or resume a controller session',
   description:
-    'Creates the session addressed by `sessionId` on the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Without a `sessionId` the session is addressed by `resourceId`. Every other session route requires a started session and returns 404 until one exists or can be recovered from a stored thread.',
+    'Creates the session addressed by `sessionId` on the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Without a `sessionId` the session is addressed by `resourceId`; without a `resourceId` it resumes on the resource it already has. Every other session route requires a started session and returns 404 until one exists or can be recovered from a stored thread.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
@@ -563,9 +572,10 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       await controller.init();
+      const id = (sessionId ?? resourceId)!;
       const session = await controller.createSession({
-        id: sessionId ?? resourceId,
-        resourceId,
+        id,
+        resourceId: resourceId ?? (await resolveSessionResourceId(controller, id)),
         ownerId: controller.id,
         tags,
         threadId,
