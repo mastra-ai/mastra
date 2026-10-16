@@ -2078,6 +2078,52 @@ describe('Scorer Utils', () => {
       expect(result.score).toBeLessThan(1);
     });
 
+    it('should detect redundant tool calls separated by processor_run and model_generation steps', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'agent',
+            children: [
+              { stepType: 'model_generation' as const, name: 'model' },
+              { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+              { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+              { stepType: 'model_generation' as const, name: 'model' },
+              { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+            ],
+          },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([{ name: 'search', index: 4 }]);
+    });
+
+    it('should not flag identical tool calls separated by a different tool call', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+          { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+          { stepType: 'tool_call' as const, name: 'lookup', toolArgs: { id: 1 } },
+          { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([]);
+    });
+
+    it('should not flag tool calls with different args separated by processor_run', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'a' } },
+          { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'b' } },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([]);
+    });
+
     it('should check token budget from model_generation steps', () => {
       const trajectory: Trajectory = {
         steps: [
