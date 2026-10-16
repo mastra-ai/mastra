@@ -104,7 +104,7 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 | `startedAt`, `endedAt`, `durationMs` | Comparisons, membership and presence |
 | `error` | `exists`, `notExists` |
 
-Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. Status is `error` when the span has an error, otherwise `success`; it doesn't represent a separate execution-failure classification. User predicates don't override server authorization.
+Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
 
