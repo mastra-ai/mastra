@@ -171,9 +171,24 @@ const TEXT_BLOCK_TYPES = new Set([
   'toggle',
 ]);
 
-/** notion.so URL carrying a 32-hex-char page/database id (dashes optional). */
-const NOTION_URL_ID_PATTERN =
-  /notion\.so\/(?:[^\s"')]*-)?([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i;
+/** Notion hosts whose page URLs carry a page id: legacy `notion.so` and the live API's `app.notion.com`. */
+const NOTION_PAGE_URL_HOSTS = new Set(['notion.so', 'www.notion.so', 'app.notion.com']);
+
+/** Trailing 32-hex-char page id in a URL path segment (dashes optional), optionally after a `<slug>-` prefix. */
+const NOTION_PATH_ID_PATTERN = /(?:^|-)([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$/i;
+
+/** Page id from a Notion page URL, or `undefined` for foreign hosts and malformed ids. */
+function notionPageIdFromUrl(href: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return undefined;
+  }
+  if (!NOTION_PAGE_URL_HOSTS.has(url.hostname.toLowerCase())) return undefined;
+  const lastSegment = url.pathname.split('/').filter(Boolean).at(-1);
+  return lastSegment ? NOTION_PATH_ID_PATTERN.exec(lastSegment)?.[1] : undefined;
+}
 
 /** Normalize a Notion id to the canonical dashed UUID form used by the search API. */
 function normalizeNotionId(id: string): string {
@@ -205,11 +220,18 @@ interface BlockExtraction {
  * `child_page`/`child_database` blocks are deliberately skipped — containment
  * is emitted one-directionally by the child via its `parent` field.
  */
-function extractFromBlocks(blocks: readonly NotionBlock[]): BlockExtraction {
+function extractFromBlocks(blocks: readonly NotionBlock[], pageId: string): BlockExtraction {
   const textParts: string[] = [];
   const links: RecordLink[] = [];
-  const addLink = (object: 'page' | 'database', id: string) =>
-    links.push({ address: `notion:${object}:${normalizeNotionId(id)}`, rel: 'references' });
+  const selfId = normalizeNotionId(pageId);
+  const seen = new Set<string>();
+  const addLink = (object: 'page' | 'database', id: string) => {
+    const normalized = normalizeNotionId(id);
+    const address = `notion:${object}:${normalized}`;
+    if ((object === 'page' && normalized === selfId) || seen.has(address)) return;
+    seen.add(address);
+    links.push({ address, rel: 'references' });
+  };
   for (const block of blocks) {
     if (block.type === 'link_to_page' && block.link_to_page) {
       if (block.link_to_page.page_id) addLink('page', block.link_to_page.page_id);
@@ -222,8 +244,8 @@ function extractFromBlocks(blocks: readonly NotionBlock[]): BlockExtraction {
       else if (item.mention?.type === 'database' && item.mention.database?.id)
         addLink('database', item.mention.database.id);
       else if (item.href) {
-        const match = NOTION_URL_ID_PATTERN.exec(item.href);
-        if (match?.[1]) addLink('page', match[1]);
+        const id = notionPageIdFromUrl(item.href);
+        if (id) addLink('page', id);
       }
     }
     if (TEXT_BLOCK_TYPES.has(block.type)) {
@@ -382,7 +404,7 @@ function createNotionImporter(ctx: ImporterProviderContext) {
           if (blocks === undefined) {
             blockFetchFailed = true;
           } else {
-            const extraction = extractFromBlocks(blocks);
+            const extraction = extractFromBlocks(blocks, result.id);
             blockText = extraction.text;
             links.push(...extraction.links);
           }

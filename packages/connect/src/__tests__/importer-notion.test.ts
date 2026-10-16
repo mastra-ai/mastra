@@ -422,6 +422,41 @@ describe('notion importer', () => {
     ]);
   });
 
+  it('extracts app.notion.com hrefs and rejects foreign domains, malformed ids and self-links', async () => {
+    const harness = makeContext();
+    const { ctx, importer, state } = harness;
+    const selfId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    harness.queueSearch(searchResponse([{ id: selfId, title: 'Alpha', lastEditedTime: '2026-09-01T00:00:00Z' }]));
+    const href = (url: string) => ({ plain_text: 'x', href: url });
+    harness.queueBlocks(selfId, {
+      results: [
+        {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              href('https://app.notion.com/p/Live-Page-0123456789abcdef0123456789abcdef'),
+              href('https://app.notion.com/p/11111111-2222-3333-4444-555555555555'),
+              href('https://notion.so/Bare-0123456789ABCDEF0123456789ABCDEF'),
+              href('https://evil.example/notion.so/Fake-9999999999999999999999999999999a'),
+              href('https://notion.so.evil.example/x-8888888888888888888888888888888a'),
+              href('https://app.notion.com/p/Short-0123456789abcdef'),
+              href('https://app.notion.com/p/Self-aaaaaaaabbbbccccddddeeeeeeeeeeee'),
+            ],
+          },
+        },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+    await runImporter(notionImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get(`notion:page:${selfId}`)!.records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([
+      { address: 'notion:page:01234567-89ab-cdef-0123-456789abcdef', rel: 'references' },
+      { address: 'notion:page:11111111-2222-3333-4444-555555555555', rel: 'references' },
+    ]);
+  });
+
   it('a block-fetch failure leaves an existing good record untouched', async () => {
     const harness = makeContext();
     const { ctx, importer, state } = harness;
