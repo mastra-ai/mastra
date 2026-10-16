@@ -18,6 +18,11 @@ const { refreshToken, getApiKeyFromCreds } = vi.hoisted(() => ({
   getApiKeyFromCreds: vi.fn(),
 }));
 vi.mock('@mastra/code-sdk/auth/storage', () => ({
+  PROVIDER_DEFAULT_MODELS: {
+    anthropic: 'anthropic/claude-fable-5',
+    'openai-codex': 'openai/gpt-5.6-sol',
+    xai: 'xai/grok-4.5',
+  },
   getOAuthProvider: (id: string) =>
     id === 'anthropic' || id === 'xai'
       ? {
@@ -38,6 +43,7 @@ import {
   primeTenantCredentialsForTenant,
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
+  resolveTenantProviderDefaultModel,
 } from './tenant-credentials.js';
 import { fakeRouteAuth } from './test-utils.js';
 
@@ -291,6 +297,54 @@ describe('registerTenantCredentialResolver', () => {
     const ctx = new RequestContext();
     ctx.set('user', { workosId: USER, organizationId: ORG });
     expect(resolveCredentialStore(ctx)).toBeUndefined();
+  });
+});
+
+describe('resolveTenantProviderDefaultModel', () => {
+  const USER_SCOPE = { ...USER_TENANT, credentialScope: 'user' } as const;
+  const FACTORY_SCOPE = { ...USER_TENANT, credentialScope: 'factory' } as const;
+
+  it("picks the default model of the tenant's connected provider when the current model has no credential", async () => {
+    registerTenantCredentialResolver(seed.credentials);
+    await seed.credentials.setCredential(USER_TENANT, 'openai-codex', FRESH_OAUTH);
+
+    await expect(resolveTenantProviderDefaultModel(USER_SCOPE, 'anthropic/claude-opus-5')).resolves.toBe(
+      'openai/gpt-5.6-sol',
+    );
+    await expect(resolveTenantProviderDefaultModel(USER_SCOPE, undefined)).resolves.toBe('openai/gpt-5.6-sol');
+  });
+
+  it('keeps a current model the tenant can already call', async () => {
+    registerTenantCredentialResolver(seed.credentials, new Set(['amazon-bedrock']));
+    await seed.credentials.setCredential(USER_TENANT, 'openai-codex', FRESH_OAUTH);
+
+    await expect(resolveTenantProviderDefaultModel(USER_SCOPE, 'openai/gpt-5.4')).resolves.toBeUndefined();
+    await expect(resolveTenantProviderDefaultModel(USER_SCOPE, 'amazon-bedrock/claude')).resolves.toBeUndefined();
+  });
+
+  it("reads only the session's credential scope", async () => {
+    registerTenantCredentialResolver(seed.credentials);
+    await seed.credentials.setCredential(ORG_TENANT, 'xai', { type: 'api_key', key: 'org-xai' });
+
+    await expect(resolveTenantProviderDefaultModel(USER_SCOPE, 'anthropic/claude-opus-5')).resolves.toBeUndefined();
+    await expect(resolveTenantProviderDefaultModel(FACTORY_SCOPE, 'anthropic/claude-opus-5')).resolves.toBe(
+      'xai/grok-4.5',
+    );
+  });
+
+  it('prefers providers in subscription-default order', async () => {
+    registerTenantCredentialResolver(seed.credentials);
+    await seed.credentials.setCredential(USER_TENANT, 'xai', { type: 'api_key', key: 'user-xai' });
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+
+    await expect(resolveTenantProviderDefaultModel(USER_SCOPE, 'google/gemini')).resolves.toBe(
+      'anthropic/claude-fable-5',
+    );
+  });
+
+  it('changes nothing before the tenant resolver is registered', async () => {
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+    await expect(resolveTenantProviderDefaultModel(USER_SCOPE, 'google/gemini')).resolves.toBeUndefined();
   });
 });
 

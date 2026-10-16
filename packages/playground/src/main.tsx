@@ -1,13 +1,11 @@
 import { StrictMode } from 'react';
 
-import '@mastra/playground-ui/style.css';
 import '@/index.css';
 
 import { createRoot } from 'react-dom/client';
 
 import App from './App.tsx';
 import { exposeStudioSharedModules } from './lib/tool-studio-components';
-import './index.css';
 
 export function startStudio() {
   if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {

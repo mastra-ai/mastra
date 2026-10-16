@@ -1,7 +1,13 @@
+import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  invalidateTenantCredentialSnapshots,
+  registerTenantCredentialResolver,
+  resetTenantCredentialResolverForTests,
+} from '../routes/tenant-credentials.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   createSourceControlSessionLookup,
@@ -401,7 +407,31 @@ describe('hydrateFactorySession', () => {
     expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
   });
 
-  it('keeps going when the default model is unknown', async () => {
+  it("runs on a connected provider's default model when no default was chosen and the mode default has no credential", async () => {
+    const seeded = await createFactoryStorageForTests();
+    registerTenantCredentialResolver(seeded.credentials);
+    try {
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'anthropic', { type: 'api_key', key: 'org-key' });
+      const { session, double } = createSessionDouble();
+      const args = { orgId: 'org-1', modelScope: 'factory', ownerUserId: 'user-1' } as const;
+
+      await expect(hydrateFactorySession(session, args)).resolves.toBe(PROVIDER_DEFAULT_MODELS.anthropic);
+      expect(double.model.switch).toHaveBeenCalledExactlyOnceWith(PROVIDER_DEFAULT_MODELS.anthropic);
+
+      // Once the mode default's provider is connected too, the mode default stays.
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', {
+        type: 'api_key',
+        key: 'org-openai',
+      });
+      invalidateTenantCredentialSnapshots({ orgId: 'org-1' });
+      const fresh = createSessionDouble();
+      await expect(hydrateFactorySession(fresh.session, args)).resolves.toBe('openai/gpt-5.5');
+    } finally {
+      resetTenantCredentialResolverForTests();
+    }
+  });
+
+  it('keeps going but reports no selected model when the default model is unknown', async () => {
     const { session, double } = createSessionDouble();
     double.model.switch.mockRejectedValueOnce(new Error('unknown model'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

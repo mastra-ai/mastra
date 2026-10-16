@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -25,7 +26,6 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { formatModelName } from '../../../settings/components/model-display-name';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { SessionThinkingControl } from './SessionThinkingControl';
@@ -86,6 +86,14 @@ export function ModelPicker() {
     modelsQuery.data?.some(model => model.id === defaultModelId);
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
+  if (modelsQuery.isError && noModelsToOffer) {
+    const unavailableLabel = `${label} · model list unavailable`;
+    return (
+      <span className="text-destructive-foreground" aria-label={unavailableLabel} title={modelsQuery.error.message}>
+        {unavailableLabel}
+      </span>
+    );
+  }
   if (!switchable || noModelsToOffer) {
     if (notConfigured && organizationScoped && factoryId) {
       return (

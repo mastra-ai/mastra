@@ -82,12 +82,12 @@ describe('Factory switch navigation', () => {
         session: 'user',
         initialEntry: '/factories/factory-current/user/threads/user-thread?resourceId=user#messages',
       },
-    ])('opens the destination overview from a $session session', async ({ initialEntry }) => {
+    ])('opens the destination board landing from a $session session', async ({ initialEntry }) => {
       const { currentLocation } = renderFactorySwitcher(initialEntry);
 
       await switchToNextFactory();
 
-      expect(currentLocation()).toBe('/factories/factory-next/overview');
+      expect(currentLocation()).toBe('/factories/factory-next');
     });
   });
 });

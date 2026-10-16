@@ -299,6 +299,10 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
 
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
+export type QueueAgentSignalOptions<OUTPUT = unknown> = QueueAgentMessageOptions<OUTPUT>;
+
+export type QueueAgentSignalResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
 export interface SubscribeAgentThreadEventsOptions {
   resourceId: string;
   threadId: string;

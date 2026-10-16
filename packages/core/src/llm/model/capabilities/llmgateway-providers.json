@@ -126,9 +126,6 @@
     "fireworks/glm-5.3-flash",
     "fireworks/kimi-k3",
     "fireworks/kimi-k3-fast",
-    "google-ai-studio/gemini-2.5-flash",
-    "google-ai-studio/gemini-2.5-flash-lite",
-    "google-ai-studio/gemini-2.5-pro",
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
@@ -139,9 +136,6 @@
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
-    "google-vertex/gemini-2.5-flash",
-    "google-vertex/gemini-2.5-flash-lite",
-    "google-vertex/gemini-2.5-pro",
     "google-vertex/gemini-3-flash-preview",
     "google-vertex/gemini-3.1-flash-lite",
     "google-vertex/gemini-3.1-pro-preview",
@@ -303,7 +297,6 @@
     "anthropic/claude-sonnet-4-5",
     "anthropic/claude-sonnet-4-5-20250929",
     "anthropic/claude-sonnet-4-6",
-    "atria/atria-dawn-preview",
     "aws-bedrock/claude-haiku-4-5",
     "aws-bedrock/claude-haiku-4-5-20251001",
     "aws-bedrock/claude-opus-4-1-20250805",
@@ -399,15 +392,13 @@
     "embercloud/glm-5.2",
     "embercloud/qwen3-coder-next",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
     "fireworks/glm-5.3",
     "fireworks/glm-5.3-flash",
     "gonka24/minimax-m2.7",
-    "google-ai-studio/gemini-2.5-flash",
-    "google-ai-studio/gemini-2.5-flash-lite",
-    "google-ai-studio/gemini-2.5-pro",
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
@@ -417,9 +408,6 @@
     "google-ai-studio/gemini-3.7-flash",
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-pro-latest",
-    "google-vertex/gemini-2.5-flash",
-    "google-vertex/gemini-2.5-flash-lite",
-    "google-vertex/gemini-2.5-pro",
     "google-vertex/gemini-3-flash-preview",
     "google-vertex/gemini-3.1-flash-lite",
     "google-vertex/gemini-3.1-pro-preview",
@@ -695,12 +683,10 @@
     "deepinfra/muse-glimmer-30b",
     "deepinfra/qwen3.5-9b",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
-    "google-ai-studio/gemini-2.5-flash",
-    "google-ai-studio/gemini-2.5-flash-lite",
-    "google-ai-studio/gemini-2.5-pro",
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
@@ -711,9 +697,6 @@
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
-    "google-vertex/gemini-2.5-flash",
-    "google-vertex/gemini-2.5-flash-lite",
-    "google-vertex/gemini-2.5-pro",
     "google-vertex/gemini-3-flash-preview",
     "google-vertex/gemini-3.1-flash-lite",
     "google-vertex/gemini-3.1-pro-preview",
@@ -815,6 +798,12 @@
       }
     ],
     "entrim/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "entrim/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -1250,28 +1239,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "google-ai-studio/gemini-2.5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 24576
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "google-ai-studio/gemini-3.7-flash": [
@@ -2601,12 +2568,6 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "atria/atria-dawn-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "mistral/glm-5.3": [
       {
         "type": "effort",
@@ -2721,28 +2682,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-vertex/gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "google-vertex/gemini-2.5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 24576
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "google-vertex/gemini-3.7-flash": [

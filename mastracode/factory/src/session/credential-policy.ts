@@ -5,11 +5,13 @@ import {
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { UUID_PATTERN } from '../routes/contracts.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { parseSupervisorResourceId } from '../supervisor/session.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
+
+const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
 interface FactoryModelPolicyDependencies {
   projects: Pick<FactoryProjectsStorage, 'getById'>;
@@ -35,22 +37,6 @@ export async function resolveFactoryModelPolicy(
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller?.resourceId) return { tenant: principal };
 
-  const supervisorProjectId = parseSupervisorResourceId(controller.resourceId);
-  if (supervisorProjectId) {
-    const project = await deps.projects.getById({ id: supervisorProjectId });
-    if (!project || project.orgId !== principal.orgId) throw new Error('Factory model policy is unavailable.');
-    // Supervisor turns are Factory-owned automation, so a hybrid Factory bills them as runs.
-    return {
-      factoryProjectId: project.id,
-      factoryDefaultModelId: project.defaultModelId,
-      tenant: {
-        orgId: project.orgId,
-        userId: project.createdBy,
-        credentialScope: effectiveModelScope(project.modelScope, 'run'),
-      },
-    };
-  }
-
   const sourceSession = await deps.sourceControl.getBySessionId(controller.resourceId);
   const binding =
     principal.orgId && controller.threadId
@@ -65,6 +51,18 @@ export async function resolveFactoryModelPolicy(
   if (!sourceSession) {
     if (!binding && (controller.resourceId === principal.userId || controller.resourceId.startsWith('channel:')))
       return { tenant: principal };
+    // Session-less Factory pages address the Factory itself: the resourceId is the project id.
+    const factoryProject =
+      !binding && FACTORY_PROJECT_ID.test(controller.resourceId)
+        ? await deps.projects.getById({ id: controller.resourceId })
+        : null;
+    if (factoryProject && factoryProject.orgId === principal.orgId) {
+      return {
+        factoryProjectId: factoryProject.id,
+        factoryDefaultModelId: factoryProject.defaultModelId,
+        tenant: { ...principal, credentialScope: effectiveModelScope(factoryProject.modelScope, 'session') },
+      };
+    }
     throw new Error('Factory session ownership is unavailable.');
   }
   if (

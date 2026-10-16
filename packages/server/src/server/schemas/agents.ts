@@ -780,6 +780,7 @@ export const sendAgentMessageBodySchema = z.union([
 ]);
 
 export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
+export const queueAgentSignalBodySchema = sendAgentSignalBodySchema;
 
 const agentThreadBodySchema = z.object({
   resourceId: z.string().optional(),

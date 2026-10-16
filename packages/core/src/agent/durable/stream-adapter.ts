@@ -474,6 +474,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
+  let onChunkDelivery = Promise.resolve();
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -513,7 +514,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorCause = errPayload?.error ?? errPayload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
-          await onChunk?.(chunk as ChunkType<OUTPUT>);
+          const delivery = onChunkDelivery.then(() => onChunk?.(chunk as ChunkType<OUTPUT>));
+          onChunkDelivery = delivery.catch(() => {});
+          await delivery;
           break;
         }
 
@@ -533,6 +536,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
+          clearIdleTimer();
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
 
@@ -760,7 +766,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const subscribedCallback: EventCallback = (event, ack, nack) => {
     const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
     inFlightDeliveries.add(delivery);
-    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    void delivery
+      .finally(() => {
+        inFlightDeliveries.delete(delivery);
+      })
+      .catch(() => {});
     return delivery;
   };
   const waitForEventDelivery = async () => {
@@ -958,6 +968,8 @@ export async function emitStepStartEvent(
     stepId?: string;
     messageId?: string;
     startedAt?: StepStartPayload['startedAt'];
+    modelId?: StepStartPayload['modelId'];
+    provider?: StepStartPayload['provider'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
   },

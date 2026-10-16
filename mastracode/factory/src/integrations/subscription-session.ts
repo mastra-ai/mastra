@@ -75,9 +75,10 @@ export async function prepareSessionRunContext(
   sessionId: string,
   sourceControl: SubscriptionSessionLookup,
   options?: { expectedOrgId?: string },
-): Promise<'prepared' | 'unavailable' | 'organization-mismatch'> {
+): Promise<'prepared' | 'session-not-found' | 'organization-unresolved' | 'organization-mismatch'> {
   const sessionRow = await sourceControl.sessions.getBySessionId(sessionId);
-  if (!sessionRow || !hasResolvedOrg(sessionRow.orgId)) return 'unavailable';
+  if (!sessionRow) return 'session-not-found';
+  if (!hasResolvedOrg(sessionRow.orgId)) return 'organization-unresolved';
   if (options?.expectedOrgId !== undefined && sessionRow.orgId !== options.expectedOrgId) {
     return 'organization-mismatch';
   }

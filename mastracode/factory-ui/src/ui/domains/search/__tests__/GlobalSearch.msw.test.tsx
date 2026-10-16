@@ -441,7 +441,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/work`);
 
-    await screen.findByLabelText('Board columns');
+    await screen.findByLabelText('Board stages');
     await user.keyboard('{Control>}k{/Control}');
 
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
@@ -464,9 +464,9 @@ describe('Global search', () => {
     expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
     expect(screen.getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
-      'Overview',
       'Work',
       'Review',
+      'Activity',
       'Rules',
       'Audit log',
       'Preferences',

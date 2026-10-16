@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
-import { thinkingConfig } from '../../../../../__tests__/fixtures/thinkingConfig';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatPermissionsProvider } from '../../../context/ChatPermissionsProvider';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
@@ -66,11 +65,16 @@ function renderRoute(initialThreadId: string) {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
       HttpResponse.json({
-        project: { id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'openai/gpt-5' },
+        project: {
+          id: 'fp-1',
+          name: 'Mastra',
+          modelScope: 'hybrid',
+          defaultModelId: 'openai/gpt-5',
+          defaultThinkingLevel: 'medium',
+        },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5' })),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
     // The server resolves the thread's owner and billing scope; a work-item thread is Factory-billed.
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
       const params = new URL(request.url).searchParams;

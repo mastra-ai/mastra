@@ -1,6 +1,7 @@
 export const TRACE_OPTIONAL_COLUMNS = [
   'type',
   'input',
+  'output',
   'duration',
   'endTime',
   'environment',
@@ -41,15 +42,16 @@ import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
 export type { TraceUsageSummary };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
-  visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+  visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
   customColumns: [],
   metadataKeys: [],
 };
 
 // v2: 'entity' became 'type' and moved before Name; duration + cost joined the defaults.
 // v3: added `customColumns`; a v2 payload is migrated rather than reset.
-const TRACE_COLUMN_PREFERENCES_VERSION = 3;
-const TRACE_COLUMN_PREFERENCES_MIGRATABLE_VERSIONS = new Set<unknown>([2, TRACE_COLUMN_PREFERENCES_VERSION]);
+// v4: added 'output', shown after 'input' for anyone who had Input visible.
+const TRACE_COLUMN_PREFERENCES_VERSION = 4;
+const TRACE_COLUMN_PREFERENCES_MIGRATABLE_VERSIONS = new Set<unknown>([2, 3, TRACE_COLUMN_PREFERENCES_VERSION]);
 const TRACE_COLUMN_SET = new Set<string>(TRACE_OPTIONAL_COLUMNS);
 const TRACE_USAGE_COLUMN_SET = new Set<TraceOptionalColumn>(TRACE_USAGE_COLUMNS);
 const TRACE_CUSTOM_COLUMN_SET = new Set<string>(TRACE_CUSTOM_COLUMN_FIELDS);
@@ -89,6 +91,10 @@ export function parseTraceColumnPreferences(serialized: string | undefined): Tra
     const visibleColumns = Array.isArray(parsed.visibleColumns)
       ? [...new Set(parsed.visibleColumns.filter(isTraceOptionalColumn))]
       : [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns];
+    if (parsed.version !== TRACE_COLUMN_PREFERENCES_VERSION && !visibleColumns.includes('output')) {
+      const input = visibleColumns.indexOf('input');
+      if (input !== -1) visibleColumns.splice(input + 1, 0, 'output');
+    }
     const customColumns = Array.isArray(parsed.customColumns)
       ? [...new Set(parsed.customColumns.filter(isTraceCustomColumn))]
       : [];
@@ -119,6 +125,7 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   if (visible.has('type')) keys.push('type');
   keys.push('name');
   if (visible.has('input')) keys.push('input');
+  if (visible.has('output')) keys.push('output');
   keys.push('status');
   for (const column of ['duration', 'endTime', 'environment', ...TRACE_USAGE_COLUMNS] as const) {
     if (visible.has(column)) keys.push(column);
@@ -130,13 +137,15 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
 
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
   const visible = new Set(preferences.visibleColumns);
-  // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
-  // without Input, Name is the flexible track that fills the grid.
+  // Name is bounded when Input or Output is visible so they (1fr each) absorb the free space;
+  // without either, Name is the flexible track that fills the grid.
   const columns = ['11rem'];
+  const hasPreview = visible.has('input') || visible.has('output');
 
   if (visible.has('type')) columns.push('7rem');
-  columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
+  columns.push(hasPreview ? '14rem' : 'minmax(8rem,1fr)');
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
+  if (visible.has('output')) columns.push('minmax(8rem,1fr)');
 
   columns.push('6rem');
 

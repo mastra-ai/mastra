@@ -166,6 +166,19 @@ The author persists under `content.metadata.signal.author`. Read it with `getMes
 
 Queue a message for the next run, or send it immediately while the session is idle. Author metadata persists with the queued message.
 
+#### `queueSignal(signal, { requestContext?, tracingContext?, tracingOptions? }?)`
+
+Queue a typed signal for the next run, or send it immediately while the session is idle. The signal keeps its `type`, `tagName`, and `attributes`. Unlike `queueMessage()`, the session doesn't stamp an author from `requestContext`; set `signal.author` to record one.
+
+```typescript
+await session.queueSignal({
+  type: 'reactive',
+  tagName: 'skill',
+  attributes: { name: 'triage' },
+  contents: 'Triage the new issue.',
+})
+```
+
 #### `steer({ content, files?, requestContext?, author? })`
 
 Abort the active run, then send `content` as a new message. Pass `files` to attach files in the same shape as `sendMessage()`: `{ data, mediaType, filename? }`, where `data` is raw text or a base64 data URL for text files, and base64 for binary files.

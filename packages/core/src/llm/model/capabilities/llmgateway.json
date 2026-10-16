@@ -25,9 +25,6 @@
     "fugu-max",
     "fugu-ultra",
     "fugu-ultra-v2.0",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview",
@@ -151,7 +148,6 @@
   ],
   "temperature": [
     "Qwen3.8-27B",
-    "atria-dawn-preview",
     "auto",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
@@ -172,9 +168,6 @@
     "fugu-max",
     "fugu-ultra",
     "fugu-ultra-v2.0",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview",
@@ -340,9 +333,6 @@
     "deepseek-v4.1-flash",
     "fugu-max",
     "fugu-ultra-v2.0",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview",
@@ -935,32 +925,10 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
     "qwen3.6-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-2.5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 24576
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "nemotron-3-ultra-550b": [
@@ -1267,12 +1235,6 @@
     "deepseek-v3.2": [
       {
         "type": "toggle"
-      }
-    ],
-    "atria-dawn-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "hy4-preview": [

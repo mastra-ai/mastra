@@ -536,6 +536,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               accumulatedSteps: state.accumulatedSteps,
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
+              completionStartTime: state.completionStartTime,
             };
           },
           { id: 'map-to-llm-input' },
@@ -549,6 +550,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             return (llmOutput.toolCalls ?? []).map(toolCall => ({
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
+              completionStartTime: llmOutput.completionStartTime,
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
@@ -1066,6 +1068,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+              // Rebuilt spans end from snapshots taken at run start, so the clock the
+              // steps carried is applied here: the loop state's for the originals, the
+              // registry's for a resumed segment's fresh spans.
+              const clock = reg?.resumeModelSpanData ? reg.resumeCompletionStartTime : state.completionStartTime;
+              const completionStartTime = clock ? new Date(clock) : undefined;
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan = observability.rebuildSpan(
@@ -1086,13 +1093,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
                       ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                      ...(completionStartTime ? { completionStartTime } : {}),
                     },
                     usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
                 }
                 if (agentSpanData) {
                   const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
-                  agentSpan?.end({ output: { text: finalText } });
+                  agentSpan?.end({
+                    output: { text: finalText },
+                    ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+                  });
                 }
               }
             } catch (error) {

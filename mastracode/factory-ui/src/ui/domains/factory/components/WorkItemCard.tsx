@@ -203,6 +203,7 @@ export function WorkItemCard({
       <RelatedWorkItemLink key={related.id} item={related} href={relationshipPath(related, factoryId)} kind="board" />
     );
   };
+  const relatedLinks = relatedItems.map(relatedLink);
 
   // A held card's decision, like a parked suggestion, is the person's to
   // release, so it stays on the card beside a finished triage session.
@@ -220,7 +221,7 @@ export function WorkItemCard({
       projectRepositoryId={projectRepositoryId}
       activityPage={activityPage}
       morph={morph}
-      relatedLinks={relatedItems.map(relatedLink)}
+      relatedLinks={relatedLinks}
       status={status}
       actions={actions}
       menu={<WorkItemMenuItems {...panelMenu} />}
@@ -232,9 +233,12 @@ export function WorkItemCard({
       <>
         <WorkItemListRow
           item={item}
+          columnStage={columnStage}
           morph={morph}
           deepLinkRef={deepLinkRef}
           highlighted={highlighted}
+          activityStatus={wick}
+          relatedLinks={relatedLinks}
           locked={lockedByYou}
           busy={busy}
           dragPayload={dragPayload}
@@ -283,7 +287,7 @@ export function WorkItemCard({
         <WorkItemCardRows
           item={item}
           columnStage={columnStage}
-          relatedLinks={relatedItems.map(relatedLink)}
+          relatedLinks={relatedLinks}
           activity={activity}
           actors={activityPage?.actors ?? {}}
           status={status}
