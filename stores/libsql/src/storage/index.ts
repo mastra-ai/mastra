@@ -382,12 +382,23 @@ export class LibSQLStore extends MastraCompositeStore {
   private async initDomainsInParallel(): Promise<boolean> {
     const stores = this.getStoresToInit();
     let next = 0;
+    let failed = false;
     const worker = async () => {
-      while (next < stores.length) {
-        await this.initStoreWithRetry(stores[next++]!);
+      while (!failed && next < stores.length) {
+        try {
+          await this.initStoreWithRetry(stores[next++]!);
+        } catch (error) {
+          failed = true;
+          throw error;
+        }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(REMOTE_INIT_CONCURRENCY, stores.length) }, worker));
+    // Wait for in-flight inits to settle so a retried init() never overlaps with them.
+    const results = await Promise.allSettled(
+      Array.from({ length: Math.min(REMOTE_INIT_CONCURRENCY, stores.length) }, worker),
+    );
+    const rejected = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (rejected) throw rejected.reason;
     return true;
   }
 
