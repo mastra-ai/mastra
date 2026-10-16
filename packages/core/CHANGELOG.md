@@ -1,5 +1,20 @@
 # @mastra/core
 
+## 1.78.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d))
+
+- Fixed `untilIdle` continuations losing a completed background task's result when newer messages push it outside the configured history window. ([#27205](https://github.com/mastra-ai/mastra/pull/27205))
+
+- Fixed a Session that follows a thread keeping a tool call marked as pending after the run was resumed on another instance and completed. The follower now drops the answered call, so `suspensions.hasPending()` returns false and aborting no longer emits a spurious `tool_suspension_cancelled` event. ([#27226](https://github.com/mastra-ai/mastra/pull/27226))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/schema-compat@1.3.16-alpha.0
+
 ## 1.78.0
 
 ### Minor Changes

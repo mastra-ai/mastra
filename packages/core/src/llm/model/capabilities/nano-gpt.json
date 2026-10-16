@@ -85,6 +85,7 @@
     "deepseek/deepseek-v4.1-flash:thinking",
     "doubao-1.5-vision-pro-32k",
     "ernie-5.0-thinking-preview",
+    "fireworks/ember-1",
     "gemini-2.0-pro-exp-02-05",
     "gemini-2.0-pro-reasoner",
     "gemini-2.5-flash",
@@ -164,6 +165,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "microsoft/wizardlm-2-8x22b",
     "minimax/minimax-01",
     "minimax/minimax-latest",
@@ -446,6 +448,7 @@
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
     "meta/muse-spark-1.3",
+    "meta/muse-spark-open",
     "microsoft/wizardlm-2-8x22b",
     "minimax/minimax-m2",
     "minimax/minimax-m2-her",
@@ -688,6 +691,7 @@
     "deepseek/deepseek-v4-pro:thinking",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash:thinking",
+    "fireworks/ember-1",
     "gemini-2.5-flash-lite-preview-09-2025",
     "gemini-2.5-flash-lite-preview-09-2025-thinking",
     "gemini-2.5-flash-preview-09-2025",
@@ -734,6 +738,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "minimax/minimax-latest",
     "minimax/minimax-m2.1",
     "minimax/minimax-m2.5",
@@ -1487,6 +1492,12 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "x-ai/grok-4.20-multi-agent": [
       {
         "type": "effort",
@@ -1746,6 +1757,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "fireworks/ember-1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "mistralai/mistral-large-4": [

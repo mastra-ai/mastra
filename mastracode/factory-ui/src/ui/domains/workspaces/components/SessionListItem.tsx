@@ -48,7 +48,7 @@ export function SessionListItem({
       onSelect={() => void navigate(row.openPath, row.origin === 'factory' ? { state: { from: location } } : undefined)}
       onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
-      onRegenerateTitle={ownUserSession ? regenerate : undefined}
+      onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
       // Slack threads keep the visibility they were created with; the server refuses a change.

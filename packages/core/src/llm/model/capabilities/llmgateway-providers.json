@@ -126,9 +126,6 @@
     "fireworks/glm-5.3-flash",
     "fireworks/kimi-k3",
     "fireworks/kimi-k3-fast",
-    "google-ai-studio/gemini-2.5-flash",
-    "google-ai-studio/gemini-2.5-flash-lite",
-    "google-ai-studio/gemini-2.5-pro",
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
@@ -139,9 +136,6 @@
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
-    "google-vertex/gemini-2.5-flash",
-    "google-vertex/gemini-2.5-flash-lite",
-    "google-vertex/gemini-2.5-pro",
     "google-vertex/gemini-3-flash-preview",
     "google-vertex/gemini-3.1-flash-lite",
     "google-vertex/gemini-3.1-pro-preview",
@@ -405,9 +399,6 @@
     "fireworks/glm-5.3",
     "fireworks/glm-5.3-flash",
     "gonka24/minimax-m2.7",
-    "google-ai-studio/gemini-2.5-flash",
-    "google-ai-studio/gemini-2.5-flash-lite",
-    "google-ai-studio/gemini-2.5-pro",
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
@@ -417,9 +408,6 @@
     "google-ai-studio/gemini-3.7-flash",
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-pro-latest",
-    "google-vertex/gemini-2.5-flash",
-    "google-vertex/gemini-2.5-flash-lite",
-    "google-vertex/gemini-2.5-pro",
     "google-vertex/gemini-3-flash-preview",
     "google-vertex/gemini-3.1-flash-lite",
     "google-vertex/gemini-3.1-pro-preview",
@@ -699,9 +687,6 @@
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
-    "google-ai-studio/gemini-2.5-flash",
-    "google-ai-studio/gemini-2.5-flash-lite",
-    "google-ai-studio/gemini-2.5-pro",
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
@@ -712,9 +697,6 @@
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
-    "google-vertex/gemini-2.5-flash",
-    "google-vertex/gemini-2.5-flash-lite",
-    "google-vertex/gemini-2.5-pro",
     "google-vertex/gemini-3-flash-preview",
     "google-vertex/gemini-3.1-flash-lite",
     "google-vertex/gemini-3.1-pro-preview",
@@ -1257,28 +1239,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "google-ai-studio/gemini-2.5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 24576
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "google-ai-studio/gemini-3.7-flash": [
@@ -2722,28 +2682,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-vertex/gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "google-vertex/gemini-2.5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 24576
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "google-vertex/gemini-3.7-flash": [
