@@ -3,9 +3,12 @@ import type { Mastra } from '@mastra/core/mastra';
 import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
 import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
 import type { Context, Env, Hono, MiddlewareHandler, Schema } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 
 import { createAuthMiddleware } from '../auth-middleware';
 import { UpgradeTicketStore } from './upgrade-tickets';
+
+const TICKET_BODY_MAX_BYTES = 4 * 1024;
 
 /**
  * Allowed `Origin` values for browser WebSocket upgrades. Accepts the same shape
@@ -281,7 +284,13 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   // on the WebSocket upgrade. This is an ordinary HTTP route, so a
   // header-authenticated client can send its `Authorization` header here and
   // keep that reusable credential out of every URL.
-  app.post(`${apiPrefix}/agents/:agentId/browser/stream-ticket`, authenticate, async c => {
+  // The body only carries `{ threadId }`; cap it before parsing because this raw
+  // route is outside the per-route body limit applied to registered API routes.
+  const ticketBodyLimit = bodyLimit({
+    maxSize: TICKET_BODY_MAX_BYTES,
+    onError: c => c.json({ error: 'Request body too large' }, 413),
+  });
+  app.post(`${apiPrefix}/agents/:agentId/browser/stream-ticket`, authenticate, ticketBodyLimit, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);

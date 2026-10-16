@@ -565,6 +565,12 @@ describe('hono browser-stream routes', () => {
       expect(body.expiresIn).toBeGreaterThan(0);
     });
 
+    it('rejects an oversized ticket request body before parsing it', async () => {
+      const response = await mint({ body: JSON.stringify({ threadId: 'x'.repeat(8 * 1024) }) });
+
+      expect(response.status).toBe(413);
+    });
+
     it('does not return the caller credential as the ticket', async () => {
       const response = await mint();
       const body = (await response.json()) as { ticket: string };
