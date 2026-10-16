@@ -18,12 +18,13 @@ import { ActivityTimeline } from '../timeline/ActivityTimeline';
 
 const FACTORY_ID = 'factory-1';
 
-const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
-
-/** Halfway through the current local day, so a run near midnight never lands the row on yesterday. */
-function earlierToday(): string {
+/**
+ * A moment earlier in the current local day, `hours` back on a day squeezed into the time elapsed since midnight.
+ * More hours back is always earlier, and nothing lands on yesterday, so a run near midnight keeps every row on one day.
+ */
+function earlierToday(hours = 12): string {
   const midnight = new Date().setHours(0, 0, 0, 0);
-  return new Date(midnight + (Date.now() - midnight) / 2).toISOString();
+  return new Date(midnight + (Date.now() - midnight) * (1 - hours / 24)).toISOString();
 }
 
 let nextId = 0;
@@ -42,8 +43,8 @@ function card(title: string, stageHistory: WorkItemStageEntry[]) {
     sessions: { work: { sessionId: `session-${nextId}`, branch: 'b', threadId: 't', startedBy: 'u1' } },
     metadata: null,
     revision: 1,
-    createdAt: stageHistory[0]?.enteredAt ?? hoursAgo(20),
-    updatedAt: hoursAgo(1),
+    createdAt: stageHistory[0]?.enteredAt ?? earlierToday(20),
+    updatedAt: earlierToday(1),
   };
 }
 
@@ -81,7 +82,7 @@ function failedRun(workItemId: string): FactoryAutomationFailedAttentionItem {
     decisionType: 'sendMessage',
     failureCode: 'source_control_missing',
     canRetry: true,
-    occurredAt: hoursAgo(1),
+    occurredAt: earlierToday(1),
     read: false,
     target: { kind: 'thread', sessionId: 'session-1', threadId: 'thread-1' },
     archived: false,
@@ -111,9 +112,9 @@ describe('Factory feed', () => {
   it('folds one hand walking a card through several stages into a single sentence', async () => {
     stubBoard([
       card('Bump vite to 7', [
-        { stage: 'triage', enteredAt: hoursAgo(4), by: 'agent:builder' },
-        { stage: 'execute', enteredAt: hoursAgo(3), by: 'agent:builder' },
-        { stage: 'done', enteredAt: hoursAgo(2), by: 'agent:builder' },
+        { stage: 'triage', enteredAt: earlierToday(4), by: 'agent:builder' },
+        { stage: 'execute', enteredAt: earlierToday(3), by: 'agent:builder' },
+        { stage: 'done', enteredAt: earlierToday(2), by: 'agent:builder' },
       ]),
     ]);
     renderActivity();
@@ -132,7 +133,7 @@ describe('Factory feed', () => {
         action: 'factory.agent.push',
         targets: [],
         metadata: { branch: 'fix/thing' },
-        occurredAt: hoursAgo(1),
+        occurredAt: earlierToday(1),
       },
     ]);
     renderActivity();
@@ -143,10 +144,10 @@ describe('Factory feed', () => {
 
   it('flags each card that needs you once, on its latest line', async () => {
     const stuck = card('Fix the flaky auth test', [
-      { stage: 'execute', enteredAt: hoursAgo(3), by: 'agent:builder' },
-      { stage: 'review', enteredAt: hoursAgo(2), by: 'user:u1' },
+      { stage: 'execute', enteredAt: earlierToday(3), by: 'agent:builder' },
+      { stage: 'review', enteredAt: earlierToday(2), by: 'user:u1' },
     ]);
-    const fine = card('Bump vite to 7', [{ stage: 'done', enteredAt: hoursAgo(4), by: 'agent:builder' }]);
+    const fine = card('Bump vite to 7', [{ stage: 'done', enteredAt: earlierToday(4), by: 'agent:builder' }]);
     stubBoard([stuck, fine]);
     stubOpenAttention([failedRun(stuck.id)]);
     renderActivity();
@@ -159,7 +160,7 @@ describe('Factory feed', () => {
   });
 
   it('leaves a card whose discussion merely moved on unflagged', async () => {
-    const discussed = card('Fix the flaky auth test', [{ stage: 'review', enteredAt: hoursAgo(2), by: 'user:u1' }]);
+    const discussed = card('Fix the flaky auth test', [{ stage: 'review', enteredAt: earlierToday(2), by: 'user:u1' }]);
     stubBoard([discussed]);
     stubOpenAttention([
       {
@@ -171,7 +172,7 @@ describe('Factory feed', () => {
         workItemId: discussed.id,
         title: 'Fix the flaky auth test',
         detail: 'Pushed a fix.',
-        occurredAt: hoursAgo(1),
+        occurredAt: earlierToday(1),
         read: false,
         archived: false,
         target: { kind: 'work-item', workItemId: discussed.id, board: 'work' },
@@ -185,7 +186,7 @@ describe('Factory feed', () => {
   });
 
   it('holds older board moves back until the audit trail has been read down to them', async () => {
-    stubBoard([card('Old card', [{ stage: 'done', enteredAt: hoursAgo(5), by: 'agent:builder' }])]);
+    stubBoard([card('Old card', [{ stage: 'done', enteredAt: earlierToday(5), by: 'agent:builder' }])]);
     const event = (id: string, action: string, occurredAt: string) => ({
       id,
       actorId: 'u1',
@@ -198,9 +199,9 @@ describe('Factory feed', () => {
     server.use(
       http.get('*/web/factory/projects/:id/audit', ({ request }) =>
         new URL(request.url).searchParams.get('before') === 'page-2'
-          ? HttpResponse.json({ events: [event('older', 'factory.agent.push', hoursAgo(3))], actors: {} })
+          ? HttpResponse.json({ events: [event('older', 'factory.agent.push', earlierToday(3))], actors: {} })
           : HttpResponse.json({
-              events: [event('newer', 'factory.agent.push', hoursAgo(1))],
+              events: [event('newer', 'factory.agent.push', earlierToday(1))],
               actors: {},
               nextCursor: 'page-2',
             }),
@@ -220,7 +221,7 @@ describe('Factory feed', () => {
   });
 
   it('keeps reading the trail when its first page holds nothing to show yet', async () => {
-    stubBoard([card('Old card', [{ stage: 'done', enteredAt: hoursAgo(5), by: 'agent:builder' }])]);
+    stubBoard([card('Old card', [{ stage: 'done', enteredAt: earlierToday(5), by: 'agent:builder' }])]);
     server.use(
       http.get('*/web/factory/projects/:id/audit', ({ request }) =>
         new URL(request.url).searchParams.get('before') === 'page-2'
@@ -250,7 +251,7 @@ describe('Factory feed', () => {
           action: 'factory.agent.push',
           targets: [],
           metadata: { branch: 'fix/thing' },
-          occurredAt: hoursAgo(1),
+          occurredAt: earlierToday(1),
         },
       ],
       { 'workos:user-7': { id: 'user-7', name: 'Ada Lovelace' } },
@@ -261,7 +262,7 @@ describe('Factory feed', () => {
   });
 
   it('lists each audit event on its own line once every event is shown', async () => {
-    const shipped = card('Ship the release', [{ stage: 'execute', enteredAt: hoursAgo(5), by: 'agent:builder' }]);
+    const shipped = card('Ship the release', [{ stage: 'execute', enteredAt: earlierToday(5), by: 'agent:builder' }]);
     stubBoard([shipped]);
     stubAudit(
       ['complete', 'aborted'].map((reason, index) => ({
@@ -271,7 +272,7 @@ describe('Factory feed', () => {
         action: 'factory.run.ended',
         targets: [{ type: 'work_item', id: shipped.id }],
         metadata: { reason },
-        occurredAt: hoursAgo(index + 1),
+        occurredAt: earlierToday(index + 1),
       })),
     );
     server.use(http.get('*/web/audit/portal-link', () => new HttpResponse(null, { status: 404 })));
