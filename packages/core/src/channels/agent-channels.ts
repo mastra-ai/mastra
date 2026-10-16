@@ -10,6 +10,7 @@ import { getErrorFromUnknown } from '../error/utils';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
+import { channelPlaceholderTitle } from '../memory/thread-title';
 import type { StorageThreadType } from '../memory/types';
 import type {
   InputProcessor,
@@ -2156,7 +2157,7 @@ export class AgentChannels {
     return memoryStore.saveThread({
       thread: {
         id: resolvedThreadId || defaultThreadId,
-        title: `${platform} conversation`,
+        title: channelPlaceholderTitle(platform),
         resourceId: resolvedResourceId,
         createdAt: new Date(),
         updatedAt: new Date(),

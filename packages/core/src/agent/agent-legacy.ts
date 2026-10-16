@@ -21,7 +21,7 @@ import type { Mastra } from '../mastra';
 import { createRunScope, createRunScopeKey } from '../mastra/run-scope';
 import type { MastraMemory } from '../memory/memory';
 import { getMemoryRunState, MemoryRunState } from '../memory/run-state';
-import { needsThreadTitle } from '../memory/thread-title';
+import { needsThreadTitle, saveGeneratedThreadTitle } from '../memory/thread-title';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, TracingOptions, TracingProperties, ObservabilityContext } from '../observability';
 import {
@@ -660,17 +660,7 @@ export class AgentLegacyHandler {
                   this.capabilities
                     .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
                     .then(async title => {
-                      if (!title) return;
-                      // Update-only: the thread may have been deleted while the title was generating (#25203).
-                      const currentThread = await memory.getThreadById({ threadId: thread.id });
-                      if (!currentThread || !needsThreadTitle(currentThread)) return;
-                      try {
-                        await memory.updateThread({ id: thread.id, title, memoryConfig });
-                      } catch (error) {
-                        // A delete can still land between the check and the update; only swallow that case.
-                        if (!(await memory.getThreadById({ threadId: thread.id }))) return;
-                        throw error;
-                      }
+                      if (title) await saveGeneratedThreadTitle({ memory, threadId: thread.id, title, memoryConfig });
                     }),
                 );
               }

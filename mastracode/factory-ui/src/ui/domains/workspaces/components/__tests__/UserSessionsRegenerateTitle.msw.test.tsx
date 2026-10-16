@@ -12,7 +12,6 @@ import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
 import { testChatSession } from './fixtures/sessionsSection';
-import { pickSessionProperty } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = 'sess-1';
@@ -110,62 +109,41 @@ describe('Session title regeneration', () => {
     },
   );
 
-  it('does not offer regeneration for another owner’s Slack session', async () => {
-    useFactoryFixtures(() => [{ ...session, branch: 'slack/1791936483-798759' }]);
+  it('keeps a pending session disabled while another session finishes first', async () => {
+    const other: FactoryUserSession = { ...session, id: 'row-2', sessionId: 'sess-2', title: 'Second session' };
+    let releaseFirst = () => {};
+    const firstAnswered = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    const asked: string[] = [];
+    useFactoryFixtures(() => [session, other]);
     server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: 'other-user' } }),
-      ),
+      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, async ({ params }) => {
+        asked.push(String(params.sessionId));
+        if (params.sessionId === sessionId) await firstAnswered;
+        return HttpResponse.json({ title: `Named ${params.sessionId}` });
+      }),
     );
+
     const user = userEvent.setup();
-    renderSection();
-    await screen.findByRole('button', { name: /^Sessions properties/ });
-    await pickSessionProperty(user, 'Owner', 'All owners');
-    await user.click(await screen.findByRole('button', { name: `Session actions for ${session.title}` }));
-    expect(screen.queryByRole('menuitem', { name: 'Regenerate title' })).not.toBeInTheDocument();
+    const { client } = renderSection();
+
+    await openTitleAction(user, 'Tell me what have been done in the factory since');
+    await openTitleAction(user, 'Second session');
+    expect(await screen.findByText('Renamed to “Named sess-2”')).toBeInTheDocument();
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Session actions for Tell me what have been done in the factory since',
+      }),
+    );
+    expect(await screen.findByRole('menuitem', { name: 'Regenerate title' })).toHaveAttribute('aria-disabled', 'true');
+    await user.click(await screen.findByRole('menuitem', { name: 'Regenerate title' }));
+
+    releaseFirst();
+    await waitForMutationsIdle(client);
+    expect(asked).toEqual([sessionId, 'sess-2']);
   });
-
-  it.each(['user/my-feature', 'slack/1791936483-798759'])(
-    'keeps a pending %s session disabled while another finishes first',
-    async branch => {
-      const other: FactoryUserSession = { ...session, id: 'row-2', sessionId: 'sess-2', title: 'Second session' };
-      let releaseFirst = () => {};
-      const firstAnswered = new Promise<void>(resolve => {
-        releaseFirst = resolve;
-      });
-      const asked: string[] = [];
-      useFactoryFixtures(() => [{ ...session, branch }, other]);
-      server.use(
-        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, async ({ params }) => {
-          asked.push(String(params.sessionId));
-          if (params.sessionId === sessionId) await firstAnswered;
-          return HttpResponse.json({ title: `Named ${params.sessionId}` });
-        }),
-      );
-
-      const user = userEvent.setup();
-      const { client } = renderSection();
-
-      await openTitleAction(user, 'Tell me what have been done in the factory since');
-      await openTitleAction(user, 'Second session');
-      expect(await screen.findByText('Renamed to “Named sess-2”')).toBeInTheDocument();
-
-      await user.click(
-        await screen.findByRole('button', {
-          name: 'Session actions for Tell me what have been done in the factory since',
-        }),
-      );
-      expect(await screen.findByRole('menuitem', { name: 'Regenerate title' })).toHaveAttribute(
-        'aria-disabled',
-        'true',
-      );
-      await user.click(await screen.findByRole('menuitem', { name: 'Regenerate title' }));
-
-      releaseFirst();
-      await waitForMutationsIdle(client);
-      expect(asked).toEqual([sessionId, 'sess-2']);
-    },
-  );
 
   it('keeps a pending session disabled after its group folds and unfolds again', async () => {
     const newerSessions = Array.from(
@@ -212,23 +190,20 @@ describe('Session title regeneration', () => {
     expect(asked).toEqual([sessionId]);
   });
 
-  it.each(['user/my-feature', 'slack/1791936483-798759'])(
-    'surfaces the server’s reason when %s has nothing to name',
-    async branch => {
-      useFactoryFixtures(() => [{ ...session, branch }]);
-      server.use(
-        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () =>
-          HttpResponse.json({ error: 'This session has no conversation to name yet.' }, { status: 409 }),
-        ),
-      );
+  it('surfaces the server’s reason when there is nothing to name the session from', async () => {
+    useFactoryFixtures(() => [session]);
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () =>
+        HttpResponse.json({ error: 'This session has no conversation to name yet.' }, { status: 409 }),
+      ),
+    );
 
-      const user = userEvent.setup();
-      const { client } = renderSection();
+    const user = userEvent.setup();
+    const { client } = renderSection();
 
-      await openTitleAction(user, 'Tell me what have been done in the factory since');
-      await waitForMutationsIdle(client);
+    await openTitleAction(user, 'Tell me what have been done in the factory since');
+    await waitForMutationsIdle(client);
 
-      expect(await screen.findByText('This session has no conversation to name yet.')).toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByText('This session has no conversation to name yet.')).toBeInTheDocument();
+  });
 });

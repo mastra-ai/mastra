@@ -1,13 +1,46 @@
+import type { MastraMemory } from './memory';
 import { isThreadTitlePinned } from './types';
-import type { StorageThreadType } from './types';
+import type { MemoryConfigInternal, StorageThreadType } from './types';
 
-/** Whether automatic naming may replace an empty title or a channel placeholder. */
-export function needsThreadTitle(thread: Pick<StorageThreadType, 'title' | 'metadata'>): boolean {
+type ThreadTitleState = Pick<StorageThreadType, 'title' | 'metadata'>;
+
+export function channelPlaceholderTitle(platform: string): string {
+  return `${platform} conversation`;
+}
+
+export function isChannelPlaceholderTitle({ title, metadata }: ThreadTitleState): boolean {
+  const platform = metadata?.channel_platform;
+  return typeof platform === 'string' && title === channelPlaceholderTitle(platform);
+}
+
+export function needsThreadTitle(thread: ThreadTitleState): boolean {
   if (isThreadTitlePinned(thread.metadata)) return false;
-  if (!thread.title) return true;
+  return !thread.title || isChannelPlaceholderTitle(thread);
+}
 
-  // Keep the channel's fallback label until generation succeeds. Require channel
-  // metadata so an ordinary user's title is never mistaken for a placeholder.
-  const platform = thread.metadata?.channel_platform;
-  return typeof platform === 'string' && platform.length > 0 && thread.title === `${platform} conversation`;
+/**
+ * Saves a generated title unless the thread was deleted or named while the model ran.
+ * Never creates the thread, so a deleted thread is not resurrected (#25203).
+ */
+export async function saveGeneratedThreadTitle({
+  memory,
+  threadId,
+  title,
+  memoryConfig,
+}: {
+  memory: MastraMemory;
+  threadId: string;
+  title: string;
+  memoryConfig?: MemoryConfigInternal;
+}): Promise<boolean> {
+  const thread = await memory.getThreadById({ threadId });
+  if (!thread || !needsThreadTitle(thread)) return false;
+  try {
+    await memory.updateThread({ id: threadId, title, memoryConfig });
+    return true;
+  } catch (error) {
+    // A delete can land between the read and the update.
+    if (!(await memory.getThreadById({ threadId }))) return false;
+    throw error;
+  }
 }

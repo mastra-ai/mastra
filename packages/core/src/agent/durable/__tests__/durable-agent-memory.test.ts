@@ -887,7 +887,6 @@ describe('DurableAgent memory edge cases', () => {
         memory: { thread: 'slack-thread', resource: 'slack-session' },
       });
       for await (const _chunk of result.fullStream) {
-        /* Drain the completed turn. */
       }
       if (action === 'renamed') {
         await memory.updateThread({ id: 'slack-thread', title: 'My custom title', metadata: { titlePinned: true } });
@@ -925,7 +924,6 @@ describe('DurableAgent memory edge cases', () => {
         memory: { thread: 'slack-thread', resource: 'slack-session' },
       });
       for await (const _chunk of result.fullStream) {
-        /* Drain the completed turn. */
       }
       await vi.waitFor(async () => {
         expect(await mockMemory.getThreadById({ threadId: 'slack-thread' })).toMatchObject({
