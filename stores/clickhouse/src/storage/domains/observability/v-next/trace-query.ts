@@ -43,8 +43,11 @@ type TraceSelection = {
 
 export const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
-/** Core versions without the field reject it in strict query results, so it is only returned when core knows it. */
-export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
+/**
+ * Core versions without the field reject it in strict query results, so it is only returned when core knows it.
+ * Core before 1.68 has no field registry at all.
+ */
+export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
 
 export const timeToFirstChunkFeatures = timeToFirstChunkSupported
   ? (['trace-query-time-to-first-chunk'] as const)

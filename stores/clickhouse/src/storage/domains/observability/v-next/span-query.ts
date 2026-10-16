@@ -212,14 +212,14 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
   const hydrated = page.flatMap(identity => {
     const row = byIdentity.get(coreStorage.spanQueryIdentityKey(identity));
     if (!row) return []; // The selected record can be deleted between reads.
-    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...metadata } = row;
+    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, timeToFirstChunkMs, ...metadata } = row;
     return [
       {
         ...metadata,
         ...identity,
         durationMs: Number(row.durationMs),
         ...(timeToFirstChunkSupported && {
-          timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+          timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
         }),
       },
     ];
