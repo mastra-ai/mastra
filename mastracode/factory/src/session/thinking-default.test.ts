@@ -45,14 +45,14 @@ describe('resolveFactoryThinkingLevel', () => {
     expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: FACTORY_ID }), deps())).toBe('high');
   });
 
-  it('uses off outside any Factory and when the lookup fails', async () => {
-    expect(await resolveFactoryThinkingLevel(contextFor(undefined), deps())).toBe('off');
-    expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: 'user-1' }), deps())).toBe('off');
+  it('uses medium outside any Factory and when the lookup fails', async () => {
+    expect(await resolveFactoryThinkingLevel(contextFor(undefined), deps())).toBe('medium');
+    expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: 'user-1' }), deps())).toBe('medium');
 
     const failing = deps();
     failing.sourceControl.getBySessionId.mockRejectedValue(new Error('domain not ready'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: 'session-1' }), failing)).toBe('off');
+    expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: 'session-1' }), failing)).toBe('medium');
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -63,13 +63,13 @@ describe('readFactoryThinkingLevel', () => {
     expect(await readFactoryThinkingLevel(deps().projects, FACTORY_ID)).toBe('high');
   });
 
-  it('uses off when the Factory is missing or the lookup fails', async () => {
-    expect(await readFactoryThinkingLevel(deps().projects, 'missing')).toBe('off');
+  it('uses medium when the Factory is missing or the lookup fails', async () => {
+    expect(await readFactoryThinkingLevel(deps().projects, 'missing')).toBe('medium');
 
     const failing = deps();
     failing.projects.getById.mockRejectedValue(new Error('domain not ready'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await readFactoryThinkingLevel(failing.projects, FACTORY_ID)).toBe('off');
+    expect(await readFactoryThinkingLevel(failing.projects, FACTORY_ID)).toBe('medium');
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });

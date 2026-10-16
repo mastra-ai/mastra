@@ -6,7 +6,7 @@ import { queryKeys } from '../api/keys';
 import { fetchFactoryProject, updateFactoryThinkingDefault } from '../ui/domains/workspaces/services/github';
 import type { FactoryProjectPayload } from '../ui/domains/workspaces/services/github';
 
-const DEFAULT_THINKING_LEVEL: ThinkingLevelSetting = 'off';
+const DEFAULT_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 
 /**
  * The Factory's thinking default — what every session and run in it uses until

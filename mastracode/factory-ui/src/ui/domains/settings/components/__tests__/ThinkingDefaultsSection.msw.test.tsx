@@ -31,7 +31,18 @@ describe('BaseThinkingSection', () => {
     renderWithProviders(section);
 
     const base = await screen.findByRole('slider', { name: 'Thinking level' });
+    await waitFor(() => expect(base).toBeEnabled());
     expect(base).toHaveAttribute('aria-valuetext', 'Off');
+  });
+
+  it('shows medium for a Factory without a stored level', async () => {
+    server.use(http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } })));
+
+    renderWithProviders(section);
+
+    const base = await screen.findByRole('slider', { name: 'Thinking level' });
+    await waitFor(() => expect(base).toBeEnabled());
+    expect(base).toHaveAttribute('aria-valuetext', 'Medium');
   });
 
   it('saves the level the drag ended on', async () => {

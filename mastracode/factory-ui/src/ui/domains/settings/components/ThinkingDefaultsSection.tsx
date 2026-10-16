@@ -34,7 +34,7 @@ export function BaseThinkingSection() {
     >
       <ThinkingLevelPicker
         ariaLabel="Thinking level"
-        value={levelQuery.data ?? 'off'}
+        value={levelQuery.data ?? 'medium'}
         disabled={levelQuery.data === undefined}
         onChange={level => update.mutateAsync(level).catch(() => {})}
       />

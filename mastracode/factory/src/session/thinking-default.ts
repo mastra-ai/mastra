@@ -60,7 +60,7 @@ async function readThinkingDefault(
     return (await load())?.defaultThinkingLevel ?? DEFAULT_FACTORY_THINKING_LEVEL;
   } catch (error) {
     // A missed lookup costs reasoning depth, not the run.
-    console.warn('[factory] Could not read the Factory thinking default; using off.', error);
+    console.warn('[factory] Could not read the Factory thinking default; using medium.', error);
     return DEFAULT_FACTORY_THINKING_LEVEL;
   }
 }

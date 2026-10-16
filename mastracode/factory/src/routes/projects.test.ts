@@ -172,7 +172,7 @@ describe('ProjectRoutes', () => {
   it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
-    expect(project.defaultThinkingLevel).toBe('off');
+    expect(project.defaultThinkingLevel).toBe('medium');
     const isOrganizationAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
@@ -196,7 +196,7 @@ describe('ProjectRoutes', () => {
       error: 'forbidden',
       message: 'Organization administrator access is required to change the thinking default.',
     });
-    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('off');
+    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('medium');
 
     isOrganizationAdmin.mockResolvedValue(true);
     expect((await patch({ defaultThinkingLevel: 'enormous' })).status).toBe(400);

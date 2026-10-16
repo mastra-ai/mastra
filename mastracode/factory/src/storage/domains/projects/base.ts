@@ -4,7 +4,7 @@ import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
-export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'off';
+export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
 export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
 /** The single credential scope one session or run resolves from; `hybrid` is never effective. */
