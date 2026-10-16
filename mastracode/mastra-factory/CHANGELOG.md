@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.2.11-alpha.2
+
+### Patch Changes
+
+- Platform sign-ins started from `create-factory` are now attributed to `create-factory`, so new Mastra accounts can be traced back to it. ([#27229](https://github.com/mastra-ai/mastra/pull/27229))
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`36bc322`](https://github.com/mastra-ai/mastra/commit/36bc3222c1c100893eb9f9e13a72c2c8505d0fc4), [`597e62a`](https://github.com/mastra-ai/mastra/commit/597e62a0717499439b6d04a4217652c127b46c4b), [`17dced0`](https://github.com/mastra-ai/mastra/commit/17dced0dbf6144100e81152ced7daca87ffcba4d), [`9034021`](https://github.com/mastra-ai/mastra/commit/903402172c75b4643cc40c40bd2e3d9385e992ba), [`9034021`](https://github.com/mastra-ai/mastra/commit/903402172c75b4643cc40c40bd2e3d9385e992ba)]:
+  - mastra@1.34.3-alpha.2
+
 ## 0.2.11-alpha.1
 
 ### Patch Changes

@@ -1,10 +1,10 @@
 import { join, dirname } from 'node:path';
 import type { IMastraLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
-import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
 import { slash } from '../build/utils';
 import { DepsService } from '../services';
+import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from './find-workspaces';
 
 export type WorkspacePackageInfo = {
   location: string;
