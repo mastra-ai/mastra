@@ -11,7 +11,7 @@ import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
-import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
@@ -19,7 +19,7 @@ import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
-import { RequestContext } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
@@ -1502,12 +1502,14 @@ export class AgentController<TState = {}> {
       : (callerContext ?? new RequestContext());
     const configured = (await agent.getMemory({ requestContext }))?.getMergedThreadConfig().generateTitle;
     const titleConfig = typeof configured === 'object' ? configured : undefined;
+    const overrideModel: DynamicArgument<WidenedMastraModelConfig> | undefined = model;
+    const configuredModel: DynamicArgument<WidenedMastraModelConfig> | undefined = titleConfig?.model;
 
     const title = (
       await agent.generateTitleFromUserMessage({
         messages,
         requestContext,
-        model: model ?? titleConfig?.model,
+        model: overrideModel ?? configuredModel,
         instructions: titleConfig?.instructions,
       })
     )?.trim();
@@ -2601,6 +2603,8 @@ export class AgentController<TState = {}> {
     this.#executionViews.set(controllerContext, executionView);
     requestContext.set('controller', controllerContext);
     if (threadOwnerId !== undefined) requestContext.setRaw(THREAD_OWNER_ID_CONTEXT_KEY, threadOwnerId);
+    if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
 
     return requestContext;
   }

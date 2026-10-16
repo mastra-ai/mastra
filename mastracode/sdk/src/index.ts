@@ -13,6 +13,7 @@ import type {
   AgentControllerMode,
   AgentControllerSubagent,
   AgentControllerRequestContext,
+  BuiltinToolId,
   Session,
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
@@ -30,11 +31,12 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
-import type { InputProcessor, Processor } from '@mastra/core/processors';
+import type { InputProcessor, OutputProcessor, Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
+import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
@@ -55,17 +57,18 @@ import { AgentConnectionsSignalProvider } from './agent-connections/signal-provi
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
 import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
-import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
+import { hasCredentialStoreProvider, withCredentialTenantPreparation } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
-import { planMode } from './agents/modes/plan.js';
+import { createPlanMode } from './agents/modes/plan.js';
 import {
-  createGitRefInstructionReader,
   createGitRefReminderReader,
-  getStaticallyLoadedInstructionPaths,
+  instructionSourcePaths,
+  loadSessionInstructions,
+  sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
@@ -105,6 +108,7 @@ import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
+import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -122,6 +126,8 @@ import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
 import { mastraBrand } from './theme-palette.js';
+import { isThinkingLevelSetting } from './thinking.js';
+import type { ThinkingLevelSetting } from './thinking.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
@@ -177,9 +183,14 @@ const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api
  */
 function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
-): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
+): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string; instructionRoots?: string[] } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | AgentControllerRequestContext<{
+        untrustedCheckout?: boolean;
+        baseRef?: string;
+        projectPath?: string;
+        instructionRoots?: string[];
+      }>
     | undefined;
   return agentControllerContext?.getState();
 }
@@ -275,8 +286,12 @@ export interface MastraCodeConfig {
   cwd?: string;
   /** Home directory for global config discovery. Default: os.homedir() */
   homeDir?: string;
-  /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: AgentControllerMode[];
+  /**
+   * Override modes (model IDs, colors, which modes exist). Default: build/plan/fast.
+   * `false` runs every session as the single Build agent with no mode switching:
+   * threads saved in another mode reopen as Build, and per-mode thinking defaults never apply.
+   */
+  modes?: AgentControllerMode[] | false;
   /** Replace subagent definitions. Default: explore/plan/execute. An empty array disables subagents. */
   subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
@@ -295,8 +310,23 @@ export interface MastraCodeConfig {
   inputProcessors?:
     | InputProcessor[]
     | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
+  /**
+   * Output processor instances appended after Mastra Code's built-in output processors,
+   * or a per-request resolver. They run before the memory layers the Agent appends,
+   * so changes they make to response messages are persisted.
+   */
+  outputProcessors?:
+    | OutputProcessor[]
+    | ((args: { requestContext: RequestContext }) => OutputProcessor[] | Promise<OutputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
+  /**
+   * Agent controller built-in tools (e.g. `submit_plan`, `ask_user`) removed from
+   * every session. Unlike `disabledTools`, which filters Mastra Code's dynamic
+   * tools, this is forwarded to the AgentController. Prompt guidance for a
+   * disabled built-in is omitted so the model is never told to call it.
+   */
+  disableBuiltinTools?: BuiltinToolId[];
   /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
@@ -315,6 +345,15 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /**
+   * Host-owned thinking default for a request without its own level. When set,
+   * it replaces the settings.json defaults (`preferences.thinkingLevel` and the
+   * per-mode defaults); a session's own level still wins. Called on every model
+   * resolution, so a changed default applies to the next request.
+   */
+  resolveDefaultThinkingLevel?: (ctx: {
+    requestContext: RequestContext;
+  }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
@@ -505,6 +544,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
+  const modeless = config?.modes === false;
   // The single session for this process, assigned once `createSession()` runs
   // below. Config callbacks defined before then (e.g. notification stream
   // options) read it lazily through this holder.
@@ -589,6 +629,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     settingsPath: config?.settingsPath,
   });
   const amazonBedrockGateway = createAmazonBedrockGateway();
+  const githubCopilotGateway = createGitHubCopilotGateway();
 
   // Project detection
   const project = detectProject(cwd);
@@ -794,11 +835,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
       : undefined);
   const knowledgeKey = configuredKnowledgeKey ?? 'default';
-  const memory =
-    config?.memory === false
-      ? undefined
-      : (config?.memory ??
-        getDynamicMemory(
+  const dynamicMemory =
+    config?.memory === undefined
+      ? getDynamicMemory(
           storage,
           vector,
           config?.settingsPath,
@@ -806,7 +845,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             disableSettingsOmSeed: config?.disableSettingsOmSeed,
           },
           knowledge,
-        ));
+        )
+      : undefined;
+  const memory =
+    config?.memory === false
+      ? undefined
+      : (config?.memory ??
+        // Keep settled() so shutdown still drains background memory work.
+        (dynamicMemory &&
+          Object.assign(withCredentialTenantPreparation(dynamicMemory), { settled: dynamicMemory.settled })));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =
@@ -1094,25 +1141,52 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       getReader: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
-        return createGitRefReminderReader(state?.projectPath ?? project.rootPath, state.baseRef);
+        const projectPath = state?.projectPath ?? project.rootPath;
+        const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
+        const reader = createGitRefReminderReader(primary!, state.baseRef);
+        if (primary === projectPath) return reader;
+        // The base ref covers the session's own checkout only; the other
+        // checkouts under the working directory are never read off disk.
+        const outsidePrimary = (filePath: string) => {
+          const inProject = path.relative(projectPath, filePath);
+          const inPrimary = path.relative(primary!, filePath);
+          const under = (rel: string) => rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+          return under(inProject) && !under(inPrimary);
+        };
+        return {
+          ...reader,
+          pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
+          isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
+        };
       },
       getIgnoredInstructionPaths: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         const projectPath = state?.projectPath ?? project.rootPath;
-        // On untrusted checkouts the static prompt loads from the base ref,
-        // so compute the statically-loaded paths through the same reader to
-        // keep the dedup consistent.
-        const projectReader =
-          state?.untrustedCheckout === true && typeof state?.baseRef === 'string'
-            ? createGitRefInstructionReader(projectPath, state.baseRef)
-            : undefined;
-        return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
+        // Same sources, through the same readers, as the static prompt, so the
+        // dedup stays consistent on untrusted checkouts and across roots.
+        const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
+        const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
+        const sources = loadSessionInstructions({
+          workingDir: projectPath,
+          instructionRoots: state?.instructionRoots,
+          untrustedCheckout: untrusted,
+          baseRef: untrusted ? state?.baseRef : undefined,
+        });
+        return instructionSourcePaths(sources, roots);
       },
     }),
   ];
 
   // Built-in providers are named so the plugin lane can reserve their ids.
-  const taskSignalProvider = new TaskSignalProvider();
+  const disabledBuiltinTools = new Set<string>(config?.disableBuiltinTools ?? []);
+  const taskSignalProvider: SignalProvider<'task-signals'> = new TaskSignalProvider();
+  // The task tools reach the agent through the signal provider rather than the
+  // controller built-ins, so disabled ones must be filtered here as well.
+  if (disabledBuiltinTools.size > 0) {
+    const taskTools = Object.entries(taskSignalProvider.getTools?.() ?? {});
+    const enabledTaskTools = Object.fromEntries(taskTools.filter(([id]) => !disabledBuiltinTools.has(id)));
+    taskSignalProvider.getTools = () => enabledTaskTools;
+  }
   const agentConnectionsSignalProvider = useCrossAgentSignals
     ? new AgentConnectionsSignalProvider(config?.agentConnections)
     : undefined;
@@ -1175,11 +1249,22 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         coAuthor: config?.coAuthor,
         hasSubconscious,
         hasSubagents: subagents.length > 0,
+        disabledBuiltinTools: config?.disableBuiltinTools,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: ctx => getDynamicModel(ctx, config?.settingsPath),
+    model: withCredentialTenantPreparation(async ctx => {
+      // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
+      const controller = ctx.requestContext.get('controller') as
+        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+        | undefined;
+      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+      return getDynamicModel(ctx, config?.settingsPath, {
+        modeless,
+        defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
+      });
+    }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1251,7 +1336,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // judge model is configured, keeping the goal step a no-op. Bind the same
       // `settingsPath` used above so the judge model and `maxRuns` come from one
       // config (a custom settings file would otherwise diverge).
-      judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
+      judge: withCredentialTenantPreparation(ctx => getGoalJudgeModel(ctx, config?.settingsPath)),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
       maxSteps: 1000,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
@@ -1279,13 +1364,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // Like the input lane, plugin processors sit last — after the layers they
     // customize, before the channel and memory layers the Agent appends.
-    outputProcessors: () => [
-      // Anthropic cyber refusals finish a step instead of throwing, so they are
-      // handled here; OpenAI's throw and are handled in the error lane below.
-      new CyberRefusalHandler(),
-      ...readPluginProcessors().output.map(entry => entry.value),
-      ...(pluginSignalLane?.getOutputProcessors() ?? []),
-    ],
+    outputProcessors: ({ requestContext }) => {
+      const resolveProcessors = (configured: OutputProcessor[]) => [
+        // Anthropic cyber refusals finish a step instead of throwing, so they are
+        // handled here; OpenAI's throw and are handled in the error lane below.
+        new CyberRefusalHandler(),
+        ...configured,
+        ...readPluginProcessors().output.map(entry => entry.value),
+        ...(pluginSignalLane?.getOutputProcessors() ?? []),
+      ];
+      if (typeof config?.outputProcessors !== 'function') return resolveProcessors(config?.outputProcessors ?? []);
+      const configured = config.outputProcessors({ requestContext });
+      return configured instanceof Promise ? configured.then(resolveProcessors) : resolveProcessors(configured);
+    },
     errorProcessors: [
       // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
       // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
@@ -1331,6 +1422,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // discards retry:true, so the processor no-ops instead of rotating.
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
         settingsPath: config?.settingsPath,
+        modeless,
+        resolveDefaultThinkingLevel: config?.resolveDefaultThinkingLevel,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive
@@ -1342,6 +1435,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // const defaultSubAgents: Array<AgentControllerSubagent> = [];
   // const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
+  const planMode = createPlanMode(!disabledBuiltinTools.has('submit_plan'));
   const defaultModes: AgentControllerMode[] = [
     {
       ...buildMode,
@@ -1440,7 +1534,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
   const modes = addPluginToolsToModeAllowlists(
-    applyModeDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    applyModeDefaultsToModes(
+      config?.modes === false ? [buildMode] : (config?.modes ?? defaultModes),
+      effectiveDefaults,
+    ),
     Object.keys(pluginTools),
   );
   const defaultModeId =
@@ -1549,6 +1646,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     agent: codeAgent,
     subagents,
+    ...(config?.disableBuiltinTools?.length ? { disableBuiltinTools: config.disableBuiltinTools } : {}),
     // Subagents resolve like the main agent: tenant credentials and
     // request-scoped custom providers come from the calling run's context.
     // Ids the model router would hand to another registered gateway (by
@@ -1557,11 +1655,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       routesToOtherGateway(
         modelId,
         Object.values(controller.getMastra()?.listGateways() ?? {}),
-        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, 'models.dev']),
+        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
       )
         ? modelId
         : resolveModel(modelId, { requestContext }),
-    gateways: [amazonBedrockGateway, mastraCodeGateway],
+    gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,

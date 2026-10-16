@@ -34,6 +34,7 @@ interface StreamStepOptions<OUTPUT = undefined> {
   };
   agentId: string;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
@@ -67,6 +68,7 @@ export function createStreamStep<OUTPUT = undefined>({
   resumeContext,
   agentId,
   agentVersionId,
+  resolvedScopes,
   agentName,
   toolCallId,
   methodType,
@@ -143,6 +145,7 @@ export function createStreamStep<OUTPUT = undefined>({
         },
         agentId,
         agentVersionId,
+        resolvedScopes,
         agentName,
         toolCallId,
         methodType: modelMethodType,

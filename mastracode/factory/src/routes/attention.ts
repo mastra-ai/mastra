@@ -29,7 +29,6 @@ import {
   DecisionAttentionProvider,
   failedDecisionAttentionSpec,
   MentionAttentionProvider,
-  SupervisorFindingAttentionProvider,
 } from './attention-providers.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 
@@ -168,7 +167,6 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
   const providers: AttentionProvider[] = [
     new DecisionAttentionProvider({ workItems, boards }, failedDecisionAttentionSpec),
     new DecisionAttentionProvider({ workItems, boards }, proposedDecisionAttentionSpec),
-    new SupervisorFindingAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),
     new ParkedRunAttentionProvider({ workItems, liveSessions }),

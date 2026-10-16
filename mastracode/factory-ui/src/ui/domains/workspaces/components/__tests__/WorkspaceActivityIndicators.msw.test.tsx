@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 import {
   createSessionHoverDetailsFixtures,
   factoryId,
@@ -26,7 +26,7 @@ function stubWith(activeSessionIds: string[]) {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
       HttpResponse.json(fixtures.connectionsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json(fixtures.sessionsResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${workSessionId}`, () =>
@@ -62,7 +62,7 @@ function renderAt(path: string, entry: string) {
           path={path}
           element={
             <ChatSessionConfigProvider>
-              <WorkspacesSection />
+              <SessionsSection />
             </ChatSessionConfigProvider>
           }
         />

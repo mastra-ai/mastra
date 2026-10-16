@@ -2863,6 +2863,11 @@ export interface ListDatasetsFilters extends DatasetTenancyFilters {
    */
   targetIds?: string[];
   /**
+   * Only return datasets with these IDs. Unlike `targetIds`, an empty array
+   * matches no datasets.
+   */
+  datasetIds?: string[];
+  /**
    * Substring match on dataset `name`, case-insensitive.
    */
   name?: string;

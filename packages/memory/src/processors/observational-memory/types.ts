@@ -196,6 +196,19 @@ export interface ObservationConfig {
   bufferOnIdle?: boolean;
 
   /**
+   * Observe pending messages and retry once when the model provider rejects a request for
+   * exceeding its context window.
+   *
+   * A provider can count more tokens than OM's estimate (attachments, formatting, a smaller model
+   * window), so a request can overflow before the observation threshold is reached. With this
+   * enabled, OM activates buffered observations, observes everything still pending regardless of
+   * the threshold, and retries the request with the smaller context.
+   *
+   * @default true
+   */
+  observeOnContextOverflow?: boolean;
+
+  /**
    * Controls how many raw message tokens to retain after activation.
    *
    * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
@@ -1077,6 +1090,14 @@ export interface ObservationalMemoryConfig {
   autoModels?: Record<string, string>;
 
   /**
+   * Whether the current request can authenticate with a provider. `'auto'` only prefers Gemini
+   * when this returns `true` for `'google'`. Use this when credentials are scoped per request
+   * (for example per tenant) rather than read from the server's environment.
+   * Defaults to checking `GOOGLE_GENERATIVE_AI_API_KEY`.
+   */
+  canUseProvider?: (providerId: string, context: { requestContext?: RequestContext }) => boolean;
+
+  /**
    * Resolves the model ID `'auto'` picks into a model. Use this when the main agent's models
    * come from your own resolver (custom credentials, gateways, or providers) so observer and
    * reflector calls use the same routing. Receives a concrete ID, never `'auto'`.
@@ -1226,6 +1247,8 @@ export interface ResolvedObservationConfig {
   bufferTokens?: number;
   /** Whether to buffer unobserved messages at the end of an idle turn */
   bufferOnIdle: boolean;
+  /** Whether to observe pending messages and retry when the provider rejects a request for exceeding its context window */
+  observeOnContextOverflow: boolean;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */

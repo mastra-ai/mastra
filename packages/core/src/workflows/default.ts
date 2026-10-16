@@ -51,6 +51,7 @@ import type {
   StepTripwireInfo,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  WorkflowStateTracingContext,
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
@@ -1026,14 +1027,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // never stored, and the resumed span's exported children would inherit it and
         // land as orphans. Undefined when nothing in the chain is exportable, which
         // correctly makes those children trace roots instead.
-        const persistTracingContext =
-          result.status === 'suspended' && workflowSpan
-            ? {
-                traceId: workflowSpan.traceId,
-                spanId: resolveExportedSpanId(workflowSpan),
-                parentSpanId: workflowSpan.getParentSpanId(),
-              }
-            : {};
+        let persistTracingContext: WorkflowStateTracingContext = {};
+        if (result.status === 'suspended') {
+          if (this.options.resumeTracingContext) {
+            persistTracingContext = this.options.resumeTracingContext;
+          } else if (workflowSpan) {
+            persistTracingContext = {
+              traceId: workflowSpan.traceId,
+              spanId: resolveExportedSpanId(workflowSpan),
+              parentSpanId: workflowSpan.getParentSpanId(),
+            };
+          }
+        }
 
         await this.persistStepUpdate({
           workflowId,

@@ -1,6 +1,30 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deriveLocalWorkdir, repoDirUnder, resolveContainedLocalWorkdir, sanitizeSegment } from './workdir.js';
+import {
+  deriveLocalWorkdir,
+  repoDirUnder,
+  repositoryDirectoryName,
+  resolveContainedLocalWorkdir,
+  sanitizeSegment,
+} from './workdir.js';
+
+describe('repositoryDirectoryName', () => {
+  // The same fixtures the platform template's private `repoDirName` is
+  // tested with (`workspaces/platform-workspace/src/repo-template.ts`):
+  // the boot hook's per-repo marker path must land on the directory the
+  // template cloned into, so the two rules have to agree for every slug.
+  it('derives the directory the repo templates clone into', () => {
+    expect(repositoryDirectoryName('acme/widgets')).toBe('widgets');
+    expect(repositoryDirectoryName('acme/my.repo')).toBe('my.repo');
+    expect(repositoryDirectoryName('acme/odd name')).toBe('odd-name');
+    expect(repositoryDirectoryName('acme/.hidden')).toBe('hidden');
+    expect(repositoryDirectoryName('CalebBarnes/mastra-channels-serverless-test')).toBe(
+      'mastra-channels-serverless-test',
+    );
+    expect(repositoryDirectoryName('group/sub/app')).toBe('app');
+    expect(repositoryDirectoryName('no-slash')).toBe('repo');
+  });
+});
 
 describe('sanitizeSegment', () => {
   it('keeps safe characters and replaces separators and traversal', () => {

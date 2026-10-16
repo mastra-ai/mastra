@@ -4,9 +4,10 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { DefaultModelResponse } from '../api/types';
 
-export function useDefaultModelQuery() {
+export function useDefaultModelQuery({ enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
   return useQuery({
+    enabled,
     queryKey: queryKeys.defaultModel(),
     queryFn: () => client.get<DefaultModelResponse>('/web/config/default-model'),
   });
@@ -18,7 +19,11 @@ export function useSetDefaultModel() {
   return useMutation({
     mutationFn: (modelId: string) =>
       client.put<{ ok: true; modelId: string }>('/web/config/default-model', { modelId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.defaultModel() }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.defaultModel() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+      ]),
   });
 }
 
@@ -27,6 +32,10 @@ export function useClearDefaultModel() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => client.del<{ ok: true; modelId: null }>('/web/config/default-model'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.defaultModel() }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.defaultModel() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+      ]),
   });
 }

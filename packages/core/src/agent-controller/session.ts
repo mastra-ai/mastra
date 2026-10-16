@@ -899,14 +899,21 @@ export class SessionThread {
   }
 
   /**
-   * Transfer the active thread to a new owner.
+   * Transfer a thread to a new owner. Defaults to the active thread; pass
+   * `threadId` to transfer another thread of this resource without switching to it.
    *
    * Transfers are serialized within this process. Hosts needing strict durable
    * compare-and-set semantics should commit that change in their own store before
    * mirroring it here.
    */
-  async transferOwnership({ toOwnerId }: { toOwnerId: string }): Promise<void> {
-    const threadId = this.requireId();
+  async transferOwnership({
+    toOwnerId,
+    threadId: requestedThreadId,
+  }: {
+    toOwnerId: string;
+    threadId?: string;
+  }): Promise<void> {
+    const threadId = requestedThreadId ?? this.requireId();
 
     await withThreadOwnershipMutex(threadId, async () => {
       const store = this.#store;
@@ -5341,18 +5348,56 @@ export class Session<TState = unknown> {
     }
   }
 
+  /**
+   * Queue a typed signal for the next run, or send it immediately when this
+   * session is idle. Shares the Agent runtime queue used by `queueMessage()`.
+   * Unlike `queueMessage()`, no author is inferred from the request context:
+   * set `signal.author` when the signal is human-authored.
+   */
+  async queueSignal(
+    signal: AgentSignalInput,
+    {
+      tracingContext,
+      tracingOptions,
+      requestContext: requestContextInput,
+    }: {
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      requestContext?: RequestContext;
+    } = {},
+  ): Promise<void> {
+    await this.machinery.authorizeExecute?.(requestContextInput);
+    const wasActive = this.stream.isActive();
+    const target = await this.prepareMessageTarget({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
+      // See queueMessage: a queued run must not inherit the active run's abort signal.
+      abortSignal: wasActive ? new AbortController().signal : undefined,
+    });
+    const result = this.machinery.getAgent().queueSignal(signal, target);
+
+    if (wasActive) {
+      await result.accepted;
+    } else {
+      await this.waitForAcceptedRunCompletion(result.accepted, { waitForDelivery: false });
+    }
+  }
+
   /** Abort the current run and send steering input without clearing queued follow-ups. */
   async steer({
     content,
+    files,
     requestContext,
     author,
   }: {
     content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
     requestContext?: RequestContext;
     author?: MessageAuthor;
   }): Promise<void> {
     this.abort();
-    await this.sendMessage({ content, requestContext, author });
+    await this.sendMessage({ content, files, requestContext, author });
   }
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
@@ -5390,8 +5435,16 @@ export class Session<TState = unknown> {
   }
 
   /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
-  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
+  async followUp({
+    content,
+    files,
+    requestContext,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    if (!this.run.isRunning()) return this.sendMessage({ content, files, requestContext });
     await this.machinery.authorizeExecute?.(requestContext);
     const threadId = this.thread.getId();
     if (!threadId) return;
@@ -5411,7 +5464,7 @@ export class Session<TState = unknown> {
       this.#preparingFollowUps.delete(operation);
       await agent.queueMessage(
         {
-          contents: this.createMessageInput({ content }),
+          contents: this.createMessageInput({ content, files }),
           providerOptions: withMessageAuthor(undefined, readMessageAuthor(requestContext)),
         },
         {

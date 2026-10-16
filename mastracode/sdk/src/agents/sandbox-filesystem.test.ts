@@ -9,16 +9,22 @@ import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem.js'
 class FakeSandbox implements SandboxExec {
   readonly id = 'fake-sandbox';
   readonly calls: string[] = [];
+  readonly options: Array<{ timeout?: number; maxRetainedBytes?: number } | undefined> = [];
   private responder: (script: string) => SandboxCommandResult;
 
   constructor(responder?: (script: string) => SandboxCommandResult) {
     this.responder = responder ?? (() => ({ exitCode: 0, stdout: '', stderr: '' }));
   }
 
-  async executeCommand(command: string, args?: string[]): Promise<SandboxCommandResult> {
+  async executeCommand(
+    command: string,
+    args?: string[],
+    options?: { timeout?: number; maxRetainedBytes?: number },
+  ): Promise<SandboxCommandResult> {
     // The filesystem always shells via `sh -c <script>`.
     const script = command === 'sh' && args?.[0] === '-c' ? args[1]! : [command, ...(args ?? [])].join(' ');
     this.calls.push(script);
+    this.options.push(options);
     return this.responder(script);
   }
 }
@@ -61,6 +67,22 @@ describe('SandboxFilesystem', () => {
 
     expect(result).toBe(content);
     expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/src/index.ts'`))).toBe(true);
+  });
+
+  it('asks the sandbox to retain all command output', async () => {
+    // Sandboxes keep only the newest 1 MiB of output by default; a base64 file
+    // read or a long listing must not lose its head.
+    const { sandbox, fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/big.bin`);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await fs.readFile('/big.bin');
+
+    expect(sandbox.options.length).toBeGreaterThan(0);
+    for (const options of sandbox.options) {
+      expect(options?.maxRetainedBytes).toBe(Infinity);
+    }
   });
 
   it('rejects a symlink whose realpath escapes the workspace root', async () => {

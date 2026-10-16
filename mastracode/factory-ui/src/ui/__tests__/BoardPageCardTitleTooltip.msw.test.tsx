@@ -118,9 +118,7 @@ function stubBoardEndpoints(decisions: FactoryDecisionSummary[] = []) {
         nextPage: null,
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
 }
 
