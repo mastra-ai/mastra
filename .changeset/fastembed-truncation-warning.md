@@ -2,4 +2,6 @@
 '@mastra/fastembed': patch
 ---
 
-FastEmbed embedding models now return a warning when inputs exceed the model's 512-token window and are truncated. Previously the text past the limit was silently dropped from the embedding, so long chunks could not be found by their later content.
+Added a truncation warning to the FastEmbed AI SDK v3 models.
+
+The models now warn when an input exceeds the 512-token window. Before, FastEmbed dropped the extra text without notice. Split long text into smaller chunks to embed all of it.
