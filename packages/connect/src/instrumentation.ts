@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { resolveCurrentSpan, SpanType } from '@mastra/core/observability';
 import type { AnySpan, Span } from '@mastra/core/observability';
 
@@ -70,6 +72,12 @@ function safeDecode(segment: string): string {
   }
 }
 
+const untraced = new AsyncLocalStorage<true>();
+
+export function runUntraced<T>(fn: () => T): T {
+  return untraced.run(true, fn);
+}
+
 /**
  * Starts a GENERIC child span for an outbound connect HTTP call, or returns
  * `undefined` when no ambient span is active. Span creation failures are
@@ -77,6 +85,7 @@ function safeDecode(segment: string): string {
  */
 export function startPlatformCallSpan(descriptor: PlatformCallDescriptor): Span<SpanType.GENERIC> | undefined {
   let parent: AnySpan | undefined;
+  if (untraced.getStore()) return undefined;
   try {
     parent = resolveCurrentSpan();
     if (!parent) return undefined;
