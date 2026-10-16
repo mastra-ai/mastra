@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v4';
 
 import { defineEvent } from '../../server/events';
+import type { MCPServerWebhookOptions } from '../../server/events';
 import { MCPServer } from '../../server/server';
 
 /** Server-suggested and client-floor poll intervals, kept small so poll tests finish quickly. */
@@ -20,8 +21,9 @@ interface Build {
  * - `build.finished` has a `poll` source reading a log that only `recordBuild` appends to.
  *
  * Nothing emits on a timer: every occurrence is caused by a tool call or a direct call from the test.
+ * Pass `webhook` to also serve `ticket.created` over webhook delivery.
  */
-export function createEventsServer() {
+export function createEventsServer(options: { webhook?: MCPServerWebhookOptions } = {}) {
   const builds: Build[] = [];
   let server: MCPServer;
 
@@ -71,6 +73,7 @@ export function createEventsServer() {
         },
       }),
     },
+    ...(options.webhook ? { eventsOptions: { webhook: options.webhook } } : {}),
   });
 
   return { server, recordBuild };
