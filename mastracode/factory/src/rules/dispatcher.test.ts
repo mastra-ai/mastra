@@ -1,3 +1,4 @@
+import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
@@ -1275,6 +1276,7 @@ describe('FactoryDecisionDispatcher', () => {
         type: 'reactive',
         tagName: 'skill',
         attributes: { name: 'understand-issue' },
+        escapeContents: false,
         contents: expect.stringMatching(/^Follow the skill\.[\s\S]*ARGUMENTS: Issue 42$/),
       },
       { requestContext: expect.anything(), requireDelivery: true },
@@ -1749,7 +1751,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       author: { kind: 'user', id: 'user-2', displayName: 'Bob' },
-      body: 'ship it behind the flag',
+      body: 'ship it behind the flag && run `pnpm test 2>&1`',
     });
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession();
@@ -1773,6 +1775,13 @@ describe('FactoryDecisionDispatcher', () => {
       }),
       expect.anything(),
     );
+    // The model sees the skill and feed as written, the same as TUI `/skill`.
+    const kickoff = session.sendSignal.mock.calls[0]![0];
+    const modelText = createSignal(kickoff).toLLMMessage().content;
+    expect(modelText).toMatch(/^<skill name="understand-issue">Follow the skill\./);
+    expect(modelText).toContain('\n\n<work-item-feed>\n');
+    expect(modelText).toContain('ship it behind the flag && run `pnpm test 2>&1`');
+    expect(modelText).toMatch(/<\/work-item-feed><\/skill>$/);
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 

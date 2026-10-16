@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { MessageList } from './message-list';
 import type { CreatedAgentSignal } from './signals';
 import {
   createSignal,
@@ -147,5 +148,95 @@ describe('signal attribute rendering', () => {
     expect(fresh.toLLMMessage().content).toBe(
       '<user attempt="1" expectsTerminal="true" messageId="m1" name="jane" turnId="t1" userId="u1">hello</user>',
     );
+  });
+});
+
+describe('signal content escaping (escapeContents)', () => {
+  const contents = 'Run `pnpm build && pnpm test 2>&1` and open ?a=1&b=2.\n\n<work-item-feed>\nfeed\n</work-item-feed>';
+  const skill = { type: 'reactive', tagName: 'skill', attributes: { name: 'triage' }, contents } as const;
+
+  it('escapes contents by default', () => {
+    expect(createSignal(skill).toLLMMessage().content).toBe(
+      '<skill name="triage">Run `pnpm build &amp;&amp; pnpm test 2&gt;&amp;1` and open ?a=1&amp;b=2.\n\n&lt;work-item-feed&gt;\nfeed\n&lt;/work-item-feed&gt;</skill>',
+    );
+  });
+
+  it('renders contents as written when escapeContents is false', () => {
+    expect(createSignal({ ...skill, escapeContents: false }).toLLMMessage().content).toBe(
+      `<skill name="triage">${contents}</skill>`,
+    );
+  });
+
+  it('still escapes the closing tag so contents cannot end the signal early', () => {
+    const content = createSignal({
+      ...skill,
+      escapeContents: false,
+      contents: 'before </skill> after <skill>',
+    }).toLLMMessage().content;
+    expect(content).toBe('<skill name="triage">before &lt;/skill&gt; after <skill></skill>');
+  });
+
+  it('still escapes attributes when escapeContents is false', () => {
+    const content = createSignal({
+      ...skill,
+      escapeContents: false,
+      attributes: { name: 'a"&<b' },
+      contents: 'x',
+    }).toLLMMessage().content;
+    expect(content).toBe('<skill name="a&quot;&amp;&lt;b">x</skill>');
+  });
+
+  it('applies to the inline marker for multimodal contents', () => {
+    const message = createSignal({
+      ...skill,
+      escapeContents: false,
+      contents: [
+        { type: 'text', text: 'a && b' },
+        { type: 'file', data: 'aGVsbG8=', mediaType: 'text/plain' },
+      ],
+    }).toLLMMessage();
+    expect(message.content).toEqual([
+      { type: 'text', text: '<skill name="triage">a && b</skill>' },
+      expect.objectContaining({ type: 'file' }),
+    ]);
+  });
+
+  it('persists the opt-out and replays it from storage', () => {
+    const fresh = createSignal({ ...skill, escapeContents: false });
+    const dbMessage = fresh.toDBMessage();
+
+    expect(dbMessage.content.metadata?.signal).toMatchObject({ escapeContents: false });
+    expect(mastraDBMessageToSignal(dbMessage).toLLMMessage()).toEqual(fresh.toLLMMessage());
+  });
+
+  it('does not persist the flag for default signals', () => {
+    const dbMessage = createSignal({ ...skill, escapeContents: true }).toDBMessage();
+    expect(dbMessage.content.metadata?.signal).not.toHaveProperty('escapeContents');
+    expect(mastraDBMessageToSignal(dbMessage).escapeContents).toBeUndefined();
+  });
+
+  it('round-trips the opt-out through the data part', () => {
+    const fresh = createSignal({ ...skill, escapeContents: false });
+    const part = fresh.toDataPart();
+
+    expect(part.data.escapeContents).toBe(false);
+    expect(dataPartToSignal(part).toLLMMessage()).toEqual(fresh.toLLMMessage());
+  });
+
+  it('keeps the opt-out when the signal is added to a message list and replayed', () => {
+    const list = new MessageList({ threadId: 't1', resourceId: 'r1' });
+    list.add(createSignal({ ...skill, escapeContents: false }), 'input');
+
+    const stored = list.get.all.db().at(-1)!;
+    expect(stored.content.metadata?.signal).toMatchObject({ escapeContents: false });
+
+    const replayed = new MessageList({ threadId: 't1', resourceId: 'r1' });
+    replayed.add(stored, 'memory');
+    expect(replayed.get.all.aiV5.model()).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: [expect.objectContaining({ type: 'text', text: `<skill name="triage">${contents}</skill>` })],
+      }),
+    ]);
   });
 });
