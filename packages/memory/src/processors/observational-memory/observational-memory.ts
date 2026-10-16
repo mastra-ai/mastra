@@ -4235,10 +4235,13 @@ ${formattedMessages}
 
         const unobservedMessages = messages
           ? this.getUnobservedMessages(messages, freshRecord)
-          : await this.loadMessagesFromStorage(
-              threadId,
-              resourceId,
-              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+          : this.getUnobservedMessages(
+              await this.loadMessagesFromStorage(
+                threadId,
+                resourceId,
+                freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+              ),
+              freshRecord,
             );
 
         if (opts.force) {
