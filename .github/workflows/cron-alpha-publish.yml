@@ -34,7 +34,7 @@ jobs:
       - name: Post to Slack
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          # The bot must be a member of this channel.
+          # #eng-maintainers-club; the bot must be a member of this channel.
           SLACK_CHANNEL: 'C08F5FH0KAM'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
