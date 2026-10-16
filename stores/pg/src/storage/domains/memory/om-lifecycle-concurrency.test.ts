@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { createObservationalMemoryConcurrencyTests } from '@internal/storage-test-utils';
+import {
+  createObservationalMemoryConcurrencyTests,
+  createObservationalMemoryOperationClaimTests,
+} from '@internal/storage-test-utils';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -21,6 +24,24 @@ createObservationalMemoryConcurrencyTests({
   label: 'PostgreSQL (two pools)',
   createStores: async () => {
     const schemaName = newSchemaName('om_life');
+    const { stores, a, b } = await createStorePair(schemaName);
+    return {
+      a,
+      b,
+      cleanup: async () => {
+        await Promise.all(stores.map(store => store.close().catch(() => {})));
+        const pool = new Pool({ connectionString });
+        await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        await pool.end();
+      },
+    };
+  },
+});
+
+createObservationalMemoryOperationClaimTests({
+  label: 'PostgreSQL (two pools)',
+  createStores: async () => {
+    const schemaName = newSchemaName('om_claims');
     const { stores, a, b } = await createStorePair(schemaName);
     return {
       a,
