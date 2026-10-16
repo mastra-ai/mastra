@@ -71,6 +71,9 @@ export interface EventsWebhookSetup {
  * - `MCP_EVENTS_BUFFER_OVERFLOW` – the consumer fell `maxBufferedEvents` behind and the oldest unread occurrences were dropped; the next one is flagged `truncated`.
  * - `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` – the server reports that it cannot deliver to the
  *   webhook URL (`details.lastError`, `details.active`). Refreshing resumes a suspended subscription.
+ * - `MCP_EVENTS_WEBHOOK_UNAVAILABLE` – the server rejected webhook delivery (`details.code`, e.g. an
+ *   unauthenticated connection), so a subscription that did not force a mode fell back to
+ *   `details.fallback`. Reported once, to the first `onError` handler.
  *
  * @experimental SEP-3415 is a draft; this API may change.
  */

@@ -221,6 +221,35 @@ describe('webhookDriver', () => {
     expect(port.subscribeCalls).toHaveLength(1);
   });
 
+  it('shares one server subscription between same-key subscriptions and unsubscribes after the last cancel', async () => {
+    const { port, start, post } = setup();
+    port.queueSubscribe(granted(), granted({ id: 'sub_2' }));
+    const a = await start({ repo: 'mastra' });
+    const b = await start({ repo: 'mastra' });
+    expect(port.subscribeCalls).toHaveLength(1);
+    expect(b.cursor).toBe('c0');
+
+    expect((await post('sub_1', { ...occurrence('e1'), cursor: 'c1' })).status).toBe(200);
+    expect((await a[Symbol.asyncIterator]().next()).value).toMatchObject({ eventId: 'e1' });
+    expect((await b[Symbol.asyncIterator]().next()).value).toMatchObject({ eventId: 'e1' });
+
+    await a.cancel();
+    expect(port.unsubscribeCalls).toHaveLength(0);
+    expect((await post('sub_1', { ...occurrence('e2'), cursor: 'c2' })).status).toBe(200);
+    expect((await b[Symbol.asyncIterator]().next()).value).toMatchObject({ eventId: 'e2' });
+    expect(b.cursor).toBe('c2');
+
+    await b.cancel();
+    expect(port.unsubscribeCalls).toEqual([{ name: 'test.event', arguments: { repo: 'mastra' }, delivery: { url: URL } }]);
+    expect((await post('sub_1', { ...occurrence('e3'), cursor: 'c3' })).status).not.toBe(200);
+
+    // Different arguments are a different server subscription.
+    const other = await start({ repo: 'other' });
+    expect(port.subscribeCalls).toHaveLength(2);
+    await other.cancel();
+    expect(port.unsubscribeCalls).toHaveLength(2);
+  });
+
   it('fails when the client has no webhook settings', async () => {
     const port = new FakePort();
     await expect(

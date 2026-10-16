@@ -1790,7 +1790,7 @@ When no other message has been sent for `heartbeatIntervalMs`, the stream sends 
     type: 'MCPServerWebhookOptions',
     isOptional: true,
     description:
-      'Enables [webhook delivery](#webhook-delivery) for event types without a `poll` source. Without it, the server does not advertise `webhook` or answer `events/subscribe`.',
+      "Enables [webhook delivery](#webhook-delivery) for event types without a `poll` source. Without it, the server doesn't advertise `webhook` or answer `events/subscribe`.",
   },
 ]}
 />
@@ -1839,7 +1839,7 @@ The server enforces these rules:
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Grants `ttlMs: null` requests a subscription that never expires. Otherwise they get `ttl.maxMs`. Only enable it with a durable `store`, because clients with no-expiry subscriptions do not need to refresh after a server restart.',
+      "Grants `ttlMs: null` requests a subscription that never expires. Otherwise they get `ttl.maxMs`. Only enable it with a durable `store`, because clients with no-expiry subscriptions don't need to refresh after a server restart.",
   },
   {
     name: 'store',
@@ -1881,7 +1881,7 @@ The server enforces these rules:
     type: '{ maxAttempts?: number; initialDelayMs?: number; maxDelayMs?: number; maxWindowMs?: number }',
     isOptional: true,
     description:
-      'Retry policy for each occurrence. Defaults to 5 attempts, a 1 second initial delay, a 5 minute maximum delay, and a 15 minute window. Time spent suspended does not count against the window.',
+      "Retry policy for each occurrence. Defaults to 5 attempts, a 1 second initial delay, a 5 minute maximum delay, and a 15 minute window. Time spent suspended doesn't count against the window.",
   },
   {
     name: 'suspend',

@@ -986,7 +986,7 @@ The client picks the first mode the event offers in this order: `webhook` (only 
     type: "'webhook' | 'push' | 'poll'",
     isOptional: true,
     description:
-      'Forces a delivery mode. When the event does not offer it, or for `webhook` without client `webhook` settings, `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED` and `error.cause.id` is `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE` or `MCP_EVENTS_WEBHOOK_NOT_CONFIGURED`.',
+      "Forces a delivery mode. When the event doesn't offer it, or for `webhook` without client `webhook` settings, `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED` and `error.cause.id` is `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE` or `MCP_EVENTS_WEBHOOK_NOT_CONFIGURED`.",
   },
   {
     name: 'cursor',
@@ -1152,6 +1152,10 @@ export const mastra = new Mastra({
 The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
 
 Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
+
+Webhook delivery needs an authenticated HTTP connection to the server, because the server ties each webhook subscription to the caller. Over stdio, or over HTTP without authentication, the server rejects `events/subscribe`. A subscription that didn't force a mode then falls back to `push` or `poll`, and the first `onError` handler receives `MCP_EVENTS_WEBHOOK_UNAVAILABLE` with the rejection `code` and the `fallback` mode in its details. Forcing `delivery: 'webhook'` rejects instead.
+
+Subscriptions on one server with the same event name and arguments share a single server-side webhook subscription. Each one gets every occurrence through its own iterator, and the client sends `events/unsubscribe` only when the last of them is cancelled.
 
 ## Answering input requests
 

@@ -1,4 +1,7 @@
+import { MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
+import { ProtocolError } from '@modelcontextprotocol/client';
+import { EVENTS_ERROR_CODES } from '../../shared/events';
 import type { EventDescriptor } from '../../shared/events';
 import type { InternalMastraMCPClient } from '../client';
 import { eventsError } from '../events/errors';
@@ -16,6 +19,13 @@ const DRIVERS = { webhook: webhookDriver, push: pushDriver, poll: pollDriver } s
 
 /** Upper bound on `events/list` pages followed, so a server cannot page a client forever. */
 const MAX_LIST_PAGES = 100;
+
+/** The JSON-RPC error code a subscription start was rejected with, if any. */
+function rejectionCode(error: unknown): number | undefined {
+  if (error instanceof ProtocolError) return error.code;
+  if (error instanceof MastraError) return rejectionCode(error.cause);
+  return undefined;
+}
 
 interface EventClientActionsConfig {
   client: InternalMastraMCPClient;
@@ -88,19 +98,33 @@ export class EventClientActions {
   ): Promise<MCPEventSubscription> {
     this.assertSupported();
     const descriptor = await this.findDescriptor(name);
-    const mode = selectDeliveryMode(
-      descriptor.delivery,
-      options?.delivery,
-      { serverName: this.client.name, eventName: name },
-      { webhook: this.client.webhook !== undefined },
-    );
+    const details = { serverName: this.client.name, eventName: name };
+    const webhook = this.client.webhook !== undefined;
+    const mode = selectDeliveryMode(descriptor.delivery, options?.delivery, details, { webhook });
     this.logger.debug(`[${this.client.name}] Subscribing to event '${name}' via ${mode}`);
-    return this.client.startEventSubscription({
-      name,
-      arguments: args,
-      driver: DRIVERS[mode],
-      options,
-    });
+    const start = (selected: MCPEventDeliveryMode, notice?: MastraError) =>
+      this.client.startEventSubscription({ name, arguments: args, driver: DRIVERS[selected], options, notice });
+    if (mode !== 'webhook' || options?.delivery) return start(mode);
+
+    try {
+      return await start(mode);
+    } catch (error) {
+      // Webhook needs an authenticated HTTP connection; without one the server answers Forbidden
+      // or Unsupported, and a default subscription falls back to the next mode instead of failing.
+      const code = rejectionCode(error);
+      if (code !== EVENTS_ERROR_CODES.Forbidden && code !== EVENTS_ERROR_CODES.Unsupported) throw error;
+      const fallback = selectDeliveryMode(descriptor.delivery, undefined, details);
+      this.logger.debug(`[${this.client.name}] Webhook subscribe to '${name}' rejected (${code}); using ${fallback}`);
+      return start(
+        fallback,
+        eventsError(
+          'MCP_EVENTS_WEBHOOK_UNAVAILABLE',
+          `Server '${this.client.name}' rejected webhook delivery for '${name}' (code ${code}); using ${fallback} delivery`,
+          { ...details, code, fallback },
+          error,
+        ),
+      );
+    }
   }
 
   /**
