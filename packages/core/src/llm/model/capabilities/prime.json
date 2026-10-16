@@ -9,6 +9,7 @@
     "anthropic/claude-opus-5.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
+    "anthropic/claude-sonnet-5.5",
     "deepseek/deepseek-v4.1-flash",
     "google/gemini-3-flash-preview",
     "google/gemini-3.1-pro-preview",
@@ -31,7 +32,6 @@
     "openai/gpt-5-nano",
     "openai/gpt-5.1",
     "openai/gpt-5.2",
-    "openai/gpt-5.2-pro",
     "openai/gpt-5.3-codex",
     "openai/gpt-5.4",
     "openai/gpt-5.4-mini",
@@ -102,6 +102,7 @@
     "anthropic/claude-opus-5.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
+    "anthropic/claude-sonnet-5.5",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro",
@@ -131,7 +132,6 @@
     "openai/gpt-5-nano",
     "openai/gpt-5.1",
     "openai/gpt-5.2",
-    "openai/gpt-5.2-pro",
     "openai/gpt-5.3-codex",
     "openai/gpt-5.4",
     "openai/gpt-5.4-mini",
@@ -162,22 +162,28 @@
     "anthropic/claude-opus-4.6": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-sonnet-5.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -198,13 +204,13 @@
     "anthropic/claude-sonnet-5": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-sonnet-4.6": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "anthropic/claude-opus-5.5": [
@@ -216,7 +222,7 @@
     "deepseek/deepseek-v4-flash-0731": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v4.1-flash": [
@@ -228,13 +234,13 @@
     "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "z-ai/glm-5.3-flash": [
@@ -246,7 +252,7 @@
     "z-ai/glm-5.2": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "z-ai/glm-5.3": [
@@ -294,7 +300,7 @@
     "google/gemini-3-flash-preview": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-3.8-flash": [
@@ -318,7 +324,7 @@
     "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "openai/gpt-5.4": [
@@ -349,12 +355,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5.2-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.3-codex": [
