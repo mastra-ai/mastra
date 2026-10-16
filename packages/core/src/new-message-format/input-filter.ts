@@ -87,15 +87,7 @@ function lastAssistantTurn(log: PersistableAction[]) {
  * their own key order (LibSQL puts `type` in a column; JSONB reorders), so insertion order means nothing.
  */
 const inputKey = (a: object) => {
-  const {
-    id: _id,
-    threadId: _t,
-    resourceId: _r,
-    runId: _run,
-    createdAt: _c,
-    formatVersion: _f,
-    ...rest
-  } = a as Record<string, unknown>;
+  const { id: _id, threadId: _t, resourceId: _r, runId: _run, createdAt: _c, ...rest } = a as Record<string, unknown>;
   return JSON.stringify(canonical(rest));
 };
 

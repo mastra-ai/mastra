@@ -74,7 +74,6 @@ import type { ActionRunOutput, ActionRunResult } from '../new-message-format/out
 import { lastRuns, runAgent } from '../new-message-format/run';
 import type { ActionStore, RunAgentOptions } from '../new-message-format/run';
 import type { ActionDraft, AgentInput } from '../new-message-format/to-actions';
-import { isReadableAction } from '../new-message-format/types';
 import { toV7Tools } from '../new-message-format/tools';
 import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
 import type { NotificationDeliveryPolicyInput } from '../notifications/delivery-policy';
@@ -9566,7 +9565,7 @@ export class Agent<
     if (!store) {
       throw new Error('Resuming a tool approval requires storage on the agent or its Mastra instance.');
     }
-    const log = (await store.listActions({ threadId, runId: options.runId })).filter(isReadableAction);
+    const log = await store.listActions({ threadId, runId: options.runId });
     const answered = new Set(log.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
     // A call closed without an answer (superseded by new input, repaired) is no longer pending.
     const closed = new Set(

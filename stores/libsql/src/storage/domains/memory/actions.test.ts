@@ -21,7 +21,6 @@ const text = (threadId: string, runId: string, value: string): PersistableAction
 });
 
 /** What a store returns for an action written at the current format version. */
-const stored = (action: PersistableAction) => ({ ...action, formatVersion: 1 });
 
 describe('MemoryLibSQL actions', () => {
   let store: MemoryLibSQL;
@@ -48,7 +47,7 @@ describe('MemoryLibSQL actions', () => {
     await store.saveActions({ actions: [b, a].reverse() });
 
     const listed = await store.listActions({ threadId: 't1' });
-    expect(listed).toEqual([stored(a), stored(b)]);
+    expect(listed).toEqual([a, b]);
     expect(listed[0]!.createdAt).toBeInstanceOf(Date);
     expect(listed[1]).not.toHaveProperty('resourceId');
   });
@@ -81,14 +80,14 @@ describe('MemoryLibSQL actions', () => {
     const a = text('t1', 'r1', 'original');
     await store.saveActions({ actions: [a] });
     await expect(store.saveActions({ actions: [{ ...a, text: 'overwrite' } as PersistableAction] })).rejects.toThrow();
-    expect(await store.listActions({ threadId: 't1' })).toEqual([stored(a)]);
+    expect(await store.listActions({ threadId: 't1' })).toEqual([a]);
   });
 
   it('never stores transient actions', async () => {
     const a = text('t1', 'r1', 'kept');
     const delta = { ...a, id: id(), type: 'text-delta', transient: true, contentId: 'x', delta: 'd' };
     await store.saveActions({ actions: [a, delta as unknown as PersistableAction] });
-    expect(await store.listActions({ threadId: 't1' })).toEqual([stored(a)]);
+    expect(await store.listActions({ threadId: 't1' })).toEqual([a]);
   });
 
   it('round-trips thread events with the format version', async () => {
@@ -137,8 +136,7 @@ describe('MemoryLibSQL actions', () => {
 
     const listed = await store.listActions({ threadId: 't1' });
     expect(listed.map(a => a.type)).toEqual(actions.map(a => a.type));
-    expect(listed.every(a => a.formatVersion === 1)).toBe(true);
-    expect(listed).toEqual(actions.map(stored));
+    expect(listed).toEqual(actions);
   });
 
   it('stores goal changes and verdicts exactly as written, with no merging or defaults', async () => {
@@ -162,18 +160,12 @@ describe('MemoryLibSQL actions', () => {
     await store.saveActions({ actions });
 
     const listed = await store.listActions({ threadId: 't1' });
-    expect(listed).toEqual(actions.map(stored));
+    expect(listed).toEqual(actions);
     expect(listed[0]).not.toHaveProperty('status');
     expect((listed[1] as { options: object }).options).toEqual({ maxRuns: 3 });
     expect(listed[2]).not.toHaveProperty('pausedReason');
     expect(listed[2]).not.toHaveProperty('options');
     expect(listed[3]).toMatchObject({ outcome: 'waiting-for-user', iteration: 3, maxRuns: 3, status: 'active' });
-  });
-
-  it('keeps a format version set by the writer', async () => {
-    const a = { ...text('t1', 'r1', 'from the future'), formatVersion: 2 };
-    await store.saveActions({ actions: [a] });
-    expect((await store.listActions({ threadId: 't1' }))[0]!.formatVersion).toBe(2);
   });
 
   it('returns the greatest action id of a thread, or null', async () => {
@@ -190,29 +182,6 @@ describe('MemoryLibSQL actions', () => {
     expect(names).toContain('idx_actions_resource_id');
     const columns = await client.execute(`PRAGMA index_info(idx_actions_resource_id)`);
     expect(columns.rows.map(row => row.name)).toEqual(['resource_id', 'id']);
-  });
-
-  it('adds format_version to an actions table created without it', async () => {
-    const legacy = createClient({ url: 'file::memory:' });
-    await legacy.execute(`CREATE TABLE mastra_actions (
-      id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, resource_id TEXT, run_id TEXT,
-      type TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL)`);
-    await legacy.execute({
-      sql: `INSERT INTO mastra_actions (id, thread_id, run_id, type, created_at, data) VALUES (?, 't1', 'r1', 'text', ?, ?)`,
-      args: [
-        '01J00000000000000000000000',
-        '2026-10-15T10:00:00.000Z',
-        JSON.stringify({ role: 'user', text: 'old row' }),
-      ],
-    });
-    const upgraded = new MemoryLibSQL({ client: legacy, maxRetries: 1, initialBackoffMs: 10 });
-    await upgraded.init();
-
-    const [old] = await upgraded.listActions({ threadId: 't1' });
-    expect(old).toMatchObject({ type: 'text', text: 'old row', formatVersion: 1 });
-    const fresh = text('t1', 'r1', 'new row');
-    await upgraded.saveActions({ actions: [fresh] });
-    expect(await upgraded.listActions({ threadId: 't1' })).toHaveLength(2);
   });
 
   it('stores a retried question once after its model call failed', async () => {

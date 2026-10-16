@@ -4,7 +4,6 @@ import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import { InMemoryActionStorage } from './storage';
 import { toModelMessages } from './to-model-messages';
 import type { PersistableAction } from './types';
-import { ACTION_FORMAT_VERSION, isReadableAction, toStoredAction } from './types';
 import { createUlid } from './ulid';
 
 const id = createUlid();
@@ -88,133 +87,28 @@ const goalLifecycle = (): PersistableAction[] => [
 ];
 
 describe('action format', () => {
-  it('stamps the format version and nothing else', () => {
-    const userText: PersistableAction = { ...base(), type: 'text', role: 'user', text: 'hi' };
-    expect(toStoredAction(userText)).toEqual({ ...userText, formatVersion: ACTION_FORMAT_VERSION });
-    expect(toStoredAction({ ...base(), type: 'text', role: 'user', text: 'x', formatVersion: 7 }).formatVersion).toBe(
-      7,
-    );
-    for (const action of [...threadEvents(), ...goalLifecycle()]) {
-      expect(toStoredAction(action)).toEqual({ ...action, formatVersion: ACTION_FORMAT_VERSION });
-    }
-  });
-
   it('keeps thread events out of the prompt', () => {
     const prompt = toModelMessages([{ ...base(), type: 'text', role: 'user', text: 'hello' }, ...threadEvents()]);
     expect(prompt).toEqual([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
   });
 
-  it('skips rows of a type this reader does not know', () => {
+  it('skips row types that are not model content', () => {
     const user = { ...base(), type: 'text', role: 'user', text: 'hello' } as PersistableAction;
-    const future = { ...base(), type: 'retract', formatVersion: 2 } as unknown as PersistableAction;
-    const sameVersion = { ...base(), type: 'usage' } as unknown as PersistableAction;
-    expect(toModelMessages([user, future, sameVersion])).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
-    ]);
-  });
-
-  it('skips a known type from a newer format version', () => {
-    const user = { ...base(), type: 'text', role: 'user', text: 'hello' } as PersistableAction;
-    const newer = { ...base(), type: 'text', role: 'user', text: 'v2 text', formatVersion: 2 } as PersistableAction;
-    expect(toModelMessages([user, newer])).toEqual([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
-    // A row with no version reads as version 1.
-    const { formatVersion: _, ...unversioned } = { ...user, formatVersion: undefined };
-    expect(toModelMessages([unversioned as PersistableAction])).toHaveLength(1);
-  });
-
-  it('drops a call whose outcome was skipped, and an outcome whose call was skipped', () => {
-    const call = (toolCallId: string, extra = {}) =>
-      ({
-        ...base(),
-        type: 'tool-call',
-        role: 'assistant',
-        toolCallId,
-        toolName: 'pick',
-        input: {},
-        ...extra,
-      }) as PersistableAction;
-    const result = (toolCallId: string, extra = {}) =>
-      ({ ...base(), type: 'tool-result', toolCallId, toolName: 'pick', output: 'blue', ...extra }) as PersistableAction;
-    const user = { ...base(), type: 'text', role: 'user', text: 'hello' } as PersistableAction;
-    const said = { ...base(), type: 'text', role: 'assistant', text: 'checking' } as PersistableAction;
-
-    expect(toModelMessages([user, said, call('c1'), result('c1', { formatVersion: 2 })])).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
-      { role: 'assistant', content: [{ type: 'text', text: 'checking' }] },
-    ]);
-    expect(toModelMessages([user, call('c1', { formatVersion: 2 }), result('c1')])).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
-    ]);
-    // A complete pair is untouched.
-    expect(toModelMessages([user, call('c1'), result('c1')]).flatMap(m => m.content as { type: string }[])).toEqual([
-      expect.objectContaining({ type: 'text' }),
-      expect.objectContaining({ type: 'tool-call', toolCallId: 'c1' }),
-      expect.objectContaining({ type: 'tool-result', toolCallId: 'c1' }),
-    ]);
-  });
-
-  it('keeps a deferred provider-executed call that has no result yet', () => {
-    const user = { ...base(), type: 'text', role: 'user', text: 'search it' } as PersistableAction;
-    const call = {
-      ...base(),
-      type: 'tool-call',
-      role: 'assistant',
-      toolCallId: 'srv1',
-      toolName: 'web_search',
-      input: { query: 'x' },
-      providerExecuted: true,
-    } as PersistableAction;
-    expect(toModelMessages([user, call])).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'search it' }] },
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: 'srv1',
-            toolName: 'web_search',
-            input: { query: 'x' },
-            providerExecuted: true,
-          },
-        ],
-      },
-    ]);
-  });
-
-  it('keeps a call waiting on approval, with its request and any answer', () => {
-    const user = { ...base(), type: 'text', role: 'user', text: 'delete it' } as PersistableAction;
-    const actions = [
-      user,
-      { ...base(), type: 'tool-call', role: 'assistant', toolCallId: 'c1', toolName: 'rm', input: {} },
-      { ...base(), type: 'tool-approval-requested', approvalId: 'a1', toolCallId: 'c1', toolName: 'rm', input: {} },
-      { ...base(), type: 'tool-approval-responded', approvalId: 'a1', toolCallId: 'c1', approved: true },
-    ] as PersistableAction[];
-    expect(toModelMessages(actions).flatMap(m => (m.content as { type: string }[]).map(p => p.type))).toEqual([
-      'text',
-      'tool-call',
-      'tool-approval-request',
-      'tool-approval-response',
-    ]);
-  });
-
-  it('isReadableAction gates on the version only', () => {
-    expect(isReadableAction({ ...base(), type: 'text', role: 'user', text: 'x', formatVersion: 1 })).toBe(true);
-    expect(isReadableAction({ ...base(), type: 'text', role: 'user', text: 'x' })).toBe(true);
-    expect(isReadableAction({ ...base(), type: 'turn-start', formatVersion: 2 })).toBe(false);
+    const custom = { ...base(), type: 'data-progress', data: {} } as unknown as PersistableAction;
+    expect(toModelMessages([user, custom])).toEqual([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
   });
 
   describe.each([
     ['InMemoryActionStorage', () => new InMemoryActionStorage()],
     ['InMemoryMemory', () => new InMemoryMemory({ db: new InMemoryDB() })],
   ])('%s', (_name, create) => {
-    it('round-trips thread events with the format version', async () => {
+    it('round-trips thread events', async () => {
       const store = create();
       const actions = threadEvents();
       await store.saveActions({ actions });
 
       const listed = await store.listActions({ threadId: 't1' });
-      expect(listed).toEqual(actions.map(toStoredAction));
-      expect(listed.every(a => a.formatVersion === ACTION_FORMAT_VERSION)).toBe(true);
+      expect(listed).toEqual(actions);
     });
 
     it('stores goal changes and verdicts exactly as written, with no merging or defaults', async () => {
@@ -223,7 +117,7 @@ describe('action format', () => {
       await store.saveActions({ actions });
 
       const listed = await store.listActions({ threadId: 't1' });
-      expect(listed).toEqual(actions.map(toStoredAction));
+      expect(listed).toEqual(actions);
       const [, edit, replacement, , resume, verdict] = listed;
       expect(edit).not.toHaveProperty('status');
       expect(edit).not.toHaveProperty('pausedReason');

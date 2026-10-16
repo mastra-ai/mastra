@@ -19,8 +19,6 @@ export type ActionBase = {
   providerMetadata?: MastraProviderMetadata;
   /** Streamed to consumers but never written to storage. */
   transient?: boolean;
-  /** Format version of the writer. Storage stamps `ACTION_FORMAT_VERSION` when unset. */
-  formatVersion?: number;
 };
 
 type Role = 'user' | 'assistant' | 'system';
@@ -547,23 +545,3 @@ export type MastraActionType = MastraAction['type'];
 export type PersistableAction = Exclude<MastraAction, { transient: true }>;
 
 export const isPersistable = (action: MastraAction): action is PersistableAction => !action.transient;
-
-/** Current action format. Bump when a reader of an older version would misread new rows. */
-export const ACTION_FORMAT_VERSION = 1;
-
-/** The row as stored, with `formatVersion` stamped. Every store writes through this. */
-export function toStoredAction<A extends PersistableAction>(action: A): A {
-  return {
-    ...action,
-    formatVersion: action.formatVersion ?? ACTION_FORMAT_VERSION,
-  };
-}
-
-/**
- * Whether this reader can read a stored row. Rows from a newer format version (missing reads as 1) are skipped
- * even when their type is known, because the fields may mean something else there. Unknown types are skipped
- * by the caller, which knows its own type set.
- */
-export function isReadableAction(action: PersistableAction): boolean {
-  return (action.formatVersion ?? 1) <= ACTION_FORMAT_VERSION;
-}

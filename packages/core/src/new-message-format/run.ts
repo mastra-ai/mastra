@@ -9,7 +9,7 @@ import type { ListActionsQuery } from './storage';
 import type { ActionDraft, AgentInput } from './to-actions';
 import { toModelMessages } from './to-model-messages';
 import type { ActionBase, MastraAction, PersistableAction } from './types';
-import { isPersistable, isReadableAction, ToolNotStartedError } from './types';
+import { isPersistable, ToolNotStartedError } from './types';
 
 export type ActionStore = {
   saveActions(args: { actions: PersistableAction[] }): Promise<void>;
@@ -62,16 +62,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   const generateId = options.generateId ?? (await createActionIdGenerator(memory, threadId));
   const modelId = typeof model === 'object' && 'modelId' in model ? model.modelId : 'unknown';
 
-  const stored = memory ? await memory.listActions({ threadId }) : [];
-  // Rows this reader can't read (a newer format version) are skipped, as projection skips them.
-  const history = stored.filter(isReadableAction);
-  // A run or call with a row this reader can't read may already be closed there, so it is never repaired:
-  // a closer written from a partial view would be a second outcome in the log for every reader.
-  const unreadable = stored.filter(a => !isReadableAction(a));
-  const partialRuns = new Set(unreadable.flatMap(a => (a.runId ? [a.runId] : [])));
-  const partialCalls = new Set(
-    unreadable.flatMap(a => ('toolCallId' in a && typeof a.toolCallId === 'string' ? [a.toolCallId] : [])),
-  );
+  const history = memory ? await memory.listActions({ threadId }) : [];
   const { system, actions: drafts } = trimResentInput(options.input ?? [], history);
   const stamp = (forRunId: string | undefined = runId): ActionBase => ({
     id: generateId(),
@@ -81,13 +72,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     ...(resourceId !== undefined ? { resourceId } : {}),
   });
   const close = (closers: RepairCloser[]) =>
-    closers
-      .filter(
-        c =>
-          !(c.runId && partialRuns.has(c.runId)) &&
-          !('toolCallId' in c.action && partialCalls.has(c.action.toolCallId)),
-      )
-      .map(c => ({ ...stamp(c.runId), ...c.action }) as PersistableAction);
+    closers.map(c => ({ ...stamp(c.runId), ...c.action }) as PersistableAction);
 
   // A resumed run (an approval answer) continues under its runId and already has a run-start.
   const resuming = history.some(a => a.runId === runId);
