@@ -5,7 +5,7 @@ import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { FACTORY_TRANSITION_APPROVAL_KIND, createFactoryTransitionTools } from './tools.js';
+import { createFactoryTransitionTools } from './tools.js';
 import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -79,15 +79,8 @@ async function prepareBoundItem(
   });
 }
 
-/** Runs the tool as the resumed pass a person approved; pass `resumeData: undefined` for the first pass. */
-async function execute(
-  tool: ExecutableTool,
-  context: RequestContext,
-  input: unknown,
-  toolCallId = 'tool-call-1',
-  agent: { resumeData?: unknown; suspend?: (payload: unknown) => Promise<void> } = { resumeData: 'Approve' },
-) {
-  return tool.execute(input, { requestContext: context, agent: { toolCallId, ...agent } });
+async function execute(tool: ExecutableTool, context: RequestContext, input: unknown, toolCallId = 'tool-call-1') {
+  return tool.execute(input, { requestContext: context, agent: { toolCallId } });
 }
 
 describe('factory_transition_work_item', () => {
@@ -229,61 +222,18 @@ describe('factory_transition_work_item', () => {
     ).resolves.toEqual({});
   });
 
-  it('pauses for a person before moving the item, whatever the session auto-approves', async () => {
+  it('requires approval before executing a bound transition', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
-    const transition = vi.spyOn(service, 'transition');
     await prepareBoundItem(storage);
-    const tool = (
-      await createFactoryTransitionTools({ requestContext: requestContext(), storage, transitionService: service })
-    ).factory_transition_work_item as ExecutableTool;
-    const suspend = vi.fn(async (_payload: unknown) => {});
 
-    const result = await execute(
-      tool,
-      requestContext(),
-      { stage: 'shipping', expectedRevision: 1, rationale: 'Ready.' },
-      'tool-call-1',
-      { suspend },
-    );
-
-    expect(tool.requireApproval).toBeFalsy();
-    expect(result).toBeUndefined();
-    expect(transition).not.toHaveBeenCalled();
-    expect(suspend).toHaveBeenCalledTimes(1);
-    expect(suspend.mock.calls[0]?.[0]).toEqual({
-      kind: FACTORY_TRANSITION_APPROVAL_KIND,
-      question: 'Move "Factory item" from intake to shipping?',
-      options: [{ label: 'Approve' }, { label: 'Decline' }],
-      stage: 'shipping',
-      rationale: 'Ready.',
+    const tools = await createFactoryTransitionTools({
+      requestContext: requestContext(),
+      storage,
+      transitionService: service,
     });
-  });
 
-  it('leaves the item where it is when the move is declined', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
-    const transition = vi.spyOn(service, 'transition');
-    await prepareBoundItem(storage);
-    const tool = (
-      await createFactoryTransitionTools({ requestContext: requestContext(), storage, transitionService: service })
-    ).factory_transition_work_item as ExecutableTool;
-
-    const result = await execute(
-      tool,
-      requestContext(),
-      { stage: 'shipping', expectedRevision: 1, rationale: 'Ready.' },
-      'tool-call-1',
-      { resumeData: 'Decline: not yet' },
-    );
-
-    expect(transition).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      accepted: false,
-      declined: true,
-      message:
-        'The move to shipping was declined (not yet). Leave the item where it is unless someone asks for a different move.',
-    });
+    expect((tools.factory_transition_work_item as ExecutableTool).requireApproval).toBe(true);
   });
 
   it('requires triageType only for triage bindings', async () => {

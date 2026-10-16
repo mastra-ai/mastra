@@ -1,9 +1,7 @@
-import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
-import { TRANSITION_APPROVE } from '../rules/tools.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -17,37 +15,15 @@ export interface FactoryApprovalToolDependencies {
   messaging: () => Promise<FactoryMessaging | null>;
 }
 
-type SuspensionClaim =
-  | { accepted: true; toolCallId: string; address: unknown; claimKey: string }
-  | { accepted: false; reason: string };
-
-/**
- * The parts of a live session an answer needs: its open approval gates, and the
- * pause a role's stage move makes until a person approves it.
- */
+/** The parts of a live session an answer needs: its open approval gates. */
 interface ApprovalGateSession {
   approval: { isArmed(filter: { toolCallId: string }): boolean };
   respondToToolApproval(input: {
     decision: 'approve' | 'decline';
     toolCallId: string;
     declineContext?: { reason?: string };
-    requestContext?: RequestContext;
   }): { accepted: true } | { accepted: false; reason: string };
-  suspensions: {
-    resolveAddress(filter: { toolCallId: string }): unknown;
-    get(address: unknown): { toolName: string } | undefined;
-  };
-  claimToolSuspension(toolCallId: string): SuspensionClaim;
-  respondToToolSuspension(input: {
-    address: unknown;
-    resumeData: unknown;
-    requestContext?: RequestContext;
-  }): Promise<void>;
-  releaseToolResponse(claimKey: string): void;
 }
-
-/** Tools whose pause is a request for approval, answerable with this tool. */
-const APPROVAL_PAUSES = new Set(['factory_transition_work_item']);
 
 /** Answers a tool call another session holds for approval. Interactive user turns only. */
 export function createFactoryApprovalTools(
@@ -103,39 +79,20 @@ export function createFactoryApprovalTools(
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Answering approvals is not available on this server.');
       const live = (await messaging.controller.getSessionByResource(sessionId)) as ApprovalGateSession | null;
-      const declineReason = reason ?? 'Declined by a session following it.';
-      // The run carries on as the person answering, as if they had answered on its page.
-      const requestContext = new RequestContext();
-      requestContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
-      if (live?.approval.isArmed({ toolCallId })) {
-        const result = live.respondToToolApproval({
-          decision,
-          toolCallId,
-          requestContext,
-          ...(decision === 'decline' ? { declineContext: { reason: declineReason } } : {}),
-        });
-        if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
-      } else {
-        const address = live?.suspensions.resolveAddress({ toolCallId });
-        const paused = address ? live?.suspensions.get(address) : undefined;
-        const claim =
-          live && paused && APPROVAL_PAUSES.has(paused.toolName) ? live.claimToolSuspension(toolCallId) : null;
-        if (!live || !claim?.accepted) {
-          throw new Error(
-            'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +
-              'Message the session with factory_signal_session if it should try again.',
-          );
-        }
-        // The resumed run goes on well past this answer, so it is not awaited.
-        void live
-          .respondToToolSuspension({
-            address: claim.address,
-            resumeData: decision === 'approve' ? TRANSITION_APPROVE : `Decline: ${declineReason}`,
-            requestContext,
-          })
-          .catch(error => console.warn('[Factory tools] Unable to resume the approved tool call.', error))
-          .finally(() => live.releaseToolResponse(claim.claimKey));
+      if (!live?.approval.isArmed({ toolCallId })) {
+        throw new Error(
+          'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +
+            'Message the session with factory_signal_session if it should try again.',
+        );
       }
+      const result = live.respondToToolApproval({
+        decision,
+        toolCallId,
+        ...(decision === 'decline'
+          ? { declineContext: { reason: reason ?? 'Declined by a session following it.' } }
+          : {}),
+      });
+      if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
 
       deps.auditRecorder.record({
         orgId: scope.orgId,

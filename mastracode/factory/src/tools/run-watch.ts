@@ -1,6 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 
-import { FACTORY_TRANSITION_APPROVAL_KIND } from '../rules/tools.js';
 import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun, type RunEndCaptureSession } from '../session/run-audit.js';
 import type { FactoryRunOutcome } from './reports.js';
 
@@ -47,12 +46,14 @@ export function observeSessionRunReports(
     });
   return session.subscribe(event => {
     if (event.type === 'tool_suspended' || event.type === 'tool_approval_required') {
-      const approval = event.type === 'tool_approval_required' || isTransitionApproval(event.suspendPayload);
-      parked = { toolName: event.toolName, toolCallId: event.toolCallId, approval };
-      // Announced the moment it is asked, so whoever follows the work can answer it.
-      if (approval && onApprovalRequested) {
-        const args = event.type === 'tool_approval_required' ? event.args : event.suspendPayload;
-        settle(onApprovalRequested({ toolName: event.toolName, toolCallId: event.toolCallId, args }));
+      parked = {
+        toolName: event.toolName,
+        toolCallId: event.toolCallId,
+        approval: event.type === 'tool_approval_required',
+      };
+      // An approval gate holds the run open, so it is announced now, not at the run's end.
+      if (event.type === 'tool_approval_required' && onApprovalRequested) {
+        settle(onApprovalRequested({ toolName: event.toolName, toolCallId: event.toolCallId, args: event.args }));
       }
       return;
     }
@@ -66,11 +67,9 @@ export function observeSessionRunReports(
     }
     if (event.type !== 'agent_end') return;
     const outcome = runOutcome(event.reason, parked, lastError);
-    // A run paused for approval was already announced; the answer starts the next run.
-    const announced = event.reason === 'suspended' && parked?.approval === true && onApprovalRequested !== undefined;
     parked = undefined;
     lastError = undefined;
-    if (!outcome || announced) return;
+    if (!outcome) return;
     // Move the window now, so a run that starts before this report settles is judged on its own;
     // reports made up to the end, including its last millisecond, belong to the run that ended.
     const runSince = since;
@@ -108,14 +107,6 @@ export function heartbeatOpenRunUntilEnd(
     stop();
   });
   return { endReason: () => endReason, stop };
-}
-
-function isTransitionApproval(payload: unknown): boolean {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    (payload as { kind?: unknown }).kind === FACTORY_TRANSITION_APPROVAL_KIND
-  );
 }
 
 /** `null` for an aborted run: someone stopped or steered it, which is not an outcome. */

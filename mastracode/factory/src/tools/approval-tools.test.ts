@@ -1,4 +1,3 @@
-import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryApprovalTools } from './approval-tools.js';
@@ -25,36 +24,15 @@ function setup({
   follows = true,
   armed = true,
   live = true,
-  paused,
 }: {
   row?: Record<string, unknown>;
   binding?: boolean;
   follows?: boolean;
   armed?: boolean;
   live?: boolean;
-  /** The tool paused on `call-1`, when nothing is armed. */
-  paused?: string;
 } = {}) {
   const respondToToolApproval = vi.fn((_input: unknown) => ({ accepted: true as const }));
-  const respondToToolSuspension = vi.fn(async (_input: unknown) => {});
-  const releaseToolResponse = vi.fn();
-  const session = {
-    approval: { isArmed: vi.fn(() => armed) },
-    respondToToolApproval,
-    suspensions: {
-      resolveAddress: ({ toolCallId }: { toolCallId: string }) =>
-        paused && toolCallId === 'call-1' ? { toolCallId, threadId: 't', runId: 'r', resourceId: WORKER } : undefined,
-      get: () => (paused ? { toolName: paused } : undefined),
-    },
-    claimToolSuspension: vi.fn((toolCallId: string) => ({
-      accepted: true as const,
-      toolCallId,
-      address: { toolCallId },
-      claimKey: `claim:${toolCallId}`,
-    })),
-    respondToToolSuspension,
-    releaseToolResponse,
-  };
+  const session = { approval: { isArmed: vi.fn(() => armed) }, respondToToolApproval };
   const record = vi.fn();
   const tools = createFactoryApprovalTools(scope, {
     sessions: {
@@ -80,54 +58,10 @@ function setup({
     (
       tools.factory_answer_approval as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }
     ).execute({ sessionId: WORKER, toolCallId: 'call-1', ...input }, {});
-  return { answer, session, respondToToolApproval, respondToToolSuspension, releaseToolResponse, record };
+  return { answer, session, respondToToolApproval, record };
 }
 
 describe('factory_answer_approval', () => {
-  it("approves a role's paused stage move, resuming it as the person", async () => {
-    const { answer, respondToToolSuspension, releaseToolResponse, record } = setup({
-      armed: false,
-      paused: 'factory_transition_work_item',
-    });
-
-    await expect(answer({ decision: 'approve' })).resolves.toEqual({
-      answered: 'approve',
-      sessionId: WORKER,
-      toolCallId: 'call-1',
-    });
-
-    expect(respondToToolSuspension).toHaveBeenCalledWith({
-      address: { toolCallId: 'call-1' },
-      resumeData: 'Approve',
-      requestContext: expect.any(RequestContext),
-    });
-    const [{ requestContext }] = respondToToolSuspension.mock.calls[0] as [{ requestContext: RequestContext }];
-    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
-    await vi.waitFor(() => expect(releaseToolResponse).toHaveBeenCalledWith('claim:call-1'));
-    expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.approved', actorId: 'user-1' }));
-  });
-
-  it("declines a role's paused stage move with the reason", async () => {
-    const { answer, respondToToolSuspension, record } = setup({ armed: false, paused: 'factory_transition_work_item' });
-
-    await answer({ decision: 'decline', reason: 'Keep it open.' });
-
-    expect(respondToToolSuspension).toHaveBeenCalledWith({
-      address: { toolCallId: 'call-1' },
-      resumeData: 'Decline: Keep it open.',
-      requestContext: expect.any(RequestContext),
-    });
-    expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.dismissed' }));
-  });
-
-  it('does not answer a pause that is not a request for approval', async () => {
-    const { answer, respondToToolSuspension, record } = setup({ armed: false, paused: 'ask_user' });
-
-    await expect(answer({ decision: 'approve' })).rejects.toThrow('Nothing is waiting on that tool call any more');
-    expect(respondToToolSuspension).not.toHaveBeenCalled();
-    expect(record).not.toHaveBeenCalled();
-  });
-
   it('approves the call a followed work session is holding, and audits it as the person', async () => {
     const { answer, session, respondToToolApproval, record } = setup();
 
@@ -138,11 +72,7 @@ describe('factory_answer_approval', () => {
     });
 
     expect(session.approval.isArmed).toHaveBeenCalledWith({ toolCallId: 'call-1' });
-    expect(respondToToolApproval).toHaveBeenCalledWith({
-      decision: 'approve',
-      toolCallId: 'call-1',
-      requestContext: expect.any(RequestContext),
-    });
+    expect(respondToToolApproval).toHaveBeenCalledWith({ decision: 'approve', toolCallId: 'call-1' });
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'user-1',
@@ -165,7 +95,6 @@ describe('factory_answer_approval', () => {
     expect(respondToToolApproval).toHaveBeenCalledWith({
       decision: 'decline',
       toolCallId: 'call-1',
-      requestContext: expect.any(RequestContext),
       declineContext: { reason: 'Keep it in triage.' },
     });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: 'factory.run.dismissed' }));
