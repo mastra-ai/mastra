@@ -63,6 +63,12 @@ Successful run completions continue to use the live Ready indicator and completi
 
 Opening a Factory lands on its first board; **Boards** lead the sidebar, followed by Supervisor and Knowledge.
 
+## Session titles
+
+Slack sessions use the same automatic title generation as web sessions, including the preceding Slack thread context available to the agent. Until naming succeeds, the sidebar shows the session's work item title, or its branch when it has none. Older sessions that still show the generic `slack conversation` label keep it until observational memory retitles the conversation or the owner regenerates the title.
+
+Owners can choose **Regenerate title** from a web or Slack session's sidebar menu to name it from its stored conversation. Regeneration uses the existing title model and does not start a workspace. Automatic naming failures leave the conversation usable; an explicit regeneration reports its error.
+
 ## User menu and settings
 
 The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
