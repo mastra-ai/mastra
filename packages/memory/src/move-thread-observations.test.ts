@@ -109,4 +109,15 @@ describe('moving a thread to another resource', () => {
 
     expect(vector.updateVector).not.toHaveBeenCalled();
   });
+
+  it('leaves a vector alone when the store returns it without metadata', async () => {
+    const { memory, vector } = createMemory();
+    await seedThread(memory, 'session-a', 'session-a', 'The deploy target is staging');
+    vector.query.mockImplementationOnce(async () => [{ id: 'bare', score: 1 }] as any);
+    vector.updateVector.mockClear();
+
+    await memory.updateThreadResourceId({ threadId: 'session-a', resourceId: 'factory-1' });
+
+    expect(vector.updateVector).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'bare' }));
+  });
 });

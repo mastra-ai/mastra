@@ -137,7 +137,7 @@ describe('source-control session routes', () => {
       threadId,
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: sessionId });
+      await controller.deleteSession({ sessionId });
     });
     expect(session.identity.getId()).toBe(sessionId);
     expect(session.thread.getId()).toBe(threadId);

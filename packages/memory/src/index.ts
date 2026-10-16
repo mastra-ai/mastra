@@ -3705,12 +3705,20 @@ Notes:
         const pending = stale.filter(result => !moved.has(result.id));
         if (pending.length === 0) break;
         for (const result of pending) {
+          moved.add(result.id);
+          // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
+          if (!result.metadata) {
+            this.logger.warn('Skipping observation vector without metadata during thread transfer', {
+              indexName,
+              id: result.id,
+            });
+            continue;
+          }
           await vector.updateVector({
             indexName,
             id: result.id,
             update: { metadata: { ...result.metadata, resource_id: resourceId } },
           });
-          moved.add(result.id);
         }
       }
     }
