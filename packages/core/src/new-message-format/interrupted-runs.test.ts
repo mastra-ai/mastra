@@ -9,7 +9,7 @@ import { createTool } from '../tools';
 import { scriptedModel, textTurn, toolCallTurn } from './model.mock';
 import { repairOpenRun } from './repair';
 import { runAgent } from './run';
-import { InMemoryActionStorage } from './storage';
+import { createActionIdGenerator, InMemoryActionStorage } from './storage';
 import { toModelMessages } from './to-model-messages';
 import { isPersistable } from './types';
 import type { MastraAction, PersistableAction } from './types';
@@ -292,6 +292,67 @@ describe('two pending approvals in one run', () => {
         .map(a => a.toolCallId)
         .sort(),
     ).toEqual(['c1', 'c2']);
+    expect(repairOpenRun(log)).toEqual([]);
+    expectValidToolPairs(prompts.at(-1));
+  });
+
+  it('an approved call that already started is closed as outcome unknown on the next resume, never run again', async () => {
+    const executed: string[] = [];
+    const deleteFile = createTool({
+      id: 'deleteFile',
+      description: 'Deletes a file',
+      inputSchema: z.object({ path: z.string() }),
+      requireApproval: true,
+      execute: async ({ path }) => {
+        executed.push(path);
+        return { deleted: true };
+      },
+    });
+    const twoCalls = [
+      { type: 'stream-start', warnings: [] },
+      { type: 'tool-call', toolCallId: 'c1', toolName: 'deleteFile', input: JSON.stringify({ path: '/a' }) },
+      { type: 'tool-call', toolCallId: 'c2', toolName: 'deleteFile', input: JSON.stringify({ path: '/b' }) },
+      ...toolCallTurn('x', 'x', {}).slice(-1),
+    ];
+    const { model, prompts } = scriptedModel([twoCalls, textTurn('Done.')]);
+    const agent = new Agent({ id: 'files', name: 'files', instructions: 'Files.', model, tools: { deleteFile } });
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { files: agent }, storage, logger: false });
+    const store = (await storage.getStore('memory'))!;
+    const memory = { thread: 'th1', resource: 'u1' };
+
+    const first = await (await agent.stream('Delete /a and /b', { memory })).result;
+    const runId = first.actions[0]!.runId!;
+    await (
+      await agent.approveToolCall({ runId, toolCallId: 'c1', memory })
+    ).result;
+    // What an earlier resume leaves when the process dies while c1 runs: c1's tool-started, no outcome.
+    const nextId = await createActionIdGenerator(store, 'th1');
+    await store.saveActions({
+      actions: [
+        {
+          id: nextId(),
+          threadId: 'th1',
+          resourceId: 'u1',
+          runId,
+          createdAt: new Date(),
+          type: 'tool-started',
+          toolCallId: 'c1',
+          toolName: 'deleteFile',
+        },
+      ],
+    });
+
+    await (
+      await agent.approveToolCall({ runId, toolCallId: 'c2', memory })
+    ).result;
+    const log = await store.listActions({ threadId: 'th1' });
+    const c1Errors = log.filter(a => a.type === 'tool-error' && a.toolCallId === 'c1');
+    expect(c1Errors.map(a => (a as { code?: string }).code)).toEqual(['TOOL_OUTCOME_UNKNOWN']);
+    expect(log.some(a => a.type === 'tool-result' && a.toolCallId === 'c1')).toBe(false);
+    // c1 may have run already, so it is not run again; c2 runs as before.
+    expect(executed).toEqual(['/b']);
+    expect(log.filter(a => a.type === 'tool-result').map(a => a.toolCallId)).toEqual(['c2']);
     expect(repairOpenRun(log)).toEqual([]);
     expectValidToolPairs(prompts.at(-1));
   });

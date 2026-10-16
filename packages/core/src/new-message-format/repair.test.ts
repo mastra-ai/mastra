@@ -136,6 +136,31 @@ describe('repairOpenRun', () => {
     ]);
   });
 
+  it('closes an approved call that started in an earlier resume as outcome unknown when its run resumes', () => {
+    const log = [
+      ...crashedAtToolCall(false),
+      at('r1', { type: 'tool-approval-requested', toolCallId: 'c1', toolName: 'deleteFile', approvalId: 'ap1' }),
+      at('r1', { type: 'tool-call', toolCallId: 'c2', toolName: 'deleteFile', input: { path: '/b' } }),
+      at('r1', { type: 'tool-approval-requested', toolCallId: 'c2', toolName: 'deleteFile', approvalId: 'ap2' }),
+      at('r1', { type: 'turn-end', finishReason: 'tool-calls', usage: {} }),
+      at('r1', { type: 'run-end', finishReason: 'tool-calls', usage: {} }),
+      at('r1', {
+        type: 'tool-approval-responded',
+        toolCallId: 'c1',
+        toolName: 'deleteFile',
+        approvalId: 'ap1',
+        approved: true,
+      }),
+      at('r1', { type: 'tool-started', toolCallId: 'c1', toolName: 'deleteFile' }),
+    ];
+    // The resume answering c2 leaves c2 to its input; c1 started, so it is not exempt and may have run.
+    const closers = repairOpenRun(log, { resumingRunId: 'r1', answeredCallIds: new Set(['c2']) });
+    expect(closers.map(c => c.action)).toEqual([
+      expect.objectContaining({ type: 'tool-error', toolCallId: 'c1', code: 'TOOL_OUTCOME_UNKNOWN' }),
+      { type: 'run-end', finishReason: 'interrupted', usage: {} },
+    ]);
+  });
+
   it('leaves a finished run closed when it writes rows after its run-end', () => {
     const log = [
       runStart('r1'),
