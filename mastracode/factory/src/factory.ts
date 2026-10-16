@@ -1340,6 +1340,14 @@ export class MastraFactory {
                             transitionService,
                             auditRecorder: auditDomain,
                             sessions: sourceControlSessions,
+                            messaging: async () => {
+                              const controller = this.#prepared?.base.controller;
+                              const notifications = await controller
+                                ?.getMastra()
+                                ?.getStorage()
+                                ?.getStore('notifications');
+                              return controller && notifications ? { controller, notifications } : null;
+                            },
                           },
                         }),
                       );

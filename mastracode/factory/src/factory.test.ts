@@ -1151,6 +1151,8 @@ describe('MastraFactory.prepare', () => {
       'factory_resolve_proposal',
       'factory_subscribe_work_item',
       'factory_unsubscribe_work_item',
+      'factory_signal_session',
+      'factory_message_origin',
     ];
 
     it('gives a user session read tools on every turn, management tools only on person-started turns, and other sessions none', async () => {
@@ -1173,6 +1175,24 @@ describe('MastraFactory.prepare', () => {
       stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
       const none = await extraTools({ requestContext: stranger });
       for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
+    });
+
+    it("wakes a messaged session as that session's owner, not the sender", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+      }) => Promise<void>;
+
+      // session-1 belongs to user-1; user-2's tool call sent the message. Even if
+      // the sender's identity were on the context, the wake runs as the owner.
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     });
 
     it('persists allow for the no-approval tools on a new session, so listing work items runs without asking', async () => {
