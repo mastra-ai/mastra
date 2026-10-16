@@ -511,9 +511,10 @@ jobs:
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
 
   # The Changesets release PR gates every release, so a red suite there should not wait for
-  # someone to open the PR. Calls (e.g. the alpha cron) send their own alert.
-  notify-release-pr-failure:
-    name: Notify Slack of release PR failure
+  # someone to open the PR. It alerts once when the suite goes red and once when it is green
+  # again, not on every push in between. Calls (e.g. the alpha cron) send their own alert.
+  notify-release-pr-status:
+    name: Notify Slack of release PR status
     needs:
       [
         changes,
@@ -526,12 +527,50 @@ jobs:
         workspace-tests,
         memory-test,
       ]
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.full_suite == 'true' && contains(needs.*.result, 'failure')
+    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.full_suite == 'true'
     runs-on: starsling-ubuntu-26.04
     permissions:
+      actions: read
       contents: read
     steps:
+      - name: Compare with the previous release PR run
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          CANCELLED: ${{ contains(needs.*.result, 'cancelled') }}
+          BRANCH: ${{ github.head_ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # A cancelled run says nothing about whether the suite is red or green.
+          if [ "$FAILED" != "true" ] && [ "$CANCELLED" = "true" ]; then
+            echo "Run was cancelled; leaving the alert state unchanged."
+            exit 0
+          fi
+
+          # This run is still in progress, so the newest completed run is the previous one.
+          if ! previous=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
+            -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=20 \
+            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .conclusion != \"cancelled\")][0].conclusion // \"none\""); then
+            echo "::warning::Could not read the previous run; alerting on failure only."
+            previous=unknown
+          fi
+          echo "Previous release PR run: $previous; this run failed: $FAILED"
+
+          pr="<$PR_URL|#$PR_NUMBER $PR_TITLE>"
+          if [ "$FAILED" = "true" ] && [ "$previous" != "failure" ]; then
+            echo "text=:rotating_light: Release PR tests failed: $pr. <$RUN_URL|View the run>." >> "$GITHUB_OUTPUT"
+          elif [ "$FAILED" != "true" ] && [ "$previous" = "failure" ]; then
+            echo "text=:white_check_mark: Release PR tests are green again: $pr." >> "$GITHUB_OUTPUT"
+          else
+            echo "No change since the previous run; not alerting."
+          fi
+
       - name: Checkout Slack action
+        if: steps.state.outputs.text != ''
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
@@ -539,7 +578,8 @@ jobs:
           persist-credentials: false
 
       - name: Post to Slack
+        if: steps.state.outputs.text != ''
         uses: ./.github/actions/slack-alert
         with:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          text: ':rotating_light: Release PR tests failed: <${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }} ${{ github.event.pull_request.title }}>. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View the run>.'
+          text: ${{ steps.state.outputs.text }}
