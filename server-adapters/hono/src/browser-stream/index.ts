@@ -344,7 +344,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   });
 
   // Close browser session endpoint
-  app.post(`${apiPrefix}/agents/:agentId/browser/close`, authenticate, async c => {
+  app.post(`${apiPrefix}/agents/:agentId/browser/close`, authenticate, ticketBodyLimit, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);
