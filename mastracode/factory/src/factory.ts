@@ -119,6 +119,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
+import { migrateSessionResources } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
@@ -770,6 +771,28 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    // Sessions from before shared resources ran under their own id. Move them
+    // onto their Factory or owner before any session is served. Run bindings
+    // decide which sessions belong to a Factory, so it waits for work items.
+    if (storage.isDomainReady('source-control') && storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.migrate.sessionResources', async () => {
+        try {
+          const memory = await storage.getMastraStorage().getStore('memory');
+          if (!memory) return;
+          await migrateSessionResources({
+            sessions: sourceControlStorage,
+            workItems: workItemsStorage,
+            ...(storage.isDomainReady('integrations') ? { integrations: integrationStorage } : {}),
+            memory,
+          });
+        } catch (error) {
+          // Unmoved sessions keep working under their own id; the next start retries.
+          console.warn(
+            `[factory] session resource migration stopped early: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      });
+    }
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as

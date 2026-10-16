@@ -761,6 +761,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
     super('source-control');
   }
 
+  /** Every session row across providers and organizations, for startup migrations. */
+  async listAllSessions(): Promise<SourceControlSession[]> {
+    return (await this.ops.findMany<SessionDbRow>(SESSIONS, {})).map(toSession);
+  }
+
   async init(): Promise<void> {
     await this.ensureCollections(SOURCE_CONTROL_SCHEMAS);
     await this.#backfillEnvironment();

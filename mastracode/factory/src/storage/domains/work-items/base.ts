@@ -2977,6 +2977,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { status: 'active' })).map(toBinding);
   }
 
+  /** Every session a run was ever bound to, revoked bindings included. */
+  async listRunBoundSessionIds(): Promise<Set<string>> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {});
+    return new Set(rows.map(row => String(row.session_id)));
+  }
+
+  /**
+   * Move a session's bindings from the legacy `resourceId = sessionId` onto
+   * `resourceId`. Only rows still on the session id change, so a rerun is a no-op.
+   */
+  async moveRunBindingsToResource(input: { sessionId: string; resourceId: string }): Promise<number> {
+    return this.#db.updateMany(
+      'factory_run_bindings',
+      { session_id: input.sessionId, resource_id: input.sessionId },
+      { resource_id: input.resourceId },
+    );
+  }
+
   /** List binding history, optionally narrowed to one work item. */
   async listRunBindings(
     orgId: string,
