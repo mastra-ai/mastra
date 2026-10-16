@@ -4,7 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { askUserTool, webFetchTool } from '@mastra/core/tools';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
-import { Memory } from '@mastra/memory';
+import { AUTO_MODEL_BY_PROVIDER, Memory } from '@mastra/memory';
 import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
 import { webSearchTool } from '../tools/web-search';
@@ -75,6 +75,12 @@ const agentFocus = agentInstructions
   ? `\n\n## Your purpose\n\nYour team set you up for the work below. Make it your main focus, and still help with anything else the user asks.\n\n${agentInstructions}`
   : ' If the user is new or just exploring, help them try what Mastra can do and shape you into a starting point for their own work.';
 const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-6-luna';
+const memoryModel = (() => {
+  const route = agentModel.startsWith('mastra/') ? 'mastra/' : '';
+  const provider = agentModel.slice(route.length).split('/', 1)[0] ?? '';
+  const lowCost = AUTO_MODEL_BY_PROVIDER[provider];
+  return lowCost ? `${route}${lowCost}` : agentModel;
+})();
 
 export const agent = new Agent({
   id: 'agent',
@@ -111,7 +117,7 @@ Ask concise questions when something is unclear or a good question could surface
     options: {
       generateTitle: true,
       observationalMemory: {
-        model: 'auto',
+        model: memoryModel,
       },
     },
   }),
