@@ -186,6 +186,17 @@ export interface ToolsResolver extends Promise<ResolvedToolsRecord> {
   with(extra: ToolsWithInput): ToolsResolver;
 }
 
+/**
+ * Options accepted by {@link tools}: a static {@link ToolsOptions} object, or
+ * a callback — sync or async, reading the per-request context — returning
+ * one. The callback form is the preferred way to vary options per request
+ * (e.g. role-based `allowTools` / `requireApproval`): it is invoked on every
+ * resolution and snapshots are memoized per distinct options value, so
+ * requests producing the same options share one cached snapshot with the
+ * usual TTL / stale-while-revalidate semantics.
+ */
+export type ToolsOptionsInput = ToolsOptions | ((ctx?: ToolsResolverContext) => ToolsOptions | Promise<ToolsOptions>);
+
 interface NormalizedRequest {
   registration: ProviderRegistration;
   options: ToolsProviderOptions;
@@ -371,7 +382,11 @@ function acquireScope(state: SharedToolsState, resourceId: string | undefined): 
   if (!scope) {
     scope = {
       resourceId,
-      client: resolveClient(resourceId === undefined ? state.options.client : { ...state.options.client, resourceId }),
+      client: resolveClient({
+        ...state.options.client,
+        projectId: state.projectId,
+        ...(resourceId === undefined ? {} : { resourceId }),
+      }),
       lastUsedAt: Date.now(),
     };
     state.scopes.set(key, scope);
@@ -497,10 +512,16 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
       try {
         const { connections, catalog, catalogAvailable } = await loadSnapshotInputs(state, scope.client);
         const requests = buildRequests(state.normalizedProviders, catalog, catalogAvailable);
+        const clientOptions: ConnectClientOptions = {
+          ...state.options.client,
+          projectId: state.projectId,
+          ...(scope.resourceId === undefined ? {} : { resourceId: scope.resourceId }),
+        };
         const { record, mcpKeys } = await mapTools(
           connections,
           requests,
           state.options,
+          clientOptions,
           scope.client,
           state.mcpClients,
           state.resolverId,
@@ -608,8 +629,14 @@ function disconnectState(state: SharedToolsState): Promise<void> {
  * Expected provider absence is silently skipped. Actionable per-integration
  * problems during resolution (needs re-auth or ambiguity) are downgraded to
  * warn-and-skip so one bad integration never takes down the whole toolset.
+ *
+ * Pass a callback instead of an options object to vary options per request
+ * (see {@link ToolsOptionsInput}). With the callback form, configuration
+ * validation runs at the first resolution that produces a given options
+ * value — still failing loudly — instead of at call time.
  */
-export function tools(options: ToolsOptions = {}): ToolsResolver {
+export function tools(options: ToolsOptionsInput = {}): ToolsResolver {
+  if (typeof options === 'function') return dynamicTools(options);
   const projectId = options.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
   if (!projectId) {
     throw new MastraConnectError('missing_project_id', 'Missing project id: set MASTRA_PROJECT_ID or pass projectId.');
@@ -644,10 +671,10 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   // A malformed static key fails here — at startup — not at first resolution.
   const staticResourceId = typeof resourceIdOption === 'string' ? validateResourceId(resourceIdOption) : undefined;
 
-  // Fail fast on unresolvable client config (missing access token) even
-  // though scopes resolve their own clients lazily.
-  resolveClient(options.client);
-
+  // Fail fast on unresolvable client config (missing access token) while
+  // forcing project attribution to match the project whose connections this
+  // resolver discovers. Each resource scope adds its assertion header later.
+  resolveClient({ ...options.client, projectId });
   const normalizedProviders = normalizeProviderOverrides(options.providers);
   const providerOverrides = normalizedProviders.overrides;
   validateProviderIds(providerOverrides);
@@ -739,6 +766,143 @@ function promiseSurface(resolve: () => Promise<ResolvedToolsRecord>): {
 function finalizeResolver(resolver: Omit<ToolsResolver, typeof Symbol.toStringTag>): ToolsResolver {
   Object.defineProperty(resolver, Symbol.toStringTag, { value: 'ToolsResolver', configurable: true });
   return resolver as ToolsResolver;
+}
+
+/**
+ * Most distinct options values a callback-form resolver keeps live caches
+ * (and MCP clients) for at once. Callbacks are expected to produce a small,
+ * closed set of option shapes (one per role, say); the cap exists so a
+ * callback that accidentally derives options from unbounded per-request data
+ * cannot retain an unbounded number of resolver wrappers. Eviction is
+ * least-recently-used; the separately bounded shared-state registry owns
+ * transport cleanup so resource-only variants cannot disconnect each other.
+ */
+const MAX_OPTION_VARIANTS = 32;
+
+/**
+ * Builds the callback-form resolver: each resolution invokes `getOptions`
+ * with the request context, then delegates to a memoized static resolver for
+ * that options value, so every distinct options value gets its own snapshot
+ * cache with the normal TTL / stale-while-revalidate semantics. Options
+ * validation happens when a value is first seen (inside `tools()`), so
+ * configuration errors fail that resolution loudly instead of being
+ * swallowed.
+ */
+function dynamicTools(getOptions: (ctx?: ToolsResolverContext) => ToolsOptions | Promise<ToolsOptions>): ToolsResolver {
+  interface VariantEntry {
+    resolver: ToolsResolver;
+  }
+
+  // Insertion order doubles as LRU order: a hit is re-inserted at the tail,
+  // so the head is always the least recently used variant.
+  const variants = new Map<string, VariantEntry>();
+  let closing: Promise<void> | undefined;
+
+  const acquireVariant = async (ctx?: ToolsResolverContext): Promise<VariantEntry> => {
+    if (closing) await closing;
+    const options = await getOptions(ctx);
+    // disconnect() may have started while getOptions was pending; wait for it
+    // so this resolution never inserts into the map behind the cleanup's back.
+    if (closing) await closing;
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `The tools() options callback must return a ToolsOptions object, got ${options === null ? 'null' : Array.isArray(options) ? 'an array' : typeof options}.`,
+      );
+    }
+    const key = hashOptions(options);
+    const existing = variants.get(key);
+    if (existing) {
+      variants.delete(key);
+      variants.set(key, existing);
+      return existing;
+    }
+    const entry: VariantEntry = { resolver: tools(options) };
+    variants.set(key, entry);
+    if (variants.size > MAX_OPTION_VARIANTS) {
+      const [oldestKey] = variants.entries().next().value!;
+      variants.delete(oldestKey);
+      console.warn(
+        `[@mastra/connect] tools() options callback produced more than ${MAX_OPTION_VARIANTS} distinct options values; evicting the least recently used variant. Derive options from a small, closed set of inputs (e.g. roles), not per-request data.`,
+      );
+      // Do not disconnect here. Variants that differ only by resourceId share
+      // one state, while distinct states are bounded and cleaned up by the
+      // shared-state registry.
+    }
+    return entry;
+  };
+
+  const resolve = async (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord> => {
+    const entry = await acquireVariant(ctx);
+    return entry.resolver(ctx);
+  };
+
+  const resolver: ToolsResolver = finalizeResolver(
+    Object.assign(resolve, promiseSurface(resolve), {
+      // Without a request there is no context, so refresh targets the variant
+      // the callback produces for an absent context — the same one a direct
+      // `await resolver()` call uses. Other variants keep their own TTL-based
+      // revalidation.
+      refresh: async (): Promise<ResolvedToolsRecord> => {
+        const entry = await acquireVariant(undefined);
+        return entry.resolver.refresh();
+      },
+      disconnect: (): Promise<void> => {
+        closing ??= (async () => {
+          try {
+            const all = Array.from(variants.values());
+            variants.clear();
+            await Promise.allSettled(all.map(entry => entry.resolver.disconnect()));
+          } finally {
+            closing = undefined;
+          }
+        })();
+        return closing;
+      },
+      with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+    }),
+  );
+  return resolver;
+}
+
+/** Identity registry for non-serializable option values (e.g. a custom `client.fetch`). */
+const functionIdentity = new WeakMap<object, number>();
+let nextFunctionIdentity = 0;
+
+/**
+ * Stable key for an options value: JSON with sorted object keys, so two
+ * callbacks returning structurally equal options share one cached variant.
+ * Functions (and other non-plain values) hash by identity — the same
+ * instance maps to the same key, two different instances to different keys —
+ * which is the safe direction: at worst a duplicate cache entry, never a
+ * false merge of different configurations.
+ */
+function hashOptions(options: ToolsOptions): string {
+  const byIdentity = (value: object): string => {
+    let id = functionIdentity.get(value);
+    if (id === undefined) {
+      id = ++nextFunctionIdentity;
+      functionIdentity.set(value, id);
+    }
+    return `__identity_${id}__`;
+  };
+  const encode = (value: unknown): unknown => {
+    if (value === undefined) return '__undefined__';
+    if (typeof value === 'function') return byIdentity(value);
+    if (Array.isArray(value)) return value.map(encode);
+    if (typeof value === 'object' && value !== null) {
+      const proto = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) return byIdentity(value);
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([, entryValue]) => entryValue !== undefined)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([entryKey, entryValue]) => [entryKey, encode(entryValue)]),
+      );
+    }
+    return value;
+  };
+  return JSON.stringify(encode(options));
 }
 
 /**
@@ -938,6 +1102,9 @@ async function mapTools(
   connections: ProjectConnection[],
   requests: NormalizedRequest[],
   options: ToolsOptions,
+  // Client options with the resolver's projectId merged in, so the clients the
+  // proxy toolsets create at execution time carry the attribution header.
+  clientOptions: ConnectClientOptions,
   client: ResolvedClient,
   mcpClients: Map<string, McpClientEntry>,
   resolverId: number,
@@ -980,7 +1147,7 @@ async function mapTools(
         } else {
           providerTools = request.registration.createTools({
             connectionId: resolution.connectionId,
-            client: options.client,
+            client: clientOptions,
             ...providerFilterOptions(request.options),
           } as Parameters<typeof request.registration.createTools>[0]);
           applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval);
@@ -1007,7 +1174,7 @@ async function mapTools(
             connections: resolution.connections,
             allowTools: request.options.allowTools,
             disallowTools: request.options.disallowTools,
-            client: options.client,
+            client: clientOptions,
           });
           applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
             listConnectionsToolKey(integrationId),

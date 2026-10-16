@@ -66,6 +66,102 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(screen.getByRole('group', { name: 'Custom date range' }).getAttribute('aria-invalid')).toBeNull();
   });
 
+  it('rejects a custom range wider than maxRangeMs', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 1),
+      dateTo: new Date(2026, 11, 31),
+      maxRangeMs: 31 * 24 * 60 * 60 * 1000,
+      onDateRangeChange,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.getByRole('alert').textContent).toContain('Range cannot be longer than 31 days');
+    expect(onDateRangeChange).not.toHaveBeenCalled();
+  });
+
+  it('applies a custom range within maxRangeMs', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 1),
+      dateTo: new Date(2026, 8, 20),
+      maxRangeMs: 31 * 24 * 60 * 60 * 1000,
+      onDateRangeChange,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(onDateRangeChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables days before minDate in both calendars', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 20),
+      dateTo: new Date(2026, 8, 25),
+      minDate: new Date(2026, 8, 15, 13, 30),
+      onDateRangeChange,
+    });
+
+    const [startCalendar, endCalendar] = screen.getAllByRole('grid');
+    // Each calendar shows September; the 14th is the last day before minDate.
+    for (const calendar of [startCalendar, endCalendar]) {
+      const [day14] = within(calendar).getAllByRole('gridcell', { name: '14' });
+      expect(day14.hasAttribute('disabled')).toBe(true);
+    }
+    const [day15] = within(startCalendar).getAllByRole('gridcell', { name: '15' });
+    expect(day15.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(within(startCalendar).getAllByRole('gridcell', { name: '14' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+    const [[from]] = onDateRangeChange.mock.calls;
+    expect(from.getDate()).toBe(20);
+  });
+
+  it('keeps the end calendar from minDate when the draft start is earlier', () => {
+    renderCustom({
+      dateFrom: new Date(2026, 8, 1),
+      dateTo: new Date(2026, 8, 20),
+      minDate: new Date(2026, 8, 15, 13, 30),
+    });
+
+    const [, endCalendar] = screen.getAllByRole('grid');
+    const [day14] = within(endCalendar).getAllByRole('gridcell', { name: '14' });
+    expect(day14.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('applies a range that starts on the minDate day when minDate carries a time', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 15),
+      dateTo: new Date(2026, 8, 20),
+      minDate: new Date(2026, 8, 15, 13, 30),
+      onDateRangeChange,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(onDateRangeChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a range that already starts before minDate', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 1),
+      dateTo: new Date(2026, 8, 20),
+      minDate: new Date(2026, 8, 15, 13, 30),
+      onDateRangeChange,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.getByRole('alert').textContent).toContain('Range cannot start before Sep 15, 2026');
+    expect(onDateRangeChange).not.toHaveBeenCalled();
+  });
+
   it('starts the range editor fresh each time it opens', () => {
     renderCustom({ dateFrom: new Date(2026, 0, 10), dateTo: new Date(2026, 0, 5) });
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));

@@ -1,3 +1,5 @@
+import { knownExternalAuthor } from '@mastra/factory/rules/types';
+import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
@@ -8,16 +10,29 @@ import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
+import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
+import {
+  CardActions,
+  CardStatus,
+  CommentCount,
+  ExternalAuthorBadge,
+  MetadataLabels,
+  SourceTitle,
+  WorkItemSourceIcon,
+} from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
+import { columnReviewVerdict, ReviewVerdictBadge } from './WorkItemCardRows';
 
 export function WorkItemListRow({
   item,
+  columnStage,
   morph,
   deepLinkRef,
   highlighted,
+  activityStatus,
+  relatedLinks,
   locked,
   busy,
   dragPayload,
@@ -28,9 +43,12 @@ export function WorkItemListRow({
   menu,
 }: {
   item: WorkItem;
+  columnStage: BoardStageId;
   morph: CardMorph;
   deepLinkRef: (element: HTMLElement | null) => void;
   highlighted: boolean;
+  activityStatus?: ActivityStatus;
+  relatedLinks: ReactNode;
   locked: boolean;
   busy: boolean;
   dragPayload: DragPayload | undefined;
@@ -40,6 +58,8 @@ export function WorkItemListRow({
   actions: CardAction[];
   menu: ReactNode;
 }) {
+  const external = knownExternalAuthor(item);
+  const verdict = columnReviewVerdict(item, columnStage);
   return (
     <BoardListRow
       testId="work-item-card"
@@ -52,6 +72,7 @@ export function WorkItemListRow({
       locked={locked}
       busy={busy}
       highlighted={highlighted}
+      activityStatus={activityStatus}
       menu={menu}
       createdAt={sourceCreatedAt(item.metadata) ?? item.createdAt}
       cells={{
@@ -62,8 +83,20 @@ export function WorkItemListRow({
             <SourceTitle source={item.source} title={item.title} />
           </Txt>
         ),
-        labels: <MetadataLabels metadata={item.metadata} />,
-        status: <CardStatus status={status} />,
+        links: relatedLinks,
+        labels: (
+          <span className="flex items-center gap-2">
+            <CommentCount count={item.commentCount} />
+            <MetadataLabels metadata={item.metadata} />
+          </span>
+        ),
+        status: (status.kind !== 'idle' || external || verdict) && (
+          <span className="flex items-center gap-2">
+            <CardStatus status={status} />
+            {verdict && <ReviewVerdictBadge verdict={verdict} />}
+            {external && <ExternalAuthorBadge />}
+          </span>
+        ),
         action: <CardActions actions={actions} />,
         activity: <WorkItemActivity activity={activity} actors={actors} showName={false} />,
       }}

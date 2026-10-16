@@ -5,28 +5,16 @@
  * to the stream and to memory. Model-free: `stepScript(1)` — one `step` tool call then
  * `finished 1 steps` — with `maxSteps: 3`.
  *
- * Ported variants: `mutate`, `tripwire`, `data` and `throws`. `data` was green first try; `tripwire`
- * needed the harness's own `steps` counter (the `step` tool's commit log, not the parity snapshot's
- * `toolResults`); `mutate` needs the COR-1414 declaration below.
+ * Ported variants: `mutate`, `tripwire`, `data`, `throws`, `tool-result`, and `retry`. `data` was
+ * green first try; `tripwire` needed the harness's own `steps` counter (the `step` tool's commit log,
+ * not the parity snapshot's `toolResults`); `mutate` needs the COR-1414 declaration below.
  *
  * `throws` (fail CLOSED per #25826 / COR-1315): a processor that throws on every text delta and in
  * `processOutputResult` never lets the unprocessed text reach the stream and surfaces the failure on
- * every engine, so the case's own checks are asserted against each engine directly
- * (`runT45ThrowsDirect`). The helper cannot drive it: its built-in declaration for the `error` chunk
- * (COR-1390 — plain forwards the live `Error` where durable and evented forward the serialised error
- * alone) does not reproduce for a failure raised by an output processor, because neither engine adds
- * the `type` key the declaration names, and `checkEngine` reports a stale declaration before any
- * scenario-level declaration is considered (COR-1429 covers letting a scenario run past a built-in
- * difference that does not apply). Memory diverges too (COR-1414): plain persists no assistant message
+ * every engine. It now runs through the parity helper because COR-1429 lets non-applicable built-in
+ * differences be skipped. Memory still diverges (COR-1414): plain persists no assistant message
  * where durable and evented persist the tool-invocation part plus an error part, pinned per engine so
  * the assertion goes stale when the fix lands.
- *
- * Not ported, escalated rather than weakened:
- *
- * - `tool-result` and `retry` (COR-1343, GH #22980) are recorded FAIL on durable and evented at every
- *   pin: `processOutputStream` sees the `tool-result` chunk twice and the `processOutputStep`
- *   `{ retry: true }` abort ends the run in a tripwire instead of calling the model again. A known
- *   open bug is not something this port may pin as expected behaviour.
  *
  * `mutate`: every engine persists the processOutputStream-mutated text ('FINISHED 1 STEPS') and the
  * processOutputResult tag (#26335 fixed durable/evented persisting the original deltas). One
@@ -36,19 +24,12 @@
  * `text`/`fullOutput.text` difference is declared with COR-1414 rather than ignored.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { OutputProcessor } from '../../../processors';
-import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -59,9 +40,9 @@ import type {
 } from './parity-harness';
 import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
-type Mode = 'mutate' | 'tripwire' | 'data';
-/** `throws` is driven directly (see below), so it is not one of `PLAIN_CONTRACTS`' recorded variants. */
-type ProbeMode = Mode | 'throws';
+type RecordedMode = 'mutate' | 'tripwire' | 'data';
+type Mode = RecordedMode | 'tool-result' | 'retry' | 'throws';
+type ProbeMode = Mode;
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const THREAD = 't45-thread';
@@ -70,9 +51,11 @@ const MAX_STEPS = 3;
 const STEPS = 1;
 const OUTPUT_ID = 'out-a';
 const FINAL_TEXT = 'finished 1 steps';
+const RETRY_REASON = 'Response quality too low, please improve';
+const RETRY_METADATA = { source: 't45-retry-probe' };
 
 /** Recorded `plain-none-*` contracts at the audit pin; identical on durable and evented. */
-const PLAIN_CONTRACTS: Record<Mode, Record<string, unknown>> = {
+const PLAIN_CONTRACTS: Record<RecordedMode, Record<string, unknown>> = {
   mutate: {
     streamedMutated: true,
     memoryMutated: true,
@@ -129,19 +112,6 @@ const THROWS_CHUNK_TYPES = [
   'finish',
 ];
 
-const THROWS_CONTRACT: Record<string, unknown> = {
-  streamedMutated: false,
-  memoryMutated: false,
-  memoryUppercased: false,
-  lastType: 'finish',
-  finishes: 1,
-  errors: 1,
-  tripwire: false,
-  thrown: null,
-  modelCalls: 2,
-  steps: 1,
-};
-
 /**
  * The assistant messages each engine persisted on the `throws` shape (COR-1414). The harness contract
  * hides this: `memoryMutated`/`memoryUppercased` are false everywhere. Plain fails the run before any
@@ -181,6 +151,19 @@ const MUTATE_FINAL_TEXT: EngineDifference = {
   }),
 };
 
+const THROWS_OUTPUT: EngineDifference = {
+  reason:
+    'COR-1390: wrapped engines reject getFullOutput for an output-processor stream failure while plain returns the failed output.',
+  expect: plain => ({
+    ...plain,
+    turns: plain.turns.map(turn => ({
+      ...turn,
+      error: { name: 'Error', message: `${OUTPUT_ID} threw at processOutputStream` },
+      fullOutput: { keys: [] },
+    })),
+  }),
+};
+
 /** `done` counts how many completed steps the prompt already carries (harness `toolResults(prompt)`). */
 function completedSteps(request: CapturedRequest): number {
   return request.prompt.reduce((total, message) => {
@@ -193,6 +176,7 @@ interface HookRecord {
   hook: string;
   type?: string;
   hasWriter?: boolean;
+  retryCount?: number;
 }
 
 interface ProbeHandles {
@@ -209,7 +193,7 @@ function createOutputProbe(id: string, mode: ProbeMode, handles: ProbeHandles): 
   };
   let emitted = false;
 
-  return {
+  const processor: OutputProcessor = {
     id,
     name: id,
     processOutputStream: async ({ part, abort, writer }) => {
@@ -220,7 +204,7 @@ function createOutputProbe(id: string, mode: ProbeMode, handles: ProbeHandles): 
         record('writer.custom', { hasWriter: Boolean(writer) });
         await writer?.custom({ type: 'data-probe', data: { processor: id } });
       }
-      if (['text-delta', 'text-end', 'tool-call', 'finish', 'step-finish'].includes(part.type)) {
+      if (['text-delta', 'text-end', 'tool-call', 'tool-result', 'finish', 'step-finish'].includes(part.type)) {
         record('processOutputStream', { type: part.type });
       }
       if (part.type === 'text-delta') {
@@ -246,6 +230,28 @@ function createOutputProbe(id: string, mode: ProbeMode, handles: ProbeHandles): 
       return messages;
     },
   };
+
+  if (mode === 'tool-result') {
+    processor.processToolResult = ({ messageList, toolCallId, toolName, args }) => {
+      record('processToolResult');
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId, toolName, args, result: { done: 2 } },
+      });
+      return messageList;
+    };
+  }
+  if (mode === 'retry') {
+    processor.processOutputStep = ({ text, retryCount, abort, messageList }) => {
+      record('processOutputStep', { retryCount });
+      if (text?.includes('retry this response')) {
+        abort(RETRY_REASON, { retry: true, metadata: RETRY_METADATA });
+      }
+      return messageList;
+    };
+  }
+
+  return processor;
 }
 
 async function runT45(mode: Mode) {
@@ -256,10 +262,11 @@ async function runT45(mode: Mode) {
   const stepCommits = new Map<ParityEngine, number>();
 
   const script: ModelScript = {
-    respond(request) {
+    respond(request, callIndex) {
       const done = completedSteps(request);
-      if (done >= STEPS) return textOnlyTape(`finished ${done} steps`);
-      return toolCallTape('step', { n: done + 1 }, `t45-step-${done + 1}`);
+      if (done < STEPS) return toolCallTape('step', { n: done + 1 }, `t45-step-${done + 1}`);
+      if (mode === 'retry' && callIndex === 1) return textOnlyTape('retry this response');
+      return textOnlyTape(`finished ${done} steps`);
     },
   };
 
@@ -293,185 +300,19 @@ async function runT45(mode: Mode) {
     input: 'go',
     options: {
       maxSteps: MAX_STEPS,
+      maxProcessorRetries: mode === 'retry' ? 1 : undefined,
       runId: `t45-run-${mode}`,
       memory: { thread: THREAD, resource: RESOURCE },
     } satisfies EngineTurnOptions,
-    differences: mode === 'mutate' ? { durable: MUTATE_FINAL_TEXT, evented: MUTATE_FINAL_TEXT } : undefined,
+    differences:
+      mode === 'mutate'
+        ? { durable: MUTATE_FINAL_TEXT, evented: MUTATE_FINAL_TEXT }
+        : mode === 'throws'
+          ? { durable: THROWS_OUTPUT, evented: THROWS_OUTPUT }
+          : undefined,
   });
 
   return { results, memories, handleLogs, stepCommits };
-}
-
-interface ThrowCaseState {
-  /** Chunk types the public stream yielded, in order. */
-  chunkTypes: string[];
-  /** The failure chunk's payload, when the stream carried one. */
-  errorPayload: unknown;
-  /** Text the stream streamed — the harness's `text`. */
-  streamedText: string;
-  /** `finish` chunks the stream yielded — the harness's `finishes`. */
-  finishes: number;
-  /** Failure chunks (`error`/`abort`/`tripwire`) — the harness's `errors`. */
-  errors: number;
-  /** Whether the stream carried a `tripwire` chunk. */
-  tripwire: boolean;
-  /** Set when the run rejected — the harness's `thrown`. */
-  thrown?: string;
-  /** Model calls the run made. */
-  requests: number;
-  /** `step` tool executions that completed. */
-  steps: number;
-  /** The persisted assistant messages, serialised. */
-  assistant: string;
-  /** How many assistant messages were persisted, and each message part's type in order. */
-  assistantShape: { messages: number; partTypes: string[] };
-}
-
-/**
- * Drives one engine through the `throws` shape the way the parity helper does per engine (wrapper,
- * host, one streamed turn). A direct check is required because the helper's own built-in declaration
- * for the `error` chunk (COR-1390, plain forwards the live `Error` under `type: 'error'` where the
- * wrapped engines forward the serialised error alone) does not reproduce for a failure raised by an
- * output processor — neither engine adds that `type` key here — and `checkEngine` reports a stale
- * declaration before any scenario-level declaration is considered (COR-1429).
- */
-async function runT45ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
-  const requests: CapturedRequest[] = [];
-  const model = new MockLanguageModelV2({
-    doStream: async (options: unknown) => {
-      const request = options as unknown as CapturedRequest;
-      requests.push(request);
-      const done = completedSteps(request);
-      return {
-        stream: convertArrayToReadableStream(
-          (done >= STEPS
-            ? textOnlyTape(`finished ${done} steps`)
-            : toolCallTape('step', { n: done + 1 }, `t45-step-${done + 1}`)) as never[],
-        ),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      };
-    },
-  });
-  const state: ThrowCaseState = {
-    chunkTypes: [],
-    errorPayload: undefined,
-    streamedText: '',
-    finishes: 0,
-    errors: 0,
-    tripwire: false,
-    requests: 0,
-    steps: 0,
-    assistant: '',
-    assistantShape: { messages: 0, partTypes: [] },
-  };
-  const memory = new MockMemory();
-  const agent = new Agent({
-    id: 't45-agent',
-    name: 'T45 Agent',
-    instructions: 'Use the step tool until you have finished.',
-    model: model as LanguageModelV2,
-    tools: {
-      step: createTool({
-        id: 'step',
-        description: 'Record one completed step.',
-        inputSchema: z.object({ n: z.number() }),
-        execute: async ({ n }) => {
-          state.steps += 1;
-          return { done: n };
-        },
-      }),
-    },
-    memory,
-    outputProcessors: [createOutputProbe(OUTPUT_ID, 'throws', { log: [] })],
-  });
-  const pubsub = new EventEmitterPubSub();
-  const runner =
-    engine === 'plain'
-      ? agent
-      : engine === 'durable'
-        ? createDurableAgent({ agent, pubsub })
-        : createEventedAgent({ agent });
-  const host = new Mastra({
-    agents: { 't45-agent': runner } as never,
-    storage: new InMemoryStore(),
-    logger: false,
-  });
-
-  const options = {
-    maxSteps: MAX_STEPS,
-    runId: `t45-run-throws-${engine}`,
-    memory: { thread: THREAD, resource: RESOURCE },
-  };
-
-  let cleanup: (() => Promise<void>) | undefined;
-  let output: { fullStream: AsyncIterable<{ type: string; payload?: unknown }> } | undefined;
-  try {
-    if (engine === 'plain') {
-      output = (await agent.stream('go', options)) as never;
-    } else {
-      const result = await (
-        runner as unknown as {
-          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
-        }
-      ).stream('go', options);
-      output = result.output;
-      cleanup = result.cleanup;
-    }
-  } catch (error) {
-    state.thrown = String((error as Error)?.message ?? error).slice(0, 200);
-  }
-  if (output) {
-    try {
-      for await (const chunk of output.fullStream) {
-        state.chunkTypes.push(chunk.type);
-        if (chunk.type === 'text-delta') {
-          state.streamedText += String((chunk.payload as { text?: string } | undefined)?.text ?? '');
-        }
-        if (chunk.type === 'finish') state.finishes += 1;
-        if (['error', 'abort', 'tripwire'].includes(chunk.type)) {
-          state.errors += 1;
-          state.errorPayload = chunk.payload;
-        }
-        if (chunk.type === 'tripwire') state.tripwire = true;
-      }
-    } catch (error) {
-      state.thrown = state.thrown ?? String((error as Error)?.message ?? error).slice(0, 200);
-    }
-  }
-  state.requests = requests.length;
-  // Teardown runs even if the recall throws, so this run's host cannot outlive the test.
-  try {
-    const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
-    const assistantMessages = messages.filter(message => message.role === 'assistant');
-    state.assistant = JSON.stringify(assistantMessages);
-    state.assistantShape = {
-      messages: assistantMessages.length,
-      partTypes: assistantMessages.flatMap(message => (message.content?.parts ?? []).map(part => part.type)),
-    };
-  } finally {
-    try {
-      if (cleanup) await cleanup();
-    } finally {
-      await host.shutdown();
-    }
-  }
-  return state;
-}
-
-/** The harness's `done()` contract fields, read from a direct run's state. */
-function throwsContract(state: ThrowCaseState): Record<string, unknown> {
-  return {
-    streamedMutated: state.streamedText.includes('FINISHED'),
-    memoryMutated: state.assistant.includes(`[out:${OUTPUT_ID}]`),
-    memoryUppercased: state.assistant.includes('FINISHED 1 STEPS'),
-    lastType: state.chunkTypes.at(-1) ?? null,
-    finishes: state.finishes,
-    errors: state.errors,
-    tripwire: state.tripwire,
-    thrown: state.thrown ?? null,
-    modelCalls: state.requests,
-    steps: state.steps,
-  };
 }
 
 describe('T45 output processors (plain, durable, evented)', () => {
@@ -603,34 +444,119 @@ describe('T45 output processors (plain, durable, evented)', () => {
       expect(contracts.get(engine), `${engine} contract`).toEqual(contracts.get('plain'));
     }
   });
-  it('fails closed when a text delta throws', async () => {
-    const states = new Map<ParityEngine, ThrowCaseState>();
-    for (const engine of ENGINES) states.set(engine, await runT45ThrowsDirect(engine));
+
+  it('processes each tool result exactly once before the next model call', async () => {
+    const { results, memories, handleLogs, stepCommits } = await runT45('tool-result');
 
     for (const engine of ENGINES) {
-      const state = states.get(engine)!;
+      const observation = results[engine]!;
+      const turn = observation.turns[0];
+      if (!turn) throw new Error(`T45 tool-result: ${engine} produced no turn`);
 
-      // harness: `fails closed: unprocessed text never streamed (#25826)`.
-      expect(state.streamedText, `${engine}: streamed text`).not.toContain(FINAL_TEXT);
-      // harness: `fails closed: the processor failure surfaced (error chunk or stream error)`.
-      expect(state.errors > 0 || state.thrown !== undefined, `${engine}: failure surfaced`).toBe(true);
+      expect(
+        handleLogs.get(engine)!.log.filter(entry => entry.hook === 'processToolResult'),
+        `${engine}: processToolResult runs`,
+      ).toHaveLength(1);
+      expect(
+        handleLogs
+          .get(engine)!
+          .log.filter(entry => entry.hook === 'processOutputStream' && entry.type === 'tool-result'),
+        `${engine}: streamed tool-result observations`,
+      ).toHaveLength(1);
+      expect(chunksOfType(turn, 'tool-result'), `${engine}: public tool-result chunks`).toBe(1);
+      expect(JSON.stringify(turn.chunkPayloads), `${engine}: streamed transformed tool result`).toContain('"done":2');
+      expect(observation.requests.map(completedSteps), `${engine}: completed results per request`).toEqual([0, 1]);
+      expect(JSON.stringify(observation.requests[1]), `${engine}: transformed result in next request`).toContain(
+        '"done":2',
+      );
+      expect(observation.requests, `${engine}: model calls`).toHaveLength(2);
+      expect(stepCommits.get(engine), `${engine}: tool executions`).toBe(1);
+      expect(chunksOfType(turn, 'finish'), `${engine}: finish chunks`).toBe(1);
+      expect(errorChunks(turn), `${engine}: error chunks`).toBe(0);
+      expect(turn.finishReason, `${engine}: finish reason`).toBe('stop');
 
-      // Every engine reaches the same chunk sequence and the same contract. The failure chunk's
-      // payload diverges: plain holds the live `Error` while durable and evented hold a serialised
-      // `{ name, message }` object, so only the shared content is asserted.
-      expect(state.chunkTypes, `${engine}: chunk types`).toEqual(THROWS_CHUNK_TYPES);
-      expect(Object.keys((state.errorPayload ?? {}) as object), `${engine}: failure chunk payload keys`).toEqual([
-        'error',
-      ]);
-      const failure = (state.errorPayload as { error?: { name?: string; message?: string } }).error;
+      const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+      expect(JSON.stringify(messages), `${engine}: persisted transformed tool result`).toContain('"done":2');
+    }
+  });
+
+  it('retries a rejected output step and finishes the replacement response', async () => {
+    const { results, handleLogs, stepCommits } = await runT45('retry');
+
+    for (const engine of ENGINES) {
+      const observation = results[engine]!;
+      const turn = observation.turns[0];
+      if (!turn) throw new Error(`T45 retry: ${engine} produced no turn`);
+
+      const outputStepRuns = handleLogs.get(engine)!.log.filter(entry => entry.hook === 'processOutputStep');
+      expect(
+        outputStepRuns.map(entry => entry.retryCount),
+        `${engine}: processOutputStep retry counts`,
+      ).toEqual([0, 0, 1]);
+      expect(observation.requests, `${engine}: model calls`).toHaveLength(3);
+      expect(observation.requests.map(completedSteps), `${engine}: completed results per request`).toEqual([0, 1, 1]);
+      expect(stepCommits.get(engine), `${engine}: tool executions`).toBe(1);
+      expect(turn.text, `${engine}: accepted final text`).toBe(FINAL_TEXT);
+      expect(turn.fullOutput.text, `${engine}: final output text`).toBe(FINAL_TEXT);
+      expect(turn.streamedText, `${engine}: streamed attempts`).toBe(`retry this response${FINAL_TEXT}`);
+      const retryStepFinishIndex = turn.chunkPayloads.findIndex(payload => {
+        if (!payload || typeof payload !== 'object' || !('stepResult' in payload)) return false;
+        const stepResult = payload.stepResult;
+        return (
+          !!stepResult && typeof stepResult === 'object' && 'reason' in stepResult && stepResult.reason === 'retry'
+        );
+      });
+      expect(retryStepFinishIndex, `${engine}: retry step-finish payload`).toBeGreaterThanOrEqual(0);
+      expect(turn.chunkPayloads[retryStepFinishIndex], `${engine}: retry metadata`).toMatchObject({
+        processorRetryFeedback: RETRY_REASON,
+        stepResult: {
+          retryReason: RETRY_REASON,
+          retryMetadata: RETRY_METADATA,
+          retryProcessorId: OUTPUT_ID,
+        },
+      });
+      expect(chunksOfType(turn, 'data-signal'), `${engine}: retry signals`).toBe(1);
+      const signalIndex = turn.chunkTypes.indexOf('data-signal');
+      expect(signalIndex, `${engine}: retry signal position`).toBeGreaterThanOrEqual(0);
+      expect(
+        turn.chunkTypes.indexOf('step-start', signalIndex + 1),
+        `${engine}: step after retry signal`,
+      ).toBeGreaterThan(signalIndex);
+      expect(chunksOfType(turn, 'tripwire'), `${engine}: tripwire chunks`).toBe(0);
+      expect(chunksOfType(turn, 'finish'), `${engine}: finish chunks`).toBe(1);
+      expect(turn.finishReason, `${engine}: finish reason`).toBe('stop');
+    }
+  });
+
+  it('fails closed when a text delta throws', async () => {
+    const { results, memories, stepCommits } = await runT45('throws');
+
+    for (const engine of ENGINES) {
+      const observation = results[engine]!;
+      const turn = observation.turns[0]!;
+      const errorIndex = turn.chunkTypes.indexOf('error');
+      const errorPayload = turn.chunkPayloads[errorIndex];
+
+      expect(turn.streamedText, `${engine}: streamed text`).not.toContain(FINAL_TEXT);
+      expect(errorChunks(turn) > 0 || turn.error !== undefined, `${engine}: failure surfaced`).toBe(true);
+      expect(turn.chunkTypes, `${engine}: chunk types`).toEqual(THROWS_CHUNK_TYPES);
+      expect(Object.keys((errorPayload ?? {}) as object), `${engine}: failure chunk payload keys`).toEqual(['error']);
+      const failure = (errorPayload as { error?: { name?: string; message?: string } }).error;
       expect(failure?.name, `${engine}: failure name`).toBe('Error');
       expect(failure?.message, `${engine}: failure message`).toBe(`${OUTPUT_ID} threw at processOutputStream`);
-      expect(state.thrown, `${engine}: run rejection`).toBeUndefined();
-      expect(throwsContract(state), `${engine} contract`).toEqual(THROWS_CONTRACT);
-      // COR-1414: memory diverges — plain persists no assistant message, durable and evented persist
-      // the tool-invocation part plus an error part. Pinned per engine so this goes red when the fix
-      // lands.
-      expect(state.assistantShape, `${engine}: persisted assistant messages`).toEqual(THROWS_MEMORY[engine]);
+      expect(turn.error, `${engine}: run rejection`).toEqual(
+        engine === 'plain' ? undefined : { name: 'Error', message: `${OUTPUT_ID} threw at processOutputStream` },
+      );
+      expect(observation.requests, `${engine}: model calls`).toHaveLength(2);
+      expect(stepCommits.get(engine), `${engine}: completed steps`).toBe(1);
+
+      const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+      const assistant = messages.filter(message => message.role === 'assistant');
+      const assistantShape = {
+        messages: assistant.length,
+        partTypes: assistant.flatMap(message => (message.content?.parts ?? []).map(part => part.type)),
+      };
+      expect(assistantShape, `${engine}: persisted assistant messages`).toEqual(THROWS_MEMORY[engine]);
     }
   });
 });

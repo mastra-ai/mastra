@@ -2039,7 +2039,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // tools / availableTools / toolChoice reflect any per-step mutations.
           // availableTools is derived from the serialized definitions so the
           // two can't disagree. Skipped when tracing is off or the trace was
-          // not sampled (a no-op span still hands out a tracker).
+          // not sampled (a no-op span still hands out a tracker). The prompt is
+          // passed at creation so MODEL_INFERENCE records what this call sent.
           const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
             ? getToolDefinitionsForTracing({
                 tools: currentStep.tools,
@@ -2057,7 +2058,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
-          modelSpanTracker?.startInference?.();
+          modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentStep.messageId });
           const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({
@@ -2111,6 +2112,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
                       startedAt: inferenceStartedAt,
+                      modelId: currentStep.model.modelId,
+                      provider: currentStep.model.provider,
                     },
                   };
                 },
@@ -2156,7 +2159,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // per-chunk processor pass; the deferred-error branch below runs
             // processors on the error once recovery has been ruled out.
             deferErrorChunks: true,
-            tracingContext,
+            // Stream processors run per step, so their spans belong under the step span.
+            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             processorStates,
             requestContext,
             abortSignal: options?.abortSignal,
@@ -3180,8 +3184,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'error' &&
         finishReason !== 'length' &&
         finishReason !== 'content-filter';
-      const shouldContinue =
-        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+      // A non-terminal finish reason only re-enters the loop when the step produced tool calls
+      // (matching the durable engine). Without tool calls (e.g. openai-compatible reports 'other'
+      // when the stream omits finish_reason) re-sending the same request would duplicate the
+      // answer until maxSteps. See: https://github.com/mastra-ai/mastra/issues/26811
+      const hasToolCallContinuation = toolCalls.length > 0 && !TERMINAL_FINISH_REASONS.includes(finishReason);
+      const shouldContinue = shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || hasToolCallContinuation));
 
       // Fail abandoned provider calls before creating snapshots so persisted history
       // cannot retain pending calls after a terminal error. Only target this step's IDs.

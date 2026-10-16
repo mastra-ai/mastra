@@ -79,6 +79,28 @@ export const Container: Story = {
   ),
 };
 
+const longResources = Array.from({ length: 24 }, (_, index) => `Resource ${index + 1}`);
+
+export const EdgeFade: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader} mask={{ y: true }}>
+        <ul className="mt-6 grid gap-2">
+          {longResources.map(resource => (
+            <li key={resource} className="rounded border border-border px-3 py-2">
+              {resource}
+            </li>
+          ))}
+        </ul>
+      </PageLayout>
+    </StoryFrame>
+  ),
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement).getByText('Resource 1').closest<HTMLElement>('[style*="overflow"]');
+    await expect(body?.className).toContain('mask-b-from');
+  },
+};
+
 function ComparisonHeader({
   eyebrow,
   spacing,

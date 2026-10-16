@@ -13,6 +13,7 @@ import type {
   ExportedSpan,
   TraceState,
   IModelSpanTracker,
+  ModelSpanTrackerOptions,
   AIModelGenerationSpan,
   EntityType,
   TracingPolicy,
@@ -385,13 +386,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * Create a ModelSpanTracker for this span (only works if this is a MODEL_GENERATION span)
    * Returns undefined for non-MODEL_GENERATION spans
    */
-  createTracker(): IModelSpanTracker | undefined {
+  createTracker(options?: ModelSpanTrackerOptions): IModelSpanTracker | undefined {
     // Only create tracker for MODEL_GENERATION spans
     if (this.type !== SpanType.MODEL_GENERATION) {
       return undefined;
     }
 
-    return new ModelSpanTracker(this as Span<SpanType.MODEL_GENERATION>);
+    return new ModelSpanTracker(this as Span<SpanType.MODEL_GENERATION>, options);
   }
 
   /** Returns `TRUE` if the span is the root span of a trace */

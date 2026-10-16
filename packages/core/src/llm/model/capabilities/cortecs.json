@@ -22,6 +22,7 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
+    "gemini-4-argon",
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -163,6 +164,7 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
+    "gemini-4-argon",
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -185,7 +187,6 @@
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
-    "llama-3.1-8b-instruct",
     "llama-3.3-70b-instruct",
     "minicpm-v-4.5",
     "minimax-m2",
@@ -533,6 +534,12 @@
       }
     ],
     "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-4-argon": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

@@ -37,7 +37,7 @@ describe('DefaultModelSection', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<DefaultModelSection models={models} />);
+    const { client } = renderWithProviders(<DefaultModelSection models={models} modelsLoaded />);
 
     await screen.findByRole('combobox', { name: 'Default model' });
     await pickModel(user, 'anthropic/claude-sonnet-4-5');
@@ -57,11 +57,45 @@ describe('DefaultModelSection', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<DefaultModelSection models={models} />);
+    const { client } = renderWithProviders(<DefaultModelSection models={models} modelsLoaded />);
 
     await user.click(await screen.findByRole('button', { name: 'Clear' }));
     await waitForMutationsIdle(client);
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled());
+  });
+
+  it('flags a saved default none of the connected accounts can run', async () => {
+    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'deepseek/deepseek-flash' })));
+    renderWithProviders(<DefaultModelSection models={models} modelsLoaded />);
+
+    expect(
+      await screen.findByText(/None of your connected accounts can run deepseek\/deepseek-flash/),
+    ).toBeInTheDocument();
+  });
+
+  it('warns when the successfully loaded personal catalog is empty', async () => {
+    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'deepseek/deepseek-flash' })));
+    renderWithProviders(<DefaultModelSection models={[]} modelsLoaded />);
+
+    expect(
+      await screen.findByText(/None of your connected accounts can run deepseek\/deepseek-flash/),
+    ).toBeInTheDocument();
+  });
+
+  it('does not warn before the personal catalog has loaded successfully', async () => {
+    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'deepseek/deepseek-flash' })));
+    renderWithProviders(<DefaultModelSection models={[]} modelsLoaded={false} />);
+
+    await screen.findByRole('combobox', { name: 'Default model' });
+    expect(screen.queryByText(/None of your connected accounts/)).not.toBeInTheDocument();
+  });
+
+  it('does not flag a saved default the catalog offers', async () => {
+    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'openai/gpt-5' })));
+    renderWithProviders(<DefaultModelSection models={models} modelsLoaded />);
+
+    await screen.findByRole('combobox', { name: 'Default model' });
+    expect(screen.queryByText(/None of your connected accounts/)).not.toBeInTheDocument();
   });
 });

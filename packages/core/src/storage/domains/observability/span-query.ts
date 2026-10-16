@@ -19,7 +19,12 @@ import {
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
+import { isPreviewTruncated } from './tracing';
 
+/**
+ * @deprecated Span query previews use the shared preview format (`buildPreview`), at most
+ * `PREVIEW_MAX_LENGTH` characters plus `…`.
+ */
 export const SPAN_QUERY_MAX_PREVIEW_CHARACTERS = 256;
 export const SPAN_QUERY_MAX_LIMIT = 1000;
 export const SPAN_QUERY_MAX_CURSOR_BYTES = 8192;
@@ -28,8 +33,8 @@ const identifier = z.string().min(1).max(512);
 
 const timeRangeSchema = traceQueryTimeRangeSchema.superRefine((range, context) => {
   const duration = Date.parse(range.to) - Date.parse(range.from);
-  if (duration <= 0 || duration > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', message: 'The time range must be positive and at most 31 days' });
+  if (duration <= 0) {
+    context.addIssue({ code: 'custom', message: 'The time range must be positive' });
   }
 });
 
@@ -79,10 +84,8 @@ export const spanQueryCostSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('unavailable') }).strict(),
 ]);
 
-const previewSchema = z
-  .string()
-  .refine(value => [...value].length <= SPAN_QUERY_MAX_PREVIEW_CHARACTERS, 'Preview exceeds its character limit')
-  .nullable();
+// Supplied previews are not length-limited; only automatic generation is bounded.
+const previewSchema = z.string().nullable();
 
 export const spanQueryRowSchema = spanQueryIdentitySchema
   .extend({
@@ -96,13 +99,30 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
     entityType: z.string().nullable(),
     entityId: z.string().nullable(),
     entityName: z.string().nullable(),
+    // Older adapters omit these fields; keep mixed-version responses readable.
+    entityVersionId: z.string().nullable().default(null),
+    parentEntityType: z.string().nullable().default(null),
+    parentEntityId: z.string().nullable().default(null),
+    parentEntityName: z.string().nullable().default(null),
+    parentEntityVersionId: z.string().nullable().default(null),
+    rootEntityType: z.string().nullable().default(null),
+    rootEntityId: z.string().nullable().default(null),
+    rootEntityName: z.string().nullable().default(null),
+    rootEntityVersionId: z.string().nullable().default(null),
+    threadId: z.string().nullable().default(null),
+    runId: z.string().nullable().default(null),
+    sessionId: z.string().nullable().default(null),
+    userId: z.string().nullable().default(null),
+    requestId: z.string().nullable().default(null),
+    serviceName: z.string().nullable().default(null),
+    experimentId: z.string().nullable().default(null),
+    environment: z.string().nullable().default(null),
+    executionSource: z.string().nullable().default(null),
     model: z.string().nullable(),
     provider: z.string().nullable(),
     inputPreview: previewSchema,
-    inputTruncated: z.boolean(),
     outputPreview: previewSchema,
-    outputTruncated: z.boolean(),
-    cost: spanQueryCostSchema,
+    errorPreview: previewSchema,
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);
@@ -114,15 +134,6 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
         path: ['durationMs'],
         message: 'Duration must match the completed span timestamps',
       });
-    }
-    for (const field of ['input', 'output'] as const) {
-      if (row[`${field}Preview`] === null && row[`${field}Truncated`]) {
-        context.addIssue({
-          code: 'custom',
-          path: [`${field}Truncated`],
-          message: 'An absent preview cannot be truncated',
-        });
-      }
     }
   });
 
@@ -252,19 +263,13 @@ export function encodeSpanQueryCursor(plan: TrustedSpanQueryPlan, values: z.infe
   return result;
 }
 
-/** Raw-text fallback for already-selected payloads, not an unbounded JSON parser/serializer. */
-export function createSpanQueryPreview(value: string | null): { value: string | null; truncated: boolean } {
-  if (value === null) return { value: null, truncated: false };
-  let characters = 0;
-  let preview = '';
-  for (const character of value) {
-    characters += 1;
-    if (characters > SPAN_QUERY_MAX_PREVIEW_CHARACTERS) {
-      return { value: preview, truncated: true };
-    }
-    preview += character;
-  }
-  return { value: preview, truncated: false };
+/**
+ * Span query preview from a stored preview (see `buildPreview`): `''` (nothing to preview) and
+ * `null` become `null`, and `truncated` says whether the preview was cut.
+ */
+export function createSpanQueryPreview(preview: string | null): { value: string | null; truncated: boolean } {
+  if (!preview) return { value: null, truncated: false };
+  return { value: preview, truncated: isPreviewTruncated(preview) };
 }
 
 /** @internal Identity shared by page hydration and metric attribution. */
@@ -289,7 +294,7 @@ export const SPAN_QUERY_MAX_COST_METRICS = 50_000;
  * A provider-supplied query_total carrier replaces both directional totals.
  * Missing means no token metrics have arrived; partial/unpriced/ambiguous cost is unavailable.
  */
-export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryRow['cost'] {
+export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): z.infer<typeof spanQueryCostSchema> {
   if (!metrics.length) return { state: 'missing' };
   const names = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
   const totals = metrics.filter(metric => names.includes(metric.name));
@@ -322,15 +327,16 @@ export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryR
 }
 
 /** @internal Selected page metadata; adapters normalize dates to ISO strings. */
-export type SpanQuerySelectedRow = Omit<
-  SpanQueryRow,
-  'inputPreview' | 'inputTruncated' | 'outputPreview' | 'outputTruncated' | 'cost'
->;
+export type SpanQuerySelectedRow = Omit<SpanQueryRow, 'inputPreview' | 'outputPreview' | 'errorPreview'>;
 
-/** @internal Payloads are already bounded to 257 code points by the database. */
+/**
+ * @internal Previews built by `buildPreview`: the stored preview columns, or for rows written
+ * before a store kept them, a preview built from the payload column.
+ */
 export interface SpanQueryPayload extends SpanQueryIdentity {
   inputPreview: string | null;
   outputPreview: string | null;
+  errorPreview: string | null;
 }
 
 /** @internal Hydration never changes the selected page's order or cursor boundary. */
@@ -338,16 +344,10 @@ export function buildSpanQueryResponse(
   plan: TrustedSpanQueryPlan,
   selected: SpanQuerySelectedRow[],
   payloads: SpanQueryPayload[],
-  metrics: SpanQueryCostMetric[],
+  // Older adapters pass metrics as a fourth argument. Keep the call shape, without returning costs.
+  _metrics?: SpanQueryCostMetric[],
 ): SpanQueryResponse {
   const byIdentity = new Map(payloads.map(payload => [spanQueryIdentityKey(payload), payload]));
-  const costs = new Map<string, SpanQueryCostMetric[]>();
-  for (const metric of metrics) {
-    const key = spanQueryIdentityKey(metric);
-    const group = costs.get(key) ?? [];
-    group.push(metric);
-    costs.set(key, group);
-  }
   const visible = selected.slice(0, plan.limit);
   const last = visible.at(-1);
   return spanQueryResponseSchema.parse({
@@ -356,13 +356,12 @@ export function buildSpanQueryResponse(
       const payload = byIdentity.get(key);
       const input = createSpanQueryPreview(payload?.inputPreview ?? null);
       const output = createSpanQueryPreview(payload?.outputPreview ?? null);
+      const error = createSpanQueryPreview(payload?.errorPreview ?? null);
       return {
         ...row,
         inputPreview: input.value,
-        inputTruncated: input.truncated,
         outputPreview: output.value,
-        outputTruncated: output.truncated,
-        cost: resolveSpanQueryCost(costs.get(key) ?? []),
+        errorPreview: error.value,
       };
     }),
     page: {

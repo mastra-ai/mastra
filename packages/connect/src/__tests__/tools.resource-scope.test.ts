@@ -105,6 +105,58 @@ describe('resource-scoped resolution', () => {
     }
   });
 
+  it('composes callback options with resource scoping and project attribution', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
+    installProvider('slack', 'MASTRA_SLACK_CONNECTION_ID');
+    const platform = scopedPlatform(() => [
+      makeConnection(),
+      makeConnection({ id: 'c_not1', integrationId: 'notion', resourceId: 'user-a' }),
+      makeConnection({ id: 'c_slk1', integrationId: 'slack', resourceId: 'user-b' }),
+    ]);
+    const resolver = connect(ctx => ({
+      ...platform.options,
+      resourceId: (ctx?.requestContext as { userId?: string } | undefined)?.userId,
+    }));
+
+    expect(Object.keys(await resolver({ requestContext: { userId: 'user-a' } })).sort()).toEqual([
+      'linear_fake_tool',
+      'notion_fake_tool',
+      'request_connection',
+    ]);
+    expect(Object.keys(await resolver({ requestContext: { userId: 'user-b' } })).sort()).toEqual([
+      'linear_fake_tool',
+      'request_connection',
+      'slack_fake_tool',
+    ]);
+
+    const lists = platform.connectionLists();
+    expect(lists.map(request => request.url.searchParams.get('resourceId'))).toEqual(['user-a', 'user-b']);
+    for (const request of platform.requests) {
+      expect(request.headers.get('x-mastra-project-id')).toBe('proj_1');
+      expect(request.headers.get('x-mastra-resource-id')).toMatch(/^user-[ab]$/);
+    }
+  });
+
+  it('keeps shared resource snapshots when callback variants exceed the wrapper cache', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const platform = scopedPlatform(() => [makeConnection()]);
+    const resolver = connect(ctx => ({
+      ...platform.options,
+      resourceId: `user-${String(ctx?.requestContext)}`,
+    }));
+
+    for (let index = 0; index < 33; index++) {
+      await resolver({ requestContext: index });
+    }
+    const callsAfterVariants = platform.fetchMock.mock.calls.length;
+
+    // The options-wrapper LRU is capped at 32, but all resource variants share
+    // one state whose resource-snapshot LRU is capped separately at 50.
+    await resolver({ requestContext: 31 });
+    expect(platform.fetchMock).toHaveBeenCalledTimes(callsAfterVariants);
+  });
+
   it('keeps the unscoped resolver global-only with no scoping params or header', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
