@@ -275,7 +275,8 @@ export function createFactorySessionTools(
       const session = await messaging.controller.createSession({
         id: ensured.sessionId,
         ownerId: scope.userId,
-        resourceId: ensured.sessionId,
+        // A side session works for the Factory, so it shares the Factory's memory resource.
+        resourceId: scope.factoryProjectId,
         threadId: ensured.sessionId,
         requestContext: kickoffContext,
         tags,

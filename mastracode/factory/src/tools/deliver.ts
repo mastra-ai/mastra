@@ -3,6 +3,7 @@ import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 
 import { createSessionAsRowOwner } from '../integrations/subscription-session.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import { listFactorySessionThreads } from '../session/session-threads.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** Notifications between Factory sessions all carry this source. */
@@ -68,12 +69,14 @@ export async function deliverFactorySessionNotification({
 }): Promise<FactoryDeliveryResult> {
   const thread = await controller.queryThreadById({ threadId: target.threadId });
   if (!thread) return { delivered: 'skipped', reason: 'thread-not-found' };
-  // A Factory session's threads live under its session id. A thread owned by
-  // anything else is not this session's, whatever the caller paired it with.
-  if (thread.resourceId && thread.resourceId !== target.sessionId) {
+  // Sessions share their Factory's or owner's resource, so a thread is this
+  // session's when it is the session's own thread or carries its session stamp
+  // (or, before migration, sits under the session id). Anything else is not
+  // this session's, whatever the caller paired it with.
+  if (!isSessionThread(thread, target.sessionId)) {
     return { delivered: 'skipped', reason: 'thread-not-owned' };
   }
-  const ownerResourceId = target.sessionId;
+  const ownerResourceId = thread.resourceId || target.sessionId;
 
   // No request context: without a user the controller's access check is a no-op,
   // and this is a server-side lookup on the target's behalf, not the sender's.
@@ -153,7 +156,7 @@ export async function resolveSessionThread({
   workItems,
   sessionId,
 }: {
-  controller: Pick<FactoryDeliveryController, 'getSession' | 'queryThreads'>;
+  controller: Pick<FactoryDeliveryController, 'getSession' | 'queryThreads' | 'queryThreadById'>;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
   sessionId: string;
@@ -170,7 +173,17 @@ export async function resolveSessionThread({
   const live = await controller.getSession(sessionId);
   const current = live?.thread.getId();
   if (current) return current;
-  const threads = await controller.queryThreads({ resourceId: sessionId });
+  const threads = await listFactorySessionThreads(controller, sessionId);
   const newest = [...threads].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0];
   return newest?.id ?? null;
+}
+
+function isSessionThread(
+  thread: { id: string; resourceId?: string | null; metadata?: Record<string, unknown> | null },
+  sessionId: string,
+): boolean {
+  if (thread.id === sessionId) return true;
+  const stamp = thread.metadata?.factorySessionId;
+  if (typeof stamp === 'string' && stamp) return stamp === sessionId;
+  return !thread.resourceId || thread.resourceId === sessionId;
 }

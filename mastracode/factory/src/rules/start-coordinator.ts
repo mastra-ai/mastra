@@ -226,10 +226,12 @@ export class FactoryStartCoordinator {
       factoryProjectId: request.factoryProjectId,
       projectRepositoryId: sourceSession.projectRepositoryId,
     };
+    // The run is addressed by its session id; its threads and memory belong to
+    // the Factory, so concurrent runs share resource-scoped memory.
     const session = await this.#controller.createSession({
       id: sourceSession.sessionId,
       ownerId: request.userId,
-      resourceId: sourceSession.sessionId,
+      resourceId: request.factoryProjectId,
       threadId: sourceSession.sessionId,
       requestContext,
       tags: sessionTags,
@@ -282,7 +284,7 @@ export class FactoryStartCoordinator {
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
       session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
-      resourceId: sourceSession.sessionId,
+      resourceId: request.factoryProjectId,
       kickoffKey: request.kickoffKey,
       kickoffMessage: null,
     });
@@ -317,7 +319,7 @@ export class FactoryStartCoordinator {
       workItemId: prepared.item.id,
       bindingId: prepared.binding.id,
       threadId,
-      resourceId: sourceSession.sessionId,
+      resourceId: request.factoryProjectId,
       sessionId: sourceSession.sessionId,
       branch: sourceSession.branch,
       revision,

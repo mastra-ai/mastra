@@ -27,11 +27,12 @@ import {
   createChannelResourceIdResolver,
   createChannelSessionResolver,
   createChannelSessionStartHook,
-  resolveChannelThreadId,
+  createChannelThreadIdResolver,
   createHandlers,
   resolveLinkedSender,
   resolveFactoryForLink,
 } from './slack.js';
+import type { SlackStartedSessions } from './slack.js';
 
 /**
  * The 4th argument core hands every channel handler. The handlers write the
@@ -449,6 +450,35 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(thread.post).toHaveBeenCalledWith('This private Factory session belongs to another user.');
     expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).not.toBe(true);
+  });
+
+  it("authorizes a Factory-resource thread as its session's owner", async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn(async (sessionId: string) =>
+          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1' } : null,
+        ),
+      },
+    } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'session-1', resourceId: 'fp-1' }] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    const ctx = handlerCtx(mastra);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalled();
+    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalledWith('fp-1', expect.anything());
+    expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
   });
 
   it('rejects an existing Factory session when the responder is linked to another organization', async () => {
@@ -921,6 +951,12 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     return { accountLinks, projects, sourceControl };
   }
 
+  // The thread-id resolver names a new thread after the session the resourceId
+  // resolver started for the same message.
+  const started: SlackStartedSessions = new WeakMap();
+  const threadIdFor = (args: ReturnType<typeof resolveArgs>) =>
+    createChannelThreadIdResolver(started)({ ...args, resourceId: 'fp-1', defaultThreadId: 'uuid-1' } as any);
+
   const resolveArgs = (thread = { id: 'slack:C-1:1700.42' }) => ({
     platform: 'slack',
     thread: thread as any,
@@ -928,11 +964,13 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     defaultResourceId: 'slack:U-sender',
   });
 
-  it('a linked sender with a repo-backed factory gets a user-session id, row created with repo + thread branch', async () => {
+  it('a linked sender with a repo-backed factory gets a Factory session on the Factory resource, row created with repo + thread branch', async () => {
     const deps = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('us-new');
+    const args = resolveArgs();
+    await expect(resolve(args)).resolves.toBe('fp-1');
+    expect(threadIdFor(args)).toBe('us-new');
 
     expect(deps.sourceControl.connections.list).toHaveBeenCalledWith({
       orgId: 'org-1',
@@ -955,9 +993,11 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const github = makeSourceControl({ hasRepo: false });
     const gitlab = makeSourceControl({ integrationId: 'gitlab' });
     const { sourceControl: _legacy, ...deps } = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver({ ...deps, sourceControls: [github, gitlab] } as any);
+    const resolve = createChannelResourceIdResolver({ ...deps, sourceControls: [github, gitlab] } as any, started);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('us-new');
+    const args = resolveArgs();
+    await expect(resolve(args)).resolves.toBe('fp-1');
+    expect(threadIdFor(args)).toBe('us-new');
 
     expect(github.sessions.create).not.toHaveBeenCalled();
     expect(gitlab.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ projectRepositoryId: 'pr-1' }));
@@ -965,9 +1005,11 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
   it('a DM thread creates a private session; channel threads stay org-visible', async () => {
     const deps = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
-    await expect(resolve(resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any))).resolves.toBe('us-new');
+    const args = resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any);
+    await expect(resolve(args)).resolves.toBe('fp-1');
+    expect(threadIdFor(args)).toBe('us-new');
 
     expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private' }));
   });
@@ -982,9 +1024,11 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     'a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)',
     async ({ id, branch }) => {
       const deps = makeResolverDeps();
-      const resolve = createChannelResourceIdResolver(deps as any);
+      const resolve = createChannelResourceIdResolver(deps as any, started);
 
-      await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
+      const args = resolveArgs({ id });
+      await expect(resolve(args)).resolves.toBe('fp-1');
+      expect(threadIdFor(args)).toBe('us-new');
 
       expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
     },
@@ -993,9 +1037,11 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
     const sourceControl = makeSourceControl({ existingSession: { sessionId: 'us-existing' } });
     const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('us-existing');
+    const args = resolveArgs();
+    await expect(resolve(args)).resolves.toBe('fp-1');
+    expect(threadIdFor(args)).toBe('us-existing');
 
     expect(sourceControl.sessions.getForBranch).toHaveBeenCalledWith({
       factoryProjectId: 'fp-1',
@@ -1007,7 +1053,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
   it('no sourceControl → chat-only channel resourceId', async () => {
     const { sourceControl: _unused, ...deps } = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
   });
@@ -1015,7 +1061,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('an unlinked sender is refused rather than given a chat-only thread', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ link: null, sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     await expect(resolve(resolveArgs())).rejects.toThrow(ChannelSessionRejectedError);
     await expect(resolve(resolveArgs())).rejects.toThrow(/not linked to a Factory account/);
@@ -1028,7 +1074,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const deps = makeResolverDeps({ sourceControl });
     deps.projects = makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]);
     deps.accountLinks.getAccountLink = vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1' });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     await expect(resolve(resolveArgs())).rejects.toThrow(/has no Factory project/);
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
@@ -1037,7 +1083,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('a message with no sender id falls back to the chat-only resourceId', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     const args = resolveArgs();
     args.message.author.userId = '';
@@ -1048,7 +1094,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('a message from no identifiable Slack workspace is refused', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     const args = resolveArgs();
     args.message.raw = {};
@@ -1114,7 +1160,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const message = { ...makeMessage('T-1'), id: 'msg-1', attachments: [] };
     const channels = new AgentChannels({
       adapters: { slack: { name: 'slack' } as any },
-      resolveResourceId: createChannelResourceIdResolver(resolverDeps as any),
+      resolveResourceId: createChannelResourceIdResolver(resolverDeps as any, started),
     });
     const handlers = createHandlers({ ...resolverDeps, workItems } as any);
     const ctx = handlerCtx(mastra);
@@ -1183,6 +1229,28 @@ describe('channel session creation context (resolveSession)', () => {
     });
   });
 
+  it('runs a session-bound thread under its Factory resource, addressed by its session id', async () => {
+    const row = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: 'fp-1' };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? row : null)) },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'session-1', resourceId: 'fp-1' },
+    } as any);
+
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'session-1',
+        resourceId: 'fp-1',
+        threadId: 'session-1',
+        tags: { factoryProjectId: 'fp-1' },
+      }),
+    );
+  });
+
   it('leaves ownership off a session row whose factory the backfill could not resolve', async () => {
     const sourceControl = {
       sessions: {
@@ -1225,14 +1293,23 @@ describe('channel session creation context (resolveSession)', () => {
 });
 
 describe('repo-backed thread ids (resolveThreadId)', () => {
-  it('a repo-backed thread takes the session id as its thread id (web convention: threadId = sessionId)', () => {
-    expect(resolveChannelThreadId({ resourceId: 'us-new', defaultThreadId: 'uuid-1' } as any)).toBe('us-new');
+  it('a repo-backed thread takes its session id as its thread id (web convention: threadId = sessionId)', () => {
+    const started: SlackStartedSessions = new WeakMap();
+    const message = makeMessage('T-1');
+    started.set(message, 'us-new');
+    expect(
+      createChannelThreadIdResolver(started)({ message, resourceId: 'fp-1', defaultThreadId: 'uuid-1' } as any),
+    ).toBe('us-new');
   });
 
   it('a chat-only thread keeps the default random id', () => {
-    expect(resolveChannelThreadId({ resourceId: 'channel:slack:C-1:1700.42', defaultThreadId: 'uuid-1' } as any)).toBe(
-      'uuid-1',
-    );
+    expect(
+      createChannelThreadIdResolver(new WeakMap())({
+        message: makeMessage('T-1'),
+        resourceId: 'channel:slack:C-1:1700.42',
+        defaultThreadId: 'uuid-1',
+      } as any),
+    ).toBe('uuid-1');
   });
 });
 
@@ -1575,6 +1652,12 @@ describe('session start (onSessionStart)', () => {
     expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
     expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalledWith('fp-1');
     expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
+    // The Factory's threads share one resource; the stamp ties this one to its session.
+    expect(session.thread.setSettingOn).toHaveBeenCalledWith({
+      threadId: expect.any(String),
+      key: 'factorySessionId',
+      value: 'us-1',
+    });
   });
 
   // The sender's own choice outranks the factory's shared default.

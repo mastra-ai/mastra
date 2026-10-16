@@ -548,7 +548,7 @@ describe('trusted Factory credential policy', () => {
       });
       const ctx = context();
       ctx.set('controller', {
-        sessionId: prepared.resourceId,
+        sessionId: prepared.sessionId,
         resourceId: prepared.resourceId,
         threadId: prepared.threadId,
         state: {},

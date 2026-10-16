@@ -11,6 +11,7 @@ import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
+import { listFactorySessionThreads } from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -602,7 +603,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         if (!options.controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
-        const threads = await options.controller.queryThreads({ resourceId: sessionId });
+        const threads = await listFactorySessionThreads(options.controller, sessionId);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
         const stored = await options.memorySettings.get({ orgId: row.orgId, userId: row.userId });

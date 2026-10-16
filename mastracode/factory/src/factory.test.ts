@@ -1358,7 +1358,7 @@ describe('MastraFactory.prepare', () => {
       controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-9', resourceId: 'session-9' });
 
       await expect(resumeWake({ resourceId: 'session-1', threadId: 'thread-9' })).rejects.toThrow(
-        "Factory session session-1 can't be woken as its owner: thread thread-9 is not the session's.",
+        "Factory session thread-9 can't be woken as its owner: thread thread-9 is not the session's.",
       );
       expect(controllerMock.createSession).not.toHaveBeenCalled();
       expect(runEndReports).toHaveLength(1);

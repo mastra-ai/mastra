@@ -17,10 +17,11 @@ const LINK = 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uui
 // Own paragraph, so it closes the message rather than tailing the last sentence.
 const LINK_SUFFIX = `\n\n[Open session ↗](${LINK})`;
 
-function newSessionContext({ factoryProjectId = 'fp-1' as string | null, resourceId = 'us-42' } = {}) {
+function newSessionContext({ factoryProjectId = 'fp-1' as string | null, sessionId = 'us-42', resourceId = 'fp-1' } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('controller', {
     threadId: 'uuid-thread-1',
+    sessionId,
     resourceId,
     getState: () => (factoryProjectId === null ? {} : { factoryProjectId }),
   });
@@ -158,7 +159,7 @@ describe('FactoryChannelSessionLinkProcessor', () => {
   });
 
   it('a chat-only thread links with its resource in the query', async () => {
-    const out = await render(newSessionContext({ resourceId: 'channel:slack:C-1:1700.42' }), [
+    const out = await render(newSessionContext({ sessionId: 'channel:slack:C-1:1700.42', resourceId: 'channel:slack:C-1:1700.42' }), [
       ...textBlock('Hi'),
       stepFinish(),
     ]);

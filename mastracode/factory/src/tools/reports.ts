@@ -463,7 +463,7 @@ async function sessionAudience(
     const latest = await workItems.findRunBindingBySession({
       factoryProjectId: row.factoryProjectId,
       threadId,
-      resourceId: row.sessionId,
+      resourceId: row.factoryProjectId,
       sessionId: row.sessionId,
     });
     if (latest?.orgId === row.orgId && latest.revokedAt && latest.revokedAt >= since) binding = latest;
