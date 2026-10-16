@@ -10,10 +10,10 @@ Moved the thinking level default onto each Factory. Organization admins set it u
 
 ```bash
 # Before
-curl -X PUT /web/config/thinking -d '{ "globalDefault": "high" }'
+curl -X PUT "$FACTORY_URL/web/config/thinking" -H 'Content-Type: application/json' -d '{ "globalDefault": "high" }'
 
 # After
-curl -X PATCH /web/factory/projects/<factory-id> -d '{ "defaultThinkingLevel": "high" }'
+curl -X PATCH "$FACTORY_URL/web/factory/projects/$FACTORY_ID" -H 'Content-Type: application/json' -d '{ "defaultThinkingLevel": "high" }'
 ```
 
 A level saved in settings.json (global or per mode) is no longer read by Factory sessions, so if you set one there, set it again on each Factory. The per-chat "Chat defaults" row is also gone; a level picked there still overrides the Factory default for the chats that used it, so run `/think default` in those chats to follow the Factory default.

@@ -26,6 +26,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import { getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
+import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import {
   getRequestAccountSelection,
@@ -774,7 +775,7 @@ export class AccountRotationProcessor implements Processor {
         }),
       },
       this.options.settingsPath,
-      args.requestContext
+      args.requestContext && !isThinkingLevelSetting(state?.thinkingLevel)
         ? await this.options.resolveDefaultThinkingLevel?.({ requestContext: args.requestContext })
         : undefined,
     );

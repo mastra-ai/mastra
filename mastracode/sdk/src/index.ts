@@ -126,6 +126,7 @@ import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
 import { mastraBrand } from './theme-palette.js';
+import { isThinkingLevelSetting } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
@@ -1245,12 +1246,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: withCredentialTenantPreparation(async ctx =>
-      getDynamicModel(ctx, config?.settingsPath, {
+    model: withCredentialTenantPreparation(async ctx => {
+      // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
+      const controller = ctx.requestContext.get('controller') as
+        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+        | undefined;
+      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+      return getDynamicModel(ctx, config?.settingsPath, {
         modeless,
-        defaultThinkingLevel: await config?.resolveDefaultThinkingLevel?.(ctx),
-      }),
-    ),
+        defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
+      });
+    }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
