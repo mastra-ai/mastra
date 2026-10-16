@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { mockTextModel } from '@mastra/core/test-utils/llm-mock';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { TextNode } from '../schema';
 import { KeywordExtractor } from './keywords';
@@ -9,19 +9,14 @@ describe('KeywordExtractor', () => {
   let model: any;
 
   beforeAll(() => {
-    model = new MockLanguageModelV1({
-      doGenerate: async () => {
-        const mockResponse = 'keyword1, keyword2, keyword3';
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: mockResponse,
-        };
-      },
-      doStream: async () => {
-        throw new Error('Streaming not implemented for mock');
-      },
+    model = mockTextModel(async () => {
+      const mockResponse = 'keyword1, keyword2, keyword3';
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: mockResponse,
+      };
     });
   });
 

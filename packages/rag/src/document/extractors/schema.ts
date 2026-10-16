@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import type { z } from 'zod';
 
 import type { BaseNode } from '../schema';
@@ -10,7 +10,7 @@ import type { SchemaExtractArgs } from './types';
 
 export class SchemaExtractor<T extends z.ZodType> extends BaseExtractor {
   private schema: T;
-  private llm?: MastraLanguageModel | MastraLegacyLanguageModel;
+  private llm?: MastraLanguageModel;
   private instructions?: string;
   private metadataKey?: string;
 

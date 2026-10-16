@@ -1,6 +1,6 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import { embedMany } from 'ai';
-import type { EmbeddingModel } from 'ai';
+import { embedMany } from '@internal/ai-sdk-v5';
+import type { EmbeddingModel } from '@internal/ai-sdk-v5';
+import { mockTextModel } from '@mastra/core/test-utils/llm-mock';
 import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
@@ -19,7 +19,7 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 
 // Mock embedding model for testing
 const mockEmbeddingModel: EmbeddingModel<string> = {
-  specificationVersion: 'v1',
+  specificationVersion: 'v2',
   provider: 'mock-provider',
   modelId: 'mock-embedding-model',
   maxEmbeddingsPerCall: 128,
@@ -38,50 +38,45 @@ const mockEmbeddingModel: EmbeddingModel<string> = {
 
 // Mock language model for keyword/title/summary/questions extraction
 // Returns different responses based on input text to make tests more realistic
-const mockLanguageModel = new MockLanguageModelV1({
-  doGenerate: async ({ prompt }) => {
-    // Generate a simple response based on the input
-    let mockResponse = 'keyword1, keyword2, keyword3';
+const mockLanguageModel = mockTextModel(async ({ prompt }) => {
+  // Generate a simple response based on the input
+  let mockResponse = 'keyword1, keyword2, keyword3';
 
-    // Check if this is a title extraction (look for context in the prompt)
-    const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-    const lowerPrompt = promptText.toLowerCase();
+  // Check if this is a title extraction (look for context in the prompt)
+  const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+  const lowerPrompt = promptText.toLowerCase();
 
-    // Return different responses based on the type of extraction being done
-    // Match on the actual prompt patterns used by each extractor
-    if (promptText.includes('Alpha')) {
-      // Title extraction for Alpha document
-      mockResponse = 'Title for Alpha Document';
-    } else if (promptText.includes('Beta')) {
-      // Title extraction for Beta document
-      mockResponse = 'Title for Beta Document';
-    } else if (lowerPrompt.includes('extract') && lowerPrompt.includes('keywords')) {
-      // Keyword extraction (matches: "extract up to {maxKeywords} keywords")
-      mockResponse = 'KEYWORDS: keyword1, keyword2, keyword3';
-    } else if (lowerPrompt.includes('write a summary')) {
-      // Summary extraction
-      mockResponse = 'SUMMARY: This is a summary of the document content.';
-    } else if (lowerPrompt.includes('generate') && lowerPrompt.includes('questions')) {
-      // Question extraction
-      mockResponse = 'QUESTIONS: 1. What is this about?\n2. Why is this important?';
-    } else if (lowerPrompt.includes('give a title')) {
-      // Title extraction
-      mockResponse = 'Generated Document Title';
-    } else if (lowerPrompt.includes('based on the above candidate titles')) {
-      // Title combine template
-      mockResponse = 'Combined Document Title';
-    }
+  // Return different responses based on the type of extraction being done
+  // Match on the actual prompt patterns used by each extractor
+  if (promptText.includes('Alpha')) {
+    // Title extraction for Alpha document
+    mockResponse = 'Title for Alpha Document';
+  } else if (promptText.includes('Beta')) {
+    // Title extraction for Beta document
+    mockResponse = 'Title for Beta Document';
+  } else if (lowerPrompt.includes('extract') && lowerPrompt.includes('keywords')) {
+    // Keyword extraction (matches: "extract up to {maxKeywords} keywords")
+    mockResponse = 'KEYWORDS: keyword1, keyword2, keyword3';
+  } else if (lowerPrompt.includes('write a summary')) {
+    // Summary extraction
+    mockResponse = 'SUMMARY: This is a summary of the document content.';
+  } else if (lowerPrompt.includes('generate') && lowerPrompt.includes('questions')) {
+    // Question extraction
+    mockResponse = 'QUESTIONS: 1. What is this about?\n2. Why is this important?';
+  } else if (lowerPrompt.includes('give a title')) {
+    // Title extraction
+    mockResponse = 'Generated Document Title';
+  } else if (lowerPrompt.includes('based on the above candidate titles')) {
+    // Title combine template
+    mockResponse = 'Combined Document Title';
+  }
 
-    return {
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
-      usage: { promptTokens: 10, completionTokens: 20 },
-      text: mockResponse,
-    };
-  },
-  doStream: async () => {
-    throw new Error('Streaming not implemented for mock');
-  },
+  return {
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: mockResponse,
+  };
 });
 
 vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
@@ -3641,7 +3636,6 @@ This section is moderately sized. It's not huge, but it has enough content to be
 
 This final section is very small and should definitely be merged into its predecessor, Section 3.1, because their combined total will be under the threshold.
 `;
-
       const doc = MDocument.fromMarkdown(controlledTestMarkdown);
       await doc.chunk({
         strategy: 'semantic-markdown',

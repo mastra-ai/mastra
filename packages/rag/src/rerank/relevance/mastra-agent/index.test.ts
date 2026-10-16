@@ -6,9 +6,7 @@ const TEST_MODEL = {} as MastraLanguageModel;
 
 const agentMock = vi.hoisted(() => ({
   responseText: '0.5',
-  supportedLanguageModel: true,
   generate: vi.fn(),
-  generateLegacy: vi.fn(),
   getModel: vi.fn(),
 }));
 
@@ -16,19 +14,15 @@ vi.mock('@mastra/core/agent', () => ({
   Agent: class {
     getModel = agentMock.getModel;
     generate = agentMock.generate;
-    generateLegacy = agentMock.generateLegacy;
   },
-  isSupportedLanguageModel: () => agentMock.supportedLanguageModel,
 }));
 
 describe('MastraAgentRelevanceScorer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     agentMock.responseText = '0.5';
-    agentMock.supportedLanguageModel = true;
     agentMock.getModel.mockResolvedValue({});
     agentMock.generate.mockImplementation(async () => ({ text: agentMock.responseText }));
-    agentMock.generateLegacy.mockImplementation(async () => ({ text: agentMock.responseText }));
   });
 
   it('returns a numeric relevance score from model output', async () => {
@@ -36,16 +30,6 @@ describe('MastraAgentRelevanceScorer', () => {
     const scorer = new MastraAgentRelevanceScorer('test', TEST_MODEL);
 
     await expect(scorer.getRelevanceScore('query', 'text')).resolves.toBe(0.75);
-  });
-
-  it('uses legacy generation for legacy models', async () => {
-    agentMock.supportedLanguageModel = false;
-    agentMock.responseText = '0.25';
-    const scorer = new MastraAgentRelevanceScorer('test', TEST_MODEL);
-
-    await expect(scorer.getRelevanceScore('query', 'text')).resolves.toBe(0.25);
-    expect(agentMock.generateLegacy).toHaveBeenCalled();
-    expect(agentMock.generate).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -1,5 +1,5 @@
-import { Agent, isSupportedLanguageModel } from '@mastra/core/agent';
-import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import { createSimilarityPrompt } from '@mastra/core/relevance';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 
@@ -18,7 +18,7 @@ function parseRelevanceScore(responseText: string): number {
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
 
-  constructor(name: string, model: MastraLanguageModel | MastraLegacyLanguageModel) {
+  constructor(name: string, model: MastraLanguageModel) {
     this.agent = new Agent({
       id: `relevance-scorer-${name}`,
       name: `Relevance Scorer ${name}`,
@@ -39,14 +39,7 @@ Always return just the number, no explanation.`,
   async getRelevanceScore(query: string, text: string): Promise<number> {
     const prompt = createSimilarityPrompt(query, text);
 
-    const model = await this.agent.getModel();
-    let response;
-
-    if (isSupportedLanguageModel(model)) {
-      response = await this.agent.generate(prompt);
-    } else {
-      response = await this.agent.generateLegacy(prompt);
-    }
+    const response = await this.agent.generate(prompt);
 
     return parseRelevanceScore(response.text);
   }

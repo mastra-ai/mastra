@@ -6219,15 +6219,9 @@ importers:
         specifier: 0.1.0-alpha.7
         version: 0.1.0-alpha.7(encoding@0.1.13)
     devDependencies:
-      '@ai-sdk/cohere':
-        specifier: ^1.2.10
-        version: 1.2.10(zod@4.6.5)
-      '@ai-sdk/openai':
-        specifier: ^1.3.24
-        version: 1.3.24(zod@4.6.5)
-      '@internal/ai-sdk-v4':
+      '@internal/ai-sdk-v5':
         specifier: workspace:*
-        version: link:../_vendored/ai_v4
+        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6249,9 +6243,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
-      ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.7)(zod@4.6.5)
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -10746,12 +10737,6 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.6.5
-
-  '@ai-sdk/cohere@1.2.10':
-    resolution: {integrity: sha512-OaUwd5xj4bxSO8hdCbX1a5uUlTouU8FcodSuRON6xDSsmjZIvQL4O2G1XzcidxiQVL8JQuA+M0tHZOwGxSL96A==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.0.0
 
   '@ai-sdk/deepinfra@2.0.66':
     resolution: {integrity: sha512-CaKXKQ0+Z/sZ7TwbYYctbdc5GG9unginox54rfh8CfZHdx0ONLsohT+RLzep/Enq+etxl0/i6DDFCE0HVgU8bg==}
@@ -33525,12 +33510,6 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.62(zod@4.6.5)
       '@ai-sdk/provider': 3.0.14
       '@ai-sdk/provider-utils': 4.0.56(zod@4.6.5)
-      zod: 4.6.5
-
-  '@ai-sdk/cohere@1.2.10(zod@4.6.5)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@4.6.5)
       zod: 4.6.5
 
   '@ai-sdk/deepinfra@2.0.66(zod@4.6.5)':
