@@ -122,6 +122,53 @@ describe('action format', () => {
     expect(toModelMessages([unversioned as PersistableAction])).toHaveLength(1);
   });
 
+  it('drops a call whose outcome was skipped, and an outcome whose call was skipped', () => {
+    const call = (toolCallId: string, extra = {}) =>
+      ({
+        ...base(),
+        type: 'tool-call',
+        role: 'assistant',
+        toolCallId,
+        toolName: 'pick',
+        input: {},
+        ...extra,
+      }) as PersistableAction;
+    const result = (toolCallId: string, extra = {}) =>
+      ({ ...base(), type: 'tool-result', toolCallId, toolName: 'pick', output: 'blue', ...extra }) as PersistableAction;
+    const user = { ...base(), type: 'text', role: 'user', text: 'hello' } as PersistableAction;
+    const said = { ...base(), type: 'text', role: 'assistant', text: 'checking' } as PersistableAction;
+
+    expect(toModelMessages([user, said, call('c1'), result('c1', { formatVersion: 2 })])).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'checking' }] },
+    ]);
+    expect(toModelMessages([user, call('c1', { formatVersion: 2 }), result('c1')])).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ]);
+    // A complete pair is untouched.
+    expect(toModelMessages([user, call('c1'), result('c1')]).flatMap(m => m.content as { type: string }[])).toEqual([
+      expect.objectContaining({ type: 'text' }),
+      expect.objectContaining({ type: 'tool-call', toolCallId: 'c1' }),
+      expect.objectContaining({ type: 'tool-result', toolCallId: 'c1' }),
+    ]);
+  });
+
+  it('keeps a call waiting on approval, with its request and any answer', () => {
+    const user = { ...base(), type: 'text', role: 'user', text: 'delete it' } as PersistableAction;
+    const actions = [
+      user,
+      { ...base(), type: 'tool-call', role: 'assistant', toolCallId: 'c1', toolName: 'rm', input: {} },
+      { ...base(), type: 'tool-approval-requested', approvalId: 'a1', toolCallId: 'c1', toolName: 'rm', input: {} },
+      { ...base(), type: 'tool-approval-responded', approvalId: 'a1', toolCallId: 'c1', approved: true },
+    ] as PersistableAction[];
+    expect(toModelMessages(actions).flatMap(m => (m.content as { type: string }[]).map(p => p.type))).toEqual([
+      'text',
+      'tool-call',
+      'tool-approval-request',
+      'tool-approval-response',
+    ]);
+  });
+
   it('isReadableAction gates on the version only', () => {
     expect(isReadableAction({ ...base(), type: 'text', role: 'user', text: 'x', formatVersion: 1 })).toBe(true);
     expect(isReadableAction({ ...base(), type: 'text', role: 'user', text: 'x' })).toBe(true);

@@ -46,6 +46,7 @@ describe('toModelMessages', () => {
   it('maps errors, denials, approvals and signals', () => {
     const log = stamp([
       { type: 'tool-call', role: 'assistant', toolCallId: 'c1', toolName: 'w', input: {} },
+      { type: 'tool-call', role: 'assistant', toolCallId: 'c2', toolName: 'w', input: {} },
       { type: 'tool-approval-requested', toolCallId: 'c1', toolName: 'w', approvalId: 'a1' },
       { type: 'tool-approval-responded', toolCallId: 'c1', toolName: 'w', approvalId: 'a1', approved: false },
       { type: 'tool-denied', toolCallId: 'c1', toolName: 'w', reason: 'no' },
@@ -57,6 +58,7 @@ describe('toModelMessages', () => {
       role: 'assistant',
       content: [
         { type: 'tool-call', toolCallId: 'c1', toolName: 'w', input: {} },
+        { type: 'tool-call', toolCallId: 'c2', toolName: 'w', input: {} },
         { type: 'tool-approval-request', approvalId: 'a1', toolCallId: 'c1' },
       ],
     });
