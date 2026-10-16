@@ -3114,7 +3114,7 @@ describe('Memory Handlers', () => {
         threadId: 'th1',
         resourceId: 'u1',
       } as never);
-      expect(result).toMatchObject({ actions: [{ type: 'text', text: 'hi', formatVersion: 1 }] });
+      expect(result).toMatchObject({ actions: [{ type: 'text', text: 'hi' }] });
     });
   });
 });

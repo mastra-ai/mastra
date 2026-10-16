@@ -37,7 +37,7 @@ import {
 } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import type { ListActionsQuery, PersistableAction } from './base';
-import { MemoryStorage, toStoredAction } from './base';
+import { MemoryStorage } from './base';
 
 export class InMemoryMemory extends MemoryStorage {
   override readonly supportsPartialThreadUpdate: boolean = true;
@@ -56,7 +56,7 @@ export class InMemoryMemory extends MemoryStorage {
       if (thread.some(existing => existing.id === action.id)) {
         throw new Error(`Action ${action.id} already exists; actions are append-only`);
       }
-      thread.push(structuredClone(toStoredAction(action)));
+      thread.push(structuredClone(action));
       this.db.actions.set(action.threadId, thread);
     }
   }

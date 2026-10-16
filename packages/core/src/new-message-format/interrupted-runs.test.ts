@@ -217,66 +217,6 @@ describe('reading the log', () => {
   const row = (id: string, rest: Record<string, unknown>) =>
     ({ id, threadId: 't1', runId: 'r1', createdAt: new Date(0), ...rest }) as PersistableAction;
 
-  it('repair writes no closer for a run it cannot fully read', async () => {
-    const memory = new InMemoryActionStorage();
-    await memory.saveActions({
-      actions: [
-        row('01J00000000000000000000001', { type: 'run-start', agentId: 'a', modelId: 'm', settings: {} }),
-        row('01J00000000000000000000002', { type: 'text', role: 'user', text: 'hi' }),
-        row('01J00000000000000000000003', { type: 'turn-start' }),
-        row('01J00000000000000000000004', {
-          type: 'tool-call',
-          role: 'assistant',
-          toolCallId: 'c1',
-          toolName: 'pick',
-          input: {},
-        }),
-        // A newer writer closed the call and the run; this reader can't read either row.
-        row('01J00000000000000000000005', {
-          type: 'tool-result',
-          toolCallId: 'c1',
-          toolName: 'pick',
-          output: 'blue',
-          formatVersion: 2,
-        }),
-        row('01J00000000000000000000006', { type: 'run-end', finishReason: 'stop', usage: {}, formatVersion: 2 }),
-      ],
-    });
-    const { model, prompts } = scriptedModel([textTurn('Hello.')]);
-    await drain(runAgent({ model, threadId: 't1', memory, input: 'again' }));
-    const log = await memory.listActions({ threadId: 't1' });
-    expect(log.filter(a => a.runId === 'r1').map(a => a.id)).toEqual([
-      '01J00000000000000000000001',
-      '01J00000000000000000000002',
-      '01J00000000000000000000003',
-      '01J00000000000000000000004',
-      '01J00000000000000000000005',
-      '01J00000000000000000000006',
-    ]);
-    // The model never sees the call without its result.
-    expectValidToolPairs(prompts[0]);
-  });
-
-  it("repair still closes an unreadable run's neighbours", async () => {
-    const memory = new InMemoryActionStorage();
-    await memory.saveActions({
-      actions: [
-        row('01J00000000000000000000001', { type: 'run-start', agentId: 'a', modelId: 'm', settings: {} }),
-        row('01J00000000000000000000002', { type: 'text', role: 'user', text: 'hi' }),
-        {
-          ...row('01J00000000000000000000003', { type: 'run-start', agentId: 'a', modelId: 'm', settings: {} }),
-          runId: 'r2',
-        },
-        { ...row('01J00000000000000000000004', { type: 'usage', formatVersion: 2 }), runId: 'r2' },
-      ],
-    });
-    const { model } = scriptedModel([textTurn('Hello.')]);
-    await drain(runAgent({ model, threadId: 't1', memory, input: 'again' }));
-    const log = await memory.listActions({ threadId: 't1' });
-    expect(log.filter(a => a.runId === 'r1' && a.type === 'run-end')).toHaveLength(1);
-    expect(log.filter(a => a.runId === 'r2' && a.type === 'run-end')).toHaveLength(0);
-  });
-
   it('projection keeps the first of two outcomes for one call', () => {
     const messages = toModelMessages([
       row('01', { type: 'tool-call', role: 'assistant', toolCallId: 'c1', toolName: 'pick', input: {} }),

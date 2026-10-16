@@ -6,7 +6,6 @@ import type {
   ProviderOptions,
 } from '@internal/ai-v7';
 import type { PersistableAction, SignalAction, ToolResultAction } from './types';
-import { isReadableAction } from './types';
 
 type AssistantPart = Exclude<AssistantModelMessage['content'], string>[number];
 type ToolPart = ToolModelMessage['content'][number];
@@ -35,10 +34,7 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
   const tool = (part: ToolPart) => open('tool').content.push(part);
 
   const outcomeFor = new Set<string>();
-  const called = new Set<string>();
-  const approvalFor = new Map<string, string>();
   for (const action of actions) {
-    if (!isReadableAction(action)) continue;
     const providerOptions = action.providerMetadata as ProviderOptions | undefined;
     const opts = providerOptions ? { providerOptions } : {};
     switch (action.type) {
@@ -66,7 +62,6 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
         assistant({ type: 'reasoning-file', data: toData(action.data), mediaType: action.mediaType, ...opts });
         break;
       case 'tool-call':
-        called.add(action.toolCallId);
         if (action.providerExecuted) providerExecuted.add(action.toolCallId);
         assistant({
           type: 'tool-call',
@@ -78,7 +73,6 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
         });
         break;
       case 'tool-approval-requested':
-        approvalFor.set(action.approvalId, action.toolCallId);
         assistant({ type: 'tool-approval-request', approvalId: action.approvalId, toolCallId: action.toolCallId });
         break;
       case 'tool-approval-responded':
@@ -158,33 +152,11 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
       case 'background-tool-ended':
         break;
       default:
-        // A type from a newer writer, or a custom `data-*` row: skipped.
+        // Bookkeeping and custom `data-*` rows aren't model content.
         break;
     }
   }
-  // A skipped row (one this reader can't read) can leave a call without its outcome or an outcome without its
-  // call; providers reject either, so both halves go. A call waiting on an approval keeps its request.
-  const awaiting = new Set(approvalFor.values());
-  const paired = (part: { type: string; toolCallId?: string; approvalId?: string }): boolean => {
-    switch (part.type) {
-      case 'tool-call':
-        // A provider-executed call may be deferred: its result comes from the provider later, so it goes as is.
-        return (
-          outcomeFor.has(part.toolCallId!) || awaiting.has(part.toolCallId!) || providerExecuted.has(part.toolCallId!)
-        );
-      case 'tool-result':
-      case 'tool-approval-request':
-        return called.has(part.toolCallId!);
-      case 'tool-approval-response':
-        return called.has(approvalFor.get(part.approvalId!) ?? '');
-      default:
-        return true;
-    }
-  };
-  for (const message of messages)
-    if (Array.isArray(message.content))
-      message.content = (message.content as { type: string }[]).filter(paired) as typeof message.content;
-  return messages.filter(m => !Array.isArray(m.content) || m.content.length > 0);
+  return messages;
 }
 
 function toolOutput(action: PersistableAction & { type: 'tool-result' | 'tool-error' | 'tool-denied' }): ToolOutput {
