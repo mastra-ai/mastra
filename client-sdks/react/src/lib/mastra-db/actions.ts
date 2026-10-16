@@ -98,14 +98,23 @@ export const actionsToMessages = (actions: MastraAction[]): MastraDBMessage[] =>
   let messages: MastraDBMessage[] = [];
 
   for (const action of actions) {
-    if (action.type === 'text' && action.role === 'user') {
+    if ((action.type === 'text' || action.type === 'file') && action.role === 'user') {
       messages = finishStreamingAssistantMessage(messages);
+      const part: MastraDBMessage['content']['parts'][number] =
+        action.type === 'text'
+          ? { type: 'text', text: action.text }
+          : {
+              type: 'file',
+              mimeType: action.mediaType,
+              data: action.data,
+              ...(action.filename ? { filename: action.filename } : {}),
+            };
       const last = messages[messages.length - 1];
-      // Consecutive user text in one run belongs to one message.
+      // Consecutive user content in one run belongs to one message.
       if (last?.role === 'user' && last.id.startsWith(`${action.runId ?? action.id}-user`)) {
         messages[messages.length - 1] = {
           ...last,
-          content: { ...last.content, parts: [...last.content.parts, { type: 'text', text: action.text }] },
+          content: { ...last.content, parts: [...last.content.parts, part] },
         };
         continue;
       }
@@ -115,7 +124,7 @@ export const actionsToMessages = (actions: MastraAction[]): MastraDBMessage[] =>
         createdAt: new Date(action.createdAt),
         threadId: action.threadId,
         resourceId: action.resourceId,
-        content: { format: 2, parts: [{ type: 'text', text: action.text }] },
+        content: { format: 2, parts: [part] },
       });
       continue;
     }

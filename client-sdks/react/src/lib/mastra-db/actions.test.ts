@@ -25,6 +25,19 @@ const toolRun: MastraAction[] = [
 ] as MastraAction[];
 
 describe('actionsToMessages', () => {
+  it('keeps user attachments in the same message as the user text', () => {
+    const messages = actionsToMessages([
+      { ...base('01'), type: 'text', role: 'user', text: 'What colour?' },
+      { ...base('02'), type: 'file', role: 'user', mediaType: 'image/png', data: 'data:image/png;base64,AAA' },
+    ] as MastraAction[]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.content.parts).toEqual([
+      { type: 'text', text: 'What colour?' },
+      { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,AAA' },
+    ]);
+  });
+
   it('rebuilds a user message and one assistant message per run', () => {
     const messages = actionsToMessages([
       ...toolRun,
