@@ -80,11 +80,16 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   // A resumed run (an approval answer) continues under its runId and already has a run-start.
   const resuming = history.some(a => a.runId === runId);
   const additions = [...drafts, ...(options.append ?? [])];
+  // Resuming, this run also runs the calls an earlier answer approved while it waited for the rest, unless one
+  // already started: then it may have run, and repair closes it as outcome unknown rather than running it again.
+  const startedCalls = new Set(history.flatMap(a => (a.type === 'tool-started' ? [a.toolCallId] : [])));
+  const approvedEarlier = resuming
+    ? [...answeredCalls(history.filter(a => a.runId === runId))].filter(id => !startedCalls.has(id))
+    : [];
   const repairs = close(
     repairOpenRun(history, {
       ...(resuming ? { resumingRunId: runId } : {}),
-      // Resuming, this run also runs the calls an earlier answer approved while it waited for the rest.
-      answeredCallIds: answeredCalls([...additions, ...(resuming ? history.filter(a => a.runId === runId) : [])]),
+      answeredCallIds: new Set([...answeredCalls(additions), ...approvedEarlier]),
     }),
   );
   const recalled = options.recall ? options.recall([...history, ...repairs]) : [...history, ...repairs];
