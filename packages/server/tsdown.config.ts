@@ -11,6 +11,7 @@ export default defineConfig({
     'src/server/auth/index.ts',
     'src/server/schemas/index.ts',
     'src/server/browser-stream/index.ts',
+    'src/server/error-codes/index.ts',
     '!src/server/handlers/*.test.ts',
     '!src/server/auth/*.test.ts',
     '!src/server/schemas/*.test.ts',

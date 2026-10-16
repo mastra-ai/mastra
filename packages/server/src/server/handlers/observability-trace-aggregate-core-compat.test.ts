@@ -53,6 +53,7 @@ describe('trace aggregate Core compatibility', () => {
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_AGGREGATE_UNSUPPORTED',
       message: 'Trace aggregation requires a newer @mastra/core. Please upgrade.',
+      problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
     });
     expect(getStorage).not.toHaveBeenCalled();
   });

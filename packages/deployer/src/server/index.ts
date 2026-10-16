@@ -197,9 +197,13 @@ export async function createHonoServer(
   });
 
   // Define body limit options
+  const bodyLimitMaxSize = server?.bodySizeLimit ?? 4.5 * 1024 * 1024; // 4.5 MB
   const bodyLimitOptions = {
-    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
-    onError: () => ({ error: 'Request body too large' }),
+    maxSize: bodyLimitMaxSize,
+    onError: () => ({
+      error: 'Request body too large',
+      problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: bodyLimitMaxSize } },
+    }),
   };
 
   // Create server adapter with all configuration

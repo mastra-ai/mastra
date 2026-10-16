@@ -48,7 +48,7 @@ export async function isBuilderFeatureEnabled(mastra: Mastra, feature: keyof Age
  */
 export async function requireBuilderFeature(mastra: Mastra, feature: keyof AgentFeatures): Promise<void> {
   if (!(await isBuilderFeatureEnabled(mastra, feature))) {
-    throw new HTTPException(404, { message: 'Not Found' });
+    throw new HTTPException(404, { message: 'Not Found', code: 'AGENT_BUILDER_NOT_ENABLED' });
   }
 }
 
@@ -172,7 +172,7 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
         ...(modelPolicyWarnings.length > 0 ? { modelPolicyWarnings } : {}),
       };
     } catch (error) {
-      return handleError(error, 'Error getting builder settings');
+      return handleError(error, { message: 'Error getting builder settings', code: 'BUILDER_SETTINGS_GET_FAILED' });
     }
   },
 });
@@ -230,7 +230,7 @@ export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
 
       return { providers: filtered };
     } catch (error) {
-      return handleError(error, 'Error fetching available models');
+      return handleError(error, { message: 'Error fetching available models', code: 'BUILDER_MODELS_FETCH_FAILED' });
     }
   },
 });
@@ -393,7 +393,10 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
 
       return { channels, browser, workspace, registries };
     } catch (error) {
-      return handleError(error, 'Error getting infrastructure status');
+      return handleError(error, {
+        message: 'Error getting infrastructure status',
+        code: 'BUILDER_INFRASTRUCTURE_STATUS_GET_FAILED',
+      });
     }
   },
 });

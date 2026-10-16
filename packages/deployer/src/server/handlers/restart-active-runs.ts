@@ -23,6 +23,9 @@ export async function restartAllActiveWorkflowRunsHandler(c: Context) {
 
     return c.json({ message: 'Restarting all active workflow runs...' });
   } catch (error) {
-    return handleError(error, 'Error restarting active workflow runs');
+    return handleError(error, {
+      message: 'Error restarting active workflow runs',
+      code: 'WORKFLOW_ACTIVE_RUNS_RESTART_FAILED',
+    });
   }
 }

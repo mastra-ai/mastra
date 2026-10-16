@@ -202,7 +202,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         observabilityRuntimeStrategy,
       };
     } catch (error) {
-      return handleError(error, 'Error getting system packages');
+      return handleError(error, { message: 'Error getting system packages', code: 'SYSTEM_PACKAGES_GET_FAILED' });
     }
   },
 });

@@ -31,7 +31,7 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
       const editor = mastra.getEditor();
 
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, { message: 'Editor is not configured', code: 'EDITOR_NOT_CONFIGURED' });
       }
 
       const providers = editor.getProcessorProviders();
@@ -43,7 +43,10 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
         })),
       };
     } catch (error) {
-      return handleError(error, 'Error listing processor providers');
+      return handleError(error, {
+        message: 'Error listing processor providers',
+        code: 'PROCESSOR_PROVIDERS_LIST_FAILED',
+      });
     }
   },
 });
@@ -66,13 +69,17 @@ export const GET_PROCESSOR_PROVIDER_ROUTE = createRoute({
       const editor = mastra.getEditor();
 
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, { message: 'Editor is not configured', code: 'EDITOR_NOT_CONFIGURED' });
       }
 
       const provider = editor.getProcessorProvider(providerId);
 
       if (!provider) {
-        throw new HTTPException(404, { message: `Processor provider with id ${providerId} not found` });
+        throw new HTTPException(404, {
+          message: `Processor provider with id ${providerId} not found`,
+          code: 'PROCESSOR_PROVIDER_NOT_FOUND',
+          metadata: { providerId },
+        });
       }
 
       return {
@@ -81,7 +88,7 @@ export const GET_PROCESSOR_PROVIDER_ROUTE = createRoute({
         configSchema: zodToJsonSchema(provider.configSchema) as Record<string, unknown>,
       };
     } catch (error) {
-      return handleError(error, 'Error getting processor provider');
+      return handleError(error, { message: 'Error getting processor provider', code: 'PROCESSOR_PROVIDER_GET_FAILED' });
     }
   },
 });

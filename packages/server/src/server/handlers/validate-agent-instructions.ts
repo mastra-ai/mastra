@@ -85,12 +85,16 @@ export async function validateAgentInstructionReferences({
   if (unresolvedIds.length > 0) {
     throw new HTTPException(400, {
       message: `Unable to verify referenced prompt blocks: ${unresolvedIds.join(', ')}. Resolve these references and try again.`,
+      code: 'PROMPT_BLOCK_REFERENCE_UNRESOLVED',
+      metadata: { promptBlockIds: unresolvedIds },
     });
   }
 
   if (unpublishedIds.length > 0) {
     throw new HTTPException(400, {
       message: UNPUBLISHED_REFERENCES_MESSAGE.replace('{ids}', unpublishedIds.join(', ')),
+      code: 'PROMPT_BLOCK_REFERENCE_UNPUBLISHED',
+      metadata: { promptBlockIds: unpublishedIds },
     });
   }
 }

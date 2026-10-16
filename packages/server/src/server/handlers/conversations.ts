@@ -55,16 +55,27 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, agent_id, conversation_id, resource_id, title, metadata }) => {
     try {
       if (!mastra) {
-        throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
+        throw new HTTPException(500, {
+          message: 'Mastra instance is required for conversations',
+          code: 'MASTRA_INSTANCE_REQUIRED',
+        });
       }
 
       const agent = await getAgentFromSystem({ mastra, agentId: agent_id });
       const memory = await agent.getMemory({ requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: `Agent "${agent.id}" does not have memory configured` });
+        throw new HTTPException(400, {
+          message: `Agent "${agent.id}" does not have memory configured`,
+          code: 'CONVERSATION_MEMORY_NOT_CONFIGURED',
+          metadata: { agentId: agent.id },
+        });
       }
       if (!(await getAgentMemoryStore({ agent, requestContext }))) {
-        throw new HTTPException(400, { message: `Memory storage is not configured for agent "${agent.id}"` });
+        throw new HTTPException(400, {
+          message: `Memory storage is not configured for agent "${agent.id}"`,
+          code: 'MEMORY_STORAGE_NOT_INITIALIZED',
+          metadata: { agentId: agent.id },
+        });
       }
 
       const threadId = conversation_id ?? globalThis.crypto.randomUUID();
@@ -85,7 +96,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
 
       return buildConversationObject({ thread });
     } catch (error) {
-      return handleError(error, 'Error creating conversation');
+      return handleError(error, { message: 'Error creating conversation', code: 'CONVERSATION_CREATE_FAILED' });
     }
   },
 });
@@ -105,12 +116,16 @@ export const GET_CONVERSATION_ROUTE = createRoute({
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: 'CONVERSATION_NOT_FOUND',
+          metadata: { conversationId },
+        });
       }
 
       return buildConversationObject({ thread: match.thread });
     } catch (error) {
-      return handleError(error, 'Error retrieving conversation');
+      return handleError(error, { message: 'Error retrieving conversation', code: 'CONVERSATION_GET_FAILED' });
     }
   },
 });
@@ -130,7 +145,11 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: 'CONVERSATION_NOT_FOUND',
+          metadata: { conversationId },
+        });
       }
 
       const { messages } = await match.memoryStore.listMessages({
@@ -141,7 +160,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
 
       return buildConversationItemsList(mapMastraMessagesToConversationItems(messages));
     } catch (error) {
-      return handleError(error, 'Error retrieving conversation');
+      return handleError(error, { message: 'Error retrieving conversation', code: 'CONVERSATION_GET_FAILED' });
     }
   },
 });
@@ -161,14 +180,18 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: 'CONVERSATION_NOT_FOUND',
+          metadata: { conversationId },
+        });
       }
 
       await match.memoryStore.deleteThread({ threadId: conversationId });
 
       return buildConversationDeleted(conversationId);
     } catch (error) {
-      return handleError(error, 'Error deleting conversation');
+      return handleError(error, { message: 'Error deleting conversation', code: 'CONVERSATION_DELETE_FAILED' });
     }
   },
 });

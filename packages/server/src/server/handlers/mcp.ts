@@ -26,6 +26,7 @@ import type { MCPServerTransport } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { handleError } from './error';
 
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
@@ -66,67 +67,74 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     limit,
     offset,
   }: ServerContext & { page?: number; perPage?: number; limit?: number; offset?: number }) => {
-    if (!mastra || typeof mastra.listMCPServers !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or listMCPServers method not available' });
-    }
+    try {
+      if (!mastra || typeof mastra.listMCPServers !== 'function') {
+        throw new HTTPException(500, {
+          message: 'Mastra instance or listMCPServers method not available',
+          code: 'MCP_SERVERS_LIST_UNSUPPORTED',
+        });
+      }
 
-    const servers = mastra.listMCPServers();
+      const servers = mastra.listMCPServers();
 
-    if (!servers) {
-      return { servers: [], total_count: 0, next: null };
-    }
+      if (!servers) {
+        return { servers: [], total_count: 0, next: null };
+      }
 
-    const serverList = Object.values(servers);
-    const totalCount = serverList.length;
+      const serverList = Object.values(servers);
+      const totalCount = serverList.length;
 
-    // Support both page/perPage and limit/offset for backwards compatibility
-    // Detect which format user is using - prefer page/perPage if both provided
-    const useLegacyFormat =
-      (limit !== undefined || offset !== undefined) && page === undefined && perPage === undefined;
+      // Support both page/perPage and limit/offset for backwards compatibility
+      // Detect which format user is using - prefer page/perPage if both provided
+      const useLegacyFormat =
+        (limit !== undefined || offset !== undefined) && page === undefined && perPage === undefined;
 
-    // If perPage provided, use it; otherwise fall back to limit
-    const finalPerPage = perPage ?? limit;
-    // If page provided, use it; otherwise convert from offset
-    let finalPage = page;
-    if (finalPage === undefined && offset !== undefined && finalPerPage !== undefined && finalPerPage > 0) {
-      finalPage = Math.floor(offset / finalPerPage);
-    }
+      // If perPage provided, use it; otherwise fall back to limit
+      const finalPerPage = perPage ?? limit;
+      // If page provided, use it; otherwise convert from offset
+      let finalPage = page;
+      if (finalPage === undefined && offset !== undefined && finalPerPage !== undefined && finalPerPage > 0) {
+        finalPage = Math.floor(offset / finalPerPage);
+      }
 
-    // Calculate offset from page/perPage
-    const actualOffset = finalPage !== undefined && finalPerPage !== undefined ? finalPage * finalPerPage : 0;
+      // Calculate offset from page/perPage
+      const actualOffset = finalPage !== undefined && finalPerPage !== undefined ? finalPage * finalPerPage : 0;
 
-    // Apply pagination
-    let paginatedServers = serverList;
-    let nextUrl: string | null = null;
+      // Apply pagination
+      let paginatedServers = serverList;
+      let nextUrl: string | null = null;
 
-    if (finalPerPage !== undefined) {
-      paginatedServers = serverList.slice(actualOffset, actualOffset + finalPerPage);
+      if (finalPerPage !== undefined) {
+        paginatedServers = serverList.slice(actualOffset, actualOffset + finalPerPage);
 
-      // Calculate next URL if there are more results
-      if (actualOffset + finalPerPage < totalCount) {
-        const nextPage = (finalPage ?? 0) + 1;
-        // Return next URL in same format as request (legacy limit/offset or page/perPage)
-        const prefix = routePrefix ?? '';
-        if (useLegacyFormat) {
-          const nextOffset = actualOffset + finalPerPage;
-          nextUrl = `${prefix}/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
-        } else {
-          nextUrl = `${prefix}/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+        // Calculate next URL if there are more results
+        if (actualOffset + finalPerPage < totalCount) {
+          const nextPage = (finalPage ?? 0) + 1;
+          // Return next URL in same format as request (legacy limit/offset or page/perPage)
+          const prefix = routePrefix ?? '';
+          if (useLegacyFormat) {
+            const nextOffset = actualOffset + finalPerPage;
+            nextUrl = `${prefix}/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
+          } else {
+            nextUrl = `${prefix}/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+          }
         }
       }
+
+      // Get server info for each server
+      const serverInfoList: MCPServerInfoResponse[] = paginatedServers.map(server => ({
+        ...server.getServerInfo(),
+        transports: transportsOf(server),
+      }));
+
+      return {
+        servers: serverInfoList,
+        total_count: totalCount,
+        next: nextUrl,
+      };
+    } catch (error) {
+      return handleError(error, { message: 'Error listing MCP servers', code: 'MCP_SERVERS_LIST_FAILED' });
     }
-
-    // Get server info for each server
-    const serverInfoList: MCPServerInfoResponse[] = paginatedServers.map(server => ({
-      ...server.getServerInfo(),
-      transports: transportsOf(server),
-    }));
-
-    return {
-      servers: serverInfoList,
-      total_count: totalCount,
-      next: nextUrl,
-    };
   },
 });
 
@@ -142,26 +150,39 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   tags: ['MCP'],
   requiresAuth: true,
   handler: async ({ mastra, id, version }: ServerContext & { id: string; version?: string }) => {
-    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    try {
+      if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+        throw new HTTPException(500, {
+          message: 'Mastra instance or getMCPServerById method not available',
+          code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+        });
+      }
+
+      const server = mastra.getMCPServerById(id);
+
+      if (!server) {
+        throw new HTTPException(404, {
+          message: `MCP server with ID '${id}' not found`,
+          code: 'MCP_SERVER_NOT_FOUND',
+          metadata: { serverId: id },
+        });
+      }
+
+      const serverDetail = { ...server.getServerDetail(), transports: transportsOf(server) };
+
+      // If a specific version was requested, check if it matches
+      if (version && serverDetail.version_detail.version !== version) {
+        throw new HTTPException(404, {
+          message: `MCP server with ID '${id}' found, but not version '${version}'. Available version: ${serverDetail.version_detail.version}`,
+          code: 'MCP_SERVER_VERSION_NOT_FOUND',
+          metadata: { serverId: id, version, availableVersion: serverDetail.version_detail.version },
+        });
+      }
+
+      return serverDetail;
+    } catch (error) {
+      return handleError(error, { message: 'Error getting MCP server', code: 'MCP_SERVER_GET_FAILED' });
     }
-
-    const server = mastra.getMCPServerById(id);
-
-    if (!server) {
-      throw new HTTPException(404, { message: `MCP server with ID '${id}' not found` });
-    }
-
-    const serverDetail = { ...server.getServerDetail(), transports: transportsOf(server) };
-
-    // If a specific version was requested, check if it matches
-    if (version && serverDetail.version_detail.version !== version) {
-      throw new HTTPException(404, {
-        message: `MCP server with ID '${id}' found, but not version '${version}'. Available version: ${serverDetail.version_detail.version}`,
-      });
-    }
-
-    return serverDetail;
   },
 });
 
@@ -176,21 +197,36 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   tags: ['MCP'],
   requiresAuth: true,
   handler: async ({ mastra, serverId, requestContext }: ServerContext & { serverId: string }) => {
-    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    try {
+      if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+        throw new HTTPException(500, {
+          message: 'Mastra instance or getMCPServerById method not available',
+          code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+        });
+      }
+
+      const server = mastra.getMCPServerById(serverId);
+
+      if (!server) {
+        throw new HTTPException(404, {
+          message: `MCP server with ID '${serverId}' not found`,
+          code: 'MCP_SERVER_NOT_FOUND',
+          metadata: { serverId },
+        });
+      }
+
+      if (typeof server.getToolListInfo !== 'function') {
+        throw new HTTPException(501, {
+          message: `Server '${serverId}' cannot list tools in this way.`,
+          code: 'MCP_TOOLS_UNSUPPORTED',
+          metadata: { serverId },
+        });
+      }
+
+      return await server.getToolListInfo(requestContext);
+    } catch (error) {
+      return handleError(error, { message: 'Error listing MCP server tools', code: 'MCP_SERVER_TOOLS_LIST_FAILED' });
     }
-
-    const server = mastra.getMCPServerById(serverId);
-
-    if (!server) {
-      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
-    }
-
-    if (typeof server.getToolListInfo !== 'function') {
-      throw new HTTPException(501, { message: `Server '${serverId}' cannot list tools in this way.` });
-    }
-
-    return await server.getToolListInfo(requestContext);
   },
 });
 
@@ -205,26 +241,45 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   tags: ['MCP'],
   requiresAuth: true,
   handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
-    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    try {
+      if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+        throw new HTTPException(500, {
+          message: 'Mastra instance or getMCPServerById method not available',
+          code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+        });
+      }
+
+      const server = mastra.getMCPServerById(serverId);
+
+      if (!server) {
+        throw new HTTPException(404, {
+          message: `MCP server with ID '${serverId}' not found`,
+          code: 'MCP_SERVER_NOT_FOUND',
+          metadata: { serverId },
+        });
+      }
+
+      if (typeof server.getToolInfo !== 'function') {
+        throw new HTTPException(501, {
+          message: `Server '${serverId}' cannot provide tool details in this way.`,
+          code: 'MCP_TOOLS_UNSUPPORTED',
+          metadata: { serverId },
+        });
+      }
+
+      const toolInfo = await server.getToolInfo(toolId);
+      if (!toolInfo) {
+        throw new HTTPException(404, {
+          message: `Tool with ID '${toolId}' not found on MCP server '${serverId}'`,
+          code: 'MCP_TOOL_NOT_FOUND',
+          metadata: { toolId, serverId },
+        });
+      }
+
+      return toolInfo;
+    } catch (error) {
+      return handleError(error, { message: 'Error getting MCP server tool', code: 'MCP_SERVER_TOOL_GET_FAILED' });
     }
-
-    const server = mastra.getMCPServerById(serverId);
-
-    if (!server) {
-      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
-    }
-
-    if (typeof server.getToolInfo !== 'function') {
-      throw new HTTPException(501, { message: `Server '${serverId}' cannot provide tool details in this way.` });
-    }
-
-    const toolInfo = await server.getToolInfo(toolId);
-    if (!toolInfo) {
-      throw new HTTPException(404, { message: `Tool with ID '${toolId}' not found on MCP server '${serverId}'` });
-    }
-
-    return toolInfo;
   },
 });
 
@@ -254,45 +309,65 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     resumeData?: unknown;
     suspendPayload?: unknown;
   }) => {
-    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
-    }
+    try {
+      if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+        throw new HTTPException(500, {
+          message: 'Mastra instance or getMCPServerById method not available',
+          code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+        });
+      }
 
-    const server = mastra.getMCPServerById(serverId);
+      const server = mastra.getMCPServerById(serverId);
 
-    if (!server) {
-      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
-    }
+      if (!server) {
+        throw new HTTPException(404, {
+          message: `MCP server with ID '${serverId}' not found`,
+          code: 'MCP_SERVER_NOT_FOUND',
+          metadata: { serverId },
+        });
+      }
 
-    if (typeof server.executeTool !== 'function') {
-      throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
-    }
+      if (typeof server.executeTool !== 'function') {
+        throw new HTTPException(501, {
+          message: `Server '${serverId}' cannot execute tools in this way.`,
+          code: 'MCP_TOOLS_UNSUPPORTED',
+          metadata: { serverId },
+        });
+      }
 
-    if (server.mcpVersion === 2) {
-      // A 2026-07-28 server runs the tool with no protocol client attached: a tool
-      // that suspends for input is reported as such instead of pretending it finished, and
-      // the caller answers by sending the same args with `resumeData` and `suspendPayload`.
-      let execution: MCPToolExecutionResultV2;
-      try {
-        execution = await server.executeTool(toolId, data, { requestContext, resumeData, suspendPayload });
-      } catch (error) {
-        if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') {
-          throw new HTTPException(400, { message: error.message, cause: error });
+      if (server.mcpVersion === 2) {
+        // A 2026-07-28 server runs the tool with no protocol client attached: a tool
+        // that suspends for input is reported as such instead of pretending it finished, and
+        // the caller answers by sending the same args with `resumeData` and `suspendPayload`.
+        let execution: MCPToolExecutionResultV2;
+        try {
+          execution = await server.executeTool(toolId, data, { requestContext, resumeData, suspendPayload });
+        } catch (error) {
+          if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') {
+            throw new HTTPException(400, {
+              message: error.message,
+              cause: error,
+              code: 'MCP_TOOL_INPUT_INVALID',
+              metadata: { serverId, toolId },
+            });
+          }
+          throw error;
         }
-        throw error;
+        if (execution.status === 'suspended') {
+          return {
+            status: 'suspended' as const,
+            suspendPayload: execution.suspendPayload,
+            resumeSchema: execution.resumeSchema,
+          };
+        }
+        return { result: execution.output };
       }
-      if (execution.status === 'suspended') {
-        return {
-          status: 'suspended' as const,
-          suspendPayload: execution.suspendPayload,
-          resumeSchema: execution.resumeSchema,
-        };
-      }
-      return { result: execution.output };
-    }
 
-    const result = await server.executeTool(toolId, data, { requestContext });
-    return { result };
+      const result = await server.executeTool(toolId, data, { requestContext });
+      return { result };
+    } catch (error) {
+      return handleError(error, { message: 'Error executing MCP server tool', code: 'MCP_SERVER_TOOL_EXECUTE_FAILED' });
+    }
   },
 });
 
@@ -311,21 +386,35 @@ export const LIST_MCP_SERVER_RESOURCES_ROUTE = createRoute({
   tags: ['MCP'],
   requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
-    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    try {
+      if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+        throw new HTTPException(500, {
+          message: 'Mastra instance or getMCPServerById method not available',
+          code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+        });
+      }
+
+      const server = mastra.getMCPServerById(serverId);
+
+      if (!server) {
+        throw new HTTPException(404, {
+          message: `MCP server with ID '${serverId}' not found`,
+          code: 'MCP_SERVER_NOT_FOUND',
+          metadata: { serverId },
+        });
+      }
+
+      if (typeof server.listResources !== 'function') {
+        return { resources: [] };
+      }
+
+      return server.listResources();
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error listing MCP server resources',
+        code: 'MCP_SERVER_RESOURCES_LIST_FAILED',
+      });
     }
-
-    const server = mastra.getMCPServerById(serverId);
-
-    if (!server) {
-      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
-    }
-
-    if (typeof server.listResources !== 'function') {
-      return { resources: [] };
-    }
-
-    return server.listResources();
   },
 });
 
@@ -341,28 +430,50 @@ export const READ_MCP_SERVER_RESOURCE_ROUTE = createRoute({
   tags: ['MCP'],
   requiresAuth: true,
   handler: async ({ mastra, serverId, uri }: ServerContext & { serverId: string; uri: string }) => {
-    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
-    }
-
-    const server = mastra.getMCPServerById(serverId);
-
-    if (!server) {
-      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
-    }
-
-    if (typeof server.readResource !== 'function') {
-      throw new HTTPException(501, { message: `Server '${serverId}' does not support reading resources` });
-    }
-
     try {
-      return await server.readResource(uri);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('not found') || message.includes('not configured')) {
-        throw new HTTPException(404, { message: `Resource '${uri}' not found on server '${serverId}'` });
+      if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+        throw new HTTPException(500, {
+          message: 'Mastra instance or getMCPServerById method not available',
+          code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+        });
       }
-      throw error;
+
+      const server = mastra.getMCPServerById(serverId);
+
+      if (!server) {
+        throw new HTTPException(404, {
+          message: `MCP server with ID '${serverId}' not found`,
+          code: 'MCP_SERVER_NOT_FOUND',
+          metadata: { serverId },
+        });
+      }
+
+      if (typeof server.readResource !== 'function') {
+        throw new HTTPException(501, {
+          message: `Server '${serverId}' does not support reading resources`,
+          code: 'MCP_RESOURCES_UNSUPPORTED',
+          metadata: { serverId },
+        });
+      }
+
+      try {
+        return await server.readResource(uri);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('not found') || message.includes('not configured')) {
+          throw new HTTPException(404, {
+            message: `Resource '${uri}' not found on server '${serverId}'`,
+            code: 'MCP_RESOURCE_NOT_FOUND',
+            metadata: { uri, serverId },
+          });
+        }
+        throw error;
+      }
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error reading MCP server resource',
+        code: 'MCP_SERVER_RESOURCE_READ_FAILED',
+      });
     }
   },
 });
@@ -430,13 +541,20 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+      throw new HTTPException(500, {
+        message: 'Mastra instance or getMCPServerById method not available',
+        code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+      });
     }
 
     const server = mastra.getMCPServerById(serverId);
 
     if (!server) {
-      throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
+      throw new HTTPException(404, {
+        message: `MCP server '${serverId}' not found`,
+        code: 'MCP_SERVER_NOT_FOUND',
+        metadata: { serverId },
+      });
     }
 
     return {
@@ -457,17 +575,27 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPSseTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
-      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+      throw new HTTPException(500, {
+        message: 'Mastra instance or getMCPServerById method not available',
+        code: 'MCP_SERVER_LOOKUP_UNSUPPORTED',
+      });
     }
 
     const server = mastra.getMCPServerById(serverId);
 
     if (!server) {
-      throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
+      throw new HTTPException(404, {
+        message: `MCP server '${serverId}' not found`,
+        code: 'MCP_SERVER_NOT_FOUND',
+        metadata: { serverId },
+      });
     }
 
     if (!hasSSETransport(server)) {
-      throw new HTTPException(404, { message: 'Legacy SSE transport is unavailable for MCP v2 servers' });
+      throw new HTTPException(404, {
+        message: 'Legacy SSE transport is unavailable for MCP v2 servers',
+        code: 'MCP_SSE_TRANSPORT_UNAVAILABLE',
+      });
     }
 
     return {

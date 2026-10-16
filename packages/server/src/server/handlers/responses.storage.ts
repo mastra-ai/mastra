@@ -788,7 +788,10 @@ export async function persistResponseTurnRecord({
   messages: MastraDBMessage[];
 }): Promise<void> {
   if (!memoryStore) {
-    throw new HTTPException(500, { message: 'Memory storage was not available while storing the response' });
+    throw new HTTPException(500, {
+      message: 'Memory storage was not available while storing the response',
+      code: 'RESPONSES_MEMORY_STORAGE_UNAVAILABLE',
+    });
   }
 
   const normalizedMessages: MastraDBMessage[] = messages.map(message => ({

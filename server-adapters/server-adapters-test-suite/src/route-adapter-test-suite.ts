@@ -1,3 +1,4 @@
+import { isServerProblem } from '@mastra/server/error-codes';
 import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -234,9 +235,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
         if (normalized === 'empty-string') {
           expect(response.status).toBe(400);
+          const issues = [{ field: 'root', message: expect.stringContaining('string') }];
           expect(response.data).toEqual({
             error: 'Invalid request body',
-            issues: [{ field: 'root', message: expect.stringContaining('string') }],
+            issues,
+            problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
           });
         } else {
           expect(response.status).toBe(200);
@@ -275,7 +278,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           body: true,
         });
         expect(rejected.status).toBe(400);
-        expect(rejected.data).toEqual({ error: 'Scalar schema rejected body' });
+        expect(rejected.data).toEqual({
+          error: 'Scalar schema rejected body',
+          problem: { code: 'REQUEST_VALIDATION_FAILED' },
+        });
       });
     });
 
@@ -313,7 +319,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             body,
           });
           expect(response.status).toBe(400);
-          expect(response.data).toEqual({ error: 'Required schema rejected body' });
+          expect(response.data).toEqual({
+            error: 'Required schema rejected body',
+            problem: { code: 'REQUEST_VALIDATION_FAILED' },
+          });
         },
       );
 
@@ -358,9 +367,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         body,
       });
       expect(response.status).toBe(400);
+      const issues = [{ field, message: expect.any(String) }];
       expect(response.data).toEqual({
         error: 'Invalid request body',
-        issues: [{ field, message: expect.any(String) }],
+        issues,
+        problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
       });
     });
 
@@ -889,18 +900,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           expect(response.status).toBe(404);
           expect(response.type).toBe('json');
 
-          // Verify error has a structured format
           const errorData = response.data as any;
-          expect(errorData).toBeDefined();
-
-          // Should have at least one of these error fields
-          const hasErrorField =
-            errorData.error !== undefined ||
-            errorData.message !== undefined ||
-            errorData.details !== undefined ||
-            errorData.statusCode !== undefined;
-
-          expect(hasErrorField).toBe(true);
+          expect(typeof errorData.error).toBe('string');
+          expect(isServerProblem(errorData.problem)).toBe(true);
+          expect(errorData.problem.code).not.toBe('UNEXPECTED_ERROR');
         });
       });
 
@@ -947,6 +950,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             handler: async () => {
               handlerCalls++;
               throw new HTTPException(409, {
+                code: 'TRACE_QUERY_CURSOR_CONFLICT',
                 res: Response.json(
                   { code: 'TRACE_QUERY_CURSOR_CONFLICT', message: 'The cursor does not match the query' },
                   { headers: { 'X-Trace-Error': 'cursor' } },
@@ -961,6 +965,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             handler: async () => {
               handlerCalls++;
               throw new HTTPException(418, {
+                code: 'UNEXPECTED_ERROR',
                 res: new Response('custom text', {
                   headers: { 'Content-Type': 'text/custom', 'X-Custom-Error': 'true' },
                 }),
@@ -973,7 +978,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             responseType: 'json',
             handler: async () => {
               handlerCalls++;
-              throw new HTTPException(404, { message: 'Legacy fallback' });
+              throw new HTTPException(404, { message: 'Legacy fallback', code: 'AGENT_NOT_FOUND' });
             },
           },
         ];
@@ -988,7 +993,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         }
       }
 
-      it('preserves an attached JSON response and headers', async () => {
+      it('preserves an attached JSON response and headers, adding the exception problem', async () => {
         const custom = await setupCustomErrorRoutes();
 
         const response = await executeHttpRequest(custom.app, {
@@ -1002,6 +1007,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(response.data).toEqual({
           code: 'TRACE_QUERY_CURSOR_CONFLICT',
           message: 'The cursor does not match the query',
+          problem: { code: 'TRACE_QUERY_CURSOR_CONFLICT' },
         });
         expect(custom.getHandlerCalls()).toBe(1);
       });
@@ -1030,7 +1036,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
 
         expect(response.status).toBe(404);
-        expect(response.data).toEqual({ error: 'Legacy fallback' });
+        expect(response.data).toEqual({ error: 'Legacy fallback', problem: { code: 'AGENT_NOT_FOUND' } });
         expect(custom.getHandlerCalls()).toBe(1);
       });
     });

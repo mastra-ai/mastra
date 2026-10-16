@@ -41,19 +41,26 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
       );
 
       if (!hasSubmitPlan) {
-        throw new HTTPException(404, { message: 'Plan capability not found' });
+        throw new HTTPException(404, { message: 'Plan capability not found', code: 'PLAN_CAPABILITY_NOT_FOUND' });
       }
       if (!isPlanPath(path)) {
-        throw new HTTPException(400, { message: 'Invalid plan path' });
+        throw new HTTPException(400, { message: 'Invalid plan path', code: 'PLAN_PATH_INVALID' });
       }
 
       const workspace = await agent.getWorkspace({ requestContext });
       const filesystem = await workspace?.resolveFilesystem({ requestContext });
       if (!filesystem) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace filesystem configured',
+          code: 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+        });
       }
       if (!(await filesystem.exists(path))) {
-        throw new HTTPException(404, { message: `Plan file "${path}" not found` });
+        throw new HTTPException(404, {
+          message: `Plan file "${path}" not found`,
+          code: 'PLAN_NOT_FOUND',
+          metadata: { path },
+        });
       }
 
       const content = await filesystem.readFile(path, { encoding: 'utf-8' });
@@ -62,7 +69,7 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
         content: typeof content === 'string' ? content : content.toString('utf-8'),
       };
     } catch (error) {
-      return handleError(error, 'Error reading submitted plan');
+      return handleError(error, { message: 'Error reading submitted plan', code: 'PLAN_READ_FAILED' });
     }
   },
 });

@@ -34,15 +34,20 @@ export const LIST_DYNAMIC_WORKFLOWS_ROUTE = createRoute({
   handler: async ({ mastra, status, authorId }) => {
     try {
       const storage = mastra.getStorage();
-      if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
+      if (!storage)
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
 
       const store = await storage.getStore('workflowDefinitions');
-      if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
+      if (!store)
+        throw new HTTPException(500, {
+          message: 'workflowDefinitions storage domain is not available',
+          code: 'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE',
+        });
 
       const result = await store.list({ status: status ?? 'active', authorId });
       return { workflows: result.definitions, total: result.total };
     } catch (error) {
-      return handleError(error, 'Error listing dynamic workflows');
+      return handleError(error, { message: 'Error listing dynamic workflows', code: 'DYNAMIC_WORKFLOWS_LIST_FAILED' });
     }
   },
 });
@@ -64,16 +69,26 @@ export const GET_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   handler: async ({ mastra, dynamicWorkflowId }) => {
     try {
       const storage = mastra.getStorage();
-      if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
+      if (!storage)
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
 
       const store = await storage.getStore('workflowDefinitions');
-      if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
+      if (!store)
+        throw new HTTPException(500, {
+          message: 'workflowDefinitions storage domain is not available',
+          code: 'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE',
+        });
 
       const def = await store.get(dynamicWorkflowId);
-      if (!def) throw new HTTPException(404, { message: `Dynamic workflow "${dynamicWorkflowId}" not found` });
+      if (!def)
+        throw new HTTPException(404, {
+          message: `Dynamic workflow "${dynamicWorkflowId}" not found`,
+          code: 'DYNAMIC_WORKFLOW_NOT_FOUND',
+          metadata: { dynamicWorkflowId },
+        });
       return def;
     } catch (error) {
-      return handleError(error, 'Error getting dynamic workflow');
+      return handleError(error, { message: 'Error getting dynamic workflow', code: 'DYNAMIC_WORKFLOW_GET_FAILED' });
     }
   },
 });
@@ -145,7 +160,10 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
         ...(dependencies?.length ? { dependencyIds: dependencies.map(dependency => dependency.id) } : {}),
       };
     } catch (error) {
-      return handleError(error, 'Error upserting dynamic workflow');
+      return handleError(error, {
+        message: 'Error upserting dynamic workflow',
+        code: 'DYNAMIC_WORKFLOW_UPSERT_FAILED',
+      });
     }
   },
 });
@@ -170,16 +188,21 @@ export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   handler: async ({ mastra, dynamicWorkflowId }) => {
     try {
       const storage = mastra.getStorage();
-      if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
+      if (!storage)
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
 
       const store = await storage.getStore('workflowDefinitions');
-      if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
+      if (!store)
+        throw new HTTPException(500, {
+          message: 'workflowDefinitions storage domain is not available',
+          code: 'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE',
+        });
 
       await store.delete(dynamicWorkflowId);
       mastra.removeWorkflow(dynamicWorkflowId);
       return { success: true as const, message: `Workflow ${dynamicWorkflowId} deleted` };
     } catch (error) {
-      return handleError(error, 'Error deleting dynamic workflow');
+      return handleError(error, { message: 'Error deleting dynamic workflow', code: 'DYNAMIC_WORKFLOW_DELETE_FAILED' });
     }
   },
 });

@@ -11,6 +11,8 @@ import {
   applyMcpRequestAuth,
   checkRouteFGA,
   getFGAProvider,
+  ensureProblem,
+  formatErrorResponse,
   getCustomHTTPExceptionResponse,
   isSafeObjectKey,
   isZodError,
@@ -483,15 +485,18 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         bodyLimit({
           maxSize,
           onError: (c: Context) => {
-            let errorResponse: unknown = { error: 'Request body too large' };
+            let errorResponse: unknown = {
+              error: 'Request body too large',
+              problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: maxSize } },
+            };
             if (route.maxBodySize === undefined && this.bodyLimitOptions) {
               try {
-                errorResponse = this.bodyLimitOptions.onError(errorResponse);
+                errorResponse = ensureProblem(this.bodyLimitOptions.onError(errorResponse), 'REQUEST_BODY_TOO_LARGE');
               } catch {
                 // Fall back to the default response.
               }
             }
-            return c.json(errorResponse, 413);
+            return c.json(errorResponse as any, 413);
           },
         }),
       );
@@ -522,7 +527,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
           // If this is an auth error (not just a success-with-headers), return error response
           if (authResult.error) {
-            return c.json({ error: authResult.error }, authResult.status as any);
+            return c.json({ error: authResult.error, problem: authResult.problem }, authResult.status as any);
           }
         }
 
@@ -530,10 +535,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         // Return 400 Bad Request if body parsing failed (e.g., malformed JSON)
         if (params.bodyParseError) {
+          const issues = [{ field: 'body', message: params.bodyParseError.message }];
           return c.json(
             {
               error: 'Invalid request body',
-              issues: [{ field: 'body', message: params.bodyParseError.message }],
+              issues,
+              problem: { code: 'REQUEST_BODY_INVALID_JSON', metadata: { issues } },
             },
             400,
           );
@@ -550,10 +557,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               const { status, body } = this.resolveValidationError(route, error, 'query');
               return c.json(body as any, status as any);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return c.json(
               {
                 error: 'Invalid query parameters',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                issues,
+                problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'query' } },
               },
               400,
             );
@@ -571,10 +580,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               const { status, body } = this.resolveValidationError(route, error, 'body');
               return c.json(body as any, status as any);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return c.json(
               {
                 error: 'Invalid request body',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                issues,
+                problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
               },
               400,
             );
@@ -593,10 +604,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               const { status, body } = this.resolveValidationError(route, error, 'path');
               return c.json(body as any, status as any);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return c.json(
               {
                 error: 'Invalid path parameters',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                issues,
+                problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'path' } },
               },
               400,
             );
@@ -633,6 +646,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
                 {
                   error: permissionError.error,
                   message: permissionError.message,
+                  problem: permissionError.problem,
                 },
                 permissionError.status as any,
               );
@@ -647,7 +661,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...(typeof params.body === 'object' ? params.body : {}),
         });
         if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+          return c.json(
+            { error: fgaError.error, message: fgaError.message, problem: fgaError.problem },
+            fgaError.status as any,
+          );
         }
 
         try {
@@ -669,46 +686,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               method: route.method,
             });
           }
-          const customResponse = getCustomHTTPExceptionResponse(error);
+          const customResponse = await getCustomHTTPExceptionResponse(error);
           if (customResponse) {
             return customResponse;
           }
 
-          // Check if it's an HTTPException or MastraError with a status code
-          if (error && typeof error === 'object') {
-            // Check for direct status property (HTTPException)
-            if ('status' in error) {
-              const status = (error as any).status;
-              let safeCause: { failingItems: unknown[] } | undefined;
-              try {
-                const raw = error instanceof Error ? error.cause : undefined;
-                if (
-                  raw &&
-                  typeof raw === 'object' &&
-                  !Array.isArray(raw) &&
-                  'failingItems' in raw &&
-                  Array.isArray((raw as any).failingItems)
-                ) {
-                  safeCause = { failingItems: (raw as any).failingItems };
-                }
-              } catch {
-                // serialization or access error — omit cause
-              }
-              return c.json(
-                {
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                  ...(safeCause ? { cause: safeCause } : {}),
-                },
-                status,
-              );
-            }
-            // Check for MastraError with status in details
-            if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
-              const status = (error.details as any).status;
-              return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, status);
-            }
-          }
-          return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+          const { status, body } = formatErrorResponse(error);
+          return c.json(body, status as any);
         }
       },
     );
@@ -748,7 +732,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
           if (authError.error) {
-            return c.json({ error: authError.error }, authError.status as any);
+            return c.json({ error: authError.error, problem: authError.problem }, authError.status as any);
           }
         }
 
@@ -767,7 +751,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             );
             if (permissionError) {
               return c.json(
-                { error: permissionError.error, message: permissionError.message },
+                { error: permissionError.error, message: permissionError.message, problem: permissionError.problem },
                 permissionError.status as any,
               );
             }
@@ -809,7 +793,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...bodyParams,
         });
         if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+          return c.json(
+            { error: fgaError.error, message: fgaError.message, problem: fgaError.problem },
+            fgaError.status as any,
+          );
         }
 
         const reqHeaders: Record<string, string | string[] | undefined> = {};

@@ -30,7 +30,12 @@ export function parseMultipartFormData(
 
     const contentType = request.headers['content-type'];
     if (!contentType) {
-      reject(new BadRequestException('Content-Type header is required for multipart requests'));
+      reject(
+        new BadRequestException({
+          message: 'Content-Type header is required for multipart requests',
+          problem: { code: 'REQUEST_MULTIPART_INVALID' },
+        }),
+      );
       return;
     }
 
@@ -49,9 +54,13 @@ export function parseMultipartFormData(
           if (!options.allowedMimeTypes.includes(mimetype)) {
             file.resume(); // Drain the stream
             reject(
-              new BadRequestException(
-                `Invalid file type: ${mimetype}. Allowed types: ${options.allowedMimeTypes.join(', ')}`,
-              ),
+              new BadRequestException({
+                message: `Invalid file type: ${mimetype}. Allowed types: ${options.allowedMimeTypes.join(', ')}`,
+                problem: {
+                  code: 'REQUEST_FILE_TYPE_NOT_ALLOWED',
+                  metadata: { mimetype, allowedMimeTypes: options.allowedMimeTypes },
+                },
+              }),
             );
             return;
           }
@@ -68,7 +77,10 @@ export function parseMultipartFormData(
           limitExceeded = true;
           const maxSize = options.maxFileSize;
           reject(
-            new PayloadTooLargeException(`File size limit exceeded${maxSize ? ` (max: ${formatBytes(maxSize)})` : ''}`),
+            new PayloadTooLargeException({
+              message: `File size limit exceeded${maxSize ? ` (max: ${formatBytes(maxSize)})` : ''}`,
+              problem: { code: 'REQUEST_FILE_TOO_LARGE', ...(maxSize ? { metadata: { maxFileSize: maxSize } } : {}) },
+            }),
           );
         });
 
@@ -97,7 +109,12 @@ export function parseMultipartFormData(
     });
 
     busboy.on('error', (error: Error) => {
-      reject(new BadRequestException(`Failed to parse multipart form data: ${error.message}`));
+      reject(
+        new BadRequestException({
+          message: `Failed to parse multipart form data: ${error.message}`,
+          problem: { code: 'REQUEST_MULTIPART_INVALID' },
+        }),
+      );
     });
 
     request.pipe(busboy);

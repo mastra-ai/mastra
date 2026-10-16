@@ -1981,6 +1981,12 @@ export class MastraClientError extends Error {
   /** Parsed response body if available */
   readonly body?: unknown;
 
+  /**
+   * Business error from the server's `problem` body field, if present.
+   * Compare `code` against `SERVER_ERROR_CODES` from `@mastra/server/error-codes`.
+   */
+  readonly problem?: MastraClientErrorProblem;
+
   constructor(status: number, statusText: string, message: string, body?: unknown) {
     // Keep the same message format for backwards compatibility
     super(message);
@@ -1988,7 +1994,25 @@ export class MastraClientError extends Error {
     this.status = status;
     this.statusText = statusText;
     this.body = body;
+    this.problem = parseProblem(body);
   }
+}
+
+export interface MastraClientErrorProblem {
+  code: string;
+  metadata?: Record<string, unknown>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseProblem(body: unknown): MastraClientErrorProblem | undefined {
+  if (!isPlainObject(body) || !isPlainObject(body.problem) || typeof body.problem.code !== 'string') {
+    return undefined;
+  }
+  const { code, metadata } = body.problem;
+  return isPlainObject(metadata) ? { code, metadata } : { code };
 }
 
 // ============================================

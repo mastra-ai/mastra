@@ -454,7 +454,10 @@ describe('MastraModule', () => {
       expect(response.status).toBe(404);
 
       const body = response.body as any;
-      expect(body).toEqual({ error: expect.any(String) });
+      expect(body).toEqual({
+        error: expect.any(String),
+        problem: { code: 'AGENT_NOT_FOUND', metadata: { agentId: 'non-existent-agent' } },
+      });
 
       await app.close();
     });

@@ -46,17 +46,24 @@ export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: 'STORED_MCP_CLIENT_NOT_FOUND',
+          metadata: { mcpClientId },
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
@@ -69,7 +76,10 @@ export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error listing MCP client versions');
+      return handleError(error, {
+        message: 'Error listing MCP client versions',
+        code: 'MCP_CLIENT_VERSIONS_LIST_FAILED',
+      });
     }
   },
 });
@@ -93,17 +103,24 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: 'STORED_MCP_CLIENT_NOT_FOUND',
+          metadata: { mcpClientId },
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
@@ -147,7 +164,10 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: 'MCP_CLIENT_VERSION_CREATED_RESOLVE_FAILED',
+        });
       }
 
       await enforceRetentionLimit(
@@ -159,7 +179,10 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, 'Error creating MCP client version');
+      return handleError(error, {
+        message: 'Error creating MCP client version',
+        code: 'MCP_CLIENT_VERSION_CREATE_FAILED',
+      });
     }
   },
 });
@@ -182,23 +205,32 @@ export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const version = await mcpClientStore.getVersion(versionId);
 
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId },
+        });
       }
 
       if (version.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId, mcpClientId },
         });
       }
       const mcpClient = await mcpClientStore.getById(mcpClientId);
@@ -206,7 +238,7 @@ export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, 'Error getting MCP client version');
+      return handleError(error, { message: 'Error getting MCP client version', code: 'MCP_CLIENT_VERSION_GET_FAILED' });
     }
   },
 });
@@ -229,27 +261,40 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: 'STORED_MCP_CLIENT_NOT_FOUND',
+          metadata: { mcpClientId },
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId },
+        });
       }
       if (version.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId, mcpClientId },
         });
       }
 
@@ -268,7 +313,10 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         activeVersionId: versionId,
       };
     } catch (error) {
-      return handleError(error, 'Error activating MCP client version');
+      return handleError(error, {
+        message: 'Error activating MCP client version',
+        code: 'MCP_CLIENT_VERSION_ACTIVATE_FAILED',
+      });
     }
   },
 });
@@ -291,27 +339,40 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: 'STORED_MCP_CLIENT_NOT_FOUND',
+          metadata: { mcpClientId },
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const versionToRestore = await mcpClientStore.getVersion(versionId);
       if (!versionToRestore) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId },
+        });
       }
       if (versionToRestore.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId, mcpClientId },
         });
       }
 
@@ -348,7 +409,10 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const newVersion = await mcpClientStore.getVersion(newVersionId);
       if (!newVersion) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: 'MCP_CLIENT_VERSION_CREATED_RESOLVE_FAILED',
+        });
       }
 
       await enforceRetentionLimit(
@@ -363,7 +427,10 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       return newVersion;
     } catch (error) {
-      return handleError(error, 'Error restoring MCP client version');
+      return handleError(error, {
+        message: 'Error restoring MCP client version',
+        code: 'MCP_CLIENT_VERSION_RESTORE_FAILED',
+      });
     }
   },
 });
@@ -386,33 +453,47 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: 'STORED_MCP_CLIENT_NOT_FOUND',
+          metadata: { mcpClientId },
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId },
+        });
       }
       if (version.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { versionId, mcpClientId },
         });
       }
 
       if (mcpClient.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+          code: 'MCP_CLIENT_VERSION_ACTIVE_DELETE_FORBIDDEN',
         });
       }
 
@@ -426,7 +507,10 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         message: `Version ${version.versionNumber} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, 'Error deleting MCP client version');
+      return handleError(error, {
+        message: 'Error deleting MCP client version',
+        code: 'MCP_CLIENT_VERSION_DELETE_FAILED',
+      });
     }
   },
 });
@@ -450,33 +534,48 @@ export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const fromVersion = await mcpClientStore.getVersion(from);
       if (!fromVersion) {
-        throw new HTTPException(404, { message: `Version with id ${from} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${from} not found`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { fromVersionId: from },
+        });
       }
       if (fromVersion.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for MCP client ${mcpClientId}`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { fromVersionId: from, mcpClientId },
         });
       }
 
       const toVersion = await mcpClientStore.getVersion(to);
       if (!toVersion) {
-        throw new HTTPException(404, { message: `Version with id ${to} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${to} not found`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { toVersionId: to },
+        });
       }
       if (toVersion.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for MCP client ${mcpClientId}`,
+          code: 'MCP_CLIENT_VERSION_NOT_FOUND',
+          metadata: { toVersionId: to, mcpClientId },
         });
       }
 
@@ -497,7 +596,10 @@ export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
         toVersion,
       };
     } catch (error) {
-      return handleError(error, 'Error comparing MCP client versions');
+      return handleError(error, {
+        message: 'Error comparing MCP client versions',
+        code: 'MCP_CLIENT_VERSIONS_COMPARE_FAILED',
+      });
     }
   },
 });

@@ -203,6 +203,7 @@ describe('Hono Server Adapter', () => {
       await expectErrorResponse(response, 400, {
         code: 'TRACE_QUERY_CURSOR_MALFORMED',
         message: 'The query cursor is malformed',
+        problem: { code: 'TRACE_QUERY_CURSOR_MALFORMED' },
       });
     });
 
@@ -222,6 +223,7 @@ describe('Hono Server Adapter', () => {
       await expectErrorResponse(response, 409, {
         code: 'TRACE_QUERY_CURSOR_CONFLICT',
         message: 'The cursor does not match the query',
+        problem: { code: 'TRACE_QUERY_CURSOR_CONFLICT' },
       });
     });
 
@@ -231,16 +233,18 @@ describe('Hono Server Adapter', () => {
         where: { op: 'eq', left: { path: 'input' }, right: { literal: 'sensitive search' } },
       });
 
+      const issues = [
+        {
+          code: 'field_not_allowed',
+          path: ['where', 'left', 'path'],
+          message: 'The predicate field is not allowed here',
+        },
+      ];
       const body = await expectErrorResponse(response, 422, {
         code: 'TRACE_QUERY_INVALID',
         message: 'The trace query is invalid',
-        issues: [
-          {
-            code: 'field_not_allowed',
-            path: ['where', 'left', 'path'],
-            message: 'The predicate field is not allowed here',
-          },
-        ],
+        issues,
+        problem: { code: 'TRACE_QUERY_INVALID', metadata: { issues } },
       });
       expect(JSON.stringify(body)).not.toContain('sensitive search');
     });
@@ -255,6 +259,7 @@ describe('Hono Server Adapter', () => {
       await expectErrorResponse(response, 501, {
         code: 'TRACE_QUERY_UNSUPPORTED',
         message: 'Advanced trace queries are not supported by the configured observability store',
+        problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
       });
       expect(queryTraces).not.toHaveBeenCalled();
     });
@@ -269,6 +274,7 @@ describe('Hono Server Adapter', () => {
       const body = await expectErrorResponse(response, 504, {
         code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
         message: 'The query exceeded its execution timeout',
+        problem: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' },
       });
       expect(JSON.stringify(body)).not.toMatch(/select|parameter|stack|driver/i);
     });
@@ -289,9 +295,11 @@ describe('Hono Server Adapter', () => {
 
     expect(response.status).toBe(400);
     expect(response.headers.get('content-type')).toContain('application/json');
+    const issues = [{ field: 'body', message: expect.any(String) }];
     await expect(response.json()).resolves.toEqual({
       error: 'Invalid request body',
-      issues: [{ field: 'body', message: expect.any(String) }],
+      issues,
+      problem: { code: 'REQUEST_BODY_INVALID_JSON', metadata: { issues } },
     });
   });
 
@@ -311,7 +319,10 @@ describe('Hono Server Adapter', () => {
 
     expect(response.status).toBe(413);
     expect(response.headers.get('content-type')).toContain('application/json');
-    await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
+    await expect(response.json()).resolves.toEqual({
+      error: 'Request body too large',
+      problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: 256 * 1024 } },
+    });
     expect(getStorage).not.toHaveBeenCalled();
   });
 
@@ -342,7 +353,12 @@ describe('Hono Server Adapter', () => {
         await requestTraceAggregate(new Mastra({ logger: false }), '{"timeRange":'),
         400,
       );
-      expect(body).toEqual({ error: 'Invalid request body', issues: [{ field: 'body', message: expect.any(String) }] });
+      const issues = [{ field: 'body', message: expect.any(String) }];
+      expect(body).toEqual({
+        error: 'Invalid request body',
+        issues,
+        problem: { code: 'REQUEST_BODY_INVALID_JSON', metadata: { issues } },
+      });
     });
 
     it('rejects an oversized body before storage access', async () => {
@@ -350,7 +366,10 @@ describe('Hono Server Adapter', () => {
       const getStorage = vi.spyOn(mastra, 'getStorage');
       const response = await requestTraceAggregate(mastra, JSON.stringify({ padding: 'x'.repeat(256 * 1024) }));
 
-      expect(await expectDeclaredError(response, 413)).toEqual({ error: 'Request body too large' });
+      expect(await expectDeclaredError(response, 413)).toEqual({
+        error: 'Request body too large',
+        problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: 256 * 1024 } },
+      });
       expect(getStorage).not.toHaveBeenCalled();
     });
 
@@ -399,6 +418,7 @@ describe('Hono Server Adapter', () => {
       expect(body).toEqual({
         code: 'TRACE_AGGREGATE_UNSUPPORTED',
         message: 'Trace aggregation is not supported by the configured observability store',
+        problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
       });
       expect(aggregateTraces).not.toHaveBeenCalled();
     });

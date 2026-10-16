@@ -5,6 +5,8 @@
  * This module provides the `HTTPException` class.
  */
 
+import type { ServerErrorCode, ServerProblem } from './error-codes';
+
 type InfoStatusCode = 100 | 101 | 102 | 103;
 type SuccessStatusCode = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226;
 type DeprecatedStatusCode = 305 | 306;
@@ -66,12 +68,16 @@ export type StatusCode =
 
 /**
  * Options for creating an `HTTPException`.
+ * @property code - Business error code from `SERVER_ERROR_CODES`, serialized as `problem.code`.
+ * @property metadata - Optional JSON-serializable details serialized as `problem.metadata`. Never put stack traces, raw causes or secrets here.
  * @property res - Optional response object to use.
  * @property message - Optional custom error message.
  * @property cause - Optional cause of the error.
  * @property stack - Optional stack trace for the error.
  */
-type HTTPExceptionOptions = {
+export type HTTPExceptionOptions = {
+  code: ServerErrorCode;
+  metadata?: Record<string, unknown>;
   res?: Response;
   message?: string;
   cause?: unknown;
@@ -98,7 +104,7 @@ type HTTPExceptionOptions = {
  * app.post('/auth', async (c, next) => {
  *   // authentication
  *   if (authorized === false) {
- *     throw new HTTPException(401, { message: 'Custom error message' })
+ *     throw new HTTPException(401, { message: 'Custom error message', code: 'AUTHENTICATION_REQUIRED' })
  *   }
  *   await next()
  * })
@@ -107,22 +113,24 @@ type HTTPExceptionOptions = {
 export class HTTPException extends Error {
   readonly res?: Response;
   readonly status: StatusCode;
+  readonly problem: ServerProblem;
 
   /**
    * Creates an instance of `HTTPException`.
-   * @param status - HTTP status code for the exception. Defaults to 500.
+   * @param status - HTTP status code for the exception.
    * @param options - Additional options for the exception.
    */
-  constructor(status: StatusCode = 500, options?: HTTPExceptionOptions) {
-    super(options?.message, { cause: options?.cause });
-    this.res = options?.res;
+  constructor(status: StatusCode, options: HTTPExceptionOptions) {
+    super(options.message, { cause: options.cause });
+    this.res = options.res;
     this.status = status;
-    this.stack = options?.stack || this.stack;
+    this.stack = options.stack || this.stack;
+    this.problem = options.metadata ? { code: options.code, metadata: options.metadata } : { code: options.code };
   }
 
   /**
    * Returns the response object associated with the exception.
-   * If a response object is not provided, a new response is created with the error message and status code.
+   * If a response object is not provided, a JSON `{ error, problem }` response is created with the status code.
    * @returns The response object.
    */
   getResponse(): Response {
@@ -133,8 +141,6 @@ export class HTTPException extends Error {
       });
       return newResponse;
     }
-    return new Response(this.message, {
-      status: this.status,
-    });
+    return Response.json({ error: this.message, problem: this.problem }, { status: this.status });
   }
 }

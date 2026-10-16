@@ -34,7 +34,10 @@ export const GET_WORKFLOW_BUILDER_SETTINGS_ROUTE = createRoute({
         modelPolicy: builder?.getModelPolicy(),
       };
     } catch (error) {
-      return handleError(error, 'Error getting workflow builder settings');
+      return handleError(error, {
+        message: 'Error getting workflow builder settings',
+        code: 'WORKFLOW_BUILDER_SETTINGS_GET_FAILED',
+      });
     }
   },
 });
@@ -55,11 +58,18 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
     try {
       const editor = mastra.getEditor();
       if (!editor?.hasEnabledWorkflowBuilderConfig?.() || typeof editor.resolveWorkflowBuilder !== 'function') {
-        throw new HTTPException(404, { message: 'Workflow builder is not enabled' });
+        throw new HTTPException(404, {
+          message: 'Workflow builder is not enabled',
+          code: 'WORKFLOW_BUILDER_NOT_ENABLED',
+        });
       }
 
       const builder = await editor.resolveWorkflowBuilder();
-      if (!builder?.enabled) throw new HTTPException(404, { message: 'Workflow builder is not enabled' });
+      if (!builder?.enabled)
+        throw new HTTPException(404, {
+          message: 'Workflow builder is not enabled',
+          code: 'WORKFLOW_BUILDER_NOT_ENABLED',
+        });
       const agent = builder.getAgent();
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, scopes: _scopes, ...rest } = params;
@@ -108,7 +118,10 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
         : await agent.stream(messages, options);
       return result.fullStream;
     } catch (error) {
-      return handleError(error, 'Error streaming workflow builder response');
+      return handleError(error, {
+        message: 'Error streaming workflow builder response',
+        code: 'WORKFLOW_BUILDER_STREAM_FAILED',
+      });
     }
   },
 });

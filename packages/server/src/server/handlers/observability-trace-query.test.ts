@@ -631,6 +631,7 @@ describe('QUERY_TRACES', () => {
     expect(getDeclaredErrorSchema(504).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The query exceeded its execution timeout',
+      problem: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' },
     });
   });
 
@@ -664,6 +665,7 @@ describe('QUERY_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Root duration predicates are not supported by the configured observability store',
+      problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
     });
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
@@ -714,6 +716,7 @@ describe('QUERY_TRACES', () => {
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
         message: 'Context identifier predicates are not supported by the configured observability store',
+        problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
       });
       expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
     }
@@ -749,6 +752,7 @@ describe('QUERY_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Advanced trace queries are not supported by the configured observability store',
+      problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
     });
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
@@ -763,6 +767,7 @@ describe('QUERY_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Observability storage domain is not available',
+      problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
     });
   });
 
@@ -1032,6 +1037,7 @@ describe('trace-query discovery routes', () => {
       await expect(error.getResponse().json()).resolves.toEqual({
         code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
         message: 'Trace query discovery is not supported by the configured observability store',
+        problem: { code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED' },
       });
     }
     expect(observabilityStore.getTraceQueryObservedFields).not.toHaveBeenCalled();
@@ -1051,6 +1057,7 @@ describe('trace-query discovery routes', () => {
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_RESOURCE_LIMIT',
       message: 'The query exceeded its resource limit',
+      problem: { code: 'TRACE_QUERY_RESOURCE_LIMIT' },
     });
   });
 
@@ -1071,6 +1078,7 @@ describe('trace-query discovery routes', () => {
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The query exceeded its execution timeout',
+      problem: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' },
     });
   });
 });

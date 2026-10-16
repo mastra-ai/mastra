@@ -44,12 +44,15 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Resolve the visibility scope for this caller. Non-owner queries for
@@ -86,7 +89,7 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
 
       return { ...result, workspaces };
     } catch (error) {
-      return handleError(error, 'Error listing stored workspaces');
+      return handleError(error, { message: 'Error listing stored workspaces', code: 'STORED_WORKSPACES_LIST_FAILED' });
     }
   },
 });
@@ -110,18 +113,25 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const workspace = await workspaceStore.getByIdResolved(storedWorkspaceId);
 
       if (!workspace) {
-        throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored workspace with id ${storedWorkspaceId} not found`,
+          code: 'STORED_WORKSPACE_NOT_FOUND',
+          metadata: { storedWorkspaceId },
+        });
       }
       assertStoredResourceScope(workspace, await getStoredResourceScope(mastra, requestContext));
 
@@ -135,7 +145,7 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
 
       return workspace;
     } catch (error) {
-      return handleError(error, 'Error getting stored workspace');
+      return handleError(error, { message: 'Error getting stored workspace', code: 'STORED_WORKSPACE_GET_FAILED' });
     }
   },
 });
@@ -173,12 +183,15 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Derive ID from name if not explicitly provided
@@ -187,13 +200,18 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive workspace ID from name. Please provide an explicit id.',
+          code: 'STORED_WORKSPACE_ID_DERIVATION_FAILED',
         });
       }
 
       // Check if workspace with this ID already exists
       const existing = await workspaceStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `Workspace with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `Workspace with id ${id} already exists`,
+          code: 'STORED_WORKSPACE_ALREADY_EXISTS',
+          metadata: { storedWorkspaceId: id },
+        });
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
@@ -222,12 +240,15 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       // Return the resolved workspace (thin record + version config)
       const resolved = await workspaceStore.getByIdResolved(id);
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created workspace' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created workspace',
+          code: 'STORED_WORKSPACE_CREATED_RESOLVE_FAILED',
+        });
       }
 
       return resolved;
     } catch (error) {
-      return handleError(error, 'Error creating stored workspace');
+      return handleError(error, { message: 'Error creating stored workspace', code: 'STORED_WORKSPACE_CREATE_FAILED' });
     }
   },
 });
@@ -268,18 +289,25 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if workspace exists
       const existing = await workspaceStore.getById(storedWorkspaceId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored workspace with id ${storedWorkspaceId} not found`,
+          code: 'STORED_WORKSPACE_NOT_FOUND',
+          metadata: { storedWorkspaceId },
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -327,12 +355,15 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       // Return the resolved workspace with the updated config
       const resolved = await workspaceStore.getByIdResolved(storedWorkspaceId);
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated workspace' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated workspace',
+          code: 'STORED_WORKSPACE_UPDATED_RESOLVE_FAILED',
+        });
       }
 
       return resolved;
     } catch (error) {
-      return handleError(error, 'Error updating stored workspace');
+      return handleError(error, { message: 'Error updating stored workspace', code: 'STORED_WORKSPACE_UPDATE_FAILED' });
     }
   },
 });
@@ -355,18 +386,25 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if workspace exists
       const existing = await workspaceStore.getById(storedWorkspaceId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored workspace with id ${storedWorkspaceId} not found`,
+          code: 'STORED_WORKSPACE_NOT_FOUND',
+          metadata: { storedWorkspaceId },
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
@@ -386,7 +424,7 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
         message: `Workspace ${storedWorkspaceId} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, 'Error deleting stored workspace');
+      return handleError(error, { message: 'Error deleting stored workspace', code: 'STORED_WORKSPACE_DELETE_FAILED' });
     }
   },
 });

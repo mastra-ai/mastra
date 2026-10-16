@@ -219,7 +219,7 @@ export function assertReadAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: 'STORED_RESOURCE_NOT_FOUND' });
 }
 
 /**
@@ -258,7 +258,7 @@ export function assertExecuteAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: 'STORED_RESOURCE_NOT_FOUND' });
 }
 
 /**
@@ -294,7 +294,7 @@ export function assertWriteAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: 'STORED_RESOURCE_NOT_FOUND' });
 }
 
 /**
@@ -335,7 +335,7 @@ export function assertShareAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: 'STORED_RESOURCE_NOT_FOUND' });
 }
 
 /**

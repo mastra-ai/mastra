@@ -1,5 +1,11 @@
+import { isServerProblem } from '@mastra/server/error-codes';
+import type { ServerProblem } from '@mastra/server/error-codes';
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
-import { getCustomHTTPExceptionResponse, HTTPException as MastraHTTPException } from '@mastra/server/server-adapter';
+import {
+  formatErrorResponse,
+  getCustomHTTPExceptionResponse,
+  HTTPException as MastraHTTPException,
+} from '@mastra/server/server-adapter';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -20,6 +26,7 @@ interface NormalizedError {
  * ```json
  * {
  *   "error": "Error message",
+ *   "problem": { "code": "BUSINESS_ERROR_CODE", "metadata": { ... } },
  *   "code": "ERROR_CODE",
  *   "issues": [{ "field": "fieldName", "message": "..." }],
  *   "requestId": "...",
@@ -46,7 +53,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    const customResponse = getCustomHTTPExceptionResponse(exception);
+    const customResponse = await getCustomHTTPExceptionResponse(exception);
     if (customResponse) {
       customResponse.headers.forEach((value, name) => {
         if (name.toLowerCase() !== 'set-cookie') {
@@ -62,7 +69,8 @@ export class MastraExceptionFilter implements ExceptionFilter {
     }
 
     if (exception instanceof MastraHTTPException) {
-      response.status(exception.status).json({ error: exception.message });
+      const { status, body } = formatErrorResponse(exception);
+      response.status(status).json(body);
       return;
     }
 
@@ -83,11 +91,42 @@ export class MastraExceptionFilter implements ExceptionFilter {
 
     response.status(normalized.status).json({
       error: normalized.error,
+      problem: this.resolveProblem(exception, normalized),
       ...(normalized.code && { code: normalized.code }),
       ...(normalized.issues && { issues: normalized.issues }),
       ...(requestId && { requestId }),
       timestamp: new Date().toISOString(),
     });
+  }
+
+  /**
+   * Resolve the business problem for an error. Exceptions thrown by Mastra code carry their own
+   * problem; express body-parser failures are mapped by type; anything else is unexpected.
+   */
+  private resolveProblem(exception: unknown, normalized: NormalizedError): ServerProblem {
+    if (exception instanceof HttpException) {
+      const response = exception.getResponse();
+      const problem = typeof response === 'object' && response !== null ? (response as any).problem : undefined;
+      return isServerProblem(problem) ? problem : { code: 'UNEXPECTED_ERROR' };
+    }
+
+    if (isZodError(exception)) {
+      return { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues: normalized.issues } };
+    }
+
+    const bodyParserType = typeof exception === 'object' && exception !== null ? (exception as any).type : undefined;
+    if (bodyParserType === 'entity.too.large') {
+      const limit = (exception as any).limit;
+      return {
+        code: 'REQUEST_BODY_TOO_LARGE',
+        ...(typeof limit === 'number' ? { metadata: { maxBodySize: limit } } : {}),
+      };
+    }
+    if (bodyParserType === 'entity.parse.failed') {
+      return { code: 'REQUEST_BODY_INVALID_JSON' };
+    }
+
+    return formatErrorResponse(exception).body.problem;
   }
 
   /**

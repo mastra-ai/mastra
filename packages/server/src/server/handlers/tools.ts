@@ -173,7 +173,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
       return serializedTools;
     } catch (error) {
-      return handleError(error, 'Error getting tools');
+      return handleError(error, { message: 'Error getting tools', code: 'TOOLS_LIST_FAILED' });
     }
   },
 });
@@ -210,12 +210,12 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       return serializeTool(tool);
     } catch (error) {
-      return handleError(error, 'Error getting tool');
+      return handleError(error, { message: 'Error getting tool', code: 'TOOL_GET_FAILED' });
     }
   },
 });
@@ -235,7 +235,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
-        throw new HTTPException(400, { message: 'Tool ID is required' });
+        throw new HTTPException(400, { message: 'Tool ID is required', code: 'TOOL_ID_REQUIRED' });
       }
 
       let tool: any;
@@ -258,11 +258,11 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       if (!tool?.execute) {
-        throw new HTTPException(400, { message: 'Tool is not executable' });
+        throw new HTTPException(400, { message: 'Tool is not executable', code: 'TOOL_NOT_EXECUTABLE' });
       }
 
       const { data } = bodyParams;
@@ -291,7 +291,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error executing tool');
+      return handleError(error, { message: 'Error executing tool', code: 'TOOL_EXECUTE_FAILED' });
     }
   },
 });
@@ -313,7 +313,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: 'AGENT_ID_REQUIRED' });
       }
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -322,12 +322,12 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       return serializeTool(tool);
     } catch (error) {
-      return handleError(error, 'Error getting agent tool');
+      return handleError(error, { message: 'Error getting agent tool', code: 'AGENT_TOOL_GET_FAILED' });
     }
   },
 });
@@ -346,7 +346,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: 'AGENT_ID_REQUIRED' });
       }
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -355,11 +355,11 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       if (!tool?.execute) {
-        throw new HTTPException(400, { message: 'Tool is not executable' });
+        throw new HTTPException(400, { message: 'Tool is not executable', code: 'TOOL_NOT_EXECUTABLE' });
       }
 
       const result = await tool.execute(data, {
@@ -371,7 +371,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error executing agent tool');
+      return handleError(error, { message: 'Error executing agent tool', code: 'AGENT_TOOL_EXECUTE_FAILED' });
     }
   },
 });

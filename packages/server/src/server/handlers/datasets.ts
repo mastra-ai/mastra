@@ -6,6 +6,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
 import { isReservedRequestContextKey } from '../constants';
+import { isServerErrorCode } from '../error-codes';
+import type { ServerErrorCode } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
@@ -82,7 +84,10 @@ function withTargetType<T extends { output: unknown }>(
 
 function assertDatasetsAvailable(): void {
   if (!coreFeatures.has('datasets')) {
-    throw new HTTPException(501, { message: 'Datasets require @mastra/core >= 1.4.0' });
+    throw new HTTPException(501, {
+      message: 'Datasets require @mastra/core >= 1.4.0',
+      code: 'MASTRA_CORE_VERSION_UNSUPPORTED',
+    });
   }
 }
 
@@ -97,6 +102,7 @@ function assertExperimentDeletionAvailable(): void {
   if (!coreFeatures.has('experiment-deletion')) {
     throw new HTTPException(501, {
       message: 'Experiment deletion requires a newer @mastra/core with experiment deletion support.',
+      code: 'MASTRA_CORE_VERSION_UNSUPPORTED',
     });
   }
 }
@@ -139,6 +145,17 @@ function isSchemaValidationError(error: unknown): error is SchemaValidationLike 
 
 function isSchemaUpdateValidationError(error: unknown): error is SchemaUpdateValidationLike {
   return error instanceof Error && error.name === 'SchemaUpdateValidationError';
+}
+
+/**
+ * Converts a dataset MastraError into an HTTPException. Core dataset error ids that are
+ * catalog codes are kept as the business code; anything else uses the operation fallback.
+ */
+function toDatasetHttpException(error: MastraError, fallbackCode: ServerErrorCode): HTTPException {
+  return new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, {
+    message: error.message,
+    code: isServerErrorCode(error.id) ? error.id : fallbackCode,
+  });
 }
 
 // ============================================================================
@@ -199,9 +216,9 @@ export const LIST_DATASETS_ROUTE = createRoute({
       };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASETS_LIST_FAILED');
       }
-      return handleError(error, 'Error listing datasets');
+      return handleError(error, { message: 'Error listing datasets', code: 'DATASETS_LIST_FAILED' });
     }
   },
 });
@@ -255,9 +272,9 @@ export const CREATE_DATASET_ROUTE = createRoute({
       return details as any;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_CREATE_FAILED');
       }
-      return handleError(error, 'Error creating dataset');
+      return handleError(error, { message: 'Error creating dataset', code: 'DATASET_CREATE_FAILED' });
     }
   },
 });
@@ -281,9 +298,9 @@ export const GET_DATASET_ROUTE = createRoute({
       return (await ds.getDetails()) as any;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_GET_FAILED');
       }
-      return handleError(error, 'Error getting dataset');
+      return handleError(error, { message: 'Error getting dataset', code: 'DATASET_GET_FAILED' });
     }
   },
 });
@@ -349,18 +366,22 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: error.message,
           cause: { failingItems: error.failingItems },
+          code: 'DATASET_SCHEMA_UPDATE_VALIDATION_FAILED',
+          metadata: { failingItems: error.failingItems },
         });
       }
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
+          code: 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+          metadata: { field: error.field, errors: error.errors },
         });
       }
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_UPDATE_FAILED');
       }
-      return handleError(error, 'Error updating dataset');
+      return handleError(error, { message: 'Error updating dataset', code: 'DATASET_UPDATE_FAILED' });
     }
   },
 });
@@ -391,9 +412,9 @@ export const DELETE_DATASET_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_DELETE_FAILED');
       }
-      return handleError(error, 'Error deleting dataset');
+      return handleError(error, { message: 'Error deleting dataset', code: 'DATASET_DELETE_FAILED' });
     }
   },
 });
@@ -433,9 +454,9 @@ export const LIST_ITEMS_ROUTE = createRoute({
       return { items: result.items, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEMS_LIST_FAILED');
       }
-      return handleError(error, 'Error listing dataset items');
+      return handleError(error, { message: 'Error listing dataset items', code: 'DATASET_ITEMS_LIST_FAILED' });
     }
   },
 });
@@ -495,21 +516,31 @@ export const ADD_ITEM_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
+          code: 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+          metadata: { field: error.field, errors: error.errors },
         });
       }
       if (error instanceof MastraError) {
         if (error.id === 'DATASET_ITEM_IDENTITY_CONFLICT') {
+          const conflicts = 'conflicts' in error ? error.conflicts : [];
           throw new HTTPException(409, {
             message: error.message,
-            cause: { conflicts: 'conflicts' in error ? error.conflicts : [] },
+            cause: { conflicts },
+            code: 'DATASET_ITEM_IDENTITY_CONFLICT',
+            metadata: { conflicts },
           });
         }
         if (error.id === 'DATASET_ITEM_EXTERNAL_ID_INVALID') {
-          throw new HTTPException(400, { message: error.message, cause: { field: 'externalId' } });
+          throw new HTTPException(400, {
+            message: error.message,
+            cause: { field: 'externalId' },
+            code: 'DATASET_ITEM_EXTERNAL_ID_INVALID',
+            metadata: { field: 'externalId' },
+          });
         }
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEM_ADD_FAILED');
       }
-      return handleError(error, 'Error adding item to dataset');
+      return handleError(error, { message: 'Error adding item to dataset', code: 'DATASET_ITEM_ADD_FAILED' });
     }
   },
 });
@@ -530,14 +561,18 @@ export const GET_ITEM_ROUTE = createRoute({
       const ds = await mastra.datasets.get({ id: datasetId });
       const item = await ds.getItem({ itemId });
       if (!item || (item as any).datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+        throw new HTTPException(404, {
+          message: `Item not found: ${itemId}`,
+          code: 'DATASET_ITEM_NOT_FOUND',
+          metadata: { itemId },
+        });
       }
       return item as any;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEM_GET_FAILED');
       }
-      return handleError(error, 'Error getting dataset item');
+      return handleError(error, { message: 'Error getting dataset item', code: 'DATASET_ITEM_GET_FAILED' });
     }
   },
 });
@@ -579,7 +614,11 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       // Check if item exists and belongs to dataset
       const existing = await ds.getItem({ itemId });
       if (!existing || (existing as any).datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+        throw new HTTPException(404, {
+          message: `Item not found: ${itemId}`,
+          code: 'DATASET_ITEM_NOT_FOUND',
+          metadata: { itemId },
+        });
       }
       return await ds.updateItem({
         itemId,
@@ -597,12 +636,14 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
+          code: 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+          metadata: { field: error.field, errors: error.errors },
         });
       }
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEM_UPDATE_FAILED');
       }
-      return handleError(error, 'Error updating dataset item');
+      return handleError(error, { message: 'Error updating dataset item', code: 'DATASET_ITEM_UPDATE_FAILED' });
     }
   },
 });
@@ -623,6 +664,7 @@ export const PURGE_ITEM_ROUTE = createRoute({
     if (!coreFeatures.has('dataset-item-purge')) {
       throw new HTTPException(501, {
         message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+        code: 'MASTRA_CORE_VERSION_UNSUPPORTED',
       });
     }
     try {
@@ -630,15 +672,19 @@ export const PURGE_ITEM_ROUTE = createRoute({
       const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
       const history = await ds.getItemHistory({ itemId });
       if (history.length === 0) {
-        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+        throw new HTTPException(404, {
+          message: `Item not found: ${itemId}`,
+          code: 'DATASET_ITEM_NOT_FOUND',
+          metadata: { itemId },
+        });
       }
       await ds.purgeItem({ itemId });
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEM_PURGE_FAILED');
       }
-      return handleError(error, 'Error purging dataset item data');
+      return handleError(error, { message: 'Error purging dataset item data', code: 'DATASET_ITEM_PURGE_FAILED' });
     }
   },
 });
@@ -659,15 +705,19 @@ export const DELETE_ITEM_ROUTE = createRoute({
       const ds = await mastra.datasets.get({ id: datasetId });
       const existing = await ds.getItem({ itemId });
       if (!existing || (existing as any).datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+        throw new HTTPException(404, {
+          message: `Item not found: ${itemId}`,
+          code: 'DATASET_ITEM_NOT_FOUND',
+          metadata: { itemId },
+        });
       }
       await ds.deleteItem({ itemId });
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEM_DELETE_FAILED');
       }
-      return handleError(error, 'Error deleting dataset item');
+      return handleError(error, { message: 'Error deleting dataset item', code: 'DATASET_ITEM_DELETE_FAILED' });
     }
   },
 });
@@ -693,11 +743,14 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
         params;
       const storage = mastra.getStorage();
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
+        throw new HTTPException(500, { message: 'Storage not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
       const experimentsStore = await storage.getStore('experiments');
       if (!experimentsStore) {
-        throw new HTTPException(500, { message: 'Experiments storage not available' });
+        throw new HTTPException(500, {
+          message: 'Experiments storage not available',
+          code: 'EXPERIMENTS_STORAGE_UNAVAILABLE',
+        });
       }
       const result = await experimentsStore.listExperiments({
         experimentSetId,
@@ -712,9 +765,9 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
       return { experiments: result.experiments, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENTS_LIST_FAILED');
       }
-      return handleError(error, 'Error listing experiments');
+      return handleError(error, { message: 'Error listing experiments', code: 'EXPERIMENTS_LIST_FAILED' });
     }
   },
 });
@@ -733,19 +786,25 @@ export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
     try {
       const storage = mastra.getStorage();
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
+        throw new HTTPException(500, { message: 'Storage not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
       const experimentsStore = await storage.getStore('experiments');
       if (!experimentsStore) {
-        throw new HTTPException(500, { message: 'Experiments storage not available' });
+        throw new HTTPException(500, {
+          message: 'Experiments storage not available',
+          code: 'EXPERIMENTS_STORAGE_UNAVAILABLE',
+        });
       }
       const counts = await experimentsStore.getReviewSummary();
       return { counts };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_REVIEW_SUMMARY_GET_FAILED');
       }
-      return handleError(error, 'Error getting review summary');
+      return handleError(error, {
+        message: 'Error getting review summary',
+        code: 'EXPERIMENT_REVIEW_SUMMARY_GET_FAILED',
+      });
     }
   },
 });
@@ -773,14 +832,18 @@ export const GET_ANY_EXPERIMENT_ROUTE = createRoute({
         ...(projectId !== undefined ? { projectId } : {}),
       });
       if (!experiment) {
-        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+        throw new HTTPException(404, {
+          message: `Experiment not found: ${experimentId}`,
+          code: 'EXPERIMENT_NOT_FOUND',
+          metadata: { experimentId },
+        });
       }
       return experiment;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_GET_FAILED');
       }
-      return handleError(error, 'Error getting experiment');
+      return handleError(error, { message: 'Error getting experiment', code: 'EXPERIMENT_GET_FAILED' });
     }
   },
 });
@@ -809,7 +872,11 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
       if (!scoped) {
         const existing = await mastra.datasets.getExperiment({ experimentId });
         if (!existing) {
-          throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+          throw new HTTPException(404, {
+            message: `Experiment not found: ${experimentId}`,
+            code: 'EXPERIMENT_NOT_FOUND',
+            metadata: { experimentId },
+          });
         }
       }
       // Note: experiment-linked score_events are not cascaded here (tracked separately).
@@ -821,9 +888,9 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_DELETE_FAILED');
       }
-      return handleError(error, 'Error deleting experiment');
+      return handleError(error, { message: 'Error deleting experiment', code: 'EXPERIMENT_DELETE_FAILED' });
     }
   },
 });
@@ -859,9 +926,9 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
       return { experiments: result.experiments, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENTS_LIST_FAILED');
       }
-      return handleError(error, 'Error listing experiments');
+      return handleError(error, { message: 'Error listing experiments', code: 'EXPERIMENTS_LIST_FAILED' });
     }
   },
 });
@@ -954,7 +1021,10 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         };
       }
       if (!targetType || !targetId) {
-        throw new HTTPException(400, { message: 'targetType and targetId are required to start an experiment' });
+        throw new HTTPException(400, {
+          message: 'targetType and targetId are required to start an experiment',
+          code: 'EXPERIMENT_TARGET_REQUIRED',
+        });
       }
       const result = await ds.startExperimentAsync({
         targetType,
@@ -984,9 +1054,9 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_TRIGGER_FAILED');
       }
-      return handleError(error, 'Error triggering experiment');
+      return handleError(error, { message: 'Error triggering experiment', code: 'EXPERIMENT_TRIGGER_FAILED' });
     }
   },
 });
@@ -1019,9 +1089,9 @@ export const RUN_EXPERIMENT_ITEM_ROUTE = createRoute({
       return { ...run, result: withTargetType(run.result, experiment?.targetType) };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_ITEM_RUN_FAILED');
       }
-      return handleError(error, 'Error running experiment item');
+      return handleError(error, { message: 'Error running experiment item', code: 'EXPERIMENT_ITEM_RUN_FAILED' });
     }
   },
 });
@@ -1078,9 +1148,12 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
       return withTargetType(submitted, experiment?.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_RESULT_SUBMIT_FAILED');
       }
-      return handleError(error, 'Error submitting experiment result');
+      return handleError(error, {
+        message: 'Error submitting experiment result',
+        code: 'EXPERIMENT_RESULT_SUBMIT_FAILED',
+      });
     }
   },
 });
@@ -1103,9 +1176,9 @@ export const FINALIZE_EXPERIMENT_ROUTE = createRoute({
       return await ds.finalizeExperiment({ experimentId });
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_FINALIZE_FAILED');
       }
-      return handleError(error, 'Error finalizing experiment');
+      return handleError(error, { message: 'Error finalizing experiment', code: 'EXPERIMENT_FINALIZE_FAILED' });
     }
   },
 });
@@ -1126,14 +1199,18 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
       const ds = await mastra.datasets.get({ id: datasetId });
       const run = await ds.getExperiment({ experimentId });
       if (!run || run.datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+        throw new HTTPException(404, {
+          message: `Experiment not found: ${experimentId}`,
+          code: 'EXPERIMENT_NOT_FOUND',
+          metadata: { experimentId },
+        });
       }
       return run;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_GET_FAILED');
       }
-      return handleError(error, 'Error getting experiment');
+      return handleError(error, { message: 'Error getting experiment', code: 'EXPERIMENT_GET_FAILED' });
     }
   },
 });
@@ -1165,9 +1242,9 @@ export const DELETE_EXPERIMENT_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_DELETE_FAILED');
       }
-      return handleError(error, 'Error deleting experiment');
+      return handleError(error, { message: 'Error deleting experiment', code: 'EXPERIMENT_DELETE_FAILED' });
     }
   },
 });
@@ -1190,9 +1267,9 @@ export const UPDATE_EXPERIMENT_ROUTE = createRoute({
       return await ds.updateExperiment({ experimentId, name, description, metadata });
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_UPDATE_FAILED');
       }
-      return handleError(error, 'Error updating experiment');
+      return handleError(error, { message: 'Error updating experiment', code: 'EXPERIMENT_UPDATE_FAILED' });
     }
   },
 });
@@ -1216,7 +1293,11 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
       // Validate experiment belongs to dataset
       const run = await ds.getExperiment({ experimentId });
       if (!run || run.datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+        throw new HTTPException(404, {
+          message: `Experiment not found: ${experimentId}`,
+          code: 'EXPERIMENT_NOT_FOUND',
+          metadata: { experimentId },
+        });
       }
       const result = await ds.listExperimentResults({
         experimentId,
@@ -1233,9 +1314,12 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
       };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_RESULTS_LIST_FAILED');
       }
-      return handleError(error, 'Error listing experiment results');
+      return handleError(error, {
+        message: 'Error listing experiment results',
+        code: 'EXPERIMENT_RESULTS_LIST_FAILED',
+      });
     }
   },
 });
@@ -1256,11 +1340,14 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
     try {
       const storage = mastra.getStorage();
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
+        throw new HTTPException(500, { message: 'Storage not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
       const experimentsStore = await storage.getStore('experiments');
       if (!experimentsStore) {
-        throw new HTTPException(500, { message: 'Experiments storage not available' });
+        throw new HTTPException(500, {
+          message: 'Experiments storage not available',
+          code: 'EXPERIMENTS_STORAGE_UNAVAILABLE',
+        });
       }
 
       const result = await experimentsStore.updateExperimentResult({
@@ -1275,9 +1362,12 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
       return withTargetType(result, experiment?.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_RESULT_UPDATE_FAILED');
       }
-      return handleError(error, 'Error updating experiment result');
+      return handleError(error, {
+        message: 'Error updating experiment result',
+        code: 'EXPERIMENT_RESULT_UPDATE_FAILED',
+      });
     }
   },
 });
@@ -1305,9 +1395,9 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
       return await mastra.datasets.compareExperiments({ experimentIds, baselineId });
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENTS_COMPARE_FAILED');
       }
-      return handleError(error, 'Error comparing experiments');
+      return handleError(error, { message: 'Error comparing experiments', code: 'EXPERIMENTS_COMPARE_FAILED' });
     }
   },
 });
@@ -1336,9 +1426,9 @@ export const LIST_DATASET_VERSIONS_ROUTE = createRoute({
       return { versions: result.versions, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_VERSIONS_LIST_FAILED');
       }
-      return handleError(error, 'Error listing dataset versions');
+      return handleError(error, { message: 'Error listing dataset versions', code: 'DATASET_VERSIONS_LIST_FAILED' });
     }
   },
 });
@@ -1360,14 +1450,18 @@ export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
       const rows = await ds.getItemHistory({ itemId });
       // Check rows belong to this dataset
       if (rows.length > 0 && rows[0]?.datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
+        throw new HTTPException(404, {
+          message: `Item not found in dataset: ${itemId}`,
+          code: 'DATASET_ITEM_NOT_FOUND',
+          metadata: { itemId },
+        });
       }
       return { history: rows };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEM_HISTORY_LIST_FAILED');
       }
-      return handleError(error, 'Error listing item history');
+      return handleError(error, { message: 'Error listing item history', code: 'DATASET_ITEM_HISTORY_LIST_FAILED' });
     }
   },
 });
@@ -1388,17 +1482,25 @@ export const GET_ITEM_VERSION_ROUTE = createRoute({
       const ds = await mastra.datasets.get({ id: datasetId });
       const item = await ds.getItem({ itemId, version: datasetVersion });
       if (!item) {
-        throw new HTTPException(404, { message: `Item ${itemId} not found at version ${datasetVersion}` });
+        throw new HTTPException(404, {
+          message: `Item ${itemId} not found at version ${datasetVersion}`,
+          code: 'DATASET_ITEM_VERSION_NOT_FOUND',
+          metadata: { itemId, datasetVersion },
+        });
       }
       if ((item as any).datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
+        throw new HTTPException(404, {
+          message: `Item not found in dataset: ${itemId}`,
+          code: 'DATASET_ITEM_NOT_FOUND',
+          metadata: { itemId },
+        });
       }
       return item as any;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEM_VERSION_GET_FAILED');
       }
-      return handleError(error, 'Error getting item version');
+      return handleError(error, { message: 'Error getting item version', code: 'DATASET_ITEM_VERSION_GET_FAILED' });
     }
   },
 });
@@ -1444,21 +1546,31 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
+          code: 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+          metadata: { field: error.field, errors: error.errors },
         });
       }
       if (error instanceof MastraError) {
         if (error.id === 'DATASET_ITEM_IDENTITY_CONFLICT') {
+          const conflicts = 'conflicts' in error ? error.conflicts : [];
           throw new HTTPException(409, {
             message: error.message,
-            cause: { conflicts: 'conflicts' in error ? error.conflicts : [] },
+            cause: { conflicts },
+            code: 'DATASET_ITEM_IDENTITY_CONFLICT',
+            metadata: { conflicts },
           });
         }
         if (error.id === 'DATASET_ITEM_EXTERNAL_ID_INVALID') {
-          throw new HTTPException(400, { message: error.message, cause: { field: 'externalId' } });
+          throw new HTTPException(400, {
+            message: error.message,
+            cause: { field: 'externalId' },
+            code: 'DATASET_ITEM_EXTERNAL_ID_INVALID',
+            metadata: { field: 'externalId' },
+          });
         }
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEMS_BATCH_INSERT_FAILED');
       }
-      return handleError(error, 'Error batch inserting items');
+      return handleError(error, { message: 'Error batch inserting items', code: 'DATASET_ITEMS_BATCH_INSERT_FAILED' });
     }
   },
 });
@@ -1483,9 +1595,9 @@ export const BATCH_DELETE_ITEMS_ROUTE = createRoute({
       return { success: true, deletedCount: itemIds.length };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEMS_BATCH_DELETE_FAILED');
       }
-      return handleError(error, 'Error bulk deleting items');
+      return handleError(error, { message: 'Error bulk deleting items', code: 'DATASET_ITEMS_BATCH_DELETE_FAILED' });
     }
   },
 });
@@ -1614,9 +1726,9 @@ export const GENERATE_ITEMS_ROUTE = createRoute({
       return { items };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'DATASET_ITEMS_GENERATE_FAILED');
       }
-      return handleError(error, 'Error generating dataset items');
+      return handleError(error, { message: 'Error generating dataset items', code: 'DATASET_ITEMS_GENERATE_FAILED' });
     }
   },
 });
@@ -1721,9 +1833,9 @@ export const CLUSTER_FAILURES_ROUTE = createRoute({
       return { clusters: generated.clusters, proposedTags: generated.proposedTags ?? [] };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+        throw toDatasetHttpException(error, 'EXPERIMENT_FAILURES_CLUSTER_FAILED');
       }
-      return handleError(error, 'Error clustering failures');
+      return handleError(error, { message: 'Error clustering failures', code: 'EXPERIMENT_FAILURES_CLUSTER_FAILED' });
     }
   },
 });

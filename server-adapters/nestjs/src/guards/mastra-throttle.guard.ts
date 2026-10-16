@@ -109,6 +109,7 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
           error: 'Too Many Requests',
           message: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
           retryAfter,
+          problem: { code: 'REQUEST_RATE_LIMIT_EXCEEDED', metadata: { retryAfter } },
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );

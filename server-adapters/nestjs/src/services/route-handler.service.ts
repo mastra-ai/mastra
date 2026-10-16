@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { ensureProblem, isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 
@@ -196,7 +196,10 @@ export class RouteHandlerService {
           params[paramName] = decodeURIComponent(pathPart);
         } catch {
           // Invalid percent encoding - throw a proper 400 error
-          throw new BadRequestException(`Invalid URL encoding in path parameter: ${paramName}`);
+          throw new BadRequestException({
+            message: `Invalid URL encoding in path parameter: ${paramName}`,
+            problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { location: 'path', param: paramName } },
+          });
         }
       } else if (patternPart !== pathPart) {
         // Literal parts must match exactly
@@ -315,7 +318,7 @@ export class RouteHandlerService {
             `Invalid ${VALIDATION_CONTEXT_LABELS[context]}`,
             error,
             result.status,
-            result.body,
+            ensureProblem(result.body, 'REQUEST_VALIDATION_FAILED'),
           );
         }
       } catch (hookError) {
@@ -327,7 +330,7 @@ export class RouteHandlerService {
       `Invalid ${VALIDATION_CONTEXT_LABELS[context]}`,
       error,
       400,
-      formatZodError(error, VALIDATION_CONTEXT_LABELS[context]),
+      formatZodError(error, VALIDATION_CONTEXT_LABELS[context], context),
     );
   }
 

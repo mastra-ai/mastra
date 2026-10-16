@@ -42,7 +42,10 @@ export class BodyLimitMiddleware implements NestMiddleware {
       const length = parseInt(contentLength, 10);
       if (!isNaN(length) && length > this.maxSize) {
         this.logger.warn(`Request body too large: ${length} bytes exceeds ${this.maxSize} bytes limit`);
-        throw new PayloadTooLargeException(`Request body too large. Maximum size is ${formatBytes(this.maxSize)}.`);
+        throw new PayloadTooLargeException({
+          message: `Request body too large. Maximum size is ${formatBytes(this.maxSize)}.`,
+          problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: this.maxSize } },
+        });
       }
     }
 

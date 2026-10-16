@@ -3,6 +3,7 @@ title: "Server"
 description: "Configure the Mastra HTTP server to expose agents and workflows through REST APIs with middleware, authentication, streaming, and OpenAI-compatible routes."
 packages:
   - "@mastra/core"
+  - "@mastra/server"
 ---
 
 # Server
@@ -70,6 +71,56 @@ To explore the API interactively, visit the Swagger UI at [http://localhost:4111
 The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/configuration#serverbuild) to `true` respectively.
 
 :::
+
+## Error responses
+
+Every JSON error response from a Mastra route includes a `problem` object next to the human-readable `error` message. `problem.code` is a stable business code, such as `AGENT_NOT_FOUND` or `STORED_AGENT_ALREADY_EXISTS`, that tells you what failed regardless of the HTTP status. `problem.metadata` is optional and carries the values needed to describe the failure, such as the ID that wasn't found:
+
+```json
+{
+  "error": "Agent with id support-agent not found",
+  "problem": {
+    "code": "AGENT_NOT_FOUND",
+    "metadata": { "agentId": "support-agent" }
+  }
+}
+```
+
+Codes follow the `<DOMAIN>_<SUBJECT>_<REASON>` pattern. Reason codes describe a specific failure (e.g. `WORKSPACE_MOUNT_READ_ONLY`, `REQUEST_VALIDATION_FAILED`, `PERMISSION_DENIED`). Operation codes end in `_FAILED` and describe the operation that failed when no more specific reason is known (e.g. `AGENT_CLONE_FAILED`). `UNEXPECTED_ERROR` is only returned for errors that no route handled.
+
+The full catalog is exported from `@mastra/server/error-codes`. This entry point has no dependencies, so you can import it in browser code:
+
+```typescript
+import { SERVER_ERROR_CODES, isServerProblem } from '@mastra/server/error-codes'
+
+const body = await response.json()
+
+if (isServerProblem(body.problem) && body.problem.code === SERVER_ERROR_CODES.AGENT_NOT_FOUND) {
+  showMessage(`Agent ${body.problem.metadata?.agentId} doesn't exist`)
+}
+```
+
+Existing fields such as `error`, `issues`, and `cause` are still returned. Read `problem` when your code needs to branch on the error.
+
+:::note
+
+A custom `server.onError` handler replaces the default error body, so its responses only include `problem` if your handler adds it.
+
+:::
+
+To throw a coded error from a [custom API route](/docs/server/custom-api-routes), use `HTTPException` from `@mastra/server/server-adapter`. The `code` option is required and must be a catalog code:
+
+```typescript
+import { HTTPException } from '@mastra/server/server-adapter'
+
+throw new HTTPException(404, {
+  message: `Agent ${agentId} not found`,
+  code: 'AGENT_NOT_FOUND',
+  metadata: { agentId },
+})
+```
+
+If you pass a custom `res`, Mastra sends that response. When its body is a JSON object without a valid `problem`, Mastra adds the exception's `problem` to it. Non-JSON bodies are sent unchanged.
 
 ## OpenAI Responses API
 

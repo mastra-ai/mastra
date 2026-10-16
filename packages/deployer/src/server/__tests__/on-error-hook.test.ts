@@ -126,7 +126,37 @@ describe('onError hook integration tests', () => {
       const result = await response.json();
 
       // Should use default error format from errorHandler
-      expect(result.error).toBe('Internal Server Error');
+      expect(result).toEqual({ error: 'Internal Server Error', problem: { code: 'UNEXPECTED_ERROR' } });
+    });
+
+    it('should return the business problem for an unknown agent', async () => {
+      const mastra = new Mastra({});
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const response = await app.request(new Request('http://localhost/api/agents/does-not-exist'));
+
+      expect(response.status).toBe(404);
+      const result = await response.json();
+      expect(result.problem).toEqual({ code: 'AGENT_NOT_FOUND', metadata: { agentId: 'does-not-exist' } });
+    });
+
+    it('should return the body-limit problem for oversized requests', async () => {
+      const mastra = new Mastra({ server: { bodySizeLimit: 10 } });
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const response = await app.request(
+        new Request('http://localhost/api/agents/does-not-exist/generate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ messages: 'x'.repeat(100) }),
+        }),
+      );
+
+      expect(response.status).toBe(413);
+      expect(await response.json()).toEqual({
+        error: 'Request body too large',
+        problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: 10 } },
+      });
     });
 
     it('should pass Hono context to onError handler for access to request details', async () => {

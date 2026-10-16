@@ -153,7 +153,7 @@ function hasNonEmptyInstructions(value: unknown): boolean {
 
 function assertOwnedInstructionsNotEmpty(instructions: unknown) {
   if (!hasNonEmptyInstructions(instructions)) {
-    throw new HTTPException(400, { message: 'Instructions are required' });
+    throw new HTTPException(400, { message: 'Instructions are required', code: 'STORED_AGENT_INSTRUCTIONS_REQUIRED' });
   }
 }
 
@@ -252,12 +252,15 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Agents storage domain is not available',
+          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Resolve the visibility scope for this caller. Non-owner queries for
@@ -286,7 +289,10 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         }
         const favoritesStore = await storage.getStore('favorites');
         if (!favoritesStore) {
-          throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
+          throw new HTTPException(500, {
+            message: 'Favorites storage domain is not available',
+            code: 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE',
+          });
         }
         const starredIds = await favoritesStore.listFavoritedIds({ userId: favoriteSubjectId, entityType: 'agent' });
         if (starredIds.length === 0) {
@@ -359,7 +365,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
 
       return { ...result, agents: withAuthors };
     } catch (error) {
-      return handleError(error, 'Error listing stored agents');
+      return handleError(error, { message: 'Error listing stored agents', code: 'STORED_AGENTS_LIST_FAILED' });
     }
   },
 });
@@ -391,7 +397,11 @@ async function buildStoredAgentExport({
   }
 
   if (!storedAgent && !codeAgent) {
-    throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
+    throw new HTTPException(404, {
+      message: `Agent with id ${storedAgentId} not found`,
+      code: 'STORED_AGENT_NOT_FOUND',
+      metadata: { storedAgentId },
+    });
   }
 
   const config = buildExportConfig(body, codeAgent);
@@ -420,7 +430,7 @@ export const EXPORT_STORED_AGENT_ROUTE = createRoute({
     try {
       return await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body });
     } catch (error) {
-      return handleError(error, 'Error exporting stored agent');
+      return handleError(error, { message: 'Error exporting stored agent', code: 'STORED_AGENT_EXPORT_FAILED' });
     }
   },
 });
@@ -440,7 +450,10 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
     try {
       const provider = mastra.getEditor?.()?.getSourceControlProvider?.();
       if (!provider?.openChangeRequest) {
-        throw new HTTPException(400, { message: 'Source control provider cannot open change requests' });
+        throw new HTTPException(400, {
+          message: 'Source control provider cannot open change requests',
+          code: 'SOURCE_CONTROL_CHANGE_REQUESTS_UNSUPPORTED',
+        });
       }
 
       const openChangeRequest = provider.openChangeRequest.bind(provider);
@@ -479,7 +492,10 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error opening stored agent change request');
+      return handleError(error, {
+        message: 'Error opening stored agent change request',
+        code: 'STORED_AGENT_CHANGE_REQUEST_OPEN_FAILED',
+      });
     }
   },
 });
@@ -504,18 +520,25 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Agents storage domain is not available',
+          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const agent = await agentsStore.getByIdResolved(storedAgentId, { status });
 
       if (!agent) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: 'STORED_AGENT_NOT_FOUND',
+          metadata: { storedAgentId },
+        });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
@@ -527,7 +550,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       const withFavorite = await enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
       return attachAuthor(withFavorite, authors);
     } catch (error) {
-      return handleError(error, 'Error getting stored agent');
+      return handleError(error, { message: 'Error getting stored agent', code: 'STORED_AGENT_GET_FAILED' });
     }
   },
 });
@@ -584,12 +607,15 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Agents storage domain is not available',
+          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Derive ID from name if not explicitly provided
@@ -598,13 +624,18 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive agent ID from name. Please provide an explicit id.',
+          code: 'STORED_AGENT_ID_DERIVATION_FAILED',
         });
       }
 
       // Check if agent with this ID already exists
       const existing = await agentsStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `Agent with id ${id} already exists`,
+          code: 'STORED_AGENT_ALREADY_EXISTS',
+          metadata: { storedAgentId: id },
+        });
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
@@ -722,12 +753,15 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // config the caller just saved.
       const resolved = await agentsStore.getByIdResolved(id, { status: 'published' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created agent' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created agent',
+          code: 'STORED_AGENT_CREATED_RESOLVE_FAILED',
+        });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
-      return handleError(error, 'Error creating stored agent');
+      return handleError(error, { message: 'Error creating stored agent', code: 'STORED_AGENT_CREATE_FAILED' });
     }
   },
 });
@@ -795,18 +829,25 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Agents storage domain is not available',
+          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if agent exists
       const existing = await agentsStore.getById(storedAgentId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: 'STORED_AGENT_NOT_FOUND',
+          metadata: { storedAgentId },
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -986,12 +1027,15 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Return the resolved agent with the latest version
       const resolved = await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated agent',
+          code: 'STORED_AGENT_UPDATED_RESOLVE_FAILED',
+        });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
     } catch (error) {
-      return handleError(error, 'Error updating stored agent');
+      return handleError(error, { message: 'Error updating stored agent', code: 'STORED_AGENT_UPDATE_FAILED' });
     }
   },
 });
@@ -1014,18 +1058,25 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Agents storage domain is not available',
+          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if agent exists
       const existing = await agentsStore.getById(storedAgentId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: 'STORED_AGENT_NOT_FOUND',
+          metadata: { storedAgentId },
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
@@ -1056,7 +1107,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {
-      return handleError(error, 'Error deleting stored agent');
+      return handleError(error, { message: 'Error deleting stored agent', code: 'STORED_AGENT_DELETE_FAILED' });
     }
   },
 });
@@ -1085,19 +1136,26 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
     try {
       const storage = mastra.getStorage();
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Agents storage domain is not available',
+          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Mirrors GET: 404 if the caller can't read the target. Prevents the
       // dependents endpoint from being usable as a sub-agent reference oracle.
       const target = await agentsStore.getById(storedAgentId);
       if (!target) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: 'STORED_AGENT_NOT_FOUND',
+          metadata: { storedAgentId },
+        });
       }
       assertStoredResourceScope(target, await getStoredResourceScope(mastra, requestContext));
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: target });
@@ -1138,7 +1196,10 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
 
       return { dependents, hiddenCount };
     } catch (error) {
-      return handleError(error, 'Error listing stored agent dependents');
+      return handleError(error, {
+        message: 'Error listing stored agent dependents',
+        code: 'STORED_AGENT_DEPENDENTS_LIST_FAILED',
+      });
     }
   },
 });
@@ -1181,14 +1242,17 @@ export const PREVIEW_INSTRUCTIONS_ROUTE = createRoute({
     try {
       const editor = mastra.getEditor();
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, { message: 'Editor is not configured', code: 'EDITOR_NOT_CONFIGURED' });
       }
 
       const result = await editor.prompt.preview(blocks, context ?? {});
 
       return { result };
     } catch (error) {
-      return handleError(error, 'Error previewing instructions');
+      return handleError(error, {
+        message: 'Error previewing instructions',
+        code: 'STORED_AGENT_INSTRUCTIONS_PREVIEW_FAILED',
+      });
     }
   },
 });

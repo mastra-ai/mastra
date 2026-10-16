@@ -16,7 +16,10 @@ export class RequestTrackingInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     // Reject requests during shutdown
     if (this.shutdownService.shuttingDown) {
-      throw new ServiceUnavailableException('Server is shutting down');
+      throw new ServiceUnavailableException({
+        message: 'Server is shutting down',
+        problem: { code: 'SERVER_SHUTTING_DOWN' },
+      });
     }
 
     const request = context.switchToHttp().getRequest<Request>();
