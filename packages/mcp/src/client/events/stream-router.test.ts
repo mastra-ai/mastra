@@ -161,6 +161,51 @@ describe('EventStreamRouter', () => {
     expect(b.seen).toEqual(['active']);
   });
 
+  it('never binds a pending open to a late active from a released stream', async () => {
+    const a = recordingSink();
+    const b = recordingSink();
+    const openA = router.open(params('a'), a.sink, { signal: new AbortController().signal, openTimeoutMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 1);
+    const handleA = await openA;
+    handleA.abort();
+    await expect(handleA.done).rejects.toThrow();
+
+    const openB = router.open(params('b'), b.sink, { signal: new AbortController().signal, openTimeoutMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(channel.sent.map(request => request.params.name)).toEqual(['a', 'b']);
+    // A's notifications can trail its cancellation, including a mid-stream `active` on a gap.
+    channel.notify(EVENTS_NOTIFICATIONS.active, 1, { truncated: true });
+    channel.event(1, 'late-a');
+    expect(b.seen).toEqual([]);
+
+    channel.notify(EVENTS_NOTIFICATIONS.active, 2);
+    await openB;
+    channel.event(2, 'for-b');
+    expect(b.seen).toEqual(['active', 'event:for-b']);
+    expect(a.seen).toEqual(['active']);
+    expect(log).toHaveBeenCalledWith('debug', expect.stringContaining('unknown event stream 1'));
+  });
+
+  it('retires ids of streams that ended on their own as well as aborted ones', async () => {
+    const a = recordingSink();
+    const b = recordingSink();
+    const openA = router.open(params('a'), a.sink, { signal: new AbortController().signal, openTimeoutMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 1);
+    const handleA = await openA;
+    channel.sent[0]!.resolve({});
+    await handleA.done;
+
+    const openB = router.open(params('b'), b.sink, { signal: new AbortController().signal, openTimeoutMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 1);
+    expect(b.seen).toEqual([]);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 2);
+    await openB;
+    expect(b.seen).toEqual(['active']);
+  });
+
   it('aborting the caller signal while waiting for confirmation rejects the open', async () => {
     const controller = new AbortController();
     const open = router.open(params('a'), recordingSink().sink, { signal: controller.signal, openTimeoutMs: 1000 });
