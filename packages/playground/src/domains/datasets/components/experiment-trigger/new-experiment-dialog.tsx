@@ -23,7 +23,6 @@ import { RequestContextField } from './request-context-field';
 import { RunExperimentAction } from './run-experiment-action';
 import { ScorersField } from './scorers-field';
 import { TargetField } from './target-field';
-import { useAdvancedToggle } from './use-advanced-toggle';
 import { useDatasetChoice } from './use-dataset-choice';
 import { useExperimentName } from './use-experiment-name';
 import { useRequestContextInput } from './use-request-context-input';
@@ -67,7 +66,7 @@ export function NewExperimentDialog({
   const experimentName = useExperimentName({ initialName, targetLabel: targetChoice.target?.label });
   const [description, setDescription] = useState(initialDescription ?? '');
   // A rerun that pins a version or carries a description opens with those fields showing.
-  const advanced = useAdvancedToggle(initialDatasetVersion !== undefined || Boolean(initialDescription));
+  const [advancedOpen, setAdvancedOpen] = useState(initialDatasetVersion !== undefined || Boolean(initialDescription));
   const { triggerExperiment } = useDatasetMutations();
 
   const { target } = targetChoice;
@@ -126,79 +125,71 @@ export function NewExperimentDialog({
           <DialogDescription>Run every item in a dataset through an agent, workflow or scorer.</DialogDescription>
         </DialogHeader>
 
-        {/* `contents`, so the Collapsible wraps body and footer without changing the dialog's layout. */}
-        <Collapsible open={advanced.open} onOpenChange={advanced.onOpenChange} className="contents">
-          <DialogBody>
-            {/* A plain block, so the closed Advanced panel adds no gap below the fields. */}
-            <div>
-              <div className="space-y-5">
-                <TargetField
-                  options={targetChoice.options}
-                  isLoading={targetChoice.isLoading}
-                  target={target}
-                  onTargetValueChange={targetChoice.setTargetValue}
-                  container={contentRef}
-                />
-                <DatasetField
-                  datasets={datasetChoice.datasets}
+        <DialogBody>
+          {/* A plain block, so the closed Advanced panel adds no gap below the toggle. */}
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <div className="space-y-5">
+              <TargetField
+                options={targetChoice.options}
+                isLoading={targetChoice.isLoading}
+                target={target}
+                onTargetValueChange={targetChoice.setTargetValue}
+                container={contentRef}
+              />
+              <DatasetField
+                datasets={datasetChoice.datasets}
+                datasetId={datasetId}
+                version={datasetChoice.version}
+                onDatasetChange={handleDatasetChange}
+                container={contentRef}
+              />
+              <ScorersField
+                scorerIds={scorerChoice.scorerIds}
+                usesDefaultScorers={scorerChoice.usesDefaultScorers}
+                onScorerIdsChange={scorerChoice.setScorerIds}
+                container={contentRef}
+              />
+            </div>
+
+            <div className="mt-4">
+              <AdvancedToggle />
+            </div>
+
+            <CollapsibleContent className="space-y-4 pt-3">
+              {datasetId && (
+                <DatasetVersionField
                   datasetId={datasetId}
                   version={datasetChoice.version}
-                  onDatasetChange={handleDatasetChange}
+                  onVersionChange={datasetChoice.setVersion}
                   container={contentRef}
                 />
-                <ScorersField
-                  scorerIds={scorerChoice.scorerIds}
-                  usesDefaultScorers={scorerChoice.usesDefaultScorers}
-                  onScorerIdsChange={scorerChoice.setScorerIds}
-                  container={contentRef}
-                />
-              </div>
-
-              {/* While open the toggle heads the section, 16px down like the footer row it came from
-                  (the body's bottom padding plus the footer's top padding), so it doesn't move. */}
-              {advanced.open && (
-                <div className="mt-4">
-                  <AdvancedToggle toggleRef={advanced.toggleRef} />
-                </div>
               )}
+              <ExperimentNameField
+                name={experimentName.name}
+                defaultName={experimentName.defaultName}
+                onNameChange={experimentName.setName}
+                disabled={isRunning}
+              />
+              <ExperimentDescriptionField
+                description={description}
+                onDescriptionChange={setDescription}
+                disabled={isRunning}
+              />
+              <RequestContextField
+                key={requestContextKey}
+                schema={requestContextInput.schema}
+                raw={requestContextInput.raw}
+                onRawChange={requestContextInput.setRaw}
+                onValuesChange={requestContextInput.setValues}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        </DialogBody>
 
-              <CollapsibleContent className="space-y-4 pt-3">
-                {datasetId && (
-                  <DatasetVersionField
-                    datasetId={datasetId}
-                    version={datasetChoice.version}
-                    onVersionChange={datasetChoice.setVersion}
-                    container={contentRef}
-                  />
-                )}
-                <ExperimentNameField
-                  name={experimentName.name}
-                  defaultName={experimentName.defaultName}
-                  onNameChange={experimentName.setName}
-                  disabled={isRunning}
-                />
-                <ExperimentDescriptionField
-                  description={description}
-                  onDescriptionChange={setDescription}
-                  disabled={isRunning}
-                />
-                <RequestContextField
-                  key={requestContextKey}
-                  schema={requestContextInput.schema}
-                  raw={requestContextInput.raw}
-                  onRawChange={requestContextInput.setRaw}
-                  onValuesChange={requestContextInput.setValues}
-                />
-              </CollapsibleContent>
-            </div>
-          </DialogBody>
-
-          <DialogFooter>
-            {!advanced.open && <AdvancedToggle toggleRef={advanced.toggleRef} />}
-            <DialogCancel>Cancel</DialogCancel>
-            <RunExperimentAction onRun={run} canRun={canRun} isRunning={isRunning} />
-          </DialogFooter>
-        </Collapsible>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <RunExperimentAction onRun={run} canRun={canRun} isRunning={isRunning} />
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

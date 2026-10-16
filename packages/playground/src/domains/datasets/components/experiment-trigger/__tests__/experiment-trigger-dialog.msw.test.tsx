@@ -241,13 +241,13 @@ describe('ExperimentTriggerDialog', () => {
   });
 
   describe('Advanced', () => {
-    it('stays closed by default, with its toggle in the footer', async () => {
+    it('stays closed by default, with its toggle in the body above the footer', async () => {
       setupHandlers();
       renderDialog();
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
 
       expect(screen.queryByLabelText('Experiment name')).toBeNull();
-      expect(advancedToggle().closest('[data-slot=dialog-footer]')).not.toBeNull();
+      expect(advancedToggle().closest('[data-slot=dialog-footer]')).toBeNull();
 
       await openAdvanced();
       expect(advancedToggle().closest('[data-slot=dialog-footer]')).toBeNull();
@@ -265,19 +265,6 @@ describe('ExperimentTriggerDialog', () => {
       expect(screen.queryByText('Dataset version')).toBeNull();
       await choose(datasetField(), 'Dataset 2');
       expect(await screen.findByText('Dataset version')).toBeDefined();
-    });
-
-    it('keeps focus on the toggle as it moves between the footer and the section', async () => {
-      setupHandlers();
-      renderDialog();
-      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
-
-      await openAdvanced();
-      expect(document.activeElement).toBe(advancedToggle());
-
-      fireEvent.click(advancedToggle());
-      await waitFor(() => expect(advancedToggle().closest('[data-slot=dialog-footer]')).not.toBeNull());
-      expect(document.activeElement).toBe(advancedToggle());
     });
   });
 
