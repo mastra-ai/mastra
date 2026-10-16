@@ -410,6 +410,18 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           values: [{ value: 'production', count: 2 }],
           valuesTruncated: true,
         });
+        // Root span name/type come from current qualified roots only: no superseded, pending, or child spans.
+        await expect(values({ predicateScope: 'trace', path: 'spanType' })).resolves.toEqual({
+          values: [
+            { value: 'agent_run', count: 2 },
+            { value: 'workflow_run', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'name', search: 'SYNC' })).resolves.toEqual({
+          values: [{ value: 'nightly-sync', count: 1 }],
+          valuesTruncated: false,
+        });
         await expect(values({ predicateScope: 'spans', path: 'model' })).resolves.toEqual({
           values: [
             { value: 'claude-sonnet-4-6', count: 2 },
