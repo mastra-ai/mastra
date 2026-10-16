@@ -233,6 +233,42 @@ function createTransientFailingObserverModel(onAttempt: () => void) {
   };
 }
 
+function createEmptyObserverModel(text: string, onAttempt: () => void) {
+  return {
+    ...createFailingObserverModel(),
+    async doGenerate() {
+      onAttempt();
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 0, totalTokens: 100 },
+        content: text ? [{ type: 'text' as const, text }] : [],
+        warnings: [],
+      };
+    },
+    async doStream() {
+      onAttempt();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          if (text) {
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+          }
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 100, outputTokens: 0, totalTokens: 100 },
+          });
+          controller.close();
+        },
+      });
+      return { stream, rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [] };
+    },
+  };
+}
+
 function createMockReflectorModel() {
   return {
     specificationVersion: 'v2' as const,
@@ -444,6 +480,61 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(record?.observedMessageIds ?? []).not.toContain(pendingUserMessage?.id);
     expect(record?.pendingMessageTokens).toBeGreaterThan(0);
     expect(pendingUserMessage).toBeDefined();
+  });
+
+  it.each([
+    ['no text', ''],
+    ['whitespace-only text', '  \n'],
+  ])('does not advance lastObservedAt when the observer returns %s', async (_label, observerText) => {
+    let attempts = 0;
+    const emptyMemory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: {
+            model: createEmptyObserverModel(observerText, () => attempts++) as any,
+            messageTokens: 20,
+            bufferTokens: false,
+            maxRetries: 0,
+            failurePolicy: 'continue',
+          },
+          reflection: {
+            model: createMockReflectorModel() as any,
+            observationTokens: 50000,
+          },
+        },
+      },
+    });
+    const emptyAgent = new Agent({
+      id: 'test-empty-observer-agent',
+      name: 'Test Empty Observer Agent',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory: emptyMemory,
+    });
+
+    const result = await emptyAgent.generate('Hello, I need help.', {
+      memory: { thread: 'test-empty-observer-thread', resource: 'test-resource' },
+    });
+
+    expect(attempts).toBeGreaterThan(0);
+    expect(result.tripwire).toBeUndefined();
+
+    const memoryStore = await store.getStore('memory');
+    const record = await memoryStore!.getObservationalMemory('test-empty-observer-thread', 'test-resource');
+    const messages = await memoryStore!.listMessages({ threadId: 'test-empty-observer-thread' });
+    const pendingUserMessage = messages.messages.find(
+      message =>
+        message.role === 'user' &&
+        message.content.parts.some(part => part.type === 'text' && part.text.includes('Hello')),
+    );
+
+    expect(pendingUserMessage).toBeDefined();
+    expect(record?.lastObservedAt).toBeUndefined();
+    expect(record?.observedMessageIds ?? []).not.toContain(pendingUserMessage?.id);
+    expect(record?.activeObservations ?? '').toBe('');
   });
 
   it('should emit tripwire in response when observer fails during streaming', async () => {
