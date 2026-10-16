@@ -14,6 +14,12 @@ export function normalizeResumeGenerateArgs<TOptions extends Record<string, any>
       : undefined;
 
   if (secondRunId !== undefined && args.length <= 2) {
+    if (typeof first === 'string') {
+      throw new Error(
+        'resumeGenerate received a string as the first argument and an object with runId as the second, which matches both call forms. ' +
+          'Use resumeGenerate(resumeData, { runId }) with non-string resume data, or pass the deprecated form with an explicit options argument: resumeGenerate(runId, resumeData, {}).',
+      );
+    }
     const { runId: _runId, ...options } = second as { runId: string } & TOptions;
     return { runId: secondRunId, resumeData: first, options: options as unknown as TOptions };
   }
