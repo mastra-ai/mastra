@@ -1,5 +1,5 @@
-import type { CreatedAgentSignal } from '../agent/signals';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
+import type { CreatedAgentSignal } from '../agent/signals';
 import type { ActionBase, PersistableAction } from './types';
 
 type BaseField = 'id' | 'threadId' | 'resourceId' | 'runId' | 'traceId' | 'createdAt';

@@ -48,6 +48,8 @@ export async function* streamActions(
       case 'reasoning-end': {
         const block = open.get(part.id)!;
         open.delete(part.id);
+        // Empty text blocks carry nothing; empty reasoning is kept because its provider metadata is replayed.
+        if (part.type === 'text-end' && block.text === '') break;
         yield {
           ...base(),
           type: part.type === 'text-end' ? 'text' : 'reasoning',

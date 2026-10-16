@@ -32,6 +32,14 @@ export type RunAgentOptions = {
   generateId?: () => string;
 };
 
+/** Recall window keeping the last `count` runs whole, so tool calls are never split from their results. */
+export function lastRuns(count: number): (history: PersistableAction[]) => PersistableAction[] {
+  return history => {
+    const runs = [...new Set(history.map(a => a.runId))].slice(-count);
+    return count > 0 ? history.filter(a => runs.includes(a.runId)) : [];
+  };
+}
+
 /**
  * One agent run over actions: input → actions, thread recall → prompt, model stream → actions.
  * Every action is yielded; persistable ones are saved at each `turn-end` and when the run finishes.
@@ -65,6 +73,11 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
 
   try {
     for (const action of input) yield action;
+
+    // A run with several approval requests resumes only once every one of them has an answer.
+    const runLog = [...history.filter(a => a.runId === runId), ...input];
+    const answered = new Set(runLog.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
+    if (runLog.some(a => a.type === 'tool-approval-requested' && !answered.has(a.approvalId))) return;
 
     const instructions = [options.instructions, ...system].filter(Boolean).join('\n\n');
     const result = streamText({
