@@ -47,7 +47,7 @@ function registerNativeStorageTests() {
   }
 
   const turso = trackStore({ id: 'turso-test-store', path: path.join(testDirectory, 'suite.db') });
-  createTestSuite(turso);
+  createTestSuite(turso, { versionLabels: 'supported' });
 
   createConfigValidationTests({
     storeName: 'TursoStore',

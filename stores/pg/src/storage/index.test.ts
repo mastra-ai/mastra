@@ -23,10 +23,10 @@ import { PostgresStore } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-createTestSuite(new PostgresStore(TEST_CONFIG));
-createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }));
+createTestSuite(new PostgresStore(TEST_CONFIG), { versionLabels: 'supported' });
+createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }), { versionLabels: 'supported' });
 // Schema names that are only valid when quoted, e.g. one schema per tenant (#24790)
-createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my-tenant' }));
+createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my-tenant' }), { versionLabels: 'supported' });
 
 // Helper to create a pre-configured pg.Pool
 const createTestPool = () => {
