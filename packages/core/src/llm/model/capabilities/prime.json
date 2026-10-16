@@ -19,6 +19,7 @@
     "google/gemini-3.8-flash",
     "google/gemini-4-argon",
     "google/gemma-3-27b-it",
+    "meta/muse-spark-open",
     "mistralai/mistral-large-2512",
     "mistralai/mistral-small-2603",
     "moonshotai/kimi-k3",
@@ -70,6 +71,7 @@
     "google/gemini-4-argon",
     "google/gemma-3-27b-it",
     "meta-llama/llama-3.3-70b-instruct",
+    "meta/muse-spark-open",
     "mistralai/mistral-large-2512",
     "mistralai/mistral-nemo",
     "mistralai/mistral-small-2603",
@@ -116,6 +118,7 @@
     "google/gemini-4-argon",
     "google/gemma-3-27b-it",
     "meta-llama/llama-3.3-70b-instruct",
+    "meta/muse-spark-open",
     "mistralai/mistral-large-2512",
     "mistralai/mistral-nemo",
     "mistralai/mistral-small-2603",
@@ -259,6 +262,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "x-ai/grok-4.7": [

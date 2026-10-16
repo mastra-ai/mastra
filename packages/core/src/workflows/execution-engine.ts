@@ -16,6 +16,7 @@ import type {
   WorkflowFinishCallbackResult,
   WorkflowErrorCallbackInfo,
   WorkflowStartCallbackInfo,
+  WorkflowStateTracingContext,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -29,6 +30,8 @@ export interface ExecutionGraph<TEngineType = any> {
 }
 
 export interface ExecutionEngineOptions {
+  /** @internal Explicit suspension context supplied by agent-loop workflows. */
+  resumeTracingContext?: WorkflowStateTracingContext;
   tracingPolicy?: TracingPolicy;
   validateInputs: boolean;
   emitStepEvents?: boolean;

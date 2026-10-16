@@ -89,7 +89,7 @@ describe('Settings ownership', () => {
     renderSettings('models');
 
     expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
-    expect(await screen.findByRole('slider', { name: 'Thinking level' })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Model and thinking' })).toBeInTheDocument();
     expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Your defaults')).not.toBeInTheDocument();

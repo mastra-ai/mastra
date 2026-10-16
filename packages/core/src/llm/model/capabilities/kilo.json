@@ -512,6 +512,7 @@
     "sao10k/l3-lunaris-8b",
     "sao10k/l3.1-euryale-70b",
     "sao10k/l3.3-euryale-70b",
+    "stealth/cat-jam",
     "stealth/claude-opus-4.6",
     "stealth/claude-opus-4.7",
     "stealth/claude-opus-4.8",
@@ -708,6 +709,7 @@
     "nex-agi/nex-n2.5-pro",
     "nousresearch/hermes-3-llama-3.1-405b",
     "nousresearch/hermes-3-llama-3.1-70b",
+    "nousresearch/hermes-4-405b",
     "nvidia/nemotron-3-nano-30b-a3b",
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-super-120b-a12b:free",
@@ -908,6 +910,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "stealth/cat-jam": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "stealth/claude-sonnet-4.6": [

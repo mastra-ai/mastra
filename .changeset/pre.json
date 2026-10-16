@@ -192,5 +192,29 @@
     "@mastra/sprites": "0.1.0",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "agent-scope-route-security-test",
+    "automated-model-pricing-20261016-004657",
+    "automated-provider-registry-20261016-004657",
+    "bg-result-history-window",
+    "curly-impalas-live",
+    "deployer-cross-package-shared-chunk",
+    "eighty-dogs-create",
+    "elevenlabs-listening-api-key",
+    "factory-connected-board-source-filters",
+    "factory-unified-issues-intake",
+    "follower-suspension-cleanup",
+    "great-walls-take",
+    "odd-turkeys-behave",
+    "om-auto-can-use-provider",
+    "om-auto-code-sdk-credentials",
+    "om-auto-factory-connected-providers",
+    "orange-nights-leave",
+    "parity-helper-scenario-awareness",
+    "quiet-cards-rest",
+    "quiet-owls-retire",
+    "quiet-resume-tool-result",
+    "reserved-request-context-keys",
+    "silver-peas-float"
+  ]
 }

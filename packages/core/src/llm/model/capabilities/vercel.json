@@ -32,7 +32,6 @@
     "anthropic/claude-opus-5-fast",
     "anthropic/claude-opus-5.5",
     "anthropic/claude-opus-5.5-fast",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
@@ -237,7 +236,6 @@
     "anthropic/claude-opus-4.7",
     "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-4.8-fast",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "arcee-ai/trinity-large-thinking",
@@ -417,7 +415,6 @@
     "poolside/laguna-s-2.1",
     "poolside/laguna-s-2.1-free",
     "prodia/flux-fast-schnell",
-    "quiverai/arrow-1.1",
     "recraft/recraft-v2",
     "recraft/recraft-v3",
     "recraft/recraft-v4",
@@ -875,15 +872,6 @@
       },
       {
         "type": "budget_tokens"
-      }
-    ],
-    "anthropic/claude-sonnet-4": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
       }
     ],
     "anthropic/claude-sonnet-5": [
