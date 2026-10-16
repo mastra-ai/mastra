@@ -168,7 +168,10 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
   const paired = (part: { type: string; toolCallId?: string; approvalId?: string }): boolean => {
     switch (part.type) {
       case 'tool-call':
-        return outcomeFor.has(part.toolCallId!) || awaiting.has(part.toolCallId!);
+        // A provider-executed call may be deferred: its result comes from the provider later, so it goes as is.
+        return (
+          outcomeFor.has(part.toolCallId!) || awaiting.has(part.toolCallId!) || providerExecuted.has(part.toolCallId!)
+        );
       case 'tool-result':
       case 'tool-approval-request':
         return called.has(part.toolCallId!);
