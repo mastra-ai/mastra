@@ -1387,6 +1387,18 @@ describe('resolveRequestThinkingLevel', () => {
     expect(resolveRequestThinkingLevel(undefined)).toBe('low');
   });
 
+  it('uses the host default over settings defaults but under the session override', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    expect(resolveRequestThinkingLevel({ state: {}, session: { modeId: 'build' } } as any, undefined, 'max')).toBe(
+      'max',
+    );
+    expect(mockLoadSettings).not.toHaveBeenCalled();
+    expect(resolveRequestThinkingLevel({ state: { thinkingLevel: 'medium' } } as any, undefined, 'max')).toBe('medium');
+  });
+
   it('passes the settings path through to loadSettings', () => {
     resolveRequestThinkingLevel(undefined, '/tmp/custom-settings.json');
 

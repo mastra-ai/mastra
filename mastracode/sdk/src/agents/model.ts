@@ -318,9 +318,11 @@ export interface ThinkingRequestContext {
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
+ *   2. The host's default for this request (`hostDefault`), when the host
+ *      stores thinking defaults itself (the Factory keeps one per Factory).
+ *   3. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
  *      only when the context carries a session mode.
- *   3. Global default (`preferences.thinkingLevel`).
+ *   4. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
@@ -329,9 +331,11 @@ export interface ThinkingRequestContext {
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
+  hostDefault?: ThinkingLevelSetting,
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
+  if (hostDefault) return hostDefault;
   const modeId = agentControllerContext?.session?.modeId;
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
@@ -345,7 +349,7 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-  { modeless = false }: { modeless?: boolean } = {},
+  { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
   const state = controller?.getState?.() as
@@ -377,7 +381,11 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(modeless ? { state: controller?.state } : controller, settingsPath);
+  const thinkingLevel = resolveRequestThinkingLevel(
+    modeless ? { state: controller?.state } : controller,
+    settingsPath,
+    defaultThinkingLevel,
+  );
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.
