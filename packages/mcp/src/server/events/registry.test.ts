@@ -33,6 +33,14 @@ describe('deriveDelivery', () => {
     expect(deriveDelivery('e', { poll }, ['webhook'])).toEqual(['poll', 'webhook']);
   });
 
+  it('adds webhook only to emit-fed types when the server serves webhooks', () => {
+    const definitions = { emitted: {}, polled: { poll } };
+    const withWebhook = new ServerEventRegistry(definitions, { webhook: true });
+    const without = new ServerEventRegistry(definitions);
+    expect(withWebhook.list().map(event => event.delivery)).toEqual([['push', 'poll', 'webhook'], ['poll']]);
+    expect(without.list().map(event => event.delivery)).toEqual([['push', 'poll'], ['poll']]);
+  });
+
   it('rejects a definition left with no servable mode', () => {
     expect(() => deriveDelivery('e', { delivery: ['webhook'] })).toThrow(MastraError);
     expect(() => new ServerEventRegistry({ e: { delivery: [] } })).toThrow(/no delivery mode/);

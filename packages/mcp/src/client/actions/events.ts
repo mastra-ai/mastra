@@ -3,9 +3,16 @@ import type { EventDescriptor } from '../../shared/events';
 import type { InternalMastraMCPClient } from '../client';
 import { eventsError } from '../events/errors';
 import { selectDeliveryMode } from '../events/mode';
+import type { DeliveryDriver } from '../events/mode';
 import { pollDriver } from '../events/poll-driver';
 import { pushDriver } from '../events/push-driver';
-import type { MCPEventSubscribeOptions, MCPEventSubscription } from '../events/types';
+import type { MCPEventDeliveryMode, MCPEventSubscribeOptions, MCPEventSubscription } from '../events/types';
+import { webhookDriver } from '../events/webhook-driver';
+
+const DRIVERS = { webhook: webhookDriver, push: pushDriver, poll: pollDriver } satisfies Record<
+  MCPEventDeliveryMode,
+  DeliveryDriver
+>;
 
 /** Upper bound on `events/list` pages followed, so a server cannot page a client forever. */
 const MAX_LIST_PAGES = 100;
@@ -81,15 +88,17 @@ export class EventClientActions {
   ): Promise<MCPEventSubscription> {
     this.assertSupported();
     const descriptor = await this.findDescriptor(name);
-    const mode = selectDeliveryMode(descriptor.delivery, options?.delivery, {
-      serverName: this.client.name,
-      eventName: name,
-    });
+    const mode = selectDeliveryMode(
+      descriptor.delivery,
+      options?.delivery,
+      { serverName: this.client.name, eventName: name },
+      { webhook: this.client.webhook !== undefined },
+    );
     this.logger.debug(`[${this.client.name}] Subscribing to event '${name}' via ${mode}`);
     return this.client.startEventSubscription({
       name,
       arguments: args,
-      driver: mode === 'push' ? pushDriver : pollDriver,
+      driver: DRIVERS[mode],
       options,
     });
   }

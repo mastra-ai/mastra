@@ -65,6 +65,7 @@ import { ServerEventActions } from './events/actions';
 import { registerEventHandlers } from './events/handlers';
 import { ServerEventRegistry, toDescriptor } from './events/registry';
 import type { MCPServerEventDefinition, MCPServerEventsOptions } from './events/types';
+import { WebhookDispatcher } from './events/webhook-dispatcher';
 import {
   INPUT_KEY,
   callerTrace,
@@ -180,7 +181,8 @@ export class MCPServer extends MCPServerBase {
   readonly prompts: ServerPromptActions;
   readonly toolActions: ServerToolActions;
   /**
-   * Publishes occurrences of the configured `events`.
+   * Publishes occurrences of the configured `events` to poll, push and (when
+   * `eventsOptions.webhook` is set) webhook subscribers.
    *
    * @experimental SEP-3415 is a draft; this API may change.
    */
@@ -197,6 +199,7 @@ export class MCPServer extends MCPServerBase {
   private readonly requestStateCodec: RequestStateCodec<ContinuationEnvelope>;
   private readonly eventRegistry: ServerEventRegistry;
   private readonly eventsOptions: MCPServerEventsOptions;
+  private readonly webhooks?: WebhookDispatcher;
 
   private httpHandler?: McpHttpHandler;
   private nodeHandler?: NodeMcpRequestHandler;
@@ -213,8 +216,16 @@ export class MCPServer extends MCPServerBase {
     this.resourceOptions = config.resources;
     this.loadAppResources(config.appResources);
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
-    this.eventRegistry = new ServerEventRegistry(config.events);
     this.eventsOptions = config.eventsOptions ?? {};
+    const webhook = this.eventsOptions.webhook;
+    this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
+    if (webhook && this.eventRegistry.size > 0) {
+      this.webhooks = new WebhookDispatcher({
+        registry: this.eventRegistry,
+        options: webhook,
+        getLogger: () => this.logger,
+      });
+    }
     if (config.resources?.resumeSchema) this.assertFormRepresentable('resources', config.resources.resumeSchema);
     if (config.prompts?.resumeSchema) this.assertFormRepresentable('prompts', config.prompts.resumeSchema);
 
@@ -568,6 +579,7 @@ export class MCPServer extends MCPServerBase {
         heartbeatIntervalMs: this.eventsOptions.heartbeatIntervalMs ?? DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS,
         listPageSize: this.eventsOptions.listPageSize,
         maxStreams: this.eventsOptions.maxStreams,
+        webhooks: this.webhooks,
         getLogger: () => this.logger,
         jsonSchema: (schema, options) => this.jsonSchema(schema, options),
         trace: (instance, method, params, ctx, fn) => this.traceCustomRequest(instance, method, params, ctx, fn),
@@ -1246,6 +1258,7 @@ export class MCPServer extends MCPServerBase {
   }
 
   async close(): Promise<void> {
+    this.webhooks?.close();
     // Ends open event streams first, then yields a macrotask so the protocol writes their final
     // results before the transports are torn down.
     if (this.eventRegistry.openStreams.size > 0) {

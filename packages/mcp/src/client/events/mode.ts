@@ -1,5 +1,5 @@
 import type { MastraError } from '@mastra/core/error';
-import type { EventOccurrence } from '../../shared/events';
+import type { EventOccurrence, WebhookDeliveryStatus } from '../../shared/events';
 import { eventsError } from './errors';
 import type { EventsPort, MCPEventDeliveryMode } from './types';
 
@@ -34,14 +34,15 @@ export interface DeliveryContext {
   /** Signals that the server accepted the subscription during this session. */
   established(): void;
   reportError(error: MastraError): void;
+  /** Webhook only: records the server's latest delivery status for the subscriber. */
+  setDeliveryStatus(status: WebhookDeliveryStatus | undefined): void;
   /** Waits, resolving early if the subscription is cancelled. */
   sleep(ms: number): Promise<void>;
 }
 
 /**
  * Drives one delivery session. Returning or throwing ends the session; the subscription then
- * backs off and starts another from the last cursor, unless the error is fatal. A webhook driver
- * (SEP-3415 `events/subscribe`) implements this same interface.
+ * backs off and starts another from the last cursor, unless the error is fatal.
  */
 export interface DeliveryDriver {
   readonly mode: MCPEventDeliveryMode;
@@ -49,20 +50,29 @@ export interface DeliveryDriver {
 }
 
 /**
- * Modes this client can drive, most preferred first. The SEP orders webhook before push when the
- * caller configured a receiver; a webhook driver slots in at the front of this list.
+ * Modes this client can drive, most preferred first. Webhook comes first, as the SEP recommends,
+ * but only when the caller configured a receiver.
  */
-const DELIVERY_PREFERENCE: readonly MCPEventDeliveryMode[] = ['push', 'poll'];
+const DELIVERY_PREFERENCE: readonly MCPEventDeliveryMode[] = ['webhook', 'push', 'poll'];
 
 /**
  * Picks the delivery mode for a subscription from the modes the event descriptor advertises.
- * Modes this client does not know (from newer SEP revisions) are ignored.
+ * Modes this client does not know (from newer SEP revisions) are ignored, and `webhook` is only
+ * eligible when `available.webhook` is set.
  */
 export function selectDeliveryMode(
   advertised: readonly string[],
   forced: MCPEventDeliveryMode | undefined,
   details: { serverName: string; eventName: string },
+  available: { webhook?: boolean } = {},
 ): MCPEventDeliveryMode {
+  if (forced === 'webhook' && !available.webhook) {
+    throw eventsError(
+      'MCP_EVENTS_WEBHOOK_NOT_CONFIGURED',
+      `Webhook delivery for event '${details.eventName}' needs the client's \`webhook\` option`,
+      details,
+    );
+  }
   if (forced) {
     if (advertised.includes(forced)) return forced;
     throw eventsError(
@@ -71,7 +81,9 @@ export function selectDeliveryMode(
       { ...details, requested: forced, advertised: advertised.join(',') },
     );
   }
-  const mode = DELIVERY_PREFERENCE.find(candidate => advertised.includes(candidate));
+  const mode = DELIVERY_PREFERENCE.find(
+    candidate => advertised.includes(candidate) && (candidate !== 'webhook' || available.webhook),
+  );
   if (mode) return mode;
   throw eventsError(
     'MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE',

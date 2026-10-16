@@ -60,6 +60,13 @@ constructor({
     description:
       "Client name and version every server receives on connect and with each request, so servers can attribute traffic to your application. Defaults to the server key as `name` and `'1.0.0'` as `version`. Individual server configs can override either field with their own `clientInfo`. Doesn't change tool name prefixes, which always use the server key.",
   },
+  {
+    name: 'webhook',
+    type: 'MCPClientWebhookOptions',
+    isOptional: true,
+    description:
+      'Experimental. Enables webhook delivery for [MCP events](#webhook-delivery). Servers POST occurrences to `webhook.url`, which must route to `events.handleWebhook()`.',
+  },
 ]}
 />
 
@@ -970,16 +977,16 @@ async subscribe(
 ): Promise<MCPEventSubscription>
 ```
 
-The client picks `push` (a long-lived `events/stream` request) when the event offers it, otherwise `poll` (repeated `events/poll` requests). Pass `options.delivery` to force a mode.
+The client picks the first mode the event offers in this order: `webhook` (only when the client has [`webhook` settings](#webhook-delivery)), `push` (a long-lived `events/stream` request), then `poll` (repeated `events/poll` requests). Pass `options.delivery` to force a mode.
 
 <PropertiesTable
   content={[
   {
     name: 'delivery',
-    type: "'push' | 'poll'",
+    type: "'webhook' | 'push' | 'poll'",
     isOptional: true,
     description:
-      'Forces a delivery mode. When the event does not offer it, `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED` and `error.cause.id` is `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE`.',
+      'Forces a delivery mode. When the event does not offer it, or for `webhook` without client `webhook` settings, `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED` and `error.cause.id` is `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE` or `MCP_EVENTS_WEBHOOK_NOT_CONFIGURED`.',
   },
   {
     name: 'cursor',
@@ -1055,11 +1062,96 @@ The returned `MCPEventSubscription` is an async iterable of occurrences (`eventI
 
 - `cursor`: The latest position that's safe to persist. It never moves past an occurrence your loop hasn't received yet. It's `null` when the event type doesn't support replay.
 - `truncated`: `true` when the server reported a gap right before the occurrence your loop received last, for example because the saved cursor was older than its retention window. Read it inside the loop: it's `true` for the first occurrence after the gap and `false` for the ones after it.
-- `mode`: The delivery mode in use, `'push'` or `'poll'`.
+- `mode`: The delivery mode in use, `'webhook'`, `'push'`, or `'poll'`.
+- `deliveryStatus`: Webhook mode only. The server's latest report on delivery to your webhook URL (`active`, `lastDeliveryAt`, `lastError`, `failedSince`), updated on each refresh.
 - `onError(handler)`: Receives recoverable errors, such as a dropped stream that the client is reopening. Returns a function that removes the handler.
 - `cancel()`: Stops the subscription and ends the iterator. Breaking out of a `for await` loop also cancels it.
 
-The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push subscription, or `MCP_EVENTS_RETRIES_EXHAUSTED` after `retry.maxAttempts` failed attempts in a row. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
+The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push or webhook subscription, or `MCP_EVENTS_RETRIES_EXHAUSTED` after `retry.maxAttempts` failed attempts in a row. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
+
+#### `events.handleWebhook(request: Request)`
+
+Handles one webhook delivery and returns the response to send back. Mount it on the route that `webhook.url` points at.
+
+```typescript oxfmt:false
+async handleWebhook(request: Request): Promise<Response>
+```
+
+It verifies the Standard Webhooks signature on the raw body before parsing it, answers the server's verification handshake, and routes occurrences to their subscription by the `X-MCP-Subscription-Id` header. It responds with:
+
+- `200` after the occurrence is handed to its subscription, or with the echoed challenge for a verification request.
+- `401` when the signature is invalid or the timestamp is more than 5 minutes old.
+- `503` when the subscription id isn't known yet, so the server retries. This covers deliveries that arrive before the subscribe response.
+- `400` for a signed but malformed body, and `405` for methods other than `POST`.
+- `404` when the client has no `webhook` settings.
+
+#### Webhook delivery
+
+With `webhook` settings, the client registers each subscription with `events/subscribe` and the server POSTs occurrences to your URL. The server must authenticate the client, and the URL must be publicly reachable over `https`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { MCPClient } from '@mastra/mcp'
+
+export const mcpClient = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('https://mcp.example.com/mcp'),
+      requestInit: { headers: { Authorization: `Bearer ${process.env.GITHUB_MCP_TOKEN}` } },
+    },
+  },
+  webhook: { url: 'https://agent.example.com/mcp/webhook' },
+})
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/mcp/webhook', {
+        method: 'POST',
+        // Deliveries are authenticated by their signature, not by Mastra auth
+        requiresAuth: false,
+        handler: c => mcpClient.events.handleWebhook(c.req.raw),
+      }),
+    ],
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Public `https` URL that routes to `events.handleWebhook()`.',
+  },
+  {
+    name: 'secret',
+    type: 'string',
+    isOptional: true,
+    description:
+      "A `whsec_` signing secret used for every subscription. By default the client generates a fresh secret for each subscription, so one server can't sign deliveries for another server's subscriptions.",
+  },
+  {
+    name: 'ttlMs',
+    type: 'number | null',
+    isOptional: true,
+    description:
+      'Suggested subscription lifetime. `null` asks for no expiry, which the server may decline. Defaults to the server default.',
+  },
+  {
+    name: 'refreshMarginMs',
+    type: 'number',
+    isOptional: true,
+    description:
+      'How long before the server-granted `refreshBefore` time to refresh the subscription. Defaults to the smaller of 60 seconds and 20% of the grant.',
+  },
+]}
+/>
+
+The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
+
+Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
 
 ## Answering input requests
 

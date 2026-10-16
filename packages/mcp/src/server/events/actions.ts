@@ -5,8 +5,9 @@ import type { MCPServerEmitOptions, MCPServerEventData } from './types';
 /**
  * `server.events`: publishes occurrences of the event types configured in `MCPServer`'s `events`.
  *
- * Emitted events are delivered to this process's open `events/stream` subscriptions and kept in
- * the type's in-memory ring buffer for `events/poll`. They do not reach other server processes.
+ * Emitted events are delivered to this process's open `events/stream` subscriptions, POSTed to
+ * its webhook subscriptions (when `eventsOptions.webhook` is set), and kept in the type's
+ * in-memory ring buffer for `events/poll`. They do not reach other server processes.
  *
  * @experimental SEP-3415 is a draft; this API may change.
  */
@@ -17,7 +18,7 @@ export class ServerEventActions {
   ) {}
 
   /**
-   * Records an occurrence of `name` and delivers it to every matching push subscription.
+   * Records an occurrence of `name` and delivers it to every matching push and webhook subscription.
    * `data` is validated against the type's `payloadSchema` when one is set.
    *
    * @throws MastraError `MCP_SERVER_UNKNOWN_EVENT` for an unconfigured name,
