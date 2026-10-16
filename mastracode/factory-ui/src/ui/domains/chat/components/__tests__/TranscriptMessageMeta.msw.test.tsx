@@ -1,5 +1,5 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
-import type { SessionOwner } from '@mastra/factory/routes/session-owner';
+import type { ReplyOwner } from '../../services/reply-owner';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -158,25 +158,25 @@ describe('message meta', () => {
   const grok = { modelId: 'grok-4', provider: 'xai.chat' };
   const kimi = { modelId: 'kimi-k2-thinking', provider: 'kimi-for-coding.messages' };
   const ownerCases: Array<{
-    owner: SessionOwner;
+    owner: ReplyOwner;
     viewerId: string;
     model: { modelId: string; provider: string };
     label: string;
   }> = [
     {
-      owner: { user: ward, credentials: claudeSubscription },
+      owner: { ...ward, credentials: claudeSubscription },
       viewerId: 'damien',
       model: opus,
       label: 'Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max',
     },
     {
-      owner: { user: ward, credentials: claudeSubscription },
+      owner: { ...ward, credentials: claudeSubscription },
       viewerId: 'ward',
       model: opus,
       label: 'Claude Opus 4.6 · Your Claude Pro/Max',
     },
     {
-      owner: { user: { id: 'ward' }, credentials: { openai: { type: 'api_key' } } },
+      owner: { id: 'ward', credentials: { openai: { type: 'api_key' } } },
       viewerId: 'damien',
       model: gpt,
       label: 'GPT-5 · Personal OpenAI API key',
@@ -188,13 +188,13 @@ describe('message meta', () => {
       label: 'Grok 4 · Organization SuperGrok/X Premium+',
     },
     {
-      owner: { user: ward, credentials: { 'kimi-code-plan-cn': { type: 'api_key' } } },
+      owner: { ...ward, credentials: { 'kimi-code-plan-cn': { type: 'api_key' } } },
       viewerId: 'ward',
       model: kimi,
       label: 'Kimi K2 Thinking · Your Kimi API key',
     },
     {
-      owner: { user: ward, credentials: { openai: { type: 'api_key' } } },
+      owner: { ...ward, credentials: { openai: { type: 'api_key' } } },
       viewerId: 'damien',
       model: opus,
       label: 'Claude Opus 4.6',

@@ -1,5 +1,4 @@
 import type { PlanResume } from '@mastra/client-js';
-import type { SessionOwner } from '@mastra/factory/routes/session-owner';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -18,6 +17,7 @@ import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvoc
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
 import { replyOwnerLabel } from '../services/reply-owner';
+import type { ReplyOwner } from '../services/reply-owner';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import {
@@ -76,7 +76,7 @@ export function MessageBubble({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
-  owner?: SessionOwner;
+  owner?: ReplyOwner;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
