@@ -174,6 +174,39 @@ describe('hono browser-stream routes', () => {
       expect(toolset.close).toHaveBeenCalledTimes(1);
     });
 
+    it('rejects an oversized close request body before parsing it', async () => {
+      const toolset = createMockToolset({ getScope: vi.fn().mockReturnValue('shared') });
+      toolsets.set('agent-1', toolset);
+
+      const body = JSON.stringify({ threadId: 'x'.repeat(8 * 1024) });
+
+      const response = await app.request('http://localhost/api/agents/agent-1/browser/close', {
+        method: 'POST',
+        // A constructed Request carries no content-length, so declare it to take
+        // the header branch of the body limit rather than the streaming one.
+        headers: { 'content-type': 'application/json', 'content-length': String(body.length) },
+        body,
+      });
+
+      expect(response.status).toBe(413);
+      await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
+      expect(toolset.close).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized close body sent without a content-length header', async () => {
+      const toolset = createMockToolset({ getScope: vi.fn().mockReturnValue('shared') });
+      toolsets.set('agent-1', toolset);
+
+      const response = await app.request('http://localhost/api/agents/agent-1/browser/close', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' },
+        body: JSON.stringify({ threadId: 'x'.repeat(8 * 1024) }),
+      });
+
+      expect(response.status).toBe(413);
+      expect(toolset.close).not.toHaveBeenCalled();
+    });
+
     it('returns 500 when the toolset throws during close', async () => {
       const toolset = createMockToolset({
         getScope: vi.fn().mockReturnValue('shared'),
