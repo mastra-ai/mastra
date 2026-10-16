@@ -55,7 +55,13 @@ import type {
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
-import { abortableSleep, getRestartStartIndex, getSingleStepEntryId, omitPriorCompletionFields } from './utils';
+import {
+  abortableSleep,
+  getRestartStartIndex,
+  getSingleStepEntryId,
+  omitPriorCompletionFields,
+  getStepIds,
+} from './utils';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
@@ -814,6 +820,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       throw empty_graph_error;
     }
 
+    let journal: RunJournal | undefined;
     if (params.storageVersion === 2) {
       // Resume continues from the stored snapshot; start, restart and time travel write a checkpoint first.
       let seed: Record<string, unknown> | undefined;
@@ -822,15 +829,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // A retried nested resume replaces `input` before it gets here, so write it again.
         delete seed.input;
       }
-      this.#journals.set(
+      journal = new RunJournal({
+        store: await this.mastra?.getStorage()?.getStore('workflows'),
+        workflowName: workflowId,
         runId,
-        new RunJournal({
-          store: await this.mastra?.getStorage()?.getStore('workflows'),
-          workflowName: workflowId,
-          runId,
-          seed,
-        }),
-      );
+        seed,
+      });
+      this.#journals.set(runId, journal);
     }
 
     try {
@@ -893,6 +898,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
             workflowSpan?.end({ attributes: { status: 'waiting' } });
 
+            await journal?.hydrate(stepResults);
             const formattedResult = await this.fmtReturnValue<any>(
               params.pubsub,
               stepResults,
@@ -938,6 +944,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
           });
 
+          await journal?.hydrate(stepResults);
           const formattedResult = await this.fmtReturnValue<any>(
             params.pubsub,
             stepResults,
@@ -987,6 +994,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         };
         lastExecutionContext = executionContext;
 
+        // The entry reads its own earlier results (a resumed block's finished branches, a loop's
+        // previous iteration) and the previous entry's output synchronously.
+        await journal?.hydrate(stepResults, [...getStepIds(entry), ...(i > 0 ? getStepIds(steps[i - 1]!) : [])]);
+
         lastOutput = await this.executeEntry({
           workflowId,
           runId,
@@ -1025,6 +1036,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ) {
           workflowSpan?.end({ attributes: { status: 'waiting' } });
 
+          await journal?.hydrate(stepResults);
           const formattedResult = await this.fmtReturnValue<any>(
             params.pubsub,
             stepResults,
@@ -1053,6 +1065,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             lastOutput.result = succeeded;
           }
 
+          await journal?.hydrate(stepResults);
           const result = (await this.fmtReturnValue(
             params.pubsub,
             stepResults,
@@ -1153,6 +1166,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }
 
         if (perStep) {
+          await journal?.hydrate(stepResults);
           const result = (await this.fmtReturnValue(
             params.pubsub,
             stepResults,
@@ -1193,6 +1207,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             ...(params.outputOptions?.includeState ? { state: lastState } : {}),
           };
         }
+
+        // Every write of this entry has been awaited. Keep this entry: it's the next one's `prevStep`.
+        // After the last entry, the end of the run reads every result back anyway.
+        if (i + 1 < steps.length) journal?.evict(stepResults, getStepIds(entry));
       }
 
       if (lastOutput === undefined) {
@@ -1228,6 +1246,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       // after all steps are successful, return result
+      await journal?.hydrate(stepResults);
       const result = (await this.fmtReturnValue(
         params.pubsub,
         stepResults,

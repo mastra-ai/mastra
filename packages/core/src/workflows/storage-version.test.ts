@@ -503,3 +503,234 @@ describe('storage v2 stores the same runs as v1', () => {
     });
   }
 });
+
+/** Records the step ids of each `loadWorkflowRunSteps` call. */
+function recordStepReads(storage: InstanceType<typeof MockStore>) {
+  const store = storage.stores.workflows!;
+  const reads: string[][] = [];
+  const load = store.loadWorkflowRunSteps.bind(store);
+  store.loadWorkflowRunSteps = async args => {
+    reads.push([...args.stepIds]);
+    return load(args);
+  };
+  return reads;
+}
+
+/** A step that returns its input after `onRun`, which can read other steps' results. */
+function passThrough(id: string, onRun: (read: (stepId: string) => Promise<any>) => Promise<unknown>) {
+  return createStep({
+    id,
+    inputSchema: z.any(),
+    outputSchema: z.any(),
+    execute: async ({ inputData, getStepResultAsync }) => {
+      await onRun(stepId => getStepResultAsync(stepId));
+      return inputData;
+    },
+  });
+}
+
+async function startOn(
+  storageVersion: 1 | 2,
+  build: (storageVersion: 1 | 2) => AnyWorkflow,
+  storage = new MockStore(),
+) {
+  const workflow = build(storageVersion);
+  new Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow } });
+  return (await workflow.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: {} });
+}
+
+describe('storage v2 memory', () => {
+  it('keeps the previous entry, reads older results on demand, and returns every step', async () => {
+    let readsInLastStep: string[][] = [];
+    let readValues: unknown[] = [];
+    let reads: string[][] = [];
+    const build = (storageVersion: 1 | 2) => {
+      let workflow: any = createWorkflow({
+        id: 'chain',
+        inputSchema: num,
+        outputSchema: z.any(),
+        options: { storageVersion },
+      });
+      for (let i = 1; i < 10; i++) workflow = workflow.then(addOne(`step${i}`));
+      return workflow
+        .then(
+          passThrough('step10', async read => {
+            const before = reads.length;
+            readValues = [await read('step1'), await read('step9')];
+            readsInLastStep = reads.slice(before);
+          }),
+        )
+        .commit();
+    };
+
+    const v1 = await startOn(1, build);
+    expect(readValues).toEqual([{ n: 1 }, { n: 9 }]);
+
+    const storage = new MockStore();
+    reads = recordStepReads(storage);
+    const v2 = await startOn(2, build, storage);
+    expect(readValues).toEqual([{ n: 1 }, { n: 9 }]);
+    // step9 is the previous entry, so it's in memory; step1 was evicted.
+    expect(readsInLastStep).toEqual([['step1']]);
+    // The end of the run reads back what is still evicted, in one read.
+    expect(reads).toEqual([['step1'], ['step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8']]);
+    expect(withoutTimestamps(v2)).toEqual(withoutTimestamps(v1));
+  });
+
+  it('keeps a parallel entry for the entry after it, then evicts it', async () => {
+    const storage = new MockStore();
+    const reads = recordStepReads(storage);
+    let joinReads: string[][] = [];
+    let afterReads: string[][] = [];
+    let joined: unknown;
+    const result = await startOn(
+      2,
+      storageVersion =>
+        createWorkflow({ id: 'join', inputSchema: num, outputSchema: z.any(), options: { storageVersion } })
+          .parallel([addOne('left'), addOne('right')])
+          .then(
+            passThrough('join', async read => {
+              const before = reads.length;
+              await read('left');
+              joinReads = reads.slice(before);
+            }),
+          )
+          .then(
+            passThrough('after', async read => {
+              const before = reads.length;
+              joined = await read('join');
+              await read('left');
+              afterReads = reads.slice(before);
+            }),
+          )
+          .then(passThrough('last', async () => {}))
+          .commit(),
+      storage,
+    );
+
+    expect(result.status).toBe('success');
+    expect(joined).toEqual({ left: { n: 1 }, right: { n: 1 } });
+    expect(joinReads).toEqual([]);
+    expect(afterReads).toEqual([['left']]);
+  });
+
+  it('reads an evicted step once across foreach iterations', async () => {
+    const storage = new MockStore();
+    const reads = recordStepReads(storage);
+    const result = await startOn(
+      2,
+      storageVersion =>
+        createWorkflow({ id: 'each', inputSchema: num, outputSchema: z.any(), options: { storageVersion } })
+          .then(addOne('seed'))
+          .map(async () => Array.from({ length: 20 }, (_, k) => ({ n: k })))
+          .foreach(
+            createStep({
+              id: 'plus-seed',
+              inputSchema: num,
+              outputSchema: num,
+              execute: async ({ inputData, getStepResultAsync }) => ({
+                n: inputData.n + ((await getStepResultAsync('seed')) as { n: number }).n,
+              }),
+            }),
+          )
+          .commit(),
+      storage,
+    );
+
+    expect(result.status === 'success' && result.result).toEqual(Array.from({ length: 20 }, (_, k) => ({ n: k + 1 })));
+    expect(reads).toEqual([['seed']]);
+  });
+
+  it('resolves a declarative map of an evicted step through storage', async () => {
+    const storage = new MockStore();
+    const reads = recordStepReads(storage);
+    const first = addOne('first');
+    const result = await startOn(
+      2,
+      storageVersion =>
+        createWorkflow({ id: 'mapped', inputSchema: num, outputSchema: z.any(), options: { storageVersion } })
+          .then(first)
+          .then(addOne('second'))
+          .then(addOne('third'))
+          .map({ fromFirst: { step: first, path: 'n' } })
+          .commit(),
+      storage,
+    );
+
+    expect(result.status === 'success' && result.result).toEqual({ fromFirst: 1 });
+    expect(reads).toEqual([['first'], ['second']]);
+  });
+
+  it("doesn't evict results that a shouldPersistSnapshot predicate kept out of storage", async () => {
+    let readValue: unknown;
+    const build = (storageVersion: 1 | 2) =>
+      createWorkflow({
+        id: 'unpersisted',
+        inputSchema: num,
+        outputSchema: z.any(),
+        options: { storageVersion, shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+      })
+        .then(addOne('a'))
+        .then(addOne('b'))
+        .then(addOne('c'))
+        .then(
+          passThrough('d', async read => {
+            readValue = await read('a');
+          }),
+        )
+        .commit();
+
+    const v1 = await startOn(1, build);
+    const storage = new MockStore();
+    const reads = recordStepReads(storage);
+    const v2 = await startOn(2, build, storage);
+
+    expect(readValue).toEqual({ n: 1 });
+    expect(reads).toEqual([]);
+    expect(withoutTimestamps(v2)).toEqual(withoutTimestamps(v1));
+  });
+
+  it.each([
+    [2, 2],
+    [1, 2],
+    [2, 1],
+  ] as const)(
+    'checks whether a nested workflow finished by its own storage version (parent v%i, child v%i)',
+    async (parentVersion, childVersion) => {
+      const storage = new MockStore();
+      const store = storage.stores.workflows!;
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: z.object({}),
+        outputSchema: z.any(),
+        options: { storageVersion: childVersion },
+      })
+        .then(gateStep())
+        .commit();
+      const outer = createWorkflow({
+        id: 'outer',
+        inputSchema: z.object({}),
+        outputSchema: z.any(),
+        options: { storageVersion: parentVersion },
+      })
+        .then(inner)
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+
+      const run = await outer.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+      const headerReads = vi.spyOn(store, 'loadWorkflowRunHeader');
+      const result = await (
+        await outer.createRun({ runId: run.runId })
+      ).resume({
+        step: ['inner', 'gate'],
+        resumeData: true,
+      });
+
+      expect(result.status).toBe('success');
+      const innerHeaderReads = headerReads.mock.calls.filter(([args]) => args.workflowName === 'inner');
+      expect(innerHeaderReads).toHaveLength(childVersion === 2 ? 1 : 0);
+    },
+  );
+});
