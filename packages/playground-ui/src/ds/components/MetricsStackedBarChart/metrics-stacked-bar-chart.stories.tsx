@@ -6,6 +6,7 @@ import { count, coldStartSeries, ms, requestsByHour, statusSeries } from '../Met
 import type { MetricsLineChartSeries } from '../MetricsLineChart';
 import { Txt } from '../Txt';
 import { MetricsStackedBarChart } from './metrics-stacked-bar-chart';
+import { formatFullNumber } from '@/utils/cost';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' });
 
@@ -88,6 +89,35 @@ export const OverIncluded: Story = {
     valueFormatter: value => `${value} GB`,
     referenceLine: { value: included, label: `${included} GB included`, color: 'var(--destructive-indicator)' },
     showLegend: false,
+  },
+};
+
+const overageRate = 0.1;
+
+export const ColumnLabel: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`columnLabelKey` names a row field to print above that column, in the color of its top segment. Here the last day carries the overage charged to credits, so the amount sits on the red segment it explains. Rows without the field stay unlabeled.',
+      },
+    },
+  },
+  args: {
+    ...OverIncluded.args,
+    data: egress.map(({ time, total }, i) => {
+      const overage =
+        i === egress.length - 1 && total > included
+          ? `${formatFullNumber((total - included) * overageRate, { currency: 'USD' })} over`
+          : undefined;
+      return {
+        time,
+        included: Math.min(total, included),
+        over: Math.max(total - included, 0),
+        overage,
+      };
+    }),
+    columnLabelKey: 'overage',
   },
 };
 

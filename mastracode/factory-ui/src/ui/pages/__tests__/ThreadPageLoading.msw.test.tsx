@@ -92,7 +92,7 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
@@ -137,7 +137,6 @@ function stubThreadRoute({
       await messagesGate.promise;
       return HttpResponse.json({ messages });
     }),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
@@ -163,7 +162,7 @@ describe('ThreadPage loading shell', () => {
     // Pending phase: the shell is up — sidebar navigation renders alongside
     // the loading spinner instead of a bare full-page placeholder.
     expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New user session' })).toBeInTheDocument();
     // The thread chrome itself is not mounted yet.
     expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
@@ -173,7 +172,7 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
   });
 
   it('keeps the session header and its workspace toggle mounted while thread messages load', async () => {

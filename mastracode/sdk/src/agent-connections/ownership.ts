@@ -15,7 +15,10 @@ export interface ThreadClaimContext {
 }
 
 const OWNERSHIP_RETRY_INITIAL_DELAY_MS = 250;
-const OWNERSHIP_RETRY_MAX_DELAY_MS = 5_000;
+// Kept short: a claim is usually contended only while the previous owner
+// process is shutting down, and every retry beyond that point is time the
+// thread stays unreachable to peers.
+const OWNERSHIP_RETRY_MAX_DELAY_MS = 1_000;
 
 /**
  * Per-thread claim bookkeeping. One entry per thread this session has bound, so

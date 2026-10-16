@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
   TRACE_CUSTOM_COLUMN_LABELS,
+  buildTraceListColumnKeys,
   buildTraceListColumns,
   formatTraceMetadataValue,
   hasTraceColumn,
@@ -37,6 +38,10 @@ export type TracesListViewTrace = {
   /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
   inputPreview?: string | null;
   input?: unknown;
+  /** Server-rendered preview of the root span's output. */
+  outputPreview?: string;
+  /** Server-rendered preview of the root span's error. Shown in place of the output when `status` is `'error'`. */
+  errorPreview?: string;
   metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
   endedAt?: Date | string | null;
@@ -99,6 +104,8 @@ export type TracesListViewProps = {
   onSortChange?: (direction: DataListSort, key: 'startedAt') => void;
   /** When provided, custom column headers offer an `is <value>` filter for every value currently listed. */
   onFilterByField?: (field: TraceCustomColumn, value: string) => void;
+  /** Storage id for the persisted column order. Use a distinct id per page so each keeps its own order. */
+  listId?: string;
 };
 
 /**
@@ -122,9 +129,11 @@ export function TracesListView({
   createdSort,
   onSortChange,
   onFilterByField,
+  listId = 'all-traces',
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);
+  const columnKeys = buildTraceListColumnKeys(columnPreferences);
 
   const virtualizer = useVirtualizer({
     count: traces.length,
@@ -147,7 +156,15 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={columns} fit="container" scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList
+      reorderable
+      id={listId}
+      columns={columns}
+      columnKeys={columnKeys}
+      fit="container"
+      scrollRef={scrollRef}
+      className="min-w-0"
+    >
       <TracesDataList.Top>
         {onSortChange ? (
           <TracesDataList.SortableTopCell sortKey="startedAt" sort={createdSort} onSortChange={onSortChange}>
@@ -159,6 +176,7 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Primitive type</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'output') && <TracesDataList.TopCell>Output</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
@@ -259,6 +277,13 @@ export function TracesListView({
                 />
                 {hasTraceColumn(columnPreferences, 'input') && (
                   <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
+                )}
+                {hasTraceColumn(columnPreferences, 'output') && (
+                  <TracesDataList.OutputCell
+                    output={trace.outputPreview}
+                    error={trace.errorPreview}
+                    status={trace.status}
+                  />
                 )}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (

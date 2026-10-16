@@ -7,7 +7,7 @@ description: "Browse CoreWeave model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/wandb.svg" alt="CoreWeave logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CoreWeave
 
-Access 20 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
+Access 21 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
 
 Learn more in the [CoreWeave documentation](https://docs.wandb.ai).
 
@@ -90,7 +90,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.2,
+    "inputCost": 0.15,
     "outputCost": 0.65
   },
   {
@@ -214,6 +214,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.2
   },
   {
+    "model": "wandb/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.15,
+    "outputCost": 0.75
+  },
+  {
     "model": "wandb/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -270,7 +282,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.76,
+    "inputCost": 0.62,
     "outputCost": 2.42
   },
   {

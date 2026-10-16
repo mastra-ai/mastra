@@ -575,7 +575,7 @@ const testAuth: RouteAuth = {
   isOrganizationAdmin: async () => true,
 };
 
-import { buildGithubRoutes } from './routes.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -1648,6 +1648,99 @@ describe('prs route', () => {
   });
 });
 
+describe('linked repository backlog import', () => {
+  const deliveryIds = (ingest: ReturnType<typeof vi.fn>) =>
+    ingest.mock.calls.map(([event]) => (event as { deliveryId: string }).deliveryId);
+
+  it('ingests every page of open issues and pull requests for the linked repository', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({
+      issues: [
+        {
+          number: 12,
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          author: 'ada',
+          assignee: 'grace',
+          labels: ['bug'],
+          comments: 3,
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+      nextPage: 2,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent,
+    });
+
+    expect(listRepoOpenIssues.mock.calls.map(call => call.slice(0, 3))).toEqual([
+      [7, 'octo/hello', 1],
+      [7, 'octo/hello', 2],
+    ]);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+    expect(deliveryIds(ingestFactoryEvent)).toEqual([
+      'poll:99:issue:12:2026-07-01T00:00:00Z',
+      'poll:99:issue:12:2026-07-01T00:00:00Z',
+      'poll:99:pull-request:34:2026-07-03T00:00:00Z',
+    ]);
+  });
+
+  it('stops paging after five pages', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockImplementation(async (_i, _r, page) => ({ issues: [], nextPage: page + 1 }));
+    listRepoOpenPullRequests.mockImplementation(async (_i, _r, page) => ({ pullRequests: [], nextPage: page + 1 }));
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent: vi.fn(async () => undefined),
+    });
+
+    expect(listRepoOpenIssues).toHaveBeenCalledTimes(5);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(5);
+  });
+
+  it('makes no GitHub calls for a repository this integration cannot resolve', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'other-org',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent,
+    });
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'missing',
+      ingestFactoryEvent,
+    });
+
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+    expect(ingestFactoryEvent).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when Factory rules are not configured', async () => {
+    seedMaterializedProject();
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent: undefined,
+    });
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+});
+
 describe('pr detail route', () => {
   it("returns one pull request's description for the project repo", async () => {
     seedMaterializedProject();
@@ -2244,6 +2337,9 @@ describe('Factory session routes', () => {
     expect(named.resourceId).toBe(sessionId);
     // Naming runs as the session's owner, so it bills their model credentials.
     expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toEqual({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
     // A closed session has no live state, so the owner's stored observer model
     // is what keeps a manual rename on the model that names threads on its own.
     expect(named.model({ requestContext: named.requestContext }).modelId).toContain('claude-haiku-4-5');
@@ -2264,7 +2360,9 @@ describe('Factory session routes', () => {
 
     expect(response.status).toBe(200);
     // No stored model to override with, so naming runs on the memory's own title model.
-    expect(controller.generateThreadTitle.mock.calls[0][0].model).toBeUndefined();
+    const named = controller.generateThreadTitle.mock.calls[0][0];
+    expect(named.model).toBeUndefined();
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toBeNull();
     expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
   });
 

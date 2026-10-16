@@ -96,13 +96,18 @@ export class HttpTransport extends LoggerTransport {
     this.flushIntervalId = setInterval(() => this.requestFlush(), this.flushInterval);
   }
 
-  private async makeHttpRequest(data: any, retryCount = 0): Promise<Response> {
+  private async makeHttpRequest(data: any): Promise<Response> {
+    // Serialize once, outside the retry loop: serialization failures are not retryable,
+    // and every retry must send the exact same payload.
+    const body = JSON.stringify({ logs: data });
+    return this.sendWithRetry(body);
+  }
+
+  private async sendWithRetry(body: string, retryCount = 0): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      const body = JSON.stringify({ logs: data });
-
       const response = await fetch(this.url, {
         method: this.method,
         headers: this.headers,
@@ -130,7 +135,7 @@ export class HttpTransport extends LoggerTransport {
         const delay = Math.max(backoff, Math.min(retryAfter, this.timeout));
 
         await new Promise(resolve => setTimeout(resolve, delay));
-        return this.makeHttpRequest(data, retryCount + 1);
+        return this.sendWithRetry(body, retryCount + 1);
       }
 
       throw error;
@@ -234,12 +239,10 @@ export class HttpTransport extends LoggerTransport {
   _transform(chunk: string, _enc: string, cb: Function): void {
     try {
       // Parse the log line if it's a string
-      const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
+      const parsed = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
 
-      // Add timestamp if not present
-      if (!log.time) {
-        log.time = Date.now();
-      }
+      // Add timestamp if not present, on a copy so caller-owned (possibly frozen) records stay untouched
+      const log = parsed.time === undefined || parsed.time === null ? { ...parsed, time: Date.now() } : parsed;
 
       // Add to buffer
       this.logBuffer.push(log);
@@ -305,7 +308,7 @@ export class HttpTransport extends LoggerTransport {
     return {
       logs: [],
       total: 0,
-      page: params?.page ?? 1,
+      page: params?.page === 0 ? 1 : (params?.page ?? 1),
       perPage: params?.perPage ?? 100,
       hasMore: false,
     };
@@ -343,7 +346,7 @@ export class HttpTransport extends LoggerTransport {
     return {
       logs: [],
       total: 0,
-      page: page ?? 1,
+      page: page === 0 ? 1 : (page ?? 1),
       perPage: perPage ?? 100,
       hasMore: false,
     };

@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -9,6 +9,7 @@ import {
   useFeedbackAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
+  useTraceQueryRootDurationAvailable,
 } from '@mastra/playground-ui/domains/capabilities';
 import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
@@ -37,13 +38,13 @@ import {
   filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
   TRACE_FILTER_BAR_OPERATORS,
+  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import {
   buildTraceQueryRequest,
-  clampTraceDiscoveryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/traces/trace-query-filters';
@@ -65,6 +66,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
@@ -78,6 +80,10 @@ type TracesPageProps = {
 
 const TRACES_SORT_KEYS = ['startedAt'] as const;
 const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
+const ROOT_DURATION_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs']);
+// The agent Chat tab opens its Traces tab filtered to the open conversation. That filter is
+// navigation context, so it must not be restored on a later visit.
+const SCOPED_UNSAVED_FILTER_PARAMS = [TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId];
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
@@ -109,6 +115,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
     storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+    excludeParams: isScoped ? SCOPED_UNSAVED_FILTER_PARAMS : undefined,
   });
   const querySearchParams = new URLSearchParams(searchParams);
   querySearchParams.delete('listMode');
@@ -117,6 +124,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // that has no effect on the list.
   for (const field of TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS) {
     querySearchParams.delete(`filter${field[0]?.toUpperCase()}${field.slice(1)}`);
+  }
+  // Servers without root-duration support reject `durationMs` predicates (shared links, saved filters).
+  // Flat params are dropped here; `filterGroup` conditions are dropped by `buildTraceQueryRequest`.
+  const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
+  if (!withRootDuration) {
+    querySearchParams.delete('filterDurationMs');
+    querySearchParams.delete('filterDurationMs.op');
   }
   const url = useTraceUrlState(querySearchParams, setPersistedSearchParams);
   const { sort, onSortChange } = useUrlSort({
@@ -200,14 +214,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const [discoveryNow] = useState(() => new Date());
   const discoveryTimeRange = useMemo(
     () =>
-      clampTraceDiscoveryTimeRange(
-        buildTraceQueryRequest({
-          dateFrom: url.selectedDateFrom,
-          dateTo: url.selectedDateTo,
-          tokens: [],
-          now: discoveryNow,
-        }).timeRange,
-      ),
+      buildTraceQueryRequest({
+        dateFrom: url.selectedDateFrom,
+        dateTo: url.selectedDateTo,
+        tokens: [],
+        now: discoveryNow,
+      }).timeRange,
     [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
   );
   const { enabled: withDiscovery } = useTraceQueryDiscoveryAvailable();
@@ -237,9 +249,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         canonicalTraceFields,
         valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
         withQueryTrace,
+        withRootDuration,
       }),
     ],
     [
+      withRootDuration,
       rootEntityNameSuggestions,
       discoveredEnvironments,
       hiddenFieldIds,
@@ -319,6 +333,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,
         groups: url.filterGroups,
+        excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
         now,
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
@@ -483,6 +498,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
       <h1 className="sr-only">Traces</h1>
       <TracesListView
+        listId={
+          scopedEntityType === EntityType.AGENT
+            ? 'agent-traces'
+            : scopedEntityType === EntityType.WORKFLOW_RUN
+              ? 'workflows-traces'
+              : 'all-traces'
+        }
         traces={traces}
         isLoading={isTracesLoading}
         isFetchingNextPage={isFetchingNextPage}
@@ -564,10 +586,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       />
 
       <TraceAsItemDialog
+        depth={isFullThreadOpen ? 3 : 2}
         rootSpanId={datasetDialogTarget?.rootSpanId}
         traceId={datasetDialogTarget?.traceId}
         isOpen={!!datasetDialogTarget}
         onClose={() => setDatasetDialogTarget(null)}
+        renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
       />
 
       <AddTraceMocksToItemDialog

@@ -1,5 +1,23 @@
 # @mastra/fastembed
 
+## 1.3.4-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.3
+
+### Patch Changes
+
+- Fixed embeddings failing with "Config file not found" when the model cache folder is removed, or the home directory changes, while a process is running. The cache folder is now looked up each time a model loads instead of once per process. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Fixed embeddings failing with "Config file not found" when the model cache folder is removed, or the home directory changes, while a process is running. The cache folder is now looked up each time a model loads instead of once per process. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
 ## 1.3.2
 
 ### Patch Changes

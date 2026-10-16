@@ -37,6 +37,47 @@ describe('SessionApproval isolation', () => {
     expect(approval.isArmed()).toBe(false);
   });
 
+  it.each(['different-thread', 'different-run'] as const)(
+    'rejects an ambiguous call ID without releasing either owner: %s',
+    async variant => {
+      const approval = new SessionApproval();
+      const source = { toolName: 'write_file', toolCallId: 'shared-call', threadId: 'a', runId: 'run-a' };
+      const active = { ...source, threadId: variant === 'different-thread' ? 'b' : 'a', runId: 'run-b' };
+      const first = approval.arm(source);
+      const second = approval.arm(active);
+      expect(first).not.toBe(second);
+      expect(approval.arm(source)).toBe(first);
+      let settled = 0;
+      void first.then(() => {
+        settled++;
+      });
+      void second.then(() => {
+        settled++;
+      });
+      let grants = 0;
+      expect(
+        approval.respond({
+          decision: 'always_allow_category',
+          toolCallId: 'shared-call',
+          onAlwaysAllow: () => {
+            grants++;
+          },
+        }),
+      ).toEqual({ accepted: false, reason: 'stale_tool_call' });
+      await Promise.resolve();
+      expect(settled).toBe(0);
+      expect(grants).toBe(0);
+      expect(approval.isArmed(source)).toBe(true);
+      expect(approval.isArmed(active)).toBe(true);
+      approval.cancel({ threadId: source.threadId, runId: source.runId });
+      await expect(first).resolves.toMatchObject({ decision: 'decline' });
+      expect(approval.isArmed(active)).toBe(true);
+      expect(approval.respond({ decision: 'approve', toolCallId: 'shared-call' })).toEqual({ accepted: true });
+      await expect(second).resolves.toMatchObject({ decision: 'approve' });
+      expect(approval.isArmed()).toBe(false);
+    },
+  );
+
   it('re-arms the same call onto the parked gate instead of stranding it', async () => {
     const approval = new SessionApproval();
     const first = approval.arm({ toolName: 'write_file', toolCallId: 'call-a' });

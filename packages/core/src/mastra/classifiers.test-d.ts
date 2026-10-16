@@ -18,7 +18,7 @@ describe('Mastra classifier registration types', () => {
     // @ts-expect-error unknown classifier keys are rejected
     mastra.getClassifier('missing');
 
-    const result = await mastra.getClassifier('safety').evaluate({ state: 'test' });
+    const result = await mastra.getClassifier('safety').decide({ state: 'test' });
     expectTypeOf(result.answers.unsafe).toEqualTypeOf<{ type: 'boolean'; probability: number }>();
   });
 });
