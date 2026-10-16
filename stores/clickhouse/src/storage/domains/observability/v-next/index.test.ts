@@ -6453,7 +6453,7 @@ LIMIT 1`,
       });
       const spanTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
       const startedAt = new Date('2026-01-01T00:00:00Z');
-      const span = (traceId: string, attributes: Record<string, unknown>) => ({
+      const span = (traceId: string, timeToFirstChunkMs: number) => ({
         traceId,
         spanId: 'root',
         parentSpanId: null,
@@ -6462,7 +6462,7 @@ LIMIT 1`,
         isEvent: false,
         startedAt,
         endedAt: new Date(startedAt.getTime() + 1000),
-        attributes,
+        timeToFirstChunkMs,
       });
 
       try {
@@ -6476,15 +6476,13 @@ LIMIT 1`,
         await client.command({ query: TRACE_ROOTS_MV_DDL });
         await client.command({ query: TRACE_BRANCHES_MV_DDL });
         // A row written before the upgrade, through the old column set.
-        const { timeToFirstChunkMs: _dropped, ...legacyRow } = spanRecordToRow(
-          span('ttfc-upgrade-old', { completionStartTime: new Date(startedAt.getTime() + 100) }),
-        );
+        const { timeToFirstChunkMs: _dropped, ...legacyRow } = spanRecordToRow(span('ttfc-upgrade-old', 100));
         await client.insert({ table: TABLE_SPAN_EVENTS, values: [legacyRow], format: 'JSONEachRow' });
 
         const upgraded = new ObservabilityStorageClickhouseVNext({ client });
         await upgraded.init();
         await upgraded.batchCreateSpans({
-          records: [span('ttfc-upgrade-new', { completionStartTime: new Date(startedAt.getTime() + 250) })],
+          records: [span('ttfc-upgrade-new', 250)],
         });
 
         for (const table of spanTables) {

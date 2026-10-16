@@ -8,7 +8,6 @@
  *   - Timestamps are sent as ISO strings; the pg driver coerces them.
  */
 
-import { getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type {
   CreateFeedbackRecord,
   CreateLogRecord,
@@ -274,8 +273,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isPending,
     startedAt: toIsoOrDate(span.startedAt),
     endedAt: toIsoOrDate(endedAt),
-    timeToFirstChunkMs:
-      getTimeToFirstChunkMs({ startTime: span.startedAt, attributes: span.attributes ?? undefined }) ?? null,
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata as Record<string, unknown> | null),
     metadataRaw: jsonField(metadata),

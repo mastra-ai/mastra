@@ -2308,23 +2308,14 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
 
     if (readTimeToFirstChunkMs) {
       describe('timeToFirstChunkMs column', () => {
-        const startedAt = VNEXT_BASE_DATE;
-        const at = (ms: number) => new Date(startedAt.getTime() + ms);
-
-        it('stores the time from span start to the first chunk, keeping zero and leaving missing values empty', async () => {
+        it('stores the time to first chunk from the span record, keeping zero and leaving missing values empty', async () => {
           await storage.batchCreateSpans({
             records: [
-              makeSpan({ traceId: 'ttfc', spanId: 'present', startedAt, attributes: { completionStartTime: at(250) } }),
-              makeSpan({ traceId: 'ttfc', spanId: 'zero', startedAt, attributes: { completionStartTime: at(0) } }),
-              makeSpan({ traceId: 'ttfc', spanId: 'missing', startedAt, attributes: { model: 'gpt-4' } }),
-              makeSpan({ traceId: 'ttfc', spanId: 'no-attributes', startedAt, attributes: null }),
-              // Spans written through a serialized exporter carry the timestamp as an ISO string.
-              makeSpan({
-                traceId: 'ttfc',
-                spanId: 'iso-string',
-                startedAt,
-                attributes: { completionStartTime: at(1200).toISOString() },
-              }),
+              makeSpan({ traceId: 'ttfc', spanId: 'present', timeToFirstChunkMs: 250 }),
+              makeSpan({ traceId: 'ttfc', spanId: 'zero', timeToFirstChunkMs: 0 }),
+              makeSpan({ traceId: 'ttfc', spanId: 'empty', timeToFirstChunkMs: null }),
+              // Records built by a core version that predates the field leave it out.
+              makeSpan({ traceId: 'ttfc', spanId: 'missing' }),
             ],
           });
           if (flushPendingMerges) await flushPendingMerges(storage);
@@ -2332,24 +2323,14 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           const read = (spanId: string) => readTimeToFirstChunkMs(storage, { traceId: 'ttfc', spanId });
           expect(await read('present')).toBe(250);
           expect(await read('zero')).toBe(0);
+          expect(await read('empty')).toBeNull();
           expect(await read('missing')).toBeNull();
-          expect(await read('no-attributes')).toBeNull();
-          expect(await read('iso-string')).toBe(1200);
         });
 
         it('reads the ended value when the span started before its first chunk', async () => {
-          await storage.createSpan({
-            span: makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', startedAt, endedAt: null, attributes: {} }),
-          });
+          await storage.createSpan({ span: makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', endedAt: null }) });
           await storage.batchCreateSpans({
-            records: [
-              makeSpan({
-                traceId: 'ttfc',
-                spanId: 'lifecycle',
-                startedAt,
-                attributes: { completionStartTime: at(400) },
-              }),
-            ],
+            records: [makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', timeToFirstChunkMs: 400 })],
           });
           if (flushPendingMerges) await flushPendingMerges(storage);
 

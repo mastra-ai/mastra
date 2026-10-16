@@ -1,4 +1,3 @@
-import { getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type {
   CreateSpanArgs,
   GetSpanArgs,
@@ -738,10 +737,6 @@ async function insertSpanEvents(db: DuckDBConnection, rows: SpanEventRow[]): Pro
 // Public API
 // ============================================================================
 
-function timeToFirstChunkMs(s: CreateSpanArgs['span']): number | null {
-  return getTimeToFirstChunkMs({ startTime: s.startedAt, attributes: s.attributes ?? undefined }) ?? null;
-}
-
 function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
   // An ended non-event record also gets an 'end' row carrying the full payload,
   // and reconstruction takes the latest non-null value per column, so the start
@@ -759,7 +754,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     isEvent: s.isEvent,
     // Event spans are point-in-time: they end at the instant they start.
     endedAt: s.isEvent ? s.startedAt : null,
-    timeToFirstChunkMs: timeToFirstChunkMs(s),
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -809,7 +804,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
-    timeToFirstChunkMs: timeToFirstChunkMs(s),
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
