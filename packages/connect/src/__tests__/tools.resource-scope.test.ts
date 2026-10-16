@@ -122,9 +122,11 @@ describe('resource-scoped resolution', () => {
     expect(Object.keys(await resolver({ requestContext: { userId: 'user-a' } })).sort()).toEqual([
       'linear_fake_tool',
       'notion_fake_tool',
+      'request_connection',
     ]);
     expect(Object.keys(await resolver({ requestContext: { userId: 'user-b' } })).sort()).toEqual([
       'linear_fake_tool',
+      'request_connection',
       'slack_fake_tool',
     ]);
 
