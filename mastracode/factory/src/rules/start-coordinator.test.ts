@@ -55,6 +55,7 @@ function makeController(sendMessage = vi.fn(async () => {})) {
   };
   return {
     controller: {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(
         async ({ threadId: exactThreadId }: { threadId: string; requestContext?: { get(key: string): unknown } }) => {
           threadId = exactThreadId;
@@ -152,7 +153,8 @@ function startRequest(
         title: 'Fix issue 1',
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        // Written by a collaborator, so the run shares the Factory's memory.
+        metadata: { authorTrusted: true },
       },
     },
   };
