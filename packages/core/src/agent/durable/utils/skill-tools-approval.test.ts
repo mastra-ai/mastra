@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { resolveToolApprovalVerdict } from '../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import { CoreToolBuilder } from '../../../tools/tool-builder/builder';
-import { markApprovalExempt } from '../../../tools/toolchecks';
+import { isApprovalExempt, markApprovalExempt } from '../../../tools/toolchecks';
 import { toolRequiresApproval } from './resolve-runtime';
 
 function buildTool({ exempt }: { exempt: boolean }) {
@@ -50,6 +50,14 @@ describe('approval-exempt (skill) tools', () => {
     expect(tool.requireApproval).toBe(false);
     expect(tool.needsApprovalFn).toBeUndefined();
     expect(Object.keys(tool)).not.toContain('approvalExempt');
+  });
+
+  it('keeps the exemption when wrapped by a spread (e.g. tool hooks)', async () => {
+    const tool = buildTool({ exempt: true });
+    const wrapped = { ...tool };
+    if (isApprovalExempt(tool)) markApprovalExempt(wrapped);
+    await expect(verdict(wrapped, true)).resolves.toBe(false);
+    await expect(verdict({ ...tool }, true)).resolves.toBe(true);
   });
 
   it('non-exempt tools with requireApproval: false are still gated by the global flag', async () => {
