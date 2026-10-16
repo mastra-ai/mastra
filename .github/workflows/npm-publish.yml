@@ -118,10 +118,20 @@ jobs:
           echo "tag=alpha" >> $GITHUB_OUTPUT
 
       - name: Publish packages
-        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
+        id: publish
+        shell: bash
+        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks 2>&1 | tee "$RUNNER_TEMP/pnpm-publish.log"
         env:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
+
+      # npm can stage a version for approval instead of publishing it while pnpm
+      # still prints "Published"; re-runs then fail with an unexplained E409.
+      # Confirm each version pnpm reported is live, and say how to approve it.
+      # Runs after a failed publish too, so an E409 gets explained.
+      - name: Verify published versions are live on npm
+        if: ${{ !cancelled() && steps.publish.outcome != 'skipped' }}
+        run: node .github/scripts/check-npm-published-versions.mjs "$RUNNER_TEMP/pnpm-publish.log" --retry-missing 300000
 
       - name: Get CLI version
         id: cli-version
@@ -350,11 +360,21 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Publish packages
+        id: publish
         if: ${{ !inputs.dry_run }}
-        run: pnpm publish -r --access public --no-git-checks
+        shell: bash
+        run: pnpm publish -r --access public --no-git-checks 2>&1 | tee "$RUNNER_TEMP/pnpm-publish.log"
         env:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
+
+      # npm can stage a version for approval instead of publishing it while pnpm
+      # still prints "Published"; re-runs then fail with an unexplained E409.
+      # Confirm each version pnpm reported is live, and say how to approve it.
+      # Runs after a failed publish too, so an E409 gets explained.
+      - name: Verify published versions are live on npm
+        if: ${{ !cancelled() && steps.publish.outcome != 'skipped' }}
+        run: node .github/scripts/check-npm-published-versions.mjs "$RUNNER_TEMP/pnpm-publish.log" --retry-missing 300000
 
       - name: Get CLI version
         id: cli-version
@@ -615,6 +635,8 @@ jobs:
           NODE
 
       - name: Publish playground UI and dependencies
+        id: publish
+        shell: bash
         env:
           NPM_CONFIG_PROVENANCE: true
           DRY_RUN: ${{ inputs.dry_run }}
@@ -623,7 +645,15 @@ jobs:
           if [[ "$DRY_RUN" == 'true' ]]; then
             args+=(--dry-run)
           fi
-          pnpm --filter '@mastra/playground-ui...' publish -r --no-git-checks --tag "$FINAL_TAG" --access public "${args[@]}"
+          pnpm --filter '@mastra/playground-ui...' publish -r --no-git-checks --tag "$FINAL_TAG" --access public "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/pnpm-publish.log"
+
+      # npm can stage a version for approval instead of publishing it while pnpm
+      # still prints "Published"; re-runs then fail with an unexplained E409.
+      # Confirm each version pnpm reported is live, and say how to approve it.
+      # Runs after a failed publish too, so an E409 gets explained.
+      - name: Verify published versions are live on npm
+        if: ${{ !cancelled() && steps.publish.outcome != 'skipped' }}
+        run: node .github/scripts/check-npm-published-versions.mjs "$RUNNER_TEMP/pnpm-publish.log" --retry-missing 300000
 
   # ===========================================
   # SNAPSHOT: Manual trigger only (non-main branches)
@@ -780,9 +810,19 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Publish to npm
-        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
+        id: publish
+        shell: bash
+        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public 2>&1 | tee "$RUNNER_TEMP/pnpm-publish.log"
         env:
           NPM_CONFIG_PROVENANCE: true
+
+      # npm can stage a version for approval instead of publishing it while pnpm
+      # still prints "Published"; re-runs then fail with an unexplained E409.
+      # Confirm each version pnpm reported is live, and say how to approve it.
+      # Runs after a failed publish too, so an E409 gets explained.
+      - name: Verify published versions are live on npm
+        if: ${{ !cancelled() && steps.publish.outcome != 'skipped' }}
+        run: node .github/scripts/check-npm-published-versions.mjs "$RUNNER_TEMP/pnpm-publish.log" --retry-missing 300000
 
       - name: Get CLI version
         id: cli-version
