@@ -1628,11 +1628,7 @@ export class MastraFactory {
     // Factory tools fall in the SDK's `mcp` category (default `ask`); allow the
     // no-approval ones per session before the session's first turn.
     prepared.base.controller.onSessionCreated(
-      session =>
-        applyFactoryToolPermissions(session, {
-          sessions: sourceControlSessions,
-          workItems: storage.getDomain<WorkItemsStorage>('work-items'),
-        }),
+      session => applyFactoryToolPermissions(session, { sessions: sourceControlSessions }),
       { blocking: true },
     );
 

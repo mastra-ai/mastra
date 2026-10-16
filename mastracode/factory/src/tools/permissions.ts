@@ -1,7 +1,6 @@
 import type { PermissionPolicy, PermissionRules } from '@mastra/core/agent-controller';
 
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /**
  * Factory tools that run without asking. Factory tools fall into the SDK's
@@ -36,11 +35,7 @@ export interface FactoryToolPermissionsSession {
 
 export interface FactoryToolPermissionsDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
-  workItems: Pick<WorkItemsStorage, 'hasRunBindingForSession'>;
 }
-
-/** All a work or side session gets from the Factory tools: reporting back. */
-export const FACTORY_WORKER_TOOLS_WITHOUT_APPROVAL: readonly string[] = ['factory_message_origin'];
 
 /**
  * Allow the no-approval Factory tools on a newly created Factory session.
@@ -50,23 +45,14 @@ export const FACTORY_WORKER_TOOLS_WITHOUT_APPROVAL: readonly string[] = ['factor
  */
 export async function applyFactoryToolPermissions(
   session: FactoryToolPermissionsSession,
-  { sessions, workItems }: FactoryToolPermissionsDependencies,
+  { sessions }: FactoryToolPermissionsDependencies,
   toolNames: readonly string[] = FACTORY_TOOLS_WITHOUT_APPROVAL,
 ): Promise<void> {
   const row = await sessions.getBySessionId(session.identity.getResourceId());
   if (!row?.factoryProjectId) return;
   const rules = session.permissions.getRules();
   if (rules.categories.mcp !== undefined) return;
-  // Work and side sessions only report back. Their own tools (a role's stage moves)
-  // share names with user-session tools and must keep asking.
-  const worker =
-    (row.originSessionId !== null && row.originSessionId !== undefined) ||
-    (await workItems.hasRunBindingForSession({
-      orgId: row.orgId,
-      factoryProjectId: row.factoryProjectId,
-      sessionId: row.sessionId,
-    }));
-  for (const toolName of worker ? FACTORY_WORKER_TOOLS_WITHOUT_APPROVAL : toolNames) {
+  for (const toolName of toolNames) {
     if (session.permissions.getRules().tools[toolName] !== undefined) continue;
     await session.permissions.setForTool({ toolName, policy: 'allow' });
   }
