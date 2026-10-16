@@ -458,13 +458,14 @@ const ownerId = await session.thread.getOwner()
 
 Returns: `Promise<string | undefined>`
 
-### `session.thread.transferOwnership({ toOwnerId })`
+### `session.thread.transferOwnership({ toOwnerId, threadId? })`
 
-Store `toOwnerId` in the active thread's `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change.
+Store `toOwnerId` in the thread's `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change. Without `threadId`, this transfers the active thread. With `threadId`, it transfers that thread of the session's resource and the active thread stays the same.
 
 ```typescript
 await session.thread.transferOwnership({
   toOwnerId: 'user-456',
+  threadId: 'thread-123',
 })
 ```
 
