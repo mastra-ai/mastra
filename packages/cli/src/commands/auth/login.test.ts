@@ -149,7 +149,7 @@ describe('login() server lifecycle', () => {
   it.each([
     { options: undefined, expected: 'mastra-cli' },
     { options: { source: 'create-mastra' as const }, expected: 'create-mastra' },
-    { options: { source: 'mastra-create' as const }, expected: 'mastra-create' },
+    { options: { source: 'mastra-cli-create' as const }, expected: 'mastra-cli-create' },
     { options: { source: 'create-factory' as const }, expected: 'create-factory' },
   ])('sends source=$expected in the login URL', async ({ options, expected }) => {
     const { login } = await import('./credentials.js');
