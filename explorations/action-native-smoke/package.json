@@ -1,0 +1,13 @@
+{
+  "name": "action-native-smoke",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "mastra dev" },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "mastra": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

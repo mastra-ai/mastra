@@ -200,7 +200,7 @@ const workflowResearchStep = createStep({
         hasWorkflowsDir: inputData.structure.hasWorkflowsDir,
       });
 
-      const result = await researchAgent.generate(researchPrompt, {
+      const result = await researchAgent.generateMessageList(researchPrompt, {
         structuredOutput: {
           schema: WorkflowResearchResultSchema,
         },
@@ -375,7 +375,7 @@ ${workflowBuilderPrompts.validation.instructions}`,
 
 ${workflowBuilderPrompts.validation.instructions}`;
 
-        const stream = await executionAgent.stream(iterationPrompt, {
+        const stream = await executionAgent.streamMessageList(iterationPrompt, {
           structuredOutput: {
             schema: TaskExecutionIterationInputSchema(tasks.length),
             model,

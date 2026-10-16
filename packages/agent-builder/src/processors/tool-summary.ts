@@ -103,7 +103,7 @@ export class ToolSummaryProcessor implements Processor {
               };
             } else {
               // Create a promise for this summary (but don't await yet)
-              const summaryPromise = this.summaryAgent.generate(
+              const summaryPromise = this.summaryAgent.generateMessageList(
                 `Summarize the following tool call: ${JSON.stringify(part.toolInvocation)}`,
               );
 

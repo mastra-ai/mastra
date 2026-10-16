@@ -9619,10 +9619,12 @@ export class Agent<
       }
     }
 
-    const model =
+    const resolvedModel =
       typeof this.model === 'object' && this.model !== null && 'specificationVersion' in this.model
         ? this.model
         : await this.getModel({ requestContext });
+    const model =
+      resolvedModel instanceof ModelRouterLanguageModel ? await resolvedModel.resolveProviderModel() : resolvedModel;
     const instructions = await this.getInstructions({ requestContext });
     const tools = toV7Tools(await this.listTools({ requestContext }), {
       agentId: this.id,

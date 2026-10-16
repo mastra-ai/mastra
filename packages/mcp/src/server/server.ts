@@ -319,7 +319,7 @@ export class MCPServer extends MCPServerBase {
           mcp: { toolType: 'agent' },
           execute: async (inputData, context) => {
             const { message } = inputData as { message: string };
-            return agent.generate(message, {
+            return agent.generateMessageList(message, {
               requestContext: context?.requestContext,
               tracingContext: context?.tracingContext,
               abortSignal: context?.abortSignal,
