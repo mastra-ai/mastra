@@ -146,4 +146,11 @@ describe('createSessionAccessGuard', () => {
     const res = await teammate.request('/api/memory/threads/t-1');
     await expect(res.json()).resolves.toEqual({ reached: true, bound: 'teammate' });
   });
+
+  it('checks both the query and body resourceId, since handlers may read either', async () => {
+    const path = `/web/config/om/observer/model?resourceId=${SHARED_ID}`;
+    expect((await post(teammate, path, { resourceId: PRIVATE_ID, modelId: 'x' })).status).toBe(404);
+    const memory = `/api/memory/threads?resourceId=${SHARED_ID}`;
+    expect((await post(teammate, memory, { resourceId: PRIVATE_ID })).status).toBe(404);
+  });
 });
