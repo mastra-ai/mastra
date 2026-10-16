@@ -678,6 +678,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/mcp-events',
+              label: 'MCP events',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },
