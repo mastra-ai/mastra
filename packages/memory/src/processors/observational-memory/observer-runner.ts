@@ -424,6 +424,7 @@ export class ObserverRunner {
         `[OM:callObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
       );
       result = await doGenerate();
+      assertNonEmptyObserverOutput(result.text);
       parsed = parseObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
@@ -757,6 +758,7 @@ export class ObserverRunner {
         `[OM:callMultiThreadObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
       );
       result = await doGenerate();
+      assertNonEmptyObserverOutput(result.text);
       parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
