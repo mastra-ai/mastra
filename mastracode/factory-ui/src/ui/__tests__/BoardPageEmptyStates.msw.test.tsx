@@ -46,6 +46,46 @@ describe('Board empty-state actions', () => {
     expect(screen.getByRole('button', { name: 'Create work item in Intake' })).toHaveFocus();
   });
 
+  it.each([
+    { layout: 'list', search: '' },
+    { layout: 'board', search: '' },
+    { layout: 'list', search: '?source=manual' },
+    { layout: 'board', search: '?source=manual' },
+  ])('does not offer intake setup for an empty connected feed ($layout, $search)', async ({ layout, search }) => {
+    stubWorkBoard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: { github: { enabled: true, sourceIds: ['acme/app'] }, linear: { enabled: false, sourceIds: null } },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, installations: [] }),
+      ),
+    );
+    renderBoard(search);
+    const user = userEvent.setup();
+    if (layout === 'board' && search) {
+      await user.click(await screen.findByRole('button', { name: 'Filter cards' }));
+      await user.click(screen.getByRole('button', { name: 'Save as view' }));
+      expect(within(await screen.findByRole('group', { name: 'View filters' })).getByText('Manual')).toBeVisible();
+      await user.click(screen.getByRole('radio', { name: 'Board' }));
+      await user.click(screen.getByRole('button', { name: 'Save view' }));
+      await screen.findByRole('group', { name: 'Board columns' });
+    } else if (layout === 'board') {
+      await saveKanbanView(user);
+    }
+
+    const intake = await screen.findByTestId('board-column-intake');
+    expect(await within(intake).findByRole('button', { name: 'Create card' })).toBeVisible();
+    expect(within(intake).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
+    expect(within(intake).getByText(/Intake is clear/)).toBeVisible();
+    expect(within(intake).queryByText(/No intake sources/)).not.toBeInTheDocument();
+  });
+
   it('clears all filters and temporary search together while preserving the sort', async () => {
     stubWorkBoard();
     const router = renderBoard('?q=missing&search=also-missing&source=manual&sort=created-newest');

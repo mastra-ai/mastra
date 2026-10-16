@@ -18,6 +18,7 @@ export function BoardStageCards({
   taskCount,
   feed,
   intakeSource,
+  hasIntakeSource,
   filtersExcludeAll,
   alreadyMaterialized,
   composer,
@@ -31,6 +32,7 @@ export function BoardStageCards({
   taskCount: number;
   feed?: IntakeFeed;
   intakeSource?: IntakeSource;
+  hasIntakeSource: boolean;
   filtersExcludeAll: boolean;
   alreadyMaterialized: number;
   composer?: ReactNode;
@@ -49,7 +51,7 @@ export function BoardStageCards({
         <BoardColumnEmptyState
           stage={stage.id}
           kind={kind}
-          hasIntakeSource={intakeSource !== undefined}
+          hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={alreadyMaterialized}
           layout={layout}

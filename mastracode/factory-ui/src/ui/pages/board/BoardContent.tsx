@@ -229,6 +229,7 @@ export function BoardContent({
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
+  const hasIntakeSource = intake.available.length > 0;
 
   const stageViews = stages.map(stage => {
     const loading = loadingStages.has(stage.id);
@@ -240,7 +241,7 @@ export function BoardContent({
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
       !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
-    const canConnectSource = stage.id === 'intake' && intake.active === undefined;
+    const canConnectSource = stage.id === 'intake' && !hasIntakeSource;
     const showEmptyStateActions =
       stage.id === definition.initialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
@@ -279,6 +280,7 @@ export function BoardContent({
           taskCount={taskCount}
           feed={columnFeed}
           intakeSource={intake.active}
+          hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={stage.id === definition.initialPhase ? intake.alreadyMaterialized : 0}
           emptyStateActions={
