@@ -518,20 +518,23 @@ describe('Classifier', () => {
     expect((error as APICallError).statusCode).toBe(503);
   });
 
-  it('records only safe classifier tracing metadata', async () => {
+  it('records the state and questions as span input and the answers as span output', async () => {
     const childSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
     const parentSpan = { createChildSpan: vi.fn(() => childSpan) };
     vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(parentSpan as never);
-    const classifier = new Classifier({ id: 'safe-id', model: createModel(), questions: booleanQuestions });
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+    const state = { message: 'I was charged twice' };
 
-    await classifier.decide({ state: { secret: 'sensitive-state' } });
+    await classifier.decide({ state });
 
-    const serializedCalls = JSON.stringify([parentSpan.createChildSpan.mock.calls, childSpan.update.mock.calls]);
-    expect(serializedCalls).toContain('safe-id');
-    expect(serializedCalls).toContain('test-model');
-    expect(serializedCalls).not.toContain('sensitive-state');
-    expect(serializedCalls).not.toContain('Unsafe');
-    expect(serializedCalls).not.toContain('probability');
-    expect(childSpan.end).toHaveBeenCalledOnce();
+    expect(parentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: { state, questions: booleanQuestions },
+        attributes: expect.objectContaining({ classifierId: 'router', modelId: 'test-model' }),
+      }),
+    );
+    expect(childSpan.end).toHaveBeenCalledExactlyOnceWith({
+      output: { answers: { unsafe: { type: 'boolean', probability: 0.8 } } },
+    });
   });
 });
