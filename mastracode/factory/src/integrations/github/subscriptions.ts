@@ -36,11 +36,10 @@ export interface SubscribeToPullRequestInput {
   subscribedByUserId?: string;
 }
 
-export interface ThreadSubscriptionTarget {
-  orgId: string;
-  resourceId: string;
-  threadId: string;
-}
+/** A thread's subscriptions, found by the session that owns it or (for older callers) by its resource. */
+export type ThreadSubscriptionTarget =
+  | { orgId: string; sessionId: string; threadId: string }
+  | { orgId: string; resourceId: string; threadId: string };
 
 export interface PullRequestSubscriptionTarget {
   orgId: string;
@@ -107,6 +106,10 @@ export async function listPullRequestSubscriptionsForThread(
   input: ThreadSubscriptionTarget,
   storage: GithubSubscriptionStorage,
 ): Promise<GithubSignalSubscriptionRow[]> {
+  if ('sessionId' in input) {
+    const owned = await storage.subscriptions.listBySession(input.sessionId);
+    return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId);
+  }
   const rows = await storage.subscriptions.listByThread(input.resourceId, input.threadId);
   const matching = rows.filter(
     row =>

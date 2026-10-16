@@ -292,6 +292,36 @@ describe('source-control session routes', () => {
     });
   });
 
+  it('reports the memory resource a session runs under when it is opened', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const create = (sessionId: string) =>
+      sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    await create('session-new');
+    await create('session-run');
+    const threads: Record<string, { id: string; resourceId: string }> = {
+      'session-run': { id: 'session-run', resourceId: project.id },
+    };
+    const controller = {
+      queryThreadById: async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
+    } as unknown as RouteOptions['controller'];
+    const app = buildApp([sourceControl], seed, controller);
+
+    // A session with no thread yet is a new user session: it starts under its owner.
+    const fresh = await app.request('/web/user-sessions/session-new');
+    await expect(fresh.json()).resolves.toMatchObject({ session: { sessionId: 'session-new', resourceId: 'user-1' } });
+    // A run's thread already names its Factory.
+    const run = await app.request('/web/user-sessions/session-run');
+    await expect(run.json()).resolves.toMatchObject({ session: { sessionId: 'session-run', resourceId: project.id } });
+  });
+
   it("names the owner when a teammate opens someone else's session", async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const session = await sourceControl.sessions.create({

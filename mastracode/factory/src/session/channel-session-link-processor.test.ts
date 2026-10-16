@@ -164,14 +164,14 @@ describe('FactoryChannelSessionLinkProcessor', () => {
       stepFinish(),
     ]);
     expect(texts(out)).toEqual([
-      `Hi\n\n[Open session ↗](https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')})`,
+      `Hi\n\n[Open session ↗](https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?sessionId=${encodeURIComponent('channel:slack:C-1:1700.42')})`,
     ]);
   });
 
   it('a session with no factory links to the factory-agnostic redirect', async () => {
     const out = await render(newSessionContext({ factoryProjectId: null }), [...textBlock('Hi'), stepFinish()]);
     expect(texts(out)).toEqual([
-      'Hi\n\n[Open session ↗](https://mc.example.com/threads/uuid-thread-1?resourceId=us-42)',
+      'Hi\n\n[Open session ↗](https://mc.example.com/threads/uuid-thread-1?sessionId=us-42)',
     ]);
   });
 

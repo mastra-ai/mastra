@@ -7,37 +7,37 @@ export const AGENT_CONTROLLER_THREAD_PAGE_SIZE = 20;
 
 interface UseAgentControllerThreadsArgs {
   agentControllerId: string;
-  resourceId: string;
+  sessionId: string;
   /**
-   * Session scope. Callers whose local variable is the worktree project path
-   * pass it in as `scope: worktreeProjectPath` — the value is also filtered
-   * against the server-side `projectPath` tag so lists stay per-worktree.
+   * Thread metadata that marks this session's threads (`{ factorySessionId }`).
+   * Sessions share their Factory's or user's resource, so without it the list
+   * holds every thread of that resource.
    */
-  scope?: string;
+  threadTags?: Record<string, string>;
   baseUrl?: string;
   enabled?: boolean;
 }
 
 export function useAgentControllerThreads({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
+  threadTags,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerThreadsArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
+    sessionId,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, scope),
+    queryKey: [...queryKeys.agentControllerThreads(agentControllerId, sessionId), threadTags ?? null],
     queryFn: () =>
       session!.listThreads({
         limit: AGENT_CONTROLLER_THREAD_PAGE_SIZE,
-        tags: scope ? { projectPath: scope } : undefined,
+        tags: threadTags,
       }),
     enabled: enabled && Boolean(session),
   });

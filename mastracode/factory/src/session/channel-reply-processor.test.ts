@@ -67,13 +67,13 @@ describe('sessionLink', () => {
   it('a chat-only thread keeps the channel workspace segment and names its resource in the query', () => {
     expect(sessionLink({ ...target, sessionId: 'channel:slack:C-1:1700.42', resourceId: 'channel:slack:C-1:1700.42' })).toBe(
       'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1' +
-        `?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
+        `?sessionId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
     );
   });
 
   it('a session with no factory falls back to the factory-agnostic redirect', () => {
     expect(sessionLink({ ...target, factoryProjectId: undefined })).toBe(
-      'https://mc.example.com/threads/uuid-thread-1?resourceId=us-42',
+      'https://mc.example.com/threads/uuid-thread-1?sessionId=us-42',
     );
   });
 

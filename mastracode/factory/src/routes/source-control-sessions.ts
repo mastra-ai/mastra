@@ -11,7 +11,7 @@ import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
-import { listFactorySessionThreads } from '../session/session-threads.js';
+import { factorySessionResourceId, listFactorySessionThreads } from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -194,7 +194,8 @@ async function resolveSession(
 }
 
 /**
- * Start the live conversation for a user session on its own thread (thread id === session id). Agent-controller
+ * Start the live conversation for a user session on its own thread (thread id === session id), under its owner's
+ * resource. Agent-controller
  * routes only act on started sessions, so the first prompt the page sends right after creation always lands on the
  * thread the page reads, with the org and Factory address already in state. Get-or-create, so retried or repeated
  * creates are safe.
@@ -208,7 +209,7 @@ async function startUserSessionConversation(
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
   const live = await controller.createSession({
     id: session.sessionId,
-    resourceId: session.sessionId,
+    resourceId: session.userId,
     threadId: session.sessionId,
     ownerId: session.userId,
     requestContext,
@@ -479,7 +480,11 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
-        return c.json({ session: withCapabilities(withOwnerProfile(session, owners), recreateSandbox) });
+        // The client opens the session by its id and creates it under this resource.
+        const resourceId = await factorySessionResourceId(options.controller, session);
+        return c.json({
+          session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
+        });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {

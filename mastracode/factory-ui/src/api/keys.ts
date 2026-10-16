@@ -18,6 +18,7 @@ export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 export interface AvailableModelsFilter {
   factoryProjectId?: string;
   scope?: 'org' | 'user';
+  sessionId?: string;
   resourceId?: string;
   threadId?: string;
 }
@@ -162,65 +163,44 @@ export const queryKeys = {
     filePath: string | undefined,
     previousFilePath: string | undefined,
   ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
-  // Sessions are scoped per worktree (projectPath), so every session-derived key
-  // includes the projectPath — two worktrees over the same resourceId are
-  // independent sessions with independent state.
-  agentControllerSession: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, projectPath ?? null] as const,
+  // Session-derived keys are addressed by the session id: sessions that share a
+  // memory resource (a Factory's runs, a user's sessions) keep independent state.
+  agentControllerSession: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'sessions', sessionId ?? null] as const,
   // Keep connection state outside agentControllerSession: mutation hooks invalidate that prefix,
   // and a sync refetch would bump dataUpdatedAt and wipe the live transcript.
-  agentControllerConnection: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => ['agent-controller', agentControllerId ?? null, 'connection', resourceId ?? null, projectPath ?? null] as const,
-  agentControllerConnectionInit: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'] as const,
+  agentControllerConnection: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'connection', sessionId ?? null] as const,
+  agentControllerConnectionInit: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerConnection(agentControllerId, sessionId), 'init'] as const,
   agentControllerConnectionState: (
     agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
+    sessionId: string | undefined,
     threadId?: string,
   ) =>
     [
-      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      ...queryKeys.agentControllerConnection(agentControllerId, sessionId),
       'state',
       ...(threadId ? [threadId] : []),
     ] as const,
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
   agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
     ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
-  agentControllerSettings: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'settings'] as const,
-  agentControllerPermissions: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'permissions'] as const,
-  agentControllerThreads: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'threads'] as const,
-  // Prefix over every thread's messages for a resource — invalidation target
-  // when an SSE gap may have dropped events for any thread of the session.
-  agentControllerResourceThreadMessages: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, 'threads'] as const,
-  // Thread ids are unique across the resource, so messages are keyed by threadId
-  // alone (no projectPath) — caches survive worktree switches and seeding does
-  // not need to know the thread's scope.
+  agentControllerSettings: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'settings'] as const,
+  agentControllerPermissions: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'permissions'] as const,
+  agentControllerThreads: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'threads'] as const,
+  // Prefix over every thread's messages for a session — invalidation target
+  // when an SSE gap may have dropped events for any thread of the session. Kept
+  // outside agentControllerSession so session invalidation leaves transcripts alone.
+  agentControllerSessionThreadMessages: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'thread-messages', sessionId ?? null] as const,
+  // Thread ids are unique, so messages are keyed by session and thread id.
   agentControllerThreadMessages: (
     agentControllerId: string | undefined,
-    resourceId: string | undefined,
+    sessionId: string | undefined,
     threadId: string | undefined,
     // The transcript is fetched as a bounded newest-N window; the limit is part
     // of the cache key so read (`useAgentControllerThreadMessages`) and write
@@ -230,7 +210,7 @@ export const queryKeys = {
     limit?: number,
   ) =>
     [
-      ...queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+      ...queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
       threadId ?? null,
       'messages',
       ...(limit === undefined ? [] : [limit]),

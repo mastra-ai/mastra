@@ -54,7 +54,7 @@ export function sessionLink({ threadId, sessionId, resourceId, factoryProjectId 
   const origin = process.env.MASTRACODE_PUBLIC_URL;
   if (!origin) return undefined;
   const isChatOnly = resourceId.startsWith('channel:');
-  const sessionParam = `?resourceId=${encodeURIComponent(sessionId)}`;
+  const sessionParam = `?sessionId=${encodeURIComponent(sessionId)}`;
   if (!factoryProjectId) return `${origin}/threads/${encodeURIComponent(threadId)}${sessionParam}`;
   const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(sessionId);
   return `${origin}/factories/${encodeURIComponent(factoryProjectId)}/workspaces/${workspaceSegment}/threads/${encodeURIComponent(threadId)}${isChatOnly ? sessionParam : ''}`;

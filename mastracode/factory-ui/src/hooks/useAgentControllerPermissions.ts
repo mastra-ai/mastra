@@ -5,28 +5,26 @@ import { createAgentControllerClient } from '../ui/domains/chat/services/agentCo
 
 interface UseAgentControllerPermissionsArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   baseUrl?: string;
   enabled?: boolean;
 }
 
 export function useAgentControllerPermissions({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerPermissionsArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
+    sessionId,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId, scope),
+    queryKey: queryKeys.agentControllerPermissions(agentControllerId, sessionId),
     queryFn: () => session!.getPermissions(),
     enabled: enabled && Boolean(session),
   });

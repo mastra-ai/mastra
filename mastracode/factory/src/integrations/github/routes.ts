@@ -27,7 +27,7 @@ import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
-import { listFactorySessionThreads } from '../../session/session-threads.js';
+import { factorySessionResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -549,18 +549,20 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const tenant = auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
+        // Sessions read by session id; resourceId is the older address.
+        const sessionId = c.req.query('sessionId');
         const resourceId = c.req.query('resourceId');
         const threadId = c.req.query('threadId');
-        if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+        const target = !threadId
+          ? null
+          : sessionId
+            ? { orgId: tenant.orgId, sessionId, threadId }
+            : resourceId
+              ? { orgId: tenant.orgId, resourceId, threadId }
+              : null;
+        if (!target) return c.json({ error: 'sessionId (or resourceId) and threadId are required' }, 400);
 
-        const subscriptions = await listPullRequestSubscriptionsForThread(
-          {
-            orgId: tenant.orgId,
-            resourceId,
-            threadId,
-          },
-          github.integrationStorage,
-        );
+        const subscriptions = await listPullRequestSubscriptionsForThread(target, github.integrationStorage);
         return c.json({
           subscriptions: subscriptions.map(subscription => ({
             id: subscription.id,
@@ -1464,7 +1466,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session });
+        return c.json({ session: { ...session, resourceId: await factorySessionResourceId(controller, session) } });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {

@@ -20,3 +20,17 @@ export async function listFactorySessionThreads(
   for (const thread of [...(own ? [own] : []), ...stamped, ...legacy]) threads.set(thread.id, thread);
   return [...threads.values()];
 }
+
+/**
+ * The memory resource a Factory session runs under. Its thread already records
+ * it (the Factory for runs and Slack sessions, the owner for user sessions, the
+ * session's own id for sessions not yet migrated). A session with no thread
+ * yet is a new user session, which starts under its owner.
+ */
+export async function factorySessionResourceId(
+  controller: Pick<AgentController<any>, 'queryThreadById'> | undefined,
+  session: { sessionId: string; userId: string },
+): Promise<string> {
+  const thread = await controller?.queryThreadById({ threadId: session.sessionId });
+  return thread?.resourceId || session.userId;
+}

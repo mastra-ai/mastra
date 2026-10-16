@@ -14,8 +14,7 @@ export interface AgentControllerLiveState {
 
 interface UseAgentControllerSessionSyncArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   threadId?: string;
   baseUrl?: string;
   enabled?: boolean;
@@ -38,8 +37,7 @@ export function reconnectRefetchInterval(
 
 export function useAgentControllerSessionSync({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   threadId,
   baseUrl = '',
   enabled = true,
@@ -49,13 +47,13 @@ export function useAgentControllerSessionSync({
 }: UseAgentControllerSessionSyncArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
+    sessionId,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, threadId),
+    queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, threadId),
     queryFn: async () => {
       const generationAtRequestStart = liveEventGeneration.current;
       const state = await session!.state({ threadId });

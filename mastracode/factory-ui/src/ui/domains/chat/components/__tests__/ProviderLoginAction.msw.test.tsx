@@ -10,14 +10,14 @@ import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { ProviderLoginAction } from '../ProviderLoginAction';
 
 const liveSession: ChatSessionContextApi = {
-  resourceId: 'session-1',
+  sessionId: 'session-1',
+  resourceId: 'user-1',
   sessionThreadId: 'thread-1',
   sessionEnabled: true,
   resourceReady: true,
   sandboxReady: true,
   sandboxPreparing: false,
   resourceEnabled: true,
-  projectPath: undefined,
   baseUrl: TEST_BASE_URL,
   kind: 'user',
   draftSessionId: undefined,

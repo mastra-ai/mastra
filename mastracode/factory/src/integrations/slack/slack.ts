@@ -475,7 +475,7 @@ export function createChannelResourceIdResolver(
  * session id AS their thread id, matching the web convention
  * (FactoryStartCoordinator seeds threads with threadId = sessionId) so
  * `/workspaces/{sessionId}/threads/{sessionId}` resolves Slack-created
- * sessions exactly like web-created ones — no `?resourceId=` override needed.
+ * sessions exactly like web-created ones — no `?sessionId=` override needed.
  * Chat-only threads keep the default random id: their `channel:...`
  * resourceId is a memory key, not a unique thread id.
  */
