@@ -91,4 +91,37 @@ describe('lastObservedAt millisecond ties (#27261)', () => {
     const sent = (call.mock.calls[0]![1] as MastraDBMessage[]).map(m => m.id);
     expect(sent).toEqual(['b']);
   });
+
+  it('resource scope: loads a tied unobserved message from storage and observes only it', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 'tie', createdAt: earlier, updatedAt: earlier },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1, bufferTokens: false },
+      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 100_000 },
+    });
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- base',
+      tokenCount: 2,
+      lastObservedAt: tie,
+      observedMessageIds: ['old', 'a'],
+    });
+    await storage.saveMessages({
+      messages: [msg('old', earlier, 'user'), msg('a', tie), msg('b', tie, 'user')],
+    });
+    const call = vi.spyOn(om.observer, 'callMultiThread').mockResolvedValue({
+      results: new Map([[threadId, { observations: '- tied fact' }]]),
+    } as Awaited<ReturnType<typeof om.observer.callMultiThread>>);
+
+    await om.observe({ threadId, resourceId });
+
+    expect(call).toHaveBeenCalledTimes(1);
+    const byThread = call.mock.calls[0]![1] as Map<string, MastraDBMessage[]>;
+    expect([...byThread.values()].flat().map(m => m.id)).toEqual(['b']);
+  });
 });

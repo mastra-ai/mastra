@@ -95,6 +95,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId: this.resourceId } });
     const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
+    const observedIds = new Set([...(record.observedMessageIds ?? []), ...this.deps.observedMessageIds]);
 
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
@@ -107,7 +108,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const thread of allThreads) {
       const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
       const startDate = threadLastObservedAt
-        ? new Date(new Date(threadLastObservedAt).getTime() + (this.deps.observedMessageIds.size > 0 ? 0 : 1))
+        ? new Date(new Date(threadLastObservedAt).getTime() + (observedIds.size > 0 ? 0 : 1))
         : undefined;
 
       const result = await this.storage.listMessages({
@@ -138,7 +139,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     }
 
     for (const [tid, msgs] of this.messagesByThread) {
-      const filtered = msgs.filter(m => !this.deps.observedMessageIds.has(m.id));
+      const filtered = msgs.filter(m => !observedIds.has(m.id));
       if (filtered.length > 0) {
         this.messagesByThread.set(tid, filtered);
       } else {
