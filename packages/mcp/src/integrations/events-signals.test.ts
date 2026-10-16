@@ -87,7 +87,9 @@ describe('MCPEventsSignalProvider', () => {
 
     const notifications = await storage.getStore('notifications');
     const records = await notifications!.listNotifications({ threadId: 'thread-1' });
-    expect(records.map(record => record.payload).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toMatchObject([
+    expect(
+      records.map(record => record.payload).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    ).toMatchObject([
       { occurrence: { eventId: 'evt-1', data: { n: 1 } } },
       { occurrence: { eventId: 'evt-2', data: { n: 2 } } },
     ]);
@@ -105,7 +107,21 @@ describe('MCPEventsSignalProvider', () => {
     const notifications = await storage.getStore('notifications');
     const records = await notifications!.listNotifications({ threadId: 'thread-1' });
     expect(records).toHaveLength(1);
-    expect(records[0]).toMatchObject({ coalescedCount: 2, payload: { occurrence: { eventId: 'evt-2', data: { n: 2 } } } });
+    expect(records[0]).toMatchObject({
+      coalescedCount: 2,
+      payload: { occurrence: { eventId: 'evt-2', data: { n: 2 } } },
+    });
+  });
+
+  it('uses the mcp-events coalesce key prefix whatever the provider id', async () => {
+    const { provider, subscriptions, sent } = setup({ coalesce: true, id: 'repo-events' });
+    await provider.subscribeThread(thread1, pushA);
+    subscriptions[0]!.push({}, { eventId: 'evt-1' });
+    await vi.waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0]!.notification).toMatchObject({
+      source: 'repo-events',
+      coalesceKey: `mcp-events:${MCPEventsSignalProvider.key(pushA)}`,
+    });
   });
 
   it('wraps event data as untrusted so it cannot escape the data block', async () => {
@@ -143,9 +159,11 @@ describe('MCPEventsSignalProvider', () => {
 
     const { summary, attributes } = sent()[0]!.notification;
     expect(attributes).toEqual({ server: 'github', event: 'repo.push', truncated: true });
-    expect(summary.endsWith(
-      'Some events may have been skipped (gap); re-fetch authoritative state with tools if it matters.',
-    )).toBe(true);
+    expect(
+      summary.endsWith(
+        'Some events may have been skipped (gap); re-fetch authoritative state with tools if it matters.',
+      ),
+    ).toBe(true);
   });
 
   describe('cursor store', () => {
