@@ -105,7 +105,7 @@ const scorer = createScorer({
             type: 'Processor[]',
             isOptional: true,
             description:
-              'Error processors for judge models that use Mastra’s current generation API. These implement `processAPIError` and can inspect LLM API rejections and signal a retry, e.g. `StreamErrorRetryProcessor`. Legacy model adapters use `generateLegacy()` and do not run error processors.',
+              'Error processors for the judge model. These implement `processAPIError` and can inspect LLM API rejections and signal a retry, e.g. `StreamErrorRetryProcessor`.',
           },
           {
             name: 'maxProcessorRetries',
@@ -193,8 +193,6 @@ Avoid adding outer scorer or workflow retries. Avoid combining a nonzero model r
 ### Override retries for one step
 
 A step's `judge` configuration overrides scorer-level judge fields. Processor arrays replace the scorer-level arrays. Omit `maxProcessorRetries` in the step configuration to inherit the scorer-level numeric cap.
-
-Coordinated processor retries require a judge model that uses Mastra’s current generation API. Legacy model adapters call [`generateLegacy()`](/reference/agents/generateLegacy), bypass error processors, and use that API's separate AI SDK `maxRetries` default of `2`.
 
 ## Type safety
 

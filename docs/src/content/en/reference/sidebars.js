@@ -45,18 +45,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/createSkill', label: 'createSkill()' },
         { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
-        { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
-        {
-          type: 'doc',
-          id: 'agents/getDefaultGenerateOptions',
-          label: '.getDefaultGenerateOptionsLegacy()',
-        },
         { type: 'doc', id: 'agents/getDefaultOptions', label: '.getDefaultOptions()' },
-        {
-          type: 'doc',
-          id: 'agents/getDefaultStreamOptions',
-          label: '.getDefaultStreamOptionsLegacy()',
-        },
         { type: 'doc', id: 'agents/getDescription', label: '.getDescription()' },
         { type: 'doc', id: 'agents/getInstructions', label: '.getInstructions()' },
         { type: 'doc', id: 'agents/getLLM', label: '.getLLM()' },
@@ -733,7 +722,6 @@ const sidebars = {
           items: [
             { type: 'doc', id: 'streaming/agents/MastraModelOutput', label: 'MastraModelOutput' },
             { type: 'doc', id: 'streaming/agents/stream', label: '.stream()' },
-            { type: 'doc', id: 'streaming/agents/streamLegacy', label: '.streamLegacy()' },
             { type: 'doc', id: 'streaming/agents/streamUntilIdle', label: '.streamUntilIdle()' },
           ],
         },

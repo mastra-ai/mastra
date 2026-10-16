@@ -110,7 +110,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      "In 'memory-only' trim mode, applies stored-history trimming at each step. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example in generateLegacy() and streamLegacy() or when the limiter is inside a processor workflow.",
+      "In 'memory-only' trim mode, applies stored-history trimming at each step. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example when the limiter is inside a processor workflow.",
     isOptional: true,
   },
   {

@@ -136,7 +136,7 @@ const { value } = await reader.read()
 await reader.cancel('user navigated away')
 ```
 
-You can also pass an `abortSignal` to cancel from outside the stream. The same option is available on `streamUntilIdle()`, `resumeStream()`, `resumeStreamUntilIdle()`, `approveToolCall()`, `declineToolCall()`, `generate()`, and `generateLegacy()`:
+You can also pass an `abortSignal` to cancel from outside the stream. The same option is available on `streamUntilIdle()`, `resumeStream()`, `resumeStreamUntilIdle()`, `approveToolCall()`, `declineToolCall()`, and `generate()`:
 
 ```typescript
 const controller = new AbortController()

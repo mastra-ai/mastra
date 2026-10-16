@@ -1,6 +1,26 @@
 {
   "redirects": [
     {
+      "source": "/reference/agents/generateLegacy",
+      "destination": "/reference/agents/generate",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/agents/streamLegacy",
+      "destination": "/reference/streaming/agents/stream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getDefaultGenerateOptions",
+      "destination": "/reference/agents/getDefaultOptions",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getDefaultStreamOptions",
+      "destination": "/reference/agents/getDefaultOptions",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview",
       "destination": "/docs/sandbox/overview",
       "permanent": true
