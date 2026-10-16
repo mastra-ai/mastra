@@ -19,6 +19,7 @@ import { notionScenario } from './notion.js';
 import { openaiScenario } from './openai.js';
 import { posthogScenario } from './posthog.js';
 import { resendScenario } from './resend.js';
+import { sharepointOnlineScenario } from './sharepoint-online.js';
 import { slackScenario } from './slack.js';
 import { snowflakeScenario } from './snowflake.js';
 import { stripeScenario } from './stripe.js';
@@ -52,6 +53,7 @@ export const scenarios: Scenario[] = [
   openaiScenario,
   posthogScenario,
   resendScenario,
+  sharepointOnlineScenario,
   slackScenario,
   snowflakeScenario,
   stripeScenario,

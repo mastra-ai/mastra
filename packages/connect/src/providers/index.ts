@@ -22,6 +22,7 @@ import { notionProvider } from './notion/index.js';
 import { openaiProvider } from './openai/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
+import { sharepointOnlineProvider } from './sharepoint-online/index.js';
 import { slackProvider } from './slack/index.js';
 import { snowflakeProvider } from './snowflake/index.js';
 import { stripeProvider } from './stripe/index.js';
@@ -50,6 +51,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   openaiProvider,
   posthogProvider,
   resendProvider,
+  sharepointOnlineProvider,
   slackProvider,
   snowflakeProvider,
   stripeProvider,
