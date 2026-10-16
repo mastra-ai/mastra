@@ -472,39 +472,40 @@ export async function proxyRequestWithResponse(
 
   if (!response.ok) {
     const { detail, code, isProblemJson } = await extractProblemDetail(response);
+    const resolvedDetail = detail ?? code;
     if (isProblemJson) {
       // Platform-originated error (bad path, unknown connection, auth, limits).
       if (response.status === 401 || response.status === 403) {
         throw new MastraConnectError(
           'unauthorized',
-          `Unauthorized calling the connection proxy${detail ? `: ${detail}` : '.'}`,
-          { status: response.status, detail },
+          `Unauthorized calling the connection proxy${resolvedDetail ? `: ${resolvedDetail}` : '.'}`,
+          { status: response.status, detail: resolvedDetail },
         );
       }
       if (response.status === 404) {
         throw new MastraConnectError(
           'connection_not_found',
-          `Connection ${connectionId} not found${detail ? `: ${detail}` : '.'}`,
-          { status: response.status, detail },
+          `Connection ${connectionId} not found${resolvedDetail ? `: ${resolvedDetail}` : '.'}`,
+          { status: response.status, detail: resolvedDetail },
         );
       }
       throw new MastraConnectError(
         'proxy_error',
-        `Proxy request failed (${response.status})${detail ? `: ${detail}` : '.'}`,
+        `Proxy request failed (${response.status})${resolvedDetail ? `: ${resolvedDetail}` : '.'}`,
         {
           status: response.status,
-          detail,
+          detail: resolvedDetail,
         },
       );
     }
     // Provider-originated error passed through the proxy. Append narrowly
     // scoped provider guidance where an opaque error hides an account or API
     // capability boundary; preserve the original status and detail.
-    const hint = providerErrorHint({ status: response.status, path: cleanPath, code, detail });
+    const hint = providerErrorHint({ status: response.status, path: cleanPath });
     throw new MastraConnectError(
       'proxy_error',
-      `Provider request failed (${response.status})${detail ? `: ${detail}` : '.'}${hint ? ` ${hint}` : ''}`,
-      { status: response.status, detail },
+      `Provider request failed (${response.status})${resolvedDetail ? `: ${resolvedDetail}` : '.'}${hint ? ` ${hint}` : ''}`,
+      { status: response.status, detail: resolvedDetail },
     );
   }
 

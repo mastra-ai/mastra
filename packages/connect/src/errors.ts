@@ -159,13 +159,8 @@ export async function extractProblemDetail(
  * replacing the provider's status, code, or message. The path scopes each hint
  * to the Graph API family whose personal-vs-work distinction is relevant.
  */
-export function providerErrorHint(options: {
-  status: number;
-  path: string;
-  code?: string;
-  detail?: string;
-}): string | undefined {
-  const { status, path, code, detail } = options;
+export function providerErrorHint(options: { status: number; path: string }): string | undefined {
+  const { status, path } = options;
   const normalizedPath = `/${path.replace(/^\/+/, '')}`;
 
   if ((status === 400 || status === 403) && /^\/v1\.0\/users(?:\/|$)/.test(normalizedPath)) {
@@ -181,23 +176,6 @@ export function providerErrorHint(options: {
       'Microsoft Graph SharePoint operations require a Microsoft work or school account; personal Microsoft ' +
       'accounts do not have SharePoint sites. If this is already a work or school account, verify the site access ' +
       'and granted Sites permissions.'
-    );
-  }
-
-  const isOpaqueWorkbookFailure =
-    code === 'UnknownError' ||
-    code === 'FileOpenUserUnauthorized' ||
-    /(?:personal|consumer|MSA account|not supported)/i.test(detail ?? '');
-  if (
-    (status === 400 || status === 401 || status === 403) &&
-    /\/workbook(?:\/|$)/.test(normalizedPath) &&
-    isOpaqueWorkbookFailure
-  ) {
-    return (
-      "Microsoft Graph's Excel workbook-content operations target workbooks in OneDrive for Business or " +
-      'SharePoint rather than personal OneDrive. Use a Microsoft work or school account for worksheet, range, ' +
-      'table, and chart operations. If this is already a work or school account, verify the workbook permissions ' +
-      'and file format.'
     );
   }
 

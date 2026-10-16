@@ -478,36 +478,6 @@ describe('proxyRequest', () => {
     });
   });
 
-  it('adds conditional account guidance to an opaque Graph workbook failure', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      Response.json(
-        {
-          error: {
-            code: 'UnknownError',
-            innerError: {
-              date: '2026-10-14T18:34:45',
-              'client-request-id': '7068e9ec-14d3-4617-abc4-cf6654e8e125',
-              'request-id': '7068e9ec-14d3-4617-abc4-cf6654e8e125',
-            },
-            message: '',
-          },
-        },
-        { status: 401 },
-      ),
-    );
-    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(
-      proxyRequest(client, 'c_1', {
-        method: 'GET',
-        path: 'v1.0/drives/d1/items/i1/workbook/worksheets',
-      }),
-    ).rejects.toMatchObject({
-      code: 'proxy_error',
-      status: 401,
-      message: expect.stringContaining('Use a Microsoft work or school account'),
-    });
-  });
-
   it('does not append Microsoft account guidance to opaque errors outside the scoped paths', async () => {
     const fetchMock = vi
       .fn()
@@ -518,26 +488,7 @@ describe('proxyRequest', () => {
     ).rejects.toMatchObject({
       code: 'proxy_error',
       status: 401,
-      message: 'Provider request failed (401).',
-    });
-  });
-
-  it('does not mask an explicit workbook authentication failure with account guidance', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        Response.json(
-          { error: { code: 'InvalidAuthenticationToken', message: 'Access token has expired.' } },
-          { status: 401 },
-        ),
-      );
-    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(
-      proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/drives/d1/items/i1/workbook/worksheets' }),
-    ).rejects.toMatchObject({
-      code: 'proxy_error',
-      status: 401,
-      message: 'Provider request failed (401): Access token has expired.',
+      message: 'Provider request failed (401): UnknownError',
     });
   });
 
