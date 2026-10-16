@@ -1,5 +1,5 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
 `session.thread.transferOwnership` now accepts an optional `threadId`, so you can transfer a thread without switching the session to it first. Without `threadId` it still transfers the active thread.
