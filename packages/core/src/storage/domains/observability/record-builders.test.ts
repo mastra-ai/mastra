@@ -34,7 +34,7 @@ describe('record-builders', () => {
       expect(buildUpdateSpanRecord(span()).links).toBeNull();
     });
 
-    it('derives time to first chunk, and leaves it off updates until the first chunk arrived', () => {
+    it('derives time to first chunk, clamps clock skew to zero, and leaves it off updates until the first chunk arrived', () => {
       const streamed = (ms: number): AnyExportedSpan => ({
         ...span(),
         attributes: { completionStartTime: new Date(span().startTime.getTime() + ms) },
@@ -42,6 +42,7 @@ describe('record-builders', () => {
       expect(buildCreateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
       expect(buildUpdateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
       expect(buildCreateSpanRecord(streamed(0)).timeToFirstChunkMs).toBe(0);
+      expect(buildCreateSpanRecord(streamed(-5)).timeToFirstChunkMs).toBe(0);
       expect(buildCreateSpanRecord(span()).timeToFirstChunkMs).toBeNull();
       expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
     });
