@@ -21,11 +21,23 @@ const fields = [
   'entityId',
   'entityName',
   'entityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
   'parentEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
   'rootEntityVersionId',
+  'threadId',
   'runId',
   'sessionId',
   'userId',
+  'requestId',
+  'serviceName',
+  'experimentId',
+  'environment',
+  'executionSource',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -84,6 +96,12 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   const after = afterCursor(plan, values);
   values.push(plan.limit + 1);
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
+  // Older core still accepts model/provider predicates. Keep their source fields available
+  // for that contract; newer core rejects them and only extracts values for the selected page.
+  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
+    ? ''
+    : `CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
+       CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,`;
   // Completed records win; the greatest end time follows existing getSpan semantics.
   // Payload columns are read only after page selection, inside the same snapshot.
   // A completed span ends at or after it starts, so the end-time bound only prunes partitions.
@@ -94,8 +112,7 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   ), current_spans AS MATERIALIZED (
     SELECT DISTINCT ON (${identities})
       ${fields.map(field => `"${field}"`).join(', ')}, "startedAt", "endedAt", "cursorId"::text AS version,
-      CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
-      CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,
+      ${legacyModelFields}
       (EXTRACT(EPOCH FROM ("endedAt" - "startedAt")) * 1000)::float8 AS "durationMs",
       CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
       error IS NOT NULL AS "hasError"
@@ -109,7 +126,7 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   ), candidates AS (
     SELECT *, CASE WHEN "hasError" THEN 'error' ELSE NULL END AS error FROM current_spans
   )
-  SELECT ${[...identityFields, 'parentSpanId', 'name', 'spanType', 'entityType', 'entityId', 'entityName', 'model', 'provider', 'startedAt', 'endedAt', 'durationMs', 'status', 'version'].map(field => `s."${field}"`).join(', ')}
+  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'version'].map(field => `s."${field}"`).join(', ')}
   FROM candidates s WHERE s."startedAt" >= $1 AND s."startedAt" < $2 AND (${predicate.sql}) AND ${after}
   ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityOrder}
   LIMIT $${values.length}`;
@@ -143,7 +160,7 @@ function toSpanQueryPayload(row: Record<string, unknown>): SpanQueryPayload {
   };
 }
 
-type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt'> & {
+type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | 'provider'> & {
   startedAt: Date;
   endedAt: Date;
   version: string;
@@ -163,7 +180,7 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
         endedAt: endedAt.toISOString(),
       }));
       const page = rows.slice(0, plan.limit);
-      if (!page.length) return coreStorage.buildSpanQueryResponse(plan, selected, [], []);
+      if (!page.length) return buildSpanQueryResponse(plan, [], []);
       const remaining = async () => {
         const ms = Math.floor(deadline - performance.now());
         if (ms <= 0) throw new coreStorage.TraceQueryExecutionError();
@@ -180,28 +197,42 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
         .join(' OR ');
       // Stored previews, plus the payload only where its preview is NULL (a row written before the
       // preview columns existed), so new rows never read their payloads here.
-      const payloadRows = await tx.any<Record<string, unknown>>(
+      const payloadRows = await tx.any<
+        SpanQueryIdentity & Record<string, unknown> & { model: string | null; provider: string | null }
+      >(
         `SELECT ${identities},
+      CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
+      CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,
       ${PREVIEW_PAYLOADS.map(([preview, payload]) => `"${preview}", CASE WHEN ${missingPreviewSql(`"${preview}"`)} THEN "${payload}" END AS "${payload}"`).join(',\n      ')}
       FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} WHERE ${payloadWhere}`,
         payloadValues,
       );
       const payloads = payloadRows.map(toSpanQueryPayload);
-      await remaining();
-      const metricValues: unknown[] = [];
-      const metricWhere = selectedKeys(page, metricValues);
-      const metrics = await tx.any<SpanQueryCostMetric>(
-        `SELECT ${identities}, name, "estimatedCost", "costUnit",
-      "costMetadata" ->> 'allocation' AS allocation, COALESCE("costMetadata" ? 'error', false) AS "costError"
-      FROM (SELECT DISTINCT ON (${identities}, "metricId") ${identities}, name, "estimatedCost", "costUnit", "costMetadata" FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
-        WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
-        ORDER BY ${identities}, "metricId", "cursorId" DESC) m
-      LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
-        metricValues,
-      );
-      if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS)
-        throw new coreStorage.TraceQueryResourceLimitError();
-      return buildSpanQueryResponse(plan, selected, payloads, metrics);
+      const metadata = new Map(payloadRows.map(row => [coreStorage.spanQueryIdentityKey(row), row]));
+      const hydrated = selected.map(row => ({
+        ...row,
+        model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
+        provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
+      }));
+      // Preserve costs only for older core contracts that still return them.
+      let metrics: SpanQueryCostMetric[] = [];
+      if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY) {
+        await remaining();
+        const metricValues: unknown[] = [];
+        const metricWhere = selectedKeys(page, metricValues);
+        metrics = await tx.any<SpanQueryCostMetric>(
+          `SELECT ${identities}, name, "estimatedCost", "costUnit",
+          "costMetadata" ->> 'allocation' AS allocation, COALESCE("costMetadata" ? 'error', false) AS "costError"
+          FROM (SELECT DISTINCT ON (${identities}, "metricId") ${identities}, name, "estimatedCost", "costUnit", "costMetadata" FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
+            WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
+            ORDER BY ${identities}, "metricId", "cursorId" DESC) m
+          LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
+          metricValues,
+        );
+        if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS)
+          throw new coreStorage.TraceQueryResourceLimitError();
+      }
+      return buildSpanQueryResponse(plan, hydrated, payloads, metrics);
     },
     { repeatableRead: true },
   );

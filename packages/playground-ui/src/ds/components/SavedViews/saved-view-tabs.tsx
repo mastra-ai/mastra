@@ -111,7 +111,6 @@ export function SavedViewTabs<TSettings>({
       ) : (
         <Button
           type="button"
-          variant="ghost"
           size="icon-sm"
           tooltip="New view"
           disabled={draft !== undefined}

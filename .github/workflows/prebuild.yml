@@ -145,6 +145,10 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # The Changesets release PR gates every release, so it runs the full suite and
+          # lets regular PRs stay on affected-test selection. A fork can pick any branch
+          # name, so the head must also live in this repository.
+          RELEASE_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/') }}
         run: |
           git diff --name-only \
             "$BASE_SHA...$HEAD_SHA" \
@@ -176,7 +180,8 @@ jobs:
           const total = data.testFiles || 1;
           const ratio = count / total;
           const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
-          const runFull = hasChangedSource && ratio > 0.5;
+          const releasePr = process.env.RELEASE_PR === 'true';
+          const runFull = releasePr || (hasChangedSource && ratio > 0.5);
 
           const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
           const outputList = (name, files) => {
@@ -217,17 +222,17 @@ jobs:
             workspacePackages: discoverWorkspacePackages(),
           });
 
-          const storesChanged = affectedStoreTests || changed(file =>
+          const storesChanged = releasePr || affectedStoreTests || changed(file =>
             file.startsWith('stores/') ||
             file === '.github/workflows/test-combined-stores.yml' ||
             file === '.github/workflows/prebuild.yml'
           );
           const workspacesChanged = workspaceSelection.packages.length > 0;
-          const memoryChanged = affectedMemoryTests || changed(file =>
+          const memoryChanged = releasePr || affectedMemoryTests || changed(file =>
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
           const { studioE2eChanged } = require('./.github/scripts/studio-e2e-routing.cjs');
-          const e2eChanged = studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
+          const e2eChanged = releasePr || studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
             (file.startsWith('e2e-tests/') &&
               !file.startsWith('e2e-tests/experiment-worker/') &&
               !file.startsWith('e2e-tests/_local-registry-setup/')) ||
@@ -242,7 +247,7 @@ jobs:
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );
-          const mastracodeE2eChanged = changed(file =>
+          const mastracodeE2eChanged = releasePr || changed(file =>
             file.startsWith('mastracode/') ||
             file.startsWith('packages/core/') ||
             file === 'pnpm-lock.yaml' ||
@@ -269,7 +274,7 @@ jobs:
                 { encoding: 'utf8' },
               )
             : '';
-          const experimentWorkerChanged = experimentWorkerE2eChanged(nonMarkdownChangedFiles, experimentEntryDiff);
+          const experimentWorkerChanged = releasePr || experimentWorkerE2eChanged(nonMarkdownChangedFiles, experimentEntryDiff);
 
           output(`memory_changed=${memoryChanged}\n`);
           output(`e2e_changed=${e2eChanged}\n`);
@@ -286,7 +291,7 @@ jobs:
           );
 
           if (runFull) {
-            console.error('Above 50% threshold — running full suite.');
+            console.error(releasePr ? 'Changesets release PR — running full suite.' : 'Above 50% threshold — running full suite.');
             output('run_full=true\n');
             output('test_files=\n');
             output('unit_test_files=\n');

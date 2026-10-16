@@ -109,7 +109,9 @@ function unresolvedTenantError(sourceContext: RequestContext, inherited: boolean
   return error;
 }
 
-export function withCredentialTenantPreparation<T>(resolve: (ctx: { requestContext: RequestContext }) => T) {
+export function withCredentialTenantPreparation<T>(
+  resolve: (ctx: { requestContext: RequestContext }) => T | Promise<T>,
+) {
   return async (ctx: { requestContext: RequestContext }): Promise<T> => {
     await prepareCredentialTenant(ctx.requestContext);
     return resolve(ctx);

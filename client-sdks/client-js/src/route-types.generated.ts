@@ -242,12 +242,12 @@ type InputShared_Auxiliary_766 = {
   children?: InputShared_Auxiliary_766[] | undefined;
 };
 
-type Shared_Auxiliary_767 = {
+type Shared_Auxiliary_764 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_767[] | undefined;
+  children?: Shared_Auxiliary_764[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -769,6 +769,8 @@ type InputShared_Type_19 = {
   tags?: string[] | undefined;
   /** Filter by one or more trace IDs */
   traceIds?: string[] | undefined;
+  /** Filter by one or more experiment IDs */
+  experimentIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -3482,6 +3484,8 @@ type Shared_Type_61 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3597,6 +3601,8 @@ type Shared_Type_63 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -4234,7 +4240,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_767[] | undefined;
+  files?: Shared_Auxiliary_764[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -10747,26 +10753,29 @@ export type PostObservabilitySpansQuery_Response = {
     entityType: string | null;
     entityId: string | null;
     entityName: string | null;
+    entityVersionId: string | null;
+    parentEntityType: string | null;
+    parentEntityId: string | null;
+    parentEntityName: string | null;
+    parentEntityVersionId: string | null;
+    rootEntityType: string | null;
+    rootEntityId: string | null;
+    rootEntityName: string | null;
+    rootEntityVersionId: string | null;
+    threadId: string | null;
+    runId: string | null;
+    sessionId: string | null;
+    userId: string | null;
+    requestId: string | null;
+    serviceName: string | null;
+    experimentId: string | null;
+    environment: string | null;
+    executionSource: string | null;
     model: string | null;
     provider: string | null;
     inputPreview: string | null;
-    inputTruncated: boolean;
     outputPreview: string | null;
-    outputTruncated: boolean;
     errorPreview: string | null;
-    errorTruncated: boolean;
-    cost:
-      | {
-          state: 'available';
-          amount: number;
-          currency: string;
-        }
-      | {
-          state: 'missing';
-        }
-      | {
-          state: 'unavailable';
-        };
   }[];
   page: {
     next: string | null;
@@ -10944,6 +10953,7 @@ export type GetObservabilityMetrics_QueryParams = {
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | string;
   traceIds?: ((string[] | undefined) | undefined) | string;
+  experimentIds?: ((string[] | undefined) | undefined) | string;
   name?: ((string[] | undefined) | undefined) | string;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
@@ -19578,6 +19588,8 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
+  /** Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets. */
+  datasetIds?: string[] | undefined;
   orderBy?:
     | (
         | {
@@ -23628,6 +23640,41 @@ export interface PostAgentControllerControllerIdSessionsResourceIdThread_RouteCo
 }
 
 // ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams =
+  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams =
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Response = {
+  ok: boolean;
+  ownerId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams;
+  body: never;
+  request: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agent-controller/:controllerId/sessions/:resourceId/notifications
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams =
@@ -24574,6 +24621,7 @@ export interface RouteTypes {
   'POST /agent-controller/:controllerId/sessions/:resourceId/mode': PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/model': PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/thread': PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner': PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/notifications': PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract;
   'GET /agent-controller/:controllerId/workspace': GetAgentControllerControllerIdWorkspace_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId/om': GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract;
@@ -24737,6 +24785,9 @@ export interface Client {
   };
   '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages': {
     GET: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract;
   };
   '/agent-controller/:controllerId/sessions/:resourceId/threads/clone': {
     POST: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract;

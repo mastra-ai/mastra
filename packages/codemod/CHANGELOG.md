@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 1.1.7-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.1.6
 
 ### Patch Changes

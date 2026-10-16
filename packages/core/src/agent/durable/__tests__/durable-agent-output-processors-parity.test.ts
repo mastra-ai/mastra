@@ -11,13 +11,8 @@
  *
  * `throws` (fail CLOSED per #25826 / COR-1315): a processor that throws on every text delta and in
  * `processOutputResult` never lets the unprocessed text reach the stream and surfaces the failure on
- * every engine, so the case's own checks are asserted against each engine directly
- * (`runT45ThrowsDirect`). The helper cannot drive it: its built-in declaration for the `error` chunk
- * (COR-1390 — plain forwards the live `Error` where durable and evented forward the serialised error
- * alone) does not reproduce for a failure raised by an output processor, because neither engine adds
- * the `type` key the declaration names, and `checkEngine` reports a stale declaration before any
- * scenario-level declaration is considered (COR-1429 covers letting a scenario run past a built-in
- * difference that does not apply). Memory diverges too (COR-1414): plain persists no assistant message
+ * every engine. It now runs through the parity helper because COR-1429 lets non-applicable built-in
+ * differences be skipped. Memory still diverges (COR-1414): plain persists no assistant message
  * where durable and evented persist the tool-invocation part plus an error part, pinned per engine so
  * the assertion goes stale when the fix lands.
  *
@@ -29,19 +24,12 @@
  * `text`/`fullOutput.text` difference is declared with COR-1414 rather than ignored.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { OutputProcessor } from '../../../processors';
-import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -53,9 +41,8 @@ import type {
 import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 type RecordedMode = 'mutate' | 'tripwire' | 'data';
-type Mode = RecordedMode | 'tool-result' | 'retry';
-/** `throws` is driven directly (see below), so it is not one of the helper-driven variants. */
-type ProbeMode = Mode | 'throws';
+type Mode = RecordedMode | 'tool-result' | 'retry' | 'throws';
+type ProbeMode = Mode;
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const THREAD = 't45-thread';
@@ -125,19 +112,6 @@ const THROWS_CHUNK_TYPES = [
   'finish',
 ];
 
-const THROWS_CONTRACT: Record<string, unknown> = {
-  streamedMutated: false,
-  memoryMutated: false,
-  memoryUppercased: false,
-  lastType: 'finish',
-  finishes: 1,
-  errors: 1,
-  tripwire: false,
-  thrown: null,
-  modelCalls: 2,
-  steps: 1,
-};
-
 /**
  * The assistant messages each engine persisted on the `throws` shape (COR-1414). The harness contract
  * hides this: `memoryMutated`/`memoryUppercased` are false everywhere. Plain fails the run before any
@@ -173,6 +147,19 @@ const MUTATE_FINAL_TEXT: EngineDifference = {
       ...turn,
       text: 'FINISHED 1 STEPS',
       fullOutput: { ...turn.fullOutput, text: 'FINISHED 1 STEPS' },
+    })),
+  }),
+};
+
+const THROWS_OUTPUT: EngineDifference = {
+  reason:
+    'COR-1390: wrapped engines reject getFullOutput for an output-processor stream failure while plain returns the failed output.',
+  expect: plain => ({
+    ...plain,
+    turns: plain.turns.map(turn => ({
+      ...turn,
+      error: { name: 'Error', message: `${OUTPUT_ID} threw at processOutputStream` },
+      fullOutput: { keys: [] },
     })),
   }),
 };
@@ -317,182 +304,15 @@ async function runT45(mode: Mode) {
       runId: `t45-run-${mode}`,
       memory: { thread: THREAD, resource: RESOURCE },
     } satisfies EngineTurnOptions,
-    differences: mode === 'mutate' ? { durable: MUTATE_FINAL_TEXT, evented: MUTATE_FINAL_TEXT } : undefined,
+    differences:
+      mode === 'mutate'
+        ? { durable: MUTATE_FINAL_TEXT, evented: MUTATE_FINAL_TEXT }
+        : mode === 'throws'
+          ? { durable: THROWS_OUTPUT, evented: THROWS_OUTPUT }
+          : undefined,
   });
 
   return { results, memories, handleLogs, stepCommits };
-}
-
-interface ThrowCaseState {
-  /** Chunk types the public stream yielded, in order. */
-  chunkTypes: string[];
-  /** The failure chunk's payload, when the stream carried one. */
-  errorPayload: unknown;
-  /** Text the stream streamed — the harness's `text`. */
-  streamedText: string;
-  /** `finish` chunks the stream yielded — the harness's `finishes`. */
-  finishes: number;
-  /** Failure chunks (`error`/`abort`/`tripwire`) — the harness's `errors`. */
-  errors: number;
-  /** Whether the stream carried a `tripwire` chunk. */
-  tripwire: boolean;
-  /** Set when the run rejected — the harness's `thrown`. */
-  thrown?: string;
-  /** Model calls the run made. */
-  requests: number;
-  /** `step` tool executions that completed. */
-  steps: number;
-  /** The persisted assistant messages, serialised. */
-  assistant: string;
-  /** How many assistant messages were persisted, and each message part's type in order. */
-  assistantShape: { messages: number; partTypes: string[] };
-}
-
-/**
- * Drives one engine through the `throws` shape the way the parity helper does per engine (wrapper,
- * host, one streamed turn). A direct check is required because the helper's own built-in declaration
- * for the `error` chunk (COR-1390, plain forwards the live `Error` under `type: 'error'` where the
- * wrapped engines forward the serialised error alone) does not reproduce for a failure raised by an
- * output processor — neither engine adds that `type` key here — and `checkEngine` reports a stale
- * declaration before any scenario-level declaration is considered (COR-1429).
- */
-async function runT45ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
-  const requests: CapturedRequest[] = [];
-  const model = new MockLanguageModelV2({
-    doStream: async (options: unknown) => {
-      const request = options as unknown as CapturedRequest;
-      requests.push(request);
-      const done = completedSteps(request);
-      return {
-        stream: convertArrayToReadableStream(
-          (done >= STEPS
-            ? textOnlyTape(`finished ${done} steps`)
-            : toolCallTape('step', { n: done + 1 }, `t45-step-${done + 1}`)) as never[],
-        ),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      };
-    },
-  });
-  const state: ThrowCaseState = {
-    chunkTypes: [],
-    errorPayload: undefined,
-    streamedText: '',
-    finishes: 0,
-    errors: 0,
-    tripwire: false,
-    requests: 0,
-    steps: 0,
-    assistant: '',
-    assistantShape: { messages: 0, partTypes: [] },
-  };
-  const memory = new MockMemory();
-  const agent = new Agent({
-    id: 't45-agent',
-    name: 'T45 Agent',
-    instructions: 'Use the step tool until you have finished.',
-    model: model as LanguageModelV2,
-    tools: {
-      step: createTool({
-        id: 'step',
-        description: 'Record one completed step.',
-        inputSchema: z.object({ n: z.number() }),
-        execute: async ({ n }) => {
-          state.steps += 1;
-          return { done: n };
-        },
-      }),
-    },
-    memory,
-    outputProcessors: [createOutputProbe(OUTPUT_ID, 'throws', { log: [] })],
-  });
-  const pubsub = new EventEmitterPubSub();
-  const runner =
-    engine === 'plain'
-      ? agent
-      : engine === 'durable'
-        ? createDurableAgent({ agent, pubsub })
-        : createEventedAgent({ agent });
-  const host = new Mastra({
-    agents: { 't45-agent': runner } as never,
-    storage: new InMemoryStore(),
-    logger: false,
-  });
-
-  const options = {
-    maxSteps: MAX_STEPS,
-    runId: `t45-run-throws-${engine}`,
-    memory: { thread: THREAD, resource: RESOURCE },
-  };
-
-  let cleanup: (() => Promise<void>) | undefined;
-  let output: { fullStream: AsyncIterable<{ type: string; payload?: unknown }> } | undefined;
-  try {
-    if (engine === 'plain') {
-      output = (await agent.stream('go', options)) as never;
-    } else {
-      const result = await (
-        runner as unknown as {
-          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
-        }
-      ).stream('go', options);
-      output = result.output;
-      cleanup = result.cleanup;
-    }
-  } catch (error) {
-    state.thrown = String((error as Error)?.message ?? error).slice(0, 200);
-  }
-  if (output) {
-    try {
-      for await (const chunk of output.fullStream) {
-        state.chunkTypes.push(chunk.type);
-        if (chunk.type === 'text-delta') {
-          state.streamedText += String((chunk.payload as { text?: string } | undefined)?.text ?? '');
-        }
-        if (chunk.type === 'finish') state.finishes += 1;
-        if (['error', 'abort', 'tripwire'].includes(chunk.type)) {
-          state.errors += 1;
-          state.errorPayload = chunk.payload;
-        }
-        if (chunk.type === 'tripwire') state.tripwire = true;
-      }
-    } catch (error) {
-      state.thrown = state.thrown ?? String((error as Error)?.message ?? error).slice(0, 200);
-    }
-  }
-  state.requests = requests.length;
-  // Teardown runs even if the recall throws, so this run's host cannot outlive the test.
-  try {
-    const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
-    const assistantMessages = messages.filter(message => message.role === 'assistant');
-    state.assistant = JSON.stringify(assistantMessages);
-    state.assistantShape = {
-      messages: assistantMessages.length,
-      partTypes: assistantMessages.flatMap(message => (message.content?.parts ?? []).map(part => part.type)),
-    };
-  } finally {
-    try {
-      if (cleanup) await cleanup();
-    } finally {
-      await host.shutdown();
-    }
-  }
-  return state;
-}
-
-/** The harness's `done()` contract fields, read from a direct run's state. */
-function throwsContract(state: ThrowCaseState): Record<string, unknown> {
-  return {
-    streamedMutated: state.streamedText.includes('FINISHED'),
-    memoryMutated: state.assistant.includes(`[out:${OUTPUT_ID}]`),
-    memoryUppercased: state.assistant.includes('FINISHED 1 STEPS'),
-    lastType: state.chunkTypes.at(-1) ?? null,
-    finishes: state.finishes,
-    errors: state.errors,
-    tripwire: state.tripwire,
-    thrown: state.thrown ?? null,
-    modelCalls: state.requests,
-    steps: state.steps,
-  };
 }
 
 describe('T45 output processors (plain, durable, evented)', () => {
@@ -709,33 +529,34 @@ describe('T45 output processors (plain, durable, evented)', () => {
   });
 
   it('fails closed when a text delta throws', async () => {
-    const states = new Map<ParityEngine, ThrowCaseState>();
-    for (const engine of ENGINES) states.set(engine, await runT45ThrowsDirect(engine));
+    const { results, memories, stepCommits } = await runT45('throws');
 
     for (const engine of ENGINES) {
-      const state = states.get(engine)!;
+      const observation = results[engine]!;
+      const turn = observation.turns[0]!;
+      const errorIndex = turn.chunkTypes.indexOf('error');
+      const errorPayload = turn.chunkPayloads[errorIndex];
 
-      // harness: `fails closed: unprocessed text never streamed (#25826)`.
-      expect(state.streamedText, `${engine}: streamed text`).not.toContain(FINAL_TEXT);
-      // harness: `fails closed: the processor failure surfaced (error chunk or stream error)`.
-      expect(state.errors > 0 || state.thrown !== undefined, `${engine}: failure surfaced`).toBe(true);
-
-      // Every engine reaches the same chunk sequence and the same contract. The failure chunk's
-      // payload diverges: plain holds the live `Error` while durable and evented hold a serialised
-      // `{ name, message }` object, so only the shared content is asserted.
-      expect(state.chunkTypes, `${engine}: chunk types`).toEqual(THROWS_CHUNK_TYPES);
-      expect(Object.keys((state.errorPayload ?? {}) as object), `${engine}: failure chunk payload keys`).toEqual([
-        'error',
-      ]);
-      const failure = (state.errorPayload as { error?: { name?: string; message?: string } }).error;
+      expect(turn.streamedText, `${engine}: streamed text`).not.toContain(FINAL_TEXT);
+      expect(errorChunks(turn) > 0 || turn.error !== undefined, `${engine}: failure surfaced`).toBe(true);
+      expect(turn.chunkTypes, `${engine}: chunk types`).toEqual(THROWS_CHUNK_TYPES);
+      expect(Object.keys((errorPayload ?? {}) as object), `${engine}: failure chunk payload keys`).toEqual(['error']);
+      const failure = (errorPayload as { error?: { name?: string; message?: string } }).error;
       expect(failure?.name, `${engine}: failure name`).toBe('Error');
       expect(failure?.message, `${engine}: failure message`).toBe(`${OUTPUT_ID} threw at processOutputStream`);
-      expect(state.thrown, `${engine}: run rejection`).toBeUndefined();
-      expect(throwsContract(state), `${engine} contract`).toEqual(THROWS_CONTRACT);
-      // COR-1414: memory diverges — plain persists no assistant message, durable and evented persist
-      // the tool-invocation part plus an error part. Pinned per engine so this goes red when the fix
-      // lands.
-      expect(state.assistantShape, `${engine}: persisted assistant messages`).toEqual(THROWS_MEMORY[engine]);
+      expect(turn.error, `${engine}: run rejection`).toEqual(
+        engine === 'plain' ? undefined : { name: 'Error', message: `${OUTPUT_ID} threw at processOutputStream` },
+      );
+      expect(observation.requests, `${engine}: model calls`).toHaveLength(2);
+      expect(stepCommits.get(engine), `${engine}: completed steps`).toBe(1);
+
+      const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+      const assistant = messages.filter(message => message.role === 'assistant');
+      const assistantShape = {
+        messages: assistant.length,
+        partTypes: assistant.flatMap(message => (message.content?.parts ?? []).map(part => part.type)),
+      };
+      expect(assistantShape, `${engine}: persisted assistant messages`).toEqual(THROWS_MEMORY[engine]);
     }
   });
 });

@@ -379,6 +379,7 @@ describe('bundled Factory skill assets', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     await Promise.all(
@@ -3163,6 +3164,7 @@ describe('FactorySkillSource layering', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);

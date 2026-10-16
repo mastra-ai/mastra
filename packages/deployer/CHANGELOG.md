@@ -1,5 +1,41 @@
 # @mastra/deployer
 
+## 1.79.0-alpha.2
+
+### Patch Changes
+
+- Removed the `find-workspaces` and `gray-matter` dependencies. Monorepo workspace discovery now uses `tinyglobby` and markdown frontmatter is parsed by a helper shared with `@mastra/core`. This removes the vulnerable `braces` (GHSA-vfj7-8cjw-p6xm) and `sprintf-js` (GHSA-hp3w-g68c-fv3c) packages, neither of which has a patched release, from the production dependency tree of `@mastra/deployer`. `npm audit` no longer reports them for this package. ([#27198](https://github.com/mastra-ai/mastra/pull/27198))
+
+- Fixed `mastra dev` failing when a `server.apiRoutes` handler or `bundler`/`deployer` option imports a workspace package that ships raw TypeScript. These packages are now inlined into the extracted config instead of being left as imports that Node cannot load. Their own dependencies still resolve from the workspace package, so dependencies installed only for that package (for example with pnpm) keep working. ([#27303](https://github.com/mastra-ai/mastra/pull/27303))
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37)]:
+  - @mastra/core@1.79.0-alpha.2
+  - @mastra/server@1.79.0-alpha.2
+
+## 1.79.0-alpha.1
+
+### Patch Changes
+
+- Fixed generated servers exiting immediately instead of shutting down gracefully on Ctrl-C under `mastra dev`, `mastra start`, or another tool that forwards the signal. The server receives Ctrl-C twice in a few milliseconds, once from the terminal and once from the parent, and treated the second as a request to force-quit. A second signal within 250ms of the first is now ignored, so in-flight requests drain and Mastra shuts down cleanly. Pressing Ctrl-C again after that still exits immediately. ([#26986](https://github.com/mastra-ai/mastra/pull/26986))
+
+- Servers built with `mastra build` now start model usage telemetry before serving requests, so shutdown reports include every model call the server handled. ([#26986](https://github.com/mastra-ai/mastra/pull/26986))
+
+- Updated dependencies [[`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e)]:
+  - @mastra/core@1.79.0-alpha.1
+  - @mastra/server@1.79.0-alpha.1
+
+## 1.78.1-alpha.0
+
+### Patch Changes
+
+- Fixed `mastra build` and `mastra dev` failing in monorepos where multiple workspace packages share code. ([#27204](https://github.com/mastra-ai/mastra/pull/27204))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`f885386`](https://github.com/mastra-ai/mastra/commit/f885386b79be0e4d784067b0e26608971e0cc788), [`f6a9762`](https://github.com/mastra-ai/mastra/commit/f6a9762b12ae9dad6a154f73ed3099a2ee472d0c), [`370f159`](https://github.com/mastra-ai/mastra/commit/370f159e96f1e630cd51d06a9e3a7a0a6659c465), [`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/core@1.78.1-alpha.0
+  - @mastra/server@1.78.1-alpha.0
+
 ## 1.78.0
 
 ### Patch Changes

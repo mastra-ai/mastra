@@ -33,6 +33,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     write: vi.fn(),
     end: vi.fn(),
     destroy: vi.fn(),
+    resume: vi.fn(),
     writableEnded: false,
   };
 
@@ -1401,7 +1402,7 @@ describe('DockerSandbox', () => {
       const pgidFile = spawnCmd[4];
 
       // Capture the kill exec call
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       const killStart = vi.fn().mockResolvedValue(killStream);
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
@@ -1416,6 +1417,9 @@ describe('DockerSandbox', () => {
       const killCall = mockContainer.exec.mock.calls[1]?.[0];
       expect(killCall.Cmd[0]).toBe('sh');
       expect(killCall.Cmd[1]).toBe('-c');
+      // Podman rejects execs with no attached stream, so the helper attaches and drains output.
+      expect(killCall).toMatchObject({ AttachStdout: true, AttachStderr: true });
+      expect(killStream.resume).toHaveBeenCalledOnce();
       const script = killCall.Cmd[2] as string;
       // The pgid file path is passed as a positional arg ($1), not interpolated,
       // so the script text is a static constant and the path travels in Cmd[4].
@@ -1440,7 +1444,7 @@ describe('DockerSandbox', () => {
       const handle = await sandbox.processes!.spawn('sleep 100');
 
       // The kill helper exec runs but exits non-zero (unrecorded/empty PGID).
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
         start: vi.fn().mockResolvedValue(killStream),
@@ -1476,7 +1480,7 @@ describe('DockerSandbox', () => {
 
       const handle = await sandbox.processes!.spawn('sleep 100');
 
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
         start: vi.fn().mockResolvedValue(killStream),
@@ -1505,7 +1509,7 @@ describe('DockerSandbox', () => {
 
       const handle = await sandbox.processes!.spawn('sh -c "printf ready; exit 0"');
 
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
         start: vi.fn().mockResolvedValue(killStream),
@@ -1585,7 +1589,7 @@ describe('DockerSandbox', () => {
       const killHelperGate = new Promise<void>(resolve => {
         releaseKillHelper = resolve;
       });
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockImplementationOnce(async () => {
         await killHelperGate;
         return {
@@ -1635,7 +1639,7 @@ describe('DockerSandbox', () => {
         await firstKillGate;
         return {
           id: 'kill-exec-1',
-          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
           inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
         };
       });
@@ -1643,7 +1647,7 @@ describe('DockerSandbox', () => {
       // confirmation, it would clear `_terminationPromise` straight away.
       mockContainer.exec.mockImplementationOnce(async () => ({
         id: 'kill-exec-2',
-        start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+        start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
         inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
       }));
 
@@ -1768,7 +1772,7 @@ describe('DockerSandbox', () => {
         const killHelperGate = new Promise<void>(resolve => {
           releaseKillHelper = resolve;
         });
-        const killStream = { destroy: vi.fn() };
+        const killStream = { destroy: vi.fn(), resume: vi.fn() };
         mockContainer.exec.mockImplementationOnce(async () => {
           await killHelperGate;
           return {
@@ -1821,7 +1825,7 @@ describe('DockerSandbox', () => {
         const killHelperGate = new Promise<void>(resolve => {
           releaseKillHelper = resolve;
         });
-        const killStream = { destroy: vi.fn() };
+        const killStream = { destroy: vi.fn(), resume: vi.fn() };
         mockContainer.exec.mockImplementationOnce(async () => {
           await killHelperGate;
           return {
@@ -1988,7 +1992,7 @@ describe('DockerSandbox', () => {
           await killHelperGate;
           return {
             id: 'kill-exec',
-            start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+            start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
             inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
           };
         });
@@ -2041,7 +2045,7 @@ describe('DockerSandbox', () => {
         // The kill helper confirms normally.
         mockContainer.exec.mockImplementationOnce(async () => ({
           id: 'kill-exec',
-          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
           inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
         }));
 
@@ -2079,7 +2083,7 @@ describe('DockerSandbox', () => {
       const killHelperGate = new Promise<void>(resolve => {
         releaseKillHelper = resolve;
       });
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockImplementationOnce(async () => {
         await killHelperGate;
         return {

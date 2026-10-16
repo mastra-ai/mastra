@@ -1,5 +1,149 @@
 # @mastra/core
 
+## 1.79.0-alpha.2
+
+### Minor Changes
+
+- `session.thread.transferOwnership` now accepts an optional `threadId`, so you can transfer a thread without switching the session to it first. Without `threadId` it still transfers the active thread. ([#27043](https://github.com/mastra-ai/mastra/pull/27043))
+
+  ```ts
+  await session.thread.transferOwnership({ toOwnerId: 'user-456', threadId: 'thread-123' });
+  ```
+
+- Span records now carry `timeToFirstChunkMs`, the milliseconds from span start to the first streamed chunk. The storage exporters fill it in, so storage adapters save the value without computing it. ([#27140](https://github.com/mastra-ai/mastra/pull/27140))
+
+### Patch Changes
+
+- Fixed `Classifier.decide()` crashing with `state.map is not a function` on decision providers built for `@ai-sdk/provider` 4.0.25 and newer, such as `@ai-sdk/typesafe-ai` 3.0.16+. String and JSON state are now converted to `text` and `json` parts before the provider is called, matching the AI SDK. Arrays are passed through only when every element is already a state part; other JSON arrays are wrapped in a `json` part. ([#27298](https://github.com/mastra-ai/mastra/pull/27298))
+
+- You can now resume durable agents (`createDurableAgent`, `createInngestAgent`) with the same `resumeGenerate(resumeData, { runId })` call you use with `Agent`. ([#27299](https://github.com/mastra-ai/mastra/pull/27299))
+
+  ```ts
+  // Before (durable-only order, still supported but deprecated)
+  await durableAgent.resumeGenerate(runId, { approved: true });
+
+  // After (same as Agent)
+  await durableAgent.resumeGenerate({ approved: true }, { runId });
+  ```
+
+  One deprecated call shape now throws instead of guessing: a string run ID followed by resume data that itself contains a string `runId`, with no third argument, for example `resumeGenerate('run-A', { runId: 'x', approved: true })`. To keep using the deprecated order, pass an explicit options argument: `resumeGenerate('run-A', { runId: 'x', approved: true }, {})`.
+
+- Fixed `LocalSandbox` commands that could hang past their timeout. When a command times out, it is asked to stop and then force-killed two seconds later if it is still running, including child processes that keep its output open. Previously a command that ignored the stop request kept the tool call waiting forever. ([#26879](https://github.com/mastra-ai/mastra/pull/26879))
+
+- Fixed trajectory scorers in `runEvals` and dataset experiments getting a flat list of tool calls instead of the full trace when storage is configured. `runEvals` also no longer waits up to 6 seconds per item before scoring. ([#27271](https://github.com/mastra-ai/mastra/pull/27271))
+
+- Fixed the 30-second default timeout for `LocalSandbox` foreground commands. A command run without a timeout could previously wait forever. Configured defaults and per-command timeouts are honored, including `0` to disable the timeout, and cloned sandboxes keep the configured default. Background processes keep their existing lifetime. ([#26878](https://github.com/mastra-ai/mastra/pull/26878))
+
+- Fixed authenticated agent controller sessions failing with `AGENT_MEMORY_THREAD_RESOURCE_MISMATCH` when auth uses `mapUserToResourceId`. The controller now sets the reserved memory resource and thread keys to the session's own resource and thread. Other auth values in the request context are kept. ([#27304](https://github.com/mastra-ai/mastra/pull/27304))
+
+- Removed the `gray-matter` dependency. SKILL.md frontmatter is now parsed with the `yaml` package directly, which drops the vulnerable `sprintf-js` package (GHSA-hp3w-g68c-fv3c, no patched release available) from the production dependency tree. YAML frontmatter that worked before keeps working; JavaScript frontmatter (`---js`) is still rejected. ([#27198](https://github.com/mastra-ai/mastra/pull/27198))
+
+## 1.79.0-alpha.1
+
+### Minor Changes
+
+- Fixed `DurableAgent.observe(runId)` when attaching to a run from another process. ([#26906](https://github.com/mastra-ai/mastra/pull/26906))
+
+  - Restored the agent's configured output processors, request context, and `returnScorerData` setting, including when the observing process also runs durable steps.
+  - Preserved live call-time processors, request context, and scorer data when another wrapper observes the run within the same Mastra instance.
+  - **Behavior change:** Cross-process `DurableAgent.observe(runId)` now throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH` when the persisted run belongs to an agent with a different ID, matching `resume()` and `recover()`. Use the same agent ID in the observing process as in the process that started the run.
+  - Made durable stream `onChunk` callbacks run serially and in order.
+  - Made `onFinish` wait for pending `onChunk` callbacks to finish, without waiting for transport acknowledgements.
+
+  **Before:** An observing process could use a different agent ID to attach to a run started by `researcher`:
+
+  ```ts
+  const observer = createDurableAgent({
+    agent: new Agent({ ...agentConfig, id: 'researcher-observer' }),
+    pubsub,
+  });
+  // After registering observer with Mastra and the shared storage:
+  await observer.observe(runId);
+  ```
+
+  **After:** Use the starting agent's ID in the observing process. The previous configuration now throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH`:
+
+  ```ts
+  const observer = createDurableAgent({
+    agent: new Agent({ ...agentConfig, id: 'researcher' }),
+    pubsub,
+  });
+  // After registering observer with Mastra and the shared storage:
+  await observer.observe(runId);
+  ```
+
+- Added batch experiment ID filtering to observability metric queries, so you can get token usage and cost for many experiments in one request. ([#27255](https://github.com/mastra-ai/mastra/pull/27255))
+
+  ```ts
+  const result = await client.getMetricBreakdown({
+    name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+    aggregation: 'sum',
+    groupBy: ['experimentId', 'name'],
+    filters: { experimentIds: ['experiment-1', 'experiment-2'] },
+  });
+  ```
+
+- Added a `datasetIds` filter to dataset listing, so you can fetch specific datasets by ID in one request. All matches come back on one page, up to 100 IDs. ([#27255](https://github.com/mastra-ai/mastra/pull/27255))
+
+  ```ts
+  const { datasets } = await client.listDatasets({ datasetIds: ['dataset-1', 'dataset-2'] });
+  ```
+
+- Added `querySpans()` filters and response fields for span context and parent/root entity information. For example: ([#27272](https://github.com/mastra-ai/mastra/pull/27272))
+
+  ```ts
+  where: { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-123' } }
+  ```
+
+  **Breaking:** `querySpans()` no longer accepts `model` and `provider` filters or returns `cost`, `inputTruncated`, `outputTruncated` and `errorTruncated`. Model/provider values, name matching, duration filtering and previews remain available.
+
+  The new filters require an updated storage adapter.
+
+- Added `completionStartTime` to agent run and model step span attributes, a `getTimeToFirstChunkMs()` helper that derives time to first chunk for any span, and carried the first-chunk clock through durable and evented agent runs so their generation and agent run spans report it too. ([#26998](https://github.com/mastra-ai/mastra/pull/26998))
+
+### Patch Changes
+
+- Classifier evaluation spans now show what the classifier was asked and what it decided. The span input holds the `state` and the questions, and the span output holds the answers, so routing decisions are visible in traces. Set `hideInput` and `hideOutput` in `tracingOptions` to keep them out of exported traces. ([#27243](https://github.com/mastra-ai/mastra/pull/27243))
+
+- Server model usage telemetry now counts tokens as model calls finish and reports them every 15 minutes and on shutdown as a new `mastra_model_token_usage_v2` event. Each `mastra_model_token_usage_v2` event contains only tokens the reporting process used, so redeploys, replicas, and lost home directories can't make it resend earlier usage. The startup `mastra_model_token_usage` event is still sent, unchanged, for compatibility, and can still resend earlier usage in those cases. Set `MASTRA_TELEMETRY_DISABLED=1` to turn off telemetry. ([#26986](https://github.com/mastra-ai/mastra/pull/26986))
+
+- Fixed durable, evented, and Inngest agent streams to reject when `stopWhen` throws, matching plain agents. ([#26921](https://github.com/mastra-ai/mastra/pull/26921))
+
+  Previously, these stream consumers could handle this failure as an `error` chunk. Catch the `fullStream` rejection instead:
+
+  ```ts
+  try {
+    for await (const chunk of output.fullStream) {
+      // Handle streamed chunks.
+    }
+  } catch (error) {
+    // Handle the error thrown by stopWhen.
+  }
+  ```
+
+  Durable transports reconstruct the error from its serialized name and message. The original stack, cause, and subclass identity do not survive a cross-process boundary. Core durable and evented workflows classify this failure with the reserved internal `DURABLE_AGENT_STOP_WHEN_FAILED` identifier. Inngest's serve transport uses the memoized step's `stop-when-` id prefix because its `StepError` serialization does not retain that identifier or its details. Any failure inside that Inngest step is therefore classified as a `stopWhen` failure.
+
+- Fixed resumed agent spans to remain children of the initial agent run across repeated suspensions, matching durable agent tracing. ([#27149](https://github.com/mastra-ai/mastra/pull/27149))
+
+- Fixed channel conversations (Slack, Discord, Telegram and others) never getting an automatic title. New channel threads now start without a title, like any other thread, so `generateTitle` names them from the conversation. ([#27251](https://github.com/mastra-ai/mastra/pull/27251))
+
+  Before, every new channel thread was saved with a generic label such as `slack conversation`, which counted as an existing title and blocked title generation. With `generateTitle` turned off, new channel threads now appear untitled in Studio, which lists them by creation date, instead of showing that label. Existing threads keep their current title.
+
+## 1.78.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d))
+
+- Fixed `untilIdle` continuations losing a completed background task's result when newer messages push it outside the configured history window. ([#27205](https://github.com/mastra-ai/mastra/pull/27205))
+
+- Fixed a Session that follows a thread keeping a tool call marked as pending after the run was resumed on another instance and completed. The follower now drops the answered call, so `suspensions.hasPending()` returns false and aborting no longer emits a spurious `tool_suspension_cancelled` event. ([#27226](https://github.com/mastra-ai/mastra/pull/27226))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/schema-compat@1.3.16-alpha.0
+
 ## 1.78.0
 
 ### Minor Changes
