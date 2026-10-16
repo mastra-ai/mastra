@@ -1,20 +1,25 @@
+import { runThinkingLevel } from '@mastra/code-sdk/thinking';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { MouseEvent } from 'react';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { useFactoryThinkingDefaultQuery, useSetFactoryThinkingDefaultMutation } from '../../../../hooks/use-thinking';
 import {
   useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
 } from '../../../../hooks/useFactoryDefaultModel';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { ModelMenu } from '../../../ui/ModelMenu';
+import { thinkingLevelOptionsForModel } from '../../chat/services/thinkingLevels';
 
-import { ModelCombobox } from './ModelCombobox';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
 function skippedReasonSummary(reasons: Array<{ reason: string }>) {
@@ -23,21 +28,33 @@ function skippedReasonSummary(reasons: Array<{ reason: string }>) {
   return [...counts.entries()].map(([reason, count]) => `${reason.replaceAll('-', ' ')} (${count})`).join(', ');
 }
 
+function thinkingWriteErrorMessage(error: Error) {
+  if ('status' in error && error.status === 403) return 'Only organization admins can change the thinking level';
+  return error.message;
+}
+
 export function FactoryDefaultModelSection({ models }: { models: AvailableModelOption[] }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
   const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId ?? '');
+  const thinkingQuery = useFactoryThinkingDefaultQuery(factoryId);
+  const setThinking = useSetFactoryThinkingDefaultMutation(factoryId);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [confirmModelId, setConfirmModelId] = useState<string>();
   const applyRequested = useRef(false);
 
   if (!factoryId) return null;
 
   const defaultModelId = projectQuery.data?.defaultModelId ?? '';
-  const error = applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error;
+  const reasoningOptions = models.find(model => model.id === defaultModelId)?.reasoningOptions;
+  const thinkingOptions = thinkingLevelOptionsForModel(defaultModelId, reasoningOptions);
+  const modelError = applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error;
+  const errorText = setThinking.error ? thinkingWriteErrorMessage(setThinking.error) : modelError?.message;
   const applyResult = applyToSessions.data;
 
   const saveDefaultModel = (value: string) => {
+    setModelMenuOpen(false);
     if (value === defaultModelId) return;
     applyToSessions.reset();
     setDefaultModel.mutate(value, { onSuccess: () => setConfirmModelId(value) });
@@ -61,7 +78,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   return (
     <>
       <SettingsRow
-        label="Factory default model"
+        label="Model and thinking"
         description={
           <>
             <span>
@@ -69,9 +86,9 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
                 ? "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead."
                 : "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them."}
             </span>
-            {error && (
+            {errorText && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">
-                {error instanceof Error ? error.message : String(error)}
+                {errorText}
               </Txt>
             )}
             <SharedCredentialNotice modelId={defaultModelId || undefined} />
@@ -83,15 +100,33 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
             {setDefaultModel.isPending && (
               <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
             )}
-            <div className="flex min-w-0">
-              <ModelCombobox
+            <ButtonsGroup size="sm" aria-label="Model and thinking">
+              <ModelMenu
                 models={models}
-                value={defaultModelId}
+                selectedModelId={defaultModelId || undefined}
                 placeholder="Select a model"
-                disabled={projectQuery.isPending || setDefaultModel.isPending}
-                onValueChange={saveDefaultModel}
+                ariaLabel="Factory default model"
+                open={modelMenuOpen}
+                onOpenChange={setModelMenuOpen}
+                onSelect={saveDefaultModel}
+                locked={projectQuery.isPending || setDefaultModel.isPending}
               />
-            </div>
+              {thinkingQuery.data === undefined ? (
+                <ThinkingLevelUnavailable
+                  options={thinkingOptions}
+                  label="Thinking"
+                  reason="The thinking level isn't loaded yet."
+                />
+              ) : (
+                <ThinkingLevelPicker
+                  options={thinkingOptions}
+                  value={runThinkingLevel(defaultModelId, thinkingQuery.data, reasoningOptions)}
+                  label="Thinking"
+                  description="Used by every session and work-item run in this Factory until it picks its own level."
+                  onChange={level => setThinking.mutateAsync(level).catch(() => {})}
+                />
+              )}
+            </ButtonsGroup>
           </div>
           {applyResult && (
             <Txt variant="meta">

@@ -6,7 +6,6 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
-import { BaseThinkingSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 
 interface FactoryModelsSettingsProps {
@@ -39,12 +38,7 @@ export function FactoryModelsSettings({ models }: FactoryModelsSettingsProps) {
     >
       <SettingsContainer>
         <FactoryModelScopeSection />
-        {(!providersKnown || anyConnected) && (
-          <>
-            <FactoryDefaultModelSection models={models} />
-            <BaseThinkingSection />
-          </>
-        )}
+        {(!providersKnown || anyConnected) && <FactoryDefaultModelSection models={models} />}
       </SettingsContainer>
     </SettingsSubsection>
   );
