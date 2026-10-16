@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
-import type { RecordLink } from '../../importer-runtime.js';
+import type { ImporterNodeProbeResult, RecordLink } from '../../importer-runtime.js';
 import {
   boundText,
   clearHighWater,
@@ -16,6 +16,7 @@ import {
   readHighWater,
   readResumeCursor,
   readWatermark,
+  reconcileImporterNodes,
   writeHighWater,
   writeResumeCursor,
   writeWatermark,
@@ -27,6 +28,9 @@ import {
 const LINEAR_WATERMARK_KEY = 'linear:documents:watermark';
 const LINEAR_RESUME_CURSOR_KEY = 'linear:documents:resume-cursor';
 const LINEAR_HIGH_WATER_KEY = 'linear:documents:high-water';
+const LINEAR_RECONCILE_CURSOR_KEY = 'linear:documents:reconcile-cursor';
+const LINEAR_DOCUMENT_PREFIX = 'linear:document:';
+const RECONCILE_PROBES_PER_RUN = 50;
 
 // Linear is an issue tracker, but issues are operational work — not knowledge.
 // This importer syncs Linear Documents (project docs, PRDs, initiative docs),
@@ -57,6 +61,49 @@ const documentsResponseSchema = z.object({
 });
 
 type LinearDocument = z.infer<typeof documentSchema>;
+
+const documentProbeResponseSchema = z.object({
+  data: z.object({
+    document: z.object({
+      id: z.string(),
+      archivedAt: z.string().nullish(),
+      trashed: z.boolean().nullish(),
+    }),
+  }),
+});
+
+// The `documents` list omits archived and trashed documents, so removal is
+// detected by an exact-id point query instead.
+const DOCUMENT_PROBE_QUERY = `
+query DocumentRemovalProbe($id: String!) {
+  document(id: $id) { id archivedAt trashed }
+}`;
+
+/**
+ * `removed` only on a positive archivedAt/trashed. Not-found, 403/404 and
+ * unexpected shapes are `uncertain` (keep data); transport and 5xx errors throw
+ * so the reconcile cursor stays on this document.
+ */
+async function probeLinearDocument(ctx: ImporterProviderContext, address: string): Promise<ImporterNodeProbeResult> {
+  const id = address.slice(LINEAR_DOCUMENT_PREFIX.length);
+  if (!id || id.startsWith('slug:')) return 'uncertain';
+  let response: unknown;
+  try {
+    response = await ctx.request({
+      method: 'POST',
+      path: 'graphql',
+      body: { query: DOCUMENT_PROBE_QUERY, variables: { id } },
+    });
+  } catch (error) {
+    const status = (error as { status?: unknown }).status;
+    if (status === 403 || status === 404) return 'uncertain';
+    throw error;
+  }
+  const parsed = documentProbeResponseSchema.safeParse(response);
+  if (!parsed.success || parsed.data.data.document.id !== id) return 'uncertain';
+  const { archivedAt, trashed } = parsed.data.data.document;
+  return archivedAt || trashed === true ? 'removed' : 'present';
+}
 
 /** Linear doc URLs: `https://linear.app/<ws>/document/<slug>-<slugId>`. */
 const DOC_URL_PATTERN = /linear\.app\/[^)\s"]+\/document\/([^)\s"?#]+)/g;
@@ -250,6 +297,18 @@ function createLinearImporter(ctx: ImporterProviderContext) {
         await writeResumeCursor(context.state, LINEAR_RESUME_CURSOR_KEY, nextCursorAfterLastPage);
         if (newestObserved) await writeHighWater(context.state, LINEAR_HIGH_WATER_KEY, newestObserved);
       }
+
+      if (context.signal.aborted) return;
+      await reconcileImporterNodes({
+        importer,
+        state: context.state,
+        cursorKey: LINEAR_RECONCILE_CURSOR_KEY,
+        addressPrefixes: [LINEAR_DOCUMENT_PREFIX],
+        canRemove,
+        probe: address => probeLinearDocument(ctx, address),
+        signal: context.signal,
+        limit: RECONCILE_PROBES_PER_RUN,
+      });
     },
   };
 }
