@@ -1061,6 +1061,132 @@ The returned `MCPEventSubscription` is an async iterable of occurrences (`eventI
 
 The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push subscription, or `MCP_EVENTS_RETRIES_EXHAUSTED` after `retry.maxAttempts` failed attempts in a row. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
 
+### Events in agents and workflows (experimental)
+
+`MCPEventsSignalProvider` delivers MCP server events to agent threads as notifications. Add it to an agent's `signals`, then subscribe threads to events. The agent needs a notifications storage domain, which `InMemoryStore` and the standard storage adapters provide.
+
+:::warning
+SEP-3415 is a draft. This API may change in any release.
+:::
+
+```typescript title="src/mastra/agents/repo-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { MCPClient, MCPEventsSignalProvider } from '@mastra/mcp'
+
+const mcp = new MCPClient({
+  servers: { github: { url: new URL('https://example.com/mcp') } },
+})
+
+export const repoEvents = new MCPEventsSignalProvider({
+  client: mcp,
+  subscribeOptions: { maxAgeMs: 60 * 60 * 1000 },
+})
+
+export const repoAgent = new Agent({
+  id: 'repo-agent',
+  name: 'Repo Agent',
+  instructions: 'Triage repository activity.',
+  model: 'openai/gpt-5.6-sol',
+  signals: [repoEvents],
+})
+
+await repoEvents.subscribeThread(
+  { resourceId: 'user-1', threadId: 'thread-1' },
+  { server: 'github', event: 'repo.push', args: { repo: 'mastra-ai/mastra' } },
+)
+```
+
+Threads that subscribe to the same server, event and arguments share one MCP subscription. Argument key order doesn't matter. Each occurrence becomes a notification with `kind: 'mcp-event'` and `attributes: { server, event }`. The raw occurrence is in `payload`. The notification `summary`, which is the only part the model reads, labels the event data as untrusted and wraps it in an `<untrusted-mcp-event-data>` block that the data can't close. When the server reports a gap, `attributes.truncated` is `true` and the summary says that events may have been skipped.
+
+If the subscription ends, for example because the server terminates it, each subscribed thread receives a `high` priority notification with `kind: 'mcp-event-subscription-ended'` and the threads are unsubscribed.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'client',
+    type: "Pick<MCPClient, 'events'>",
+    description: 'The client used to list and subscribe to events.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'mcp-events'",
+    description: 'Provider id, used as the notification `source`.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'MCP Events'",
+    description: 'Display name.',
+  },
+  {
+    name: 'cursorStore',
+    type: 'MCPEventCursorStore',
+    isOptional: true,
+    defaultValue: 'InMemoryMCPEventCursorStore',
+    description:
+      'Stores the resume cursor for each subscription. Implement `get(key)`, `set(key, cursor)` and `delete(key)` with durable storage to resume after a restart. Only non-null cursors are stored.',
+  },
+  {
+    name: 'subscribeOptions',
+    type: "Omit<MCPEventSubscribeOptions, 'cursor' | 'signal'>",
+    isOptional: true,
+    description: 'Options for every MCP subscription, for example `maxAgeMs` to bound the backlog replayed on resume.',
+  },
+  {
+    name: 'priority',
+    type: 'NotificationPriority',
+    isOptional: true,
+    defaultValue: "'medium'",
+    description: 'Priority of event notifications.',
+  },
+  {
+    name: 'tools',
+    type: 'boolean | { servers: string[] }',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Gives the agent the `mcp_events_list`, `mcp_events_subscribe` and `mcp_events_unsubscribe` tools, which act on the current thread and require memory. Pass `servers` to limit them to those servers.',
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown, info: { server: string; event: string; key: string }) => void',
+    isOptional: true,
+    description: 'Receives delivery, cursor store and subscription errors.',
+  },
+]}
+/>
+
+The provider has these methods:
+
+- `subscribeThread(thread, { server, event, args? })`: Subscribes a thread and resolves once the MCP subscription is confirmed. It resumes from the stored cursor. If the server rejects the subscription, the thread isn't subscribed and the promise rejects.
+- `unsubscribeThread(thread, { server, event, args? })`: Resolves to `true` when the thread was subscribed. When the last thread leaves, the MCP subscription is cancelled and its stored cursor is deleted.
+- `stop()`: Cancels every MCP subscription and keeps the stored cursors, so a new provider with the same `cursorStore` resumes where this one stopped.
+- `MCPEventsSignalProvider.key({ server, event, args? })`: Returns the subscription key used by the cursor store.
+
+Delivery is at least once. The provider stores the cursor after it notifies the threads, and the notification's `dedupeKey` includes the event id, so an occurrence replayed after a restart isn't stored twice.
+
+To start a workflow run for each occurrence, iterate a subscription directly:
+
+```typescript title="src/mastra/triggers/repo-push.ts"
+const subscription = await mcp.events.subscribe(
+  'github',
+  'repo.push',
+  { repo: 'mastra-ai/mastra' },
+  { cursor: await loadCursor() },
+)
+
+process.once('SIGTERM', () => void subscription.cancel())
+
+for await (const event of subscription) {
+  const run = await triagePushWorkflow.createRun()
+  await run.start({ inputData: { eventId: event.eventId, push: event.data } })
+  if (subscription.cursor) await saveCursor(subscription.cursor)
+}
+```
+
 ## Answering input requests
 
 A server tool, resource or prompt that needs something from the user ends its call with an `input_required` result instead of a value. The result carries one or more embedded requests, each with a server-chosen `key` and either a form (`requestedSchema`) or a URL the user must visit. Configure `inputRequests` on the server definition to answer them: the client calls the handler once per embedded request, retries the original call with the answers, and resolves the tool call with the final result. Without a handler an `input_required` result surfaces as an error.
