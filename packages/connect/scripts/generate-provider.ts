@@ -70,6 +70,7 @@ const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguratio
 
 interface ActionCandidate {
   providerId: string;
+  localId: string;
   file: string;
   actionSlug: string;
   toolKey: string;
@@ -620,6 +621,47 @@ function extractAction(
   };
 }
 
+const DELEGATED_OFFICE_PROVIDER_IDS = new Set(['microsoft-excel', 'microsoft-powerpoint', 'microsoft-word']);
+
+// Nango shares these actions with client-credentials templates. Adapt only the
+// customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
+function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (
+    !DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) ||
+    action.candidate.actionSlug !== 'get-user-drive'
+  ) {
+    return action;
+  }
+
+  let inputSchemaUpdated = false;
+  const moduleStatements = action.moduleStatements.map(statement => {
+    if (!statement.includes(`const ${action.inputSchemaName}`)) return statement;
+
+    const updated = statement.replace('userId: z.string().describe(', 'userId: z.string().optional().describe(');
+    inputSchemaUpdated ||= updated !== statement;
+    return updated;
+  });
+
+  const endpointPattern = /endpoint:\s*`\/v1\.0\/users\/\$\{encodeURIComponent\(input\.userId\)\}\/drive`/;
+  const execBody = action.execBody.replace(
+    endpointPattern,
+    "endpoint: input.userId ? `/v1.0/users/${encodeURIComponent(input.userId)}/drive` : '/v1.0/me/drive'",
+  );
+
+  if (!inputSchemaUpdated || execBody === action.execBody) {
+    throw new Error(
+      `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} for delegated OAuth; the upstream template shape changed.`,
+    );
+  }
+
+  return {
+    ...action,
+    description: "Get the connected user's OneDrive, or another user's drive when userId is provided.",
+    moduleStatements,
+    execBody,
+  };
+}
+
 /**
  * Exec bodies are normalized to a block during extraction; strip the outer
  * braces so the vendored statements inline directly into `execute` after the
@@ -800,12 +842,13 @@ export async function generateProvider({
     const actionSlug = filename.replace(/\.ts$/, '');
     const candidate: ActionCandidate = {
       providerId,
+      localId,
       file: resolve(actionDir, filename),
       actionSlug,
       toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
     };
     const result = extractAction(project, candidate);
-    if (result.kind === 'ok') extracted.push(result.value);
+    if (result.kind === 'ok') extracted.push(applyProviderActionOverrides(result.value));
     else skipped.push({ candidate, reason: result.reason });
   }
 
