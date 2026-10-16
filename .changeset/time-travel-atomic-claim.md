@@ -1,0 +1,6 @@
+---
+'@mastra/core': patch
+'@mastra/server': patch
+---
+
+Fixed `timeTravel()` running the same steps twice when called concurrently on one run. `timeTravel()` now atomically claims the run before executing, like `resume()` does. A losing call throws `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` (or `WORKFLOW_TIME_TRAVEL_RUN_RUNNING` if the run is already executing) and the time-travel HTTP endpoints return `409 Conflict`. Fixes #27279.

@@ -44,12 +44,15 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
 }
 
-// A resume the run can't accept: another resume claimed it, or it isn't waiting to be resumed.
+// A resume or time travel the run can't accept: another caller claimed it, it is still running,
+// or it isn't waiting to be resumed.
 const RESUME_ALREADY_CLAIMED_CODES = new Set([
   'WORKFLOW_RESUME_ALREADY_CLAIMED',
   'AGENT_RESUME_ALREADY_CLAIMED',
   'WORKFLOW_RUN_NOT_SUSPENDED',
   'AGENT_RESUME_RUN_NOT_SUSPENDED',
+  'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+  'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
 ]);
 
 function isResumeAlreadyClaimedError(error: unknown): error is Error {
