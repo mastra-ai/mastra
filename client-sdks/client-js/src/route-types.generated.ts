@@ -769,6 +769,8 @@ type InputShared_Type_19 = {
   tags?: string[] | undefined;
   /** Filter by one or more trace IDs */
   traceIds?: string[] | undefined;
+  /** Filter by one or more experiment IDs */
+  experimentIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -3717,10 +3719,14 @@ type Shared_Type_67 = {
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
   traceQueryTenantScope: boolean;
+  /** Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable. */
+  traceAggregate: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
+  traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
@@ -10743,26 +10749,29 @@ export type PostObservabilitySpansQuery_Response = {
     entityType: string | null;
     entityId: string | null;
     entityName: string | null;
+    entityVersionId: string | null;
+    parentEntityType: string | null;
+    parentEntityId: string | null;
+    parentEntityName: string | null;
+    parentEntityVersionId: string | null;
+    rootEntityType: string | null;
+    rootEntityId: string | null;
+    rootEntityName: string | null;
+    rootEntityVersionId: string | null;
+    threadId: string | null;
+    runId: string | null;
+    sessionId: string | null;
+    userId: string | null;
+    requestId: string | null;
+    serviceName: string | null;
+    experimentId: string | null;
+    environment: string | null;
+    executionSource: string | null;
     model: string | null;
     provider: string | null;
     inputPreview: string | null;
-    inputTruncated: boolean;
     outputPreview: string | null;
-    outputTruncated: boolean;
     errorPreview: string | null;
-    errorTruncated: boolean;
-    cost:
-      | {
-          state: 'available';
-          amount: number;
-          currency: string;
-        }
-      | {
-          state: 'missing';
-        }
-      | {
-          state: 'unavailable';
-        };
   }[];
   page: {
     next: string | null;
@@ -10831,6 +10840,22 @@ export type PostObservabilityTracesQueryFields_Response = {
     occurrences: number;
   }[];
   observedFieldsTruncated: boolean;
+  /** What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`. */
+  aggregate?:
+    | {
+        dimensions: {
+          path: string;
+          valueKind: 'string';
+        }[];
+        measures: {
+          name: string;
+          kind: 'count' | 'duration' | 'error' | 'tokens' | 'cost';
+          statistic?: ('avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum') | undefined;
+          unit: 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
+          approximate: boolean;
+        }[];
+      }
+    | undefined;
 };
 
 export type PostObservabilityTracesQueryFields_Request = Simplify<
@@ -10924,6 +10949,7 @@ export type GetObservabilityMetrics_QueryParams = {
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | string;
   traceIds?: ((string[] | undefined) | undefined) | string;
+  experimentIds?: ((string[] | undefined) | undefined) | string;
   name?: ((string[] | undefined) | undefined) | string;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
@@ -19558,6 +19584,8 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
+  /** Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets. */
+  datasetIds?: string[] | undefined;
   orderBy?:
     | (
         | {

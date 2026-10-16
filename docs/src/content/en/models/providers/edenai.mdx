@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 329 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 331 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -1486,6 +1486,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.05
   },
   {
+    "model": "edenai/fireworks_ai/accounts/fireworks/models/muse-spark-open",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.25,
+    "outputCost": 4.25
+  },
+  {
     "model": "edenai/fireworks_ai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -1878,8 +1890,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.15673,
-    "outputCost": 0.391825
+    "inputCost": 0.156912,
+    "outputCost": 0.39228
   },
   {
     "model": "edenai/greenpt/deepseek-v4.1-flash",
@@ -1890,8 +1902,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.24629,
-    "outputCost": 1.23145
+    "inputCost": 0.246576,
+    "outputCost": 1.23288
   },
   {
     "model": "edenai/greenpt/gpt-oss-120b",
@@ -1902,8 +1914,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 32768,
-    "inputCost": 0.2239,
-    "outputCost": 0.78365
+    "inputCost": 0.22416,
+    "outputCost": 0.78456
   },
   {
     "model": "edenai/greenpt/llama-3.3-70b-instruct",
@@ -1914,8 +1926,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
-    "inputCost": 1.23145,
-    "outputCost": 1.23145
+    "inputCost": 1.23288,
+    "outputCost": 1.23288
   },
   {
     "model": "edenai/greenpt/qwen3-235b-a22b-instruct-2507",
@@ -1926,8 +1938,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 250000,
     "maxOutput": 16384,
-    "inputCost": 1.00755,
-    "outputCost": 3.02265
+    "inputCost": 1.00872,
+    "outputCost": 3.026159
   },
   {
     "model": "edenai/groq/openai/gpt-oss-120b",
@@ -1974,8 +1986,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 100000,
     "maxOutput": 262144,
-    "inputCost": 0.33585,
-    "outputCost": 0.4478
+    "inputCost": 0.33624,
+    "outputCost": 0.44832
   },
   {
     "model": "edenai/ionos/meta-llama/Llama-3.3-70B-Instruct",
@@ -1986,8 +1998,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
-    "inputCost": 0.727675,
-    "outputCost": 0.727675
+    "inputCost": 0.72852,
+    "outputCost": 0.72852
   },
   {
     "model": "edenai/ionos/openai/gpt-oss-120b",
@@ -1998,8 +2010,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 32768,
-    "inputCost": 0.167925,
-    "outputCost": 0.727675
+    "inputCost": 0.16812,
+    "outputCost": 0.72852
   },
   {
     "model": "edenai/ionos/Qwen/Qwen3-Coder-Next",
@@ -2010,8 +2022,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 65536,
-    "inputCost": 0.167925,
-    "outputCost": 0.8956
+    "inputCost": 0.16812,
+    "outputCost": 0.89664
   },
   {
     "model": "edenai/minimax/MiniMax-M2",
@@ -2396,6 +2408,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.1,
     "outputCost": 0.3
+  },
+  {
+    "model": "edenai/nebius/meta-models/muse-spark-open",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.25,
+    "outputCost": 4.25
   },
   {
     "model": "edenai/nebius/nvidia/nemotron-3-super-120b-a12b",
@@ -3150,8 +3174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 384000,
-    "inputCost": 0.4478,
-    "outputCost": 0.8956
+    "inputCost": 0.44832,
+    "outputCost": 0.89664
   },
   {
     "model": "edenai/scaleway/deepseek-v4.1-flash",
@@ -3162,8 +3186,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 384000,
-    "inputCost": 0.6717,
-    "outputCost": 2.0151
+    "inputCost": 0.67248,
+    "outputCost": 2.01744
   },
   {
     "model": "edenai/scaleway/gemma-3-27b-it",
@@ -3186,8 +3210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 32768,
-    "inputCost": 0.167925,
-    "outputCost": 0.6717
+    "inputCost": 0.16812,
+    "outputCost": 0.67248
   },
   {
     "model": "edenai/scaleway/llama-3.3-70b-instruct",
@@ -3198,8 +3222,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
-    "inputCost": 1.00755,
-    "outputCost": 1.00755
+    "inputCost": 1.00872,
+    "outputCost": 1.00872
   },
   {
     "model": "edenai/scaleway/qwen3-235b-a22b-instruct-2507",
@@ -3210,8 +3234,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 250000,
     "maxOutput": 16384,
-    "inputCost": 0.839625,
-    "outputCost": 2.518875
+    "inputCost": 0.8406,
+    "outputCost": 2.5218
   },
   {
     "model": "edenai/scaleway/qwen3-coder-30b-a3b-instruct",
@@ -3222,8 +3246,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 65536,
-    "inputCost": 0.2239,
-    "outputCost": 0.8956
+    "inputCost": 0.22416,
+    "outputCost": 0.89664
   },
   {
     "model": "edenai/tencent/deepseek-v4-pro-0813",

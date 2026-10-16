@@ -4,9 +4,10 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { DefaultModelResponse } from '../api/types';
 
-export function useDefaultModelQuery() {
+export function useDefaultModelQuery({ enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
   return useQuery({
+    enabled,
     queryKey: queryKeys.defaultModel(),
     queryFn: () => client.get<DefaultModelResponse>('/web/config/default-model'),
   });

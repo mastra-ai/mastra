@@ -1053,6 +1053,7 @@ LIMIT 1`,
         'trace-query-context-ids',
         'trace-aggregate',
         'span-query',
+        'span-query-context-fields',
       ]);
     });
 
@@ -1078,6 +1079,7 @@ LIMIT 1`,
           'trace-query-context-ids',
           'trace-aggregate',
           'span-query',
+          'span-query-context-fields',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');

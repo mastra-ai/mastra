@@ -2170,6 +2170,7 @@ export const API_ROUTE_METADATA = {
       "environment",
       "executionSource",
       "experimentId",
+      "experimentIds",
       "field",
       "labels",
       "limit",
@@ -5109,6 +5110,7 @@ export const API_ROUTE_METADATA = {
     "path": "/datasets",
     "pathParams": [],
     "queryParams": [
+      "datasetIds",
       "orderBy",
       "page",
       "perPage",

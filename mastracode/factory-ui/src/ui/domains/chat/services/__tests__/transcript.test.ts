@@ -1436,6 +1436,27 @@ describe('transcript reducer error notices', () => {
     return notice.text;
   }
 
+  it('offers a provider login on a missing-credential error', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'error', error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } },
+    });
+    expect(state.entries.at(-1)).toMatchObject({
+      kind: 'notice',
+      level: 'error',
+      text: 'Not logged in to Anthropic.',
+      action: 'provider-login',
+    });
+  });
+
+  it('offers no action on other errors', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'error', error: { name: 'Error', message: 'boom' } },
+    });
+    expect(state.entries.at(-1)).not.toHaveProperty('action');
+  });
+
   it('renders a string error payload verbatim', () => {
     expect(errorNoticeText({ error: 'model quota exhausted' })).toBe('model quota exhausted');
   });

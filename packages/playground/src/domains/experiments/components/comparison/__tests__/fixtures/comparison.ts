@@ -1,4 +1,4 @@
-import type { CompareExperimentsResponse, DatasetExperimentResult, MastraClient } from '@mastra/client-js';
+import type { CompareExperimentsResponse, DatasetExperimentResult, DatasetItem, MastraClient } from '@mastra/client-js';
 import type { ExperimentUsage } from '@mastra/react/hooks/experiments';
 import type { ScoresByItemId } from '../../build-comparison-rows';
 
@@ -216,6 +216,23 @@ export const threeWayComparisonResponse: CompareExperimentsResponse = {
     },
   })),
 };
+
+/** Dataset items behind the compared rows, as served by `GET /datasets/:datasetId/items/:itemId`. */
+export const datasetItemsById: Record<string, DatasetItem> = Object.fromEntries(
+  comparisonResponse.items.map(item => [
+    item.itemId,
+    {
+      id: item.itemId,
+      datasetId: DATASET_ID,
+      datasetVersion: 2,
+      input: item.input,
+      groundTruth: item.groundTruth,
+      metadata: { source: 'trivia-set' },
+      createdAt: '2026-07-01T10:00:00.000Z',
+      updatedAt: '2026-07-01T10:00:00.000Z',
+    },
+  ]),
+);
 
 export const challengerResults: DatasetExperimentResult[] = [
   makeResult({

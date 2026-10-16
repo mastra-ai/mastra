@@ -1,6 +1,6 @@
 ---
-title: "Reference: Observability API | Client SDK"
-description: "The Observability API provides methods to retrieve traces, monitor application performance, score traces for evaluation, and record feedback linked to traces and spans."
+title: 'Reference: Observability API | Client SDK'
+description: 'The Observability API provides methods to retrieve traces, monitor application performance, score traces for evaluation, and record feedback linked to traces and spans.'
 packages:
   - '@mastra/client-js'
 ---
@@ -68,6 +68,50 @@ const selected = await mastraClient.getTrace(list.spans[0].traceId)
 
 It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
 
+## Querying spans
+
+`querySpans()` returns completed span summaries across traces. It requires a positive ISO timestamp range over span start time and supports cursor pagination:
+
+```typescript
+const result = await mastraClient.querySpans({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-123' } },
+      { op: 'gte', left: { path: 'durationMs' }, right: { literal: 1000 } },
+    ],
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+// Pass result.page.next as page.after to continue with the same filters and ordering.
+console.log(result.spans)
+```
+
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt` or `endedAt`, ascending or descending, and defaults to descending start time.
+
+| Fields | Operators |
+| - | - |
+| `traceId`, `spanId`, `parentSpanId`, `threadId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
+| Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
+| `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
+| `startedAt`, `endedAt`, `durationMs` | Comparisons, membership and presence |
+| `error` | `exists`, `notExists` |
+
+Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
+
+Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
+
+The additional identity, context and parent/root entity filters require an updated storage adapter. With an older adapter, requests using these filters return a structured `422` error.
+
+DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
+
 ## Querying traces
 
 `queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.
@@ -121,6 +165,33 @@ Merge `changes.traces` by `traceId`, retain `changes.deltaCursor`, and continue 
 
 See [Delta polling](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop.
 
+### Aggregate traces
+
+`aggregateTraces()` groups the traces selected by a time range and optional `where` predicate, and returns one row per group. It accepts the same predicates as `queryTraces()`.
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.traceAggregate) {
+  const { rows, truncated } = await mastraClient.aggregateTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+    groupBy: ['entityName'],
+    interval: '1d',
+    measures: ['count', 'errorRate', 'duration.p95', 'cost.sum'],
+    orderBy: { field: 'count', direction: 'desc' },
+    limit: 10,
+  })
+}
+```
+
+Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`.
+
+Check `capabilities.traceAggregate` before calling. Unlike `traceQuery`, a missing value means the server doesn't support aggregation. The client retries server errors like `queryTraces()` but doesn't retry `422` validation errors.
+
 ### Discover trace-query fields and values
 
 `getTraceQueryFields()` returns canonical query fields and observed top-level string metadata fields for one predicate scope. The response includes each field's value kind, supported operators, and whether value suggestions are available.
@@ -138,6 +209,8 @@ const fields = await mastraClient.getTraceQueryFields({
   limit: 25,
 })
 ```
+
+For the `trace` scope on a server that supports aggregation, the response also includes `aggregate`: the `dimensions` you can pass to `groupBy` and the `measures` you can request. Every observed metadata field is also a dimension, and `countDistinct.<field>` accepts any dimension or `traceId`.
 
 Use the exact local path from the response with the same scope. For example, `model` belongs inside a `spans.some` or `spans.none` predicate. A field picker can fetch the `trace` and `spans` scopes in parallel.
 

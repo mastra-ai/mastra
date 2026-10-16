@@ -12,7 +12,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { runCatalogThinkingLevel } from '../thinking-catalog.js';
@@ -225,7 +225,10 @@ export function buildOpenAICodexOAuthFetch(
       ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
     });
     try {
-      return await fetch(finalRequest);
+      return await rejectUnauthorizedResponse(await fetch(finalRequest), {
+        providerName: 'OpenAI Codex',
+        requestUrl: finalUrl.toString(),
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {
