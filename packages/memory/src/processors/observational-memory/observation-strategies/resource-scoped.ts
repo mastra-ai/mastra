@@ -106,7 +106,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     for (const thread of allThreads) {
       const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
-      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
+      const startDate = threadLastObservedAt
+        ? new Date(new Date(threadLastObservedAt).getTime() + (this.deps.observedMessageIds.size > 0 ? 0 : 1))
+        : undefined;
 
       const result = await this.storage.listMessages({
         threadId: thread.id,

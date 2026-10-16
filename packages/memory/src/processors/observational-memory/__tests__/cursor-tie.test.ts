@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { filterObservedMessages } from '../message-utils';
 import { ObservationalMemory } from '../observational-memory';
@@ -57,5 +57,38 @@ describe('lastObservedAt millisecond ties (#27261)', () => {
     expect(withIds.map(m => m.id)).toEqual(['b']);
     const withoutIds = om.getUnobservedMessages(all, { lastObservedAt: tie } as any);
     expect(withoutIds.map(m => m.id)).toEqual([]);
+  });
+
+  it('loads a tied unobserved message from storage and sends only it to the Observer', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 'tie', createdAt: earlier, updatedAt: earlier },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1, bufferTokens: false },
+      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 100_000 },
+    });
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- base',
+      tokenCount: 2,
+      lastObservedAt: tie,
+      observedMessageIds: ['old', 'a'],
+    });
+    await storage.saveMessages({
+      messages: [msg('old', earlier, 'user'), msg('a', tie), msg('b', tie, 'user')],
+    });
+    const call = vi
+      .spyOn(om.observer, 'call')
+      .mockResolvedValue({ observations: '- tied fact' } as Awaited<ReturnType<typeof om.observer.call>>);
+
+    await om.observe({ threadId, resourceId });
+
+    expect(call).toHaveBeenCalledTimes(1);
+    const sent = (call.mock.calls[0]![1] as MastraDBMessage[]).map(m => m.id);
+    expect(sent).toEqual(['b']);
   });
 });
