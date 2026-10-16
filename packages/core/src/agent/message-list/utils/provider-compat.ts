@@ -462,7 +462,11 @@ export function normalizeSystemMessagesForProvider<T extends ModelMessage>(
   }
   for (const message of messages.slice(leading)) {
     if (message?.role === 'system') {
-      result.push({ role: 'user', content: `<system-reminder>${systemText(message)}</system-reminder>` } as T);
+      result.push({
+        role: 'user',
+        content: `<system-reminder>${systemText(message)}</system-reminder>`,
+        ...(message.providerOptions ? { providerOptions: message.providerOptions } : {}),
+      } as T);
     } else {
       result.push(message);
     }

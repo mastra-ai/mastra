@@ -49,14 +49,14 @@ describe('single leading system message for OpenAI-compatible providers', () => 
       [
         { role: 'system', content: 'a' },
         { role: 'user', content: 'u' },
-        { role: 'system', content: 'late' },
+        { role: 'system', content: 'late', providerOptions: { x: { y: 1 } } },
       ],
       'openai.chat',
     );
     expect(out).toEqual([
       { role: 'system', content: 'a' },
       { role: 'user', content: 'u' },
-      { role: 'user', content: '<system-reminder>late</system-reminder>' },
+      { role: 'user', content: '<system-reminder>late</system-reminder>', providerOptions: { x: { y: 1 } } },
     ]);
   });
 
