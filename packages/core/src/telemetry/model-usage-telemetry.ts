@@ -1,6 +1,6 @@
 import type { Mastra } from '../mastra';
 import type { MetricEvent, ObservabilityExporter } from '../observability';
-import { getServerTelemetryContext } from './context';
+import { getServerTelemetryBaseContext, getServerTelemetryContext, hashProjectIdentity } from './context';
 import { captureTelemetryEventImmediate, isTelemetryEnabled } from './posthog';
 
 const INPUT_TOKENS_METRIC = 'mastra_model_total_input_tokens';
@@ -18,7 +18,32 @@ export interface StartModelUsageTelemetryOptions {
   shutdownTimeoutMs?: number;
 }
 
-type ReportReason = 'interval' | 'shutdown';
+export interface StartServerlessModelUsageTelemetryOptions {
+  /** The serverless platform the server runs on, sent with each report (for example `vercel`). */
+  runtime: string;
+  /**
+   * A value that identifies the deployed project on that platform, such as its project ID.
+   * Only a hash of it is sent, as `project_id2`.
+   */
+  projectKey?: string;
+}
+
+export interface ModelUsageReporter {
+  /** Reports the usage counted since the previous report. Resolves once sent; never rejects. */
+  report(): Promise<void>;
+}
+
+type ReportReason = 'interval' | 'shutdown' | 'request';
+
+interface ServerlessReporting {
+  runtime: string;
+  projectId2: string | undefined;
+}
+
+interface MeterOptions extends StartModelUsageTelemetryOptions {
+  /** Set for serverless servers, which report per request instead of on a timer. */
+  serverless?: ServerlessReporting;
+}
 
 interface ModelUsage {
   provider: string | null;
@@ -41,13 +66,20 @@ class ModelUsageMeter implements ObservabilityExporter {
   #usage = new Map<string, ModelUsage>();
   #windowStart = new Date();
   #pendingReports = new Set<Promise<void>>();
-  #timer: ReturnType<typeof setInterval>;
+  #timer: ReturnType<typeof setInterval> | undefined;
   #shutdownTimeoutMs: number;
+  #serverless: ServerlessReporting | undefined;
 
-  constructor(options: StartModelUsageTelemetryOptions) {
+  constructor(options: MeterOptions) {
     this.#shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
-    this.#timer = setInterval(() => this.#report('interval'), options.reportIntervalMs ?? DEFAULT_REPORT_INTERVAL_MS);
-    this.#timer.unref?.();
+    this.#serverless = options.serverless;
+    if (!this.#serverless) {
+      this.#timer = setInterval(
+        () => void this.report('interval'),
+        options.reportIntervalMs ?? DEFAULT_REPORT_INTERVAL_MS,
+      );
+      this.#timer.unref?.();
+    }
   }
 
   onMetricEvent({ metric }: MetricEvent): void {
@@ -79,12 +111,14 @@ class ModelUsageMeter implements ObservabilityExporter {
   async exportTracingEvent(): Promise<void> {}
 
   // Observability flushes are frequent in serverless and durable runtimes; reporting on
-  // each one would split usage into many tiny events, so only the interval and shutdown report.
+  // each one would split usage into many tiny events, so only the interval, request, and
+  // shutdown report.
   async flush(): Promise<void> {}
 
   async shutdown(): Promise<void> {
     clearInterval(this.#timer);
-    this.#report('shutdown');
+    // Awaited below through #pendingReports, bounded by the shutdown timeout.
+    void this.report('shutdown');
 
     let timeout: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
@@ -96,9 +130,10 @@ class ModelUsageMeter implements ObservabilityExporter {
     clearTimeout(timeout);
   }
 
-  #report(reason: ReportReason): void {
+  /** Takes the usage counted so far and sends it; the returned promise settles once sent. */
+  report(reason: ReportReason): Promise<void> {
     if (this.#usage.size === 0) {
-      return;
+      return Promise.resolve();
     }
 
     const rows = [...this.#usage.values()];
@@ -107,16 +142,27 @@ class ModelUsageMeter implements ObservabilityExporter {
     this.#usage = new Map();
     this.#windowStart = windowEnd;
 
-    const report = sendReport(rows, windowStart, windowEnd, reason).finally(() => {
+    const report = sendReport(rows, windowStart, windowEnd, reason, this.#serverless).finally(() => {
       this.#pendingReports.delete(report);
     });
     this.#pendingReports.add(report);
+    return report;
   }
 }
 
-async function sendReport(rows: ModelUsage[], windowStart: Date, windowEnd: Date, reason: ReportReason): Promise<void> {
+async function sendReport(
+  rows: ModelUsage[],
+  windowStart: Date,
+  windowEnd: Date,
+  reason: ReportReason,
+  serverless: ServerlessReporting | undefined,
+): Promise<void> {
   try {
-    const { projectId, projectId2, distinctId, command, nodeEnv } = await getServerTelemetryContext();
+    // Serverless servers have no Git checkout and are never Platform projects, so they
+    // take their project identity from the platform instead of looking it up.
+    const { projectId, projectId2, distinctId, command, nodeEnv } = serverless
+      ? { ...getServerTelemetryBaseContext(), projectId2: serverless.projectId2 }
+      : await getServerTelemetryContext();
     await Promise.all(
       rows.map(row =>
         captureTelemetryEventImmediate(MODEL_USAGE_TELEMETRY_EVENT, distinctId, {
@@ -131,12 +177,33 @@ async function sendReport(rows: ModelUsage[], windowStart: Date, windowEnd: Date
           window_start: windowStart.toISOString(),
           window_end: windowEnd.toISOString(),
           report_reason: reason,
+          ...(serverless ? { runtime: serverless.runtime } : {}),
         }),
       ),
     );
   } catch {
     // Usage telemetry must never affect server runtime or shutdown.
   }
+}
+
+function startMeter(mastra: Mastra, options: MeterOptions): ModelUsageMeter | undefined {
+  if (!isTelemetryEnabled() || startedFor.has(mastra)) {
+    return undefined;
+  }
+
+  const instances = [...mastra.observability.listInstances().values()].filter(
+    instance => typeof instance.registerExporter === 'function',
+  );
+  if (instances.length === 0) {
+    return undefined;
+  }
+
+  startedFor.add(mastra);
+  const meter = new ModelUsageMeter(options);
+  for (const instance of instances) {
+    instance.registerExporter!(meter);
+  }
+  return meter;
 }
 
 /**
@@ -147,23 +214,32 @@ async function sendReport(rows: ModelUsage[], windowStart: Date, windowEnd: Date
  */
 export function startModelUsageTelemetry(mastra: Mastra, options: StartModelUsageTelemetryOptions = {}): void {
   try {
-    if (!isTelemetryEnabled() || startedFor.has(mastra)) {
-      return;
-    }
-
-    const instances = [...mastra.observability.listInstances().values()].filter(
-      instance => typeof instance.registerExporter === 'function',
-    );
-    if (instances.length === 0) {
-      return;
-    }
-
-    startedFor.add(mastra);
-    const meter = new ModelUsageMeter(options);
-    for (const instance of instances) {
-      instance.registerExporter!(meter);
-    }
+    startMeter(mastra, options);
   } catch {
     // Usage telemetry must never affect server startup.
+  }
+}
+
+/**
+ * Starts counting model token usage for a serverless server, which reports per request
+ * instead of on a timer: call `report()` once a request has finished, and keep the
+ * function alive until it resolves. Returns `undefined` when telemetry is disabled, when
+ * observability isn't configured, or when usage is already being counted. Never throws.
+ */
+export function startServerlessModelUsageTelemetry(
+  mastra: Mastra,
+  options: StartServerlessModelUsageTelemetryOptions,
+): ModelUsageReporter | undefined {
+  try {
+    const projectKey = options.projectKey?.trim();
+    const meter = startMeter(mastra, {
+      serverless: {
+        runtime: options.runtime,
+        projectId2: projectKey ? hashProjectIdentity(projectKey) : undefined,
+      },
+    });
+    return meter ? { report: () => meter.report('request') } : undefined;
+  } catch {
+    return undefined;
   }
 }
