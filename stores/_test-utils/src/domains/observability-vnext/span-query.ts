@@ -32,6 +32,7 @@ export function createSpanQueryTests(
 
     it('advertises support and returns an empty page', async () => {
       expect(getStorage().getFeatures()).toContain('span-query');
+      expect(getStorage().getFeatures()).toContain('span-query-context-fields');
       expect(await query()).toEqual({ spans: [], page: { next: null } });
     });
 
@@ -236,6 +237,39 @@ export function createSpanQueryTests(
         expect(result.spans.map(row => row.spanId)).toEqual(['context']);
         expect(result.spans[0]).toMatchObject(expected);
       }
+    });
+
+    it('filters trace and parent span identities independently', async () => {
+      await getStorage().batchCreateSpans({
+        records: [
+          span('root', { traceId: 'trace-a' }),
+          span('child', { traceId: 'trace-a', parentSpanId: 'root' }),
+          span('other', { traceId: 'trace-b', parentSpanId: 'different-root' }),
+        ],
+      });
+      const inTrace = await query({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
+      expect(inTrace.spans.map(row => row.spanId).sort()).toEqual(['child', 'root']);
+      const children = await query({ where: { op: 'eq', left: { path: 'parentSpanId' }, right: { literal: 'root' } } });
+      expect(children.spans.map(row => row.spanId)).toEqual(['child']);
+      expect((await query({ where: { op: 'notExists', path: 'parentSpanId' } })).spans.map(row => row.spanId)).toEqual([
+        'root',
+      ]);
+    });
+
+    it('maps span source to executionSource or applies documented null semantics', async () => {
+      await getStorage().batchCreateSpans({
+        records: [span('agent', { source: 'agent' }), span('workflow', { source: 'workflow' }), span('absent')],
+      });
+      const result = await query({
+        where: { op: 'eq', left: { path: 'executionSource' }, right: { literal: 'agent' } },
+      });
+      expect(result.spans.map(row => row.spanId)).toEqual(options.eventSourced ? [] : ['agent']);
+      if (!options.eventSourced) expect(result.spans[0]).toMatchObject({ executionSource: 'agent' });
+      const absent = await query({ where: { op: 'notExists', path: 'executionSource' } });
+      expect(absent.spans.map(row => row.spanId).sort()).toEqual(
+        options.eventSourced ? ['absent', 'agent', 'workflow'] : ['absent'],
+      );
+      for (const row of absent.spans) expect(row.executionSource).toBeNull();
     });
 
     it('keeps name matching limited to whole normalized words and phrases', async () => {

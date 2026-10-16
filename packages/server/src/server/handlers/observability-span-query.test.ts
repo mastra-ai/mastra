@@ -27,7 +27,7 @@ const CURSOR_VALUES = {
   spanId: 'span-1',
 };
 
-function createHarness(features: string[] = ['span-query', 'trace-query-tenant-scope']) {
+function createHarness(features: string[] = ['span-query', 'span-query-context-fields', 'trace-query-tenant-scope']) {
   const observabilityStore = {
     getFeatures: vi.fn(() => features),
     querySpans: vi.fn().mockResolvedValue({ spans: [], page: { next: null } }),
@@ -70,6 +70,67 @@ function strictValidationError(request: unknown) {
 
 describe('QUERY_SPANS', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    'traceId',
+    'spanId',
+    'parentSpanId',
+    'threadId',
+    'resourceId',
+    'requestId',
+    'serviceName',
+    'experimentId',
+    'environment',
+    'executionSource',
+    'parentEntityType',
+    'parentEntityId',
+    'parentEntityName',
+    'rootEntityType',
+    'rootEntityId',
+    'rootEntityName',
+  ])('rejects %s on an older adapter before calling its SQL compiler', async field => {
+    const { mastra, observabilityStore } = createHarness(['span-query']);
+    observabilityStore.querySpans.mockRejectedValue(new Error(`Unsupported trusted trace-query field: ${field}`));
+    const request = {
+      timeRange: TIME_RANGE,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'name' }, right: { literal: 'agent' } },
+          { op: 'not', arg: { op: 'exists', path: field } },
+        ],
+      },
+    };
+    const error = await captureHttpException(QUERY_SPANS.handler(params(mastra, request)));
+    expect(error.status).toBe(422);
+    expect(getDeclaredErrorSchema(422).parse(await error.getResponse().json())).toMatchObject({
+      code: 'TRACE_QUERY_INVALID',
+      issues: [{ code: 'field_not_allowed', path: ['where'], message: expect.stringContaining('storage adapter') }],
+    });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+
+    const updated = createHarness();
+    await QUERY_SPANS.handler(params(updated.mastra, request));
+    expect(updated.observabilityStore.querySpans).toHaveBeenCalledOnce();
+  });
+
+  it('keeps existing predicates usable with an older adapter', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-query']);
+    await QUERY_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'name' }, right: { literal: 'agent' } },
+            { op: 'gte', left: { path: 'durationMs' }, right: { literal: 100 } },
+            { op: 'exists', path: 'entityVersionId' },
+          ],
+        },
+      }),
+    );
+    expect(observabilityStore.querySpans).toHaveBeenCalledOnce();
+  });
 
   it('forwards the trusted plan to the request-available store and returns its response unchanged', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
