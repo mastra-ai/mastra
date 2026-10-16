@@ -16,9 +16,7 @@ export function VirtualBoardItems<T>({
   layout: BoardLayout;
   renderItem: (item: T) => ReactNode;
 }) {
-  // Small groups need no measurement or scroll subscriptions. Keeping them in
-  // normal flow also preserves collapsed groups' drafts and details state.
-  if (items.length <= 30) return items.map(renderItem);
+  if (items.length === 0) return null;
 
   const itemIndexes = new Map(items.map((item, index) => [itemKey(item), index]));
 

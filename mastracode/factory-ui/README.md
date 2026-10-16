@@ -38,6 +38,8 @@ Saved views can use either the list or Kanban layout. Existing saved views keep 
 
 Groups with more than 30 work items or intake candidates render the visible rows plus four overscan rows. Smaller groups stay in normal flow. Focused cards, open details and menus, active drags, and deep-link targets stay mounted so scrolling and sorting preserve ongoing interactions.
 
+Intake candidates use the existing TanStack Query infinite feeds. Scrolling to the end loads another page; the virtual window grows with the cached pages, preserving open drafts when a group crosses 30 items. Failed pages can be retried without discarding loaded cards. Persisted work items still use the project's existing snapshot query.
+
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.

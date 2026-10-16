@@ -6,8 +6,10 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
 import { createAppRoutes } from '../router';
+import type { GithubIssueDetail } from '../domains/factory/services/factory';
 import { saveKanbanView } from './boardLayoutQueries';
 import { largeBoard, largeCandidatePage } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
@@ -30,12 +32,12 @@ function renderBoard(search = '') {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/work${search}`],
   });
-  renderWithProviders(
+  const { client } = renderWithProviders(
     <StrictMode>
       <RouterProvider router={router} />
     </StrictMode>,
   );
-  return router;
+  return { router, client };
 }
 
 describe('Large factory boards', () => {
@@ -80,7 +82,7 @@ describe('Large factory boards', () => {
   });
 
   it('given an offscreen issue, finds it by searching the full dataset', async () => {
-    const router = renderBoard();
+    const { router } = renderBoard();
     await screen.findByLabelText('Large task 249');
     expect(screen.queryByLabelText('Large task 0')).not.toBeInTheDocument();
     await act(() => router.navigate(`/factories/${FACTORY_ID}/work?search=Large+task+0`));
@@ -104,7 +106,7 @@ describe('Large factory boards', () => {
   });
 
   it('given an open comment draft, changing sort retains the same issue when its position changes', async () => {
-    const router = renderBoard();
+    const { router } = renderBoard();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Large task 249' }));
     const details = await screen.findByRole('dialog', { name: 'Large task 249' });
@@ -146,6 +148,73 @@ describe('Large factory boards', () => {
     fireEvent.dragEnd(card, { dataTransfer });
     await waitFor(() => expect(screen.queryByLabelText('Large task 249')).not.toBeInTheDocument());
   });
+
+  it.each(['list', 'board'] as const)(
+    'given 30 candidates in %s layout, when another query page arrives, preserves an open prompt and bounds mounted cards',
+    async layout => {
+      const { client } = renderBoard();
+      const requestedPages: number[] = [];
+      let releasePage = () => {};
+      const nextPage = new Promise<void>(resolve => {
+        releasePage = resolve;
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+          HttpResponse.json({ workItems: [] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+          HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, async ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          if (params.has('label')) return HttpResponse.json(largeCandidatePage(0));
+          const page = Number(params.get('page') ?? 1);
+          requestedPages.push(page);
+          if (page === 2) await nextPage;
+          return HttpResponse.json({
+            ...largeCandidatePage(page === 1 ? 30 : 100, page === 1 ? 0 : 30),
+            nextPage: page === 1 ? 2 : null,
+          });
+        }),
+        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues/1`, () =>
+          HttpResponse.json({
+            ...largeCandidatePage(1).issues[0]!,
+            description: 'Candidate description',
+          } satisfies GithubIssueDetail),
+        ),
+      );
+      const user = userEvent.setup();
+      await screen.findByRole('article', { name: 'Candidate 0' });
+      if (layout === 'board') await saveKanbanView(user);
+      await user.click(screen.getByRole('button', { name: 'Load more candidates' }));
+      await screen.findByRole('status', { name: 'Loading more candidates' });
+      await user.click(screen.getByRole('button', { name: 'Details for Candidate 0' }));
+      const details = await screen.findByRole('dialog', { name: 'Candidate 0' });
+      await user.click(within(details).getByRole('button', { name: 'Custom prompt…' }));
+      const prompt = await screen.findByRole('textbox', { name: 'Prompt for Candidate 0' });
+      await user.type(prompt, 'Keep this guidance while loading more');
+
+      releasePage();
+      await waitForMutationsIdle(client);
+
+      expect(details).toBeInTheDocument();
+      expect(prompt).toHaveValue('Keep this guidance while loading more');
+      expect(prompt).toHaveFocus();
+      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
+      expect(screen.queryByRole('button', { name: 'Load more candidates' })).not.toBeInTheDocument();
+      fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+      await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 1' })).not.toBeInTheDocument());
+      expect(prompt).toHaveValue('Keep this guidance while loading more');
+      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
+      expect(requestedPages).toEqual([1, 2]);
+
+      await act(() => client.refetchQueries({ queryKey: queryKeys.githubIssues(['repo-1']) }));
+      expect(requestedPages).toEqual([1, 2, 1, 2]);
+      expect(prompt).toBeInTheDocument();
+      expect(prompt).toHaveValue('Keep this guidance while loading more');
+      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
+    },
+  );
 
   it.each(['list', 'board'] as const)(
     'given a large candidate feed in %s layout, scrolling recycles candidates too',

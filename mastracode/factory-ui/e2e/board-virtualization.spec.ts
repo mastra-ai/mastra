@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
-import { largeBoard } from '../src/ui/__tests__/fixtures/largeBoard';
+import { largeBoard, largeCandidatePage } from '../src/ui/__tests__/fixtures/largeBoard';
 import { server } from './ui/msw-server';
 
 const viewports = [
@@ -74,6 +74,98 @@ test.describe('Factory board virtualization', () => {
 
   for (const viewport of viewports) {
     for (const layout of ['list', 'board'] as const) {
+      test.describe(`when scrolling paginated candidates in ${layout} on ${viewport.name}`, () => {
+        test.use(viewport.use);
+        test('appends query pages without jumps or duplicate requests and can retry a failed page', async ({
+          page,
+        }) => {
+          const requestedPages: number[] = [];
+          let releasePage = () => {};
+          const secondPage = new Promise<void>(resolve => {
+            releasePage = resolve;
+          });
+          let failLastPage = true;
+          server.use(
+            http.get('*/web/factory/projects/fp-1/work-items', () => HttpResponse.json({ workItems: [] })),
+            http.get('*/web/intake/config', () =>
+              HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
+            ),
+            http.get('*/web/github/projects/repo-1/issues', async ({ request }) => {
+              const params = new URL(request.url).searchParams;
+              if (params.has('label')) return HttpResponse.json(largeCandidatePage(0));
+              const pageNumber = Number(params.get('page') ?? 1);
+              requestedPages.push(pageNumber);
+              if (pageNumber === 2) await secondPage;
+              if (pageNumber === 3 && failLastPage) {
+                return HttpResponse.json({ error: 'Candidate page unavailable' }, { status: 503 });
+              }
+              return HttpResponse.json({
+                ...largeCandidatePage(pageNumber === 1 ? 30 : 100, pageNumber === 1 ? 0 : 30 + (pageNumber - 2) * 100),
+                nextPage: pageNumber < 3 ? pageNumber + 1 : null,
+              });
+            }),
+          );
+          await page.goto('/factories/fp-1/work');
+          await expect(page.getByRole('article', { name: 'Candidate 0', exact: true })).toBeVisible();
+          if (layout === 'board') {
+            await page.getByRole('button', { name: 'New view', exact: true }).click();
+            await page.getByRole('radio', { name: 'Board', exact: true }).click();
+            await page.getByRole('button', { name: 'Save view', exact: true }).click();
+            await expect(page.getByRole('group', { name: 'Board columns' })).toBeVisible();
+          }
+          const cards = page.getByTestId('candidate-card');
+          const scroll = page
+            .getByTestId('board-column-intake')
+            .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " overflow-auto ")][1]');
+          expect(requestedPages).toEqual([1]);
+          await scroll.evaluate(element => {
+            element.scrollTop = element.scrollHeight;
+          });
+          await expect(page.getByRole('status', { name: 'Loading more candidates' })).toBeVisible();
+          const anchor = page.getByRole('article', { name: 'Candidate 29', exact: true });
+          await expect(anchor).toBeInViewport();
+          const before = await anchor.evaluate(element => element.getBoundingClientRect().top);
+          await scroll.evaluate(async element => {
+            for (let frame = 0; frame < 5; frame++) {
+              element.dispatchEvent(new Event('scroll'));
+              await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+            }
+          });
+          expect(requestedPages).toEqual([1, 2]);
+          releasePage();
+          await expect(page.getByRole('status', { name: 'Loading more candidates' })).toHaveCount(0);
+          await expect(anchor).toBeInViewport();
+          expect(
+            Math.abs((await anchor.evaluate(element => element.getBoundingClientRect().top)) - before),
+          ).toBeLessThan(2);
+          expect(await cards.count()).toBeLessThan(40);
+          expect(requestedPages).toEqual([1, 2]);
+
+          await scroll.evaluate(element => {
+            element.scrollTop = element.scrollHeight;
+          });
+          await expect(page.getByRole('alert')).toContainText('Candidate page unavailable');
+          await expect(page.getByRole('article', { name: 'Candidate 129', exact: true })).toBeInViewport();
+          failLastPage = false;
+          await page.getByRole('button', { name: 'Retry', exact: true }).click();
+          await expect(page.getByRole('alert')).toHaveCount(0);
+          await expect(page.getByRole('button', { name: 'Load more candidates' })).toHaveCount(0);
+          await scroll.evaluate(element => {
+            element.scrollTop = element.scrollHeight;
+          });
+          await expect(page.getByRole('article', { name: 'Candidate 229', exact: true })).toBeInViewport();
+          expect(await cards.count()).toBeLessThan(40);
+          expect(requestedPages).toEqual([1, 2, 3, 3]);
+
+          await scroll.evaluate(element => {
+            element.scrollTop = 0;
+          });
+          await expect(page.getByRole('article', { name: 'Candidate 0', exact: true })).toBeInViewport();
+          expect(await cards.count()).toBeLessThan(40);
+          expect(requestedPages).toEqual([1, 2, 3, 3]);
+        });
+      });
+
       test.describe(`when scrolling a large ${layout} on ${viewport.name}`, () => {
         test.use(viewport.use);
         test('reaches the end and returns with bounded card mounts and no overlapping rows', async ({ page }) => {
@@ -144,14 +236,21 @@ test.describe('Factory board virtualization', () => {
       });
     });
 
-    test.describe(`when opening a deep link into a large list on ${viewport.name}`, () => {
-      test.use(viewport.use);
-      test('scrolls the linked issue into the viewport without mounting its predecessors', async ({ page }) => {
-        await page.goto('/factories/fp-1/work?item=large-0');
-        await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeInViewport();
-        await expect(page.getByRole('button', { name: 'Details for Large task 0', exact: true })).toBeFocused();
-        expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
+    for (const count of [10, 2000]) {
+      test.describe(`when opening a deep link into a ${count}-item list on ${viewport.name}`, () => {
+        test.use(viewport.use);
+        test('scrolls the linked issue into the viewport with bounded card mounts', async ({ page }) => {
+          server.use(
+            http.get('*/web/factory/projects/fp-1/work-items', () =>
+              HttpResponse.json({ workItems: largeBoard(count) }),
+            ),
+          );
+          await page.goto('/factories/fp-1/work?item=large-0');
+          await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeInViewport();
+          await expect(page.getByRole('button', { name: 'Details for Large task 0', exact: true })).toBeFocused();
+          expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
+        });
       });
-    });
+    }
   }
 });

@@ -33,6 +33,7 @@ export function VirtualBoardWindow({
   const [retainedRows] = useState(() => boardRetainedRows(contentRef));
   const retainedKeys = useSyncExternalStore(retainedRows.subscribe, retainedRows.getSnapshot);
   const [scrollOptions] = useState(() => boardVirtualScroll(scrollRef, contentRef));
+  const virtualized = count > 30;
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     ...scrollOptions,
     count,
@@ -60,15 +61,23 @@ export function VirtualBoardWindow({
       virtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined;
     };
   }, [virtualizer]);
-  const rows = virtualizer.getVirtualItems();
+  // Keep the viewport observer and keyed row tree across page appends. Disabling
+  // the observer for small groups would leave an empty range on the first render
+  // above the threshold, unmounting cards before the viewport is measured again.
+  // Measure the initial rows too: mobile heights can exceed the estimates, and
+  // switching to estimated positions would otherwise jump past the visible card.
+  const rows = virtualized
+    ? virtualizer.getVirtualItems()
+    : Array.from({ length: count }, (_, index) => ({ index, key: getItemKey(index), start: 0, end: 0 }));
   const scrollElement = virtualizer.scrollElement;
   useLayoutEffect(() => {
-    if (pinnedIndex < 0 || !scrollElement) return;
+    if (!virtualized || pinnedIndex < 0 || !scrollElement) return;
     // Reconcile the target as nearby rows are measured. On mobile those rows
     // can grow after the card's initial scrollIntoView and push it offscreen.
     virtualizer.scrollToIndex(pinnedIndex, { align: 'center' });
-  }, [pinnedIndex, scrollElement, virtualizer]);
+  }, [virtualized, pinnedIndex, scrollElement, virtualizer]);
   const listGrid = layout === 'list' ? 'col-span-full grid grid-cols-subgrid' : undefined;
+  const rowGap = layout === 'list' ? 1 : 10;
 
   return (
     <div ref={contentRef} className={listGrid}>
@@ -80,7 +89,7 @@ export function VirtualBoardWindow({
             data-index={row.index}
             data-item-key={row.key}
             className={listGrid}
-            style={{ paddingBottom: layout === 'list' ? 1 : 10 }}
+            style={{ paddingBottom: row.index === count - 1 ? 0 : rowGap }}
           >
             {renderItem(row.index)}
           </div>
@@ -89,7 +98,7 @@ export function VirtualBoardWindow({
       <div
         aria-hidden
         className="col-span-full"
-        style={{ height: Math.max(0, virtualizer.getTotalSize() - (rows.at(-1)?.end ?? 0)) }}
+        style={{ height: virtualized ? Math.max(0, virtualizer.getTotalSize() - (rows.at(-1)?.end ?? 0)) : 0 }}
       />
     </div>
   );
