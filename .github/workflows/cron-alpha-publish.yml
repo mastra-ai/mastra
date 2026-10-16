@@ -34,14 +34,14 @@ jobs:
       - name: Post to Slack
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          # Channel ID; the bot must be a member of the channel.
-          SLACK_CHANNEL: ${{ vars.ALPHA_ALERTS_SLACK_CHANNEL }}
+          # The bot must be a member of this channel.
+          SLACK_CHANNEL: 'C08F5FH0KAM'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
           SHORT_SHA: ${{ github.sha }}
         run: |
-          if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL" ]; then
-            echo "::warning::SLACK_BOT_TOKEN or ALPHA_ALERTS_SLACK_CHANNEL is not set; skipping Slack alert."
+          if [ -z "$SLACK_BOT_TOKEN" ]; then
+            echo "::warning::SLACK_BOT_TOKEN is not set; skipping Slack alert."
             exit 0
           fi
 
