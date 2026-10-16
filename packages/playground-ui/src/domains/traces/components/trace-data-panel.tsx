@@ -2,6 +2,7 @@ import { useScorers } from '@mastra/react/hooks/scores';
 import { useState, type ComponentProps } from 'react';
 import { SpanScoring } from '@/domains/scores';
 import { TraceDataPanelView, type TraceSideView } from '@/domains/traces/components/trace-data-panel-view';
+import { getEarliestRootSpan } from '@/domains/traces/utils/span-utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 
 type TraceDataPanelProps = Omit<
@@ -19,7 +20,7 @@ export function TraceDataPanel(props: TraceDataPanelProps) {
   const { data: scorers, isLoading: isLoadingScorers } = useScorers();
   const rootSpan = props.anchorSpanId
     ? props.spans?.find(span => span.spanId === props.anchorSpanId)
-    : props.spans?.find(span => span.parentSpanId == null);
+    : getEarliestRootSpan(props.spans);
 
   return (
     <>

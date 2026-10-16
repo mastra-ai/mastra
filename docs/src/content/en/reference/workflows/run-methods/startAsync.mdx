@@ -78,7 +78,7 @@ const result = await workflow.getWorkflowRunExecutionResult(runId)
             type: 'string',
             isOptional: true,
             description:
-              'Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.',
+              'Trace ID to use for this execution (1-32 hexadecimal characters). If provided, the run joins that trace as a top-level run instead of starting a new trace.',
           },
         ],
       },

@@ -9,6 +9,28 @@ export type SpanTimingLayout = {
   widthPercent: number;
 };
 
+type TimedSpan = { startTime: string; endTime?: string; spans?: TimedSpan[] };
+
+/**
+ * Time axis of a span tree: from the earliest top-level start to the latest end anywhere
+ * in the tree, so every root (not only the first one) fits on it.
+ */
+export function getTraceTimeRange(spans: TimedSpan[]): { startTime: string; latency: number } {
+  const start = Math.min(...spans.map(span => new Date(span.startTime).getTime()));
+  if (!Number.isFinite(start)) return { startTime: '', latency: 0 };
+
+  let end = start;
+  const visit = (list: TimedSpan[]) => {
+    for (const span of list) {
+      if (span.endTime) end = Math.max(end, new Date(span.endTime).getTime());
+      if (span.spans) visit(span.spans);
+    }
+  };
+  visit(spans);
+
+  return { startTime: new Date(start).toISOString(), latency: end - start };
+}
+
 /** Positions a span on a track spanning the whole trace (`overallLatency` ms from `overallStartTime`). */
 export function getSpanTimingLayout(
   span: UISpan,

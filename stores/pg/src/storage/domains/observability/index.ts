@@ -346,7 +346,7 @@ export class ObservabilityPG extends ObservabilityStorage {
 
       const row = await this.#db.readClient.oneOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name",
+          "traceId", "spanId", "parentSpanId", "externalParentSpanId", "name",
           "entityType", "entityId", "entityName",
           "userId", "organizationId", "resourceId",
           "runId", "sessionId", "threadId", "requestId",
@@ -383,6 +383,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
+  /** Returns the trace's earliest root span (by `startedAt`, then `spanId`); a trace can have several. */
   async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     const { traceId } = args;
     try {
@@ -393,7 +394,7 @@ export class ObservabilityPG extends ObservabilityStorage {
 
       const row = await this.#db.readClient.oneOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name",
+          "traceId", "spanId", "parentSpanId", "externalParentSpanId", "name",
           "entityType", "entityId", "entityName",
           "userId", "organizationId", "resourceId",
           "runId", "sessionId", "threadId", "requestId",
@@ -403,7 +404,9 @@ export class ObservabilityPG extends ObservabilityStorage {
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
-        WHERE "traceId" = $1 AND "parentSpanId" IS NULL`,
+        WHERE "traceId" = $1 AND "parentSpanId" IS NULL
+        ORDER BY "startedAtZ" ASC, "spanId" ASC
+        LIMIT 1`,
         [traceId],
       );
 
@@ -440,7 +443,7 @@ export class ObservabilityPG extends ObservabilityStorage {
 
       const spans = await this.#db.readClient.manyOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name",
+          "traceId", "spanId", "parentSpanId", "externalParentSpanId", "name",
           "entityType", "entityId", "entityName",
           "userId", "organizationId", "resourceId",
           "runId", "sessionId", "threadId", "requestId",
@@ -493,7 +496,7 @@ export class ObservabilityPG extends ObservabilityStorage {
 
       const spans = await this.#db.readClient.manyOrNone<LightSpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name",
+          "traceId", "spanId", "parentSpanId", "externalParentSpanId", "name",
           "entityType", "entityId", "entityName",
           "spanType", "error", "isEvent",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
@@ -758,7 +761,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       // Get paginated spans
       const spans = await this.#db.readClient.manyOrNone<SpanRecord>(
         `SELECT
-          r."traceId", r."spanId", r."parentSpanId", r."name",
+          r."traceId", r."spanId", r."parentSpanId", r."externalParentSpanId", r."name",
           r."entityType", r."entityId", r."entityName",
           r."userId", r."organizationId", r."resourceId",
           r."runId", r."sessionId", r."threadId", r."requestId",

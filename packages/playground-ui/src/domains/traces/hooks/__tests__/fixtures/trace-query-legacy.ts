@@ -51,3 +51,47 @@ export const lastLegacyTracePage: ListTracesLightResponse = {
     },
   ],
 };
+
+// A trace started outside Mastra holds two root spans; legacy stores return one row per root.
+// Newest first, so its later root lands on the first page and its earliest root on the next.
+const outsideRoot = {
+  traceId: 'trace-outside',
+  parentSpanId: null,
+  spanType: SpanType.AGENT_RUN,
+  isEvent: false,
+  endedAt,
+  status: TraceStatus.SUCCESS,
+  createdAt: startedAt,
+  updatedAt: endedAt,
+  externalParentSpanId: 'f00dbabe12345678',
+};
+
+export const outsideTraceFirstLegacyPage: ListTracesLightResponse = {
+  pagination: { total: 3, page: 0, perPage: 2, hasMore: true },
+  spans: [
+    {
+      ...outsideRoot,
+      spanId: 'span-outside-late',
+      name: 'Second agent run',
+      startedAt: new Date('2026-09-01T10:00:30.000Z'),
+    },
+    {
+      traceId: 'trace-other',
+      spanId: 'span-other',
+      parentSpanId: null,
+      name: 'Workflow run',
+      spanType: SpanType.WORKFLOW_RUN,
+      isEvent: false,
+      startedAt: new Date('2026-09-01T10:00:20.000Z'),
+      endedAt,
+      status: TraceStatus.SUCCESS,
+      createdAt: startedAt,
+      updatedAt: endedAt,
+    },
+  ],
+};
+
+export const outsideTraceLastLegacyPage: ListTracesLightResponse = {
+  pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
+  spans: [{ ...outsideRoot, spanId: 'span-outside-early', name: 'First agent run', startedAt }],
+};

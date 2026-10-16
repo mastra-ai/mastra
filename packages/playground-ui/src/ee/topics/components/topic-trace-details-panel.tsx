@@ -27,6 +27,7 @@ export function TopicTraceDetailsPanel({
     traceSpans.data?.spans,
     selectedSpanId,
     spanId => onSpanSelect?.(spanId),
+    { groupExternalRoots: true },
   );
 
   if (!traceId) return null;

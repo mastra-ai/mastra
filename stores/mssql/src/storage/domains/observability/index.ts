@@ -280,7 +280,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
       const result = await request.query<SpanRecord>(
         `SELECT
-          [traceId], [spanId], [parentSpanId], [name],
+          [traceId], [spanId], [parentSpanId], [externalParentSpanId], [name],
           [entityType], [entityId], [entityName],
           [userId], [organizationId], [resourceId],
           [runId], [sessionId], [threadId], [requestId],
@@ -334,7 +334,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
       const result = await request.query<LightSpanRecord>(
         `SELECT
-          [traceId], [spanId], [parentSpanId], [name],
+          [traceId], [spanId], [parentSpanId], [externalParentSpanId], [name],
           [entityType], [entityId], [entityName],
           [spanType], [error], [isEvent],
           [startedAt], [endedAt], [createdAt], [updatedAt]
@@ -385,7 +385,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
       const result = await request.query<SpanRecord>(
         `SELECT
-          [traceId], [spanId], [parentSpanId], [name],
+          [traceId], [spanId], [parentSpanId], [externalParentSpanId], [name],
           [entityType], [entityId], [entityName],
           [userId], [organizationId], [resourceId],
           [runId], [sessionId], [threadId], [requestId],
@@ -432,8 +432,8 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       request.input('traceId', traceId);
 
       const result = await request.query<SpanRecord>(
-        `SELECT
-          [traceId], [spanId], [parentSpanId], [name],
+        `SELECT TOP 1
+          [traceId], [spanId], [parentSpanId], [externalParentSpanId], [name],
           [entityType], [entityId], [entityName],
           [userId], [organizationId], [resourceId],
           [runId], [sessionId], [threadId], [requestId],
@@ -442,7 +442,8 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
           [input], [output], [error], [isEvent],
           [startedAt], [endedAt], [createdAt], [updatedAt]
         FROM ${tableName}
-        WHERE [traceId] = @traceId AND [parentSpanId] IS NULL`,
+        WHERE [traceId] = @traceId AND [parentSpanId] IS NULL
+        ORDER BY [startedAt] ASC, [spanId] ASC`,
       );
 
       if (!result.recordset || result.recordset.length === 0) {
@@ -735,7 +736,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
       const result = await dataRequest.query<SpanRecord>(
         `SELECT
-          r.[traceId], r.[spanId], r.[parentSpanId], r.[name],
+          r.[traceId], r.[spanId], r.[parentSpanId], r.[externalParentSpanId], r.[name],
           r.[entityType], r.[entityId], r.[entityName],
           r.[userId], r.[organizationId], r.[resourceId],
           r.[runId], r.[sessionId], r.[threadId], r.[requestId],

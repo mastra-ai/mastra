@@ -547,8 +547,9 @@ LIMIT 1`,
 
     await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
     try {
-      // A retried copy of the root (same dedupeKey), and a second root in the same trace, which only
-      // a writer bug produces. Its later end time makes the two roots sort differently by endedAt.
+      // A retried copy of the root (same dedupeKey), and a second, later root in the same trace (like
+      // a second run under one outside request). Its later end time would sort the trace differently
+      // by endedAt, but the trace sorts and lists by its earliest root.
       await storage.createSpan({ span: root });
       await storage.createSpan({ span: root });
       await storage.createSpan({
@@ -567,28 +568,37 @@ LIMIT 1`,
       });
       expect(await physical.json<{ rows: number }>()).toEqual([{ rows: 3 }]);
 
-      const keyset = await query({});
-      expect('traces' in keyset ? keyset.traces.map(trace => trace.traceId) : []).toEqual([root.traceId]);
+      const listed = (response: Awaited<ReturnType<typeof query>>) =>
+        'traces' in response ? response.traces.map(trace => [trace.traceId, trace.rootSpanId, trace.endedAt]) : [];
+      const earliest = [root.traceId, 'root-a', root.endedAt.toISOString()];
+      expect(listed(await query({}))).toEqual([earliest]);
 
       for (const direction of ['asc', 'desc'] as const) {
         for (const field of ['startedAt', 'endedAt'] as const) {
-          // The listed row is the root whose sort value placed the trace on the page.
+          // Listed under the earliest root, whatever the order: its row gives the sort value.
           const page = await query({ orderBy: [{ field, direction }], pagination: { page: 0, perPage: 10 } });
           if (!('pagination' in page)) throw new Error('Expected a numbered page');
           expect(page.pagination?.total).toBe(1);
-          expect(page.traces.map(trace => trace.traceId)).toEqual([root.traceId]);
+          expect(listed(page), `${field} ${direction}`).toEqual([earliest]);
+          const keyset = await query({ orderBy: [{ field, direction }] });
+          expect(listed(keyset), `${field} ${direction}`).toEqual([earliest]);
         }
       }
 
-      // A root-column filter matches the trace through either root, once.
-      for (const entityName of ['agentA', 'agentB']) {
+      // A root-column filter matches the trace through either root, once, and lists it under that root.
+      for (const [entityName, rootSpanId] of [
+        ['agentA', 'root-a'],
+        ['agentB', 'root-b'],
+      ]) {
         const filtered = await query({
           where: { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
           pagination: { page: 0, perPage: 10 },
         });
         if (!('pagination' in filtered)) throw new Error('Expected a numbered page');
         expect(filtered.pagination?.total).toBe(1);
-        expect(filtered.traces.map(trace => [trace.traceId, trace.entityName])).toEqual([[root.traceId, entityName]]);
+        expect(filtered.traces.map(trace => [trace.traceId, trace.rootSpanId, trace.entityName])).toEqual([
+          [root.traceId, rootSpanId, entityName],
+        ]);
       }
       const missing = await query({
         where: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'agentC' } },
@@ -600,7 +610,7 @@ LIMIT 1`,
       expect('groups' in groups ? groups.groups : undefined).toEqual([{ threadId: root.threadId }]);
 
       const delta = await query({ mode: 'delta', after: seed.deltaCursor });
-      expect('traces' in delta ? delta.traces.map(trace => trace.traceId) : []).toEqual([root.traceId]);
+      expect(listed(delta)).toEqual([earliest]);
 
       // A window with no root of the trace doesn't list it.
       const outside = await storage.queryTraces(
@@ -627,7 +637,7 @@ LIMIT 1`,
       startedAt: new Date(at),
       endedAt: new Date(at),
     });
-    // Trace T has roots on either side of trace U's only root, which only a writer bug produces.
+    // Trace T has roots on either side of trace U's only root.
     await storage.createSpan({ span: root('keyset-t', 'root-t1', '2026-08-10T10:00:01.000Z') });
     await storage.createSpan({ span: root('keyset-t', 'root-t0', '2026-08-10T10:00:00.000Z') });
     await storage.createSpan({ span: root('keyset-u', 'root-u', '2026-08-10T10:00:00.500Z') });
@@ -650,8 +660,10 @@ LIMIT 1`,
           listed.push(...response.traces.map(trace => trace.traceId));
           after = response.page.next ?? undefined;
         } while (after && listed.length < 5);
-        // T sorts by its first root in either direction, so it comes first, once.
-        expect(listed, `${field} ${direction}`).toEqual(['keyset-t', 'keyset-u']);
+        // T sorts by its earliest root in either direction, so it comes once, before U only when ascending.
+        expect(listed, `${field} ${direction}`).toEqual(
+          direction === 'asc' ? ['keyset-t', 'keyset-u'] : ['keyset-u', 'keyset-t'],
+        );
       }
     }
   });
@@ -7218,6 +7230,48 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
     } finally {
       await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
       await client.close();
+    }
+  });
+
+  it('groups a trace by its earliest root and matches pushed-down filters through any root', async () => {
+    await storage.dangerouslyClearAll();
+    const root = {
+      traceId: 'aggregate-pushdown-trace',
+      parentSpanId: null,
+      name: 'root-span',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      environment: 'test',
+      startedAt: new Date('2026-08-02T00:00:00Z'),
+      endedAt: new Date('2026-08-02T00:00:01Z'),
+    } as const;
+    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-a', entityName: 'agentA' } });
+    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-b', entityName: 'agentB' } });
+
+    // The roots start together, so the lower span ID represents the trace.
+    const all = await storage.aggregateTraces(
+      planTraceAggregate(
+        parseTraceAggregateRequest({ timeRange: TIME_RANGE, groupBy: ['entityName'], measures: ['count'] }),
+      ),
+    );
+    expect(all.rows).toEqual([{ dimensions: { entityName: 'agentA' }, measures: { count: 1 } }]);
+
+    for (const entityName of ['agentA', 'agentB']) {
+      const where = {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
+          { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
+        ],
+      };
+      // Grouped by the matching root, the earliest candidate.
+      const aggregate = await storage.aggregateTraces(
+        planTraceAggregate(
+          parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, groupBy: ['entityName'], measures: ['count'] }),
+        ),
+      );
+      expect(aggregate.rows).toEqual([{ dimensions: { entityName }, measures: { count: 1 } }]);
     }
   });
 });

@@ -29,7 +29,7 @@ import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/s
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
-import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
+import { ALL_DDL, ALL_MIGRATIONS, SPAN_EVENTS_DDL } from './ddl';
 import { aggregateTraces as aggregateDuckDBTraces } from './trace-aggregate';
 import type { ObservabilityStorageDuckDB } from './index';
 import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
@@ -427,6 +427,44 @@ describe('ObservabilityStorageDuckDB', () => {
       );
 
       expect(rows).toEqual([{ count: 1 }]);
+    } finally {
+      await db?.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('adds the outside parent column to a database file from an older version, keeping old rows readable', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-duckdb-external-parent-'));
+    const dbPath = join(dir, 'observability.duckdb');
+    let db: DuckDBConnection | undefined;
+
+    try {
+      db = new DuckDBConnection({ path: dbPath });
+      const olderSpanEvents = SPAN_EVENTS_DDL.replace(/^\s*externalParentSpanId VARCHAR,$/m, '');
+      expect(olderSpanEvents).not.toContain('externalParentSpanId');
+      await db.execute(olderSpanEvents);
+      await db.execute(`
+        INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent, endedAt)
+        VALUES
+          ('start', TIMESTAMP '2026-05-19 00:00:00', 1, 'trace-old', 'root-old', 'run', 'agent_run', false, NULL),
+          ('end', TIMESTAMP '2026-05-19 00:00:01', 2, 'trace-old', 'root-old', 'run', 'agent_run', false, TIMESTAMP '2026-05-19 00:00:01')
+      `);
+      await db.close();
+
+      db = new DuckDBConnection({ path: dbPath });
+      const upgraded = new ConcreteObservabilityStorageDuckDB({ db });
+      await upgraded.init();
+
+      const root = await upgraded.getRootSpan({ traceId: 'trace-old' });
+      expect(root?.span).toMatchObject({ spanId: 'root-old', parentSpanId: null, externalParentSpanId: null });
+      const listed = await upgraded.queryTraces(
+        planTraceQuery(
+          parseTraceQueryRequest({ timeRange: { from: '2026-05-19T00:00:00Z', to: '2026-05-20T00:00:00Z' } }),
+        ),
+      );
+      expect('traces' in listed && listed.traces).toEqual([
+        expect.objectContaining({ traceId: 'trace-old', externalParentSpanId: null }),
+      ]);
     } finally {
       await db?.close();
       await rm(dir, { recursive: true, force: true });

@@ -348,7 +348,7 @@ describe('trace-aggregate token and cost conformance cases', () => {
   });
 
   it('counts exactly the traces evaluateTraceQuery returns for the token fixture', () => {
-    // August holds every token trace but `early-1` and `tenant-check`, and the resumed trace
+    // August holds every token trace but `early-1` and `tenant-check`, and the two-root trace
     // counts once.
     const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
     const traces = evaluateTraceQuery(

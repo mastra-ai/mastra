@@ -40,6 +40,7 @@ export const LIGHT_SPAN_COLUMNS = [
   'traceId',
   'spanId',
   'parentSpanId',
+  'externalParentSpanId',
   'name',
   'entityType',
   'entityId',

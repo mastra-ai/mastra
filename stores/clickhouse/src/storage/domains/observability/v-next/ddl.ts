@@ -132,6 +132,8 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   traceId            String,
   spanId             String,
   parentSpanId       Nullable(String),
+  -- Parent span in an outside tracing system; not a Mastra parent, so the span can still be a root.
+  externalParentSpanId Nullable(String),
   experimentId       Nullable(String),
 
   -- Entity
@@ -210,6 +212,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   traceId            String,
   spanId             String,
   parentSpanId       Nullable(String),
+  externalParentSpanId Nullable(String),
   experimentId       Nullable(String),
 
   -- Entity
@@ -313,6 +316,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   traceId            String,
   spanId             String,
   parentSpanId       Nullable(String),
+  externalParentSpanId Nullable(String),
   experimentId       Nullable(String),
 
   -- Entity
@@ -1282,6 +1286,10 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SPAN_EVENTS, 'inputPreview', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'outputPreview', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'errorPreview', 'Nullable(String)'),
+  // Outside parent span IDs, in the same order: view targets first.
+  addColumn(TABLE_TRACE_ROOTS, 'externalParentSpanId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'externalParentSpanId', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'externalParentSpanId', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),

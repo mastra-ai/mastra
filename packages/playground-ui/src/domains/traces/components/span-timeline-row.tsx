@@ -1,6 +1,7 @@
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { getSpanTimingLayout } from '../utils/span-timing';
+import { getSpanNameTitle } from './shared';
 import type { SpanRowContext } from './span-rows';
 import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { TimelineStructureSign } from './timeline-structure-sign';
@@ -53,7 +54,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
   return (
     <div
       ref={rowRef}
-      aria-label={`View details for span ${span.name}`}
+      aria-label={span.isVirtual ? span.name : `View details for span ${span.name}`}
       aria-selected={isSelected}
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
@@ -89,7 +90,8 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
             variant="caption"
             data-highlight={span.matchedInPayloadOnly ? undefined : ''}
             data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
-            title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
+            title={getSpanNameTitle(span)}
+            tone={span.isVirtual ? 'muted' : undefined}
             className="min-w-0 truncate"
           >
             {span.name}

@@ -21,7 +21,7 @@ function narrowingScan(sql: string): string {
 }
 
 describe('DuckDB trace root pushdown', () => {
-  it('pushes root-column conjuncts into the narrowing scan and keeps the full where on candidates', () => {
+  it('pushes root-column conjuncts into the narrowing scan and keeps the full where on candidate roots', () => {
     const compiled = compileDuckDBTraceQuery(
       planTraceQuery(
         parseTraceQueryRequest({
@@ -55,7 +55,7 @@ describe('DuckDB trace root pushdown', () => {
     expect(scan).not.toContain('tags');
     expect(scan).not.toContain('EXISTS');
     expect(compiled.sql).toContain('AND traceId IN (SELECT traceId FROM root_trace_ids)');
-    expect(compiled.sql).toMatch(/candidates AS \([\s\S]*?r\.environment IS NOT DISTINCT FROM \?/);
+    expect(compiled.sql).toMatch(/candidate_roots AS \([\s\S]*?r\.environment IS NOT DISTINCT FROM \?/);
     expect(compiled.values.slice(0, 6)).toEqual([
       timeRange.from,
       timeRange.to,
@@ -175,6 +175,19 @@ describe('DuckDB trace root pushdown', () => {
       await rootVersion('current-match', { startedAt: '2026-01-01T10:00:00.000Z' });
 
       expect(await selected()).toEqual(['current-match']);
+    });
+
+    it('judges a root by its latest completed version while a later version is still running', async () => {
+      await rootVersion('reopened', { environment: 'prod' });
+      await db.execute(
+        `INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, parentSpanId, name, spanType, isEvent, environment)
+         VALUES ('start', CAST(? AS TIMESTAMP), ?, 'reopened', 'root', NULL, 'run', 'agent_run', false, 'staging')`,
+        ['2026-01-01T11:00:00.000Z', ++cursorId],
+      );
+
+      expect(await selected({ op: 'eq', left: { path: 'environment' }, right: { literal: 'prod' } })).toEqual([
+        'reopened',
+      ]);
     });
   });
 });

@@ -50,8 +50,9 @@ const COMPARISON_SQL = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>
 /**
  * Compiles a trusted aggregate plan. The plan's caps are enforced by the planner and trusted here.
  *
- * Every candidate root is first reduced to a `facts` row (dimension values, duration, error flag,
- * countDistinct inputs, bucket) so grouping, measures, and joins only reference plain columns.
+ * Each trace's representative root (see `compileDuckDBTraceCandidates`) is first reduced to a
+ * `facts` row (dimension values, duration, error flag, countDistinct inputs, bucket) so grouping,
+ * measures, and joins only reference plain columns.
  * Without `interval`, groups are filtered, ordered, and limited in one grouped select. With
  * `interval`, a `ranked` CTE ranks groups on whole-window measures, then only the top `limit`
  * groups are expanded into per-bucket rows.

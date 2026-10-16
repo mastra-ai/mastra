@@ -428,6 +428,31 @@ export function createObservabilityTests({
         expect(result!.span.spanId).toBe('root');
         expect(result!.span.parentSpanId).toBeNull();
       });
+
+      it('should return the earliest root when a trace has several roots, whatever the write order', async () => {
+        // The earliest root has the higher spanId, so ordering by spanId alone fails.
+        const roots = (traceId: string) => [
+          createSpan({ traceId, spanId: 'root-z-earliest', startedAt: DEFAULT_BASE_DATE }),
+          createSpan({ traceId, spanId: 'root-a-later', startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 5000) }),
+        ];
+        for (const span of roots('trace-1')) await observabilityStorage.createSpan({ span });
+        for (const span of roots('trace-2').reverse()) await observabilityStorage.createSpan({ span });
+
+        for (const traceId of ['trace-1', 'trace-2']) {
+          const result = await observabilityStorage.getRootSpan({ traceId });
+          expect(result!.span.spanId, traceId).toBe('root-z-earliest');
+        }
+      });
+
+      it('should keep an outside parent on a root without making it a child', async () => {
+        const rootSpan = createSpan({ traceId: 'trace-1', spanId: 'root', externalParentSpanId: 'outside-parent' });
+        await observabilityStorage.createSpan({ span: rootSpan });
+
+        const result = await observabilityStorage.getRootSpan({ traceId: 'trace-1' });
+        expect(result!.span.spanId).toBe('root');
+        expect(result!.span.parentSpanId).toBeNull();
+        expect(result!.span.externalParentSpanId).toBe('outside-parent');
+      });
     });
 
     describeUpdate('updateSpan', () => {

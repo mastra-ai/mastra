@@ -194,6 +194,7 @@ const VNEXT_SPAN_COLUMNS = [
   'traceId',
   'spanId',
   'parentSpanId',
+  'externalParentSpanId',
   'experimentId',
   'entityType',
   'entityId',
@@ -267,6 +268,7 @@ function buildLegacySpanSelectExprs(legacyColumnTypes: Map<string, string>): str
     spanId: `"spanId"`,
     // Legacy stores '' for root spans; VNext MV filters on IS NULL.
     parentSpanId: has('parentSpanId') ? `nullIf("parentSpanId", '')` : 'NULL',
+    externalParentSpanId: colOrNull('externalParentSpanId'),
     experimentId: colOrNull('experimentId'),
     entityType: colOrNull('entityType'),
     entityId: colOrNull('entityId'),

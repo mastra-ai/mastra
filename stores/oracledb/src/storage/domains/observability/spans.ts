@@ -116,7 +116,7 @@ export async function getRootSpan(
     const row = await db.oneOrNone<SpanRow>(
       `${fullSpanSelect()} FROM ${qualifyName(TABLE_SPANS, schemaName)} WHERE ${col('traceId')} = :traceId AND ${col(
         'parentSpanId',
-      )} IS NULL FETCH FIRST 1 ROWS ONLY`,
+      )} IS NULL ORDER BY ${col('startedAt')} ASC, ${col('spanId')} ASC FETCH FIRST 1 ROWS ONLY`,
       { traceId },
     );
 

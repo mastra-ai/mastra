@@ -839,6 +839,42 @@ describe('migrateLegacySpans (mastra_ai_spans → mastra_span_events)', () => {
     expect(rootRows[0]!.spanId).toBe('span-root-empty');
   });
 
+  it('copies the outside parent span ID when the legacy table has it', async () => {
+    await client.command({ query: LEGACY_SPANS_MINIMAL_DDL });
+    // The legacy store adds the column to existing tables on init.
+    await client.command({ query: `ALTER TABLE mastra_ai_spans ADD COLUMN externalParentSpanId Nullable(String)` });
+    await client.insert({
+      table: 'mastra_ai_spans',
+      values: [
+        {
+          traceId: 'trace-outside',
+          spanId: 'root-outside',
+          parentSpanId: null,
+          externalParentSpanId: 'outside-parent',
+          name: 'agent-run',
+          spanType: 'agent_run',
+          isEvent: false,
+          startedAt: '2026-09-01 10:00:00.000',
+          endedAt: '2026-09-01 10:00:01.000',
+          createdAt: '2026-09-01 10:00:00.000',
+          updatedAt: '2026-09-01 10:00:01.000',
+        },
+      ],
+      format: 'JSONEachRow',
+      clickhouse_settings: { date_time_input_format: 'best_effort' },
+    });
+
+    await migrateLegacySpans(client);
+
+    const rows = await client.query({
+      query: `SELECT spanId, parentSpanId, externalParentSpanId FROM ${TABLE_TRACE_ROOTS}`,
+      format: 'JSONEachRow',
+    });
+    expect(await rows.json()).toEqual([
+      { spanId: 'root-outside', parentSpanId: null, externalParentSpanId: 'outside-parent' },
+    ]);
+  });
+
   it('handles legacy tags stored as Nullable(String) JSON text', async () => {
     // Very old schemas store tags as Nullable(String) containing JSON arrays
     await client.command({
@@ -1099,5 +1135,98 @@ describe('preview columns (ClickHouse v-next)', () => {
     }
     const light = await store.listTracesLight({ pagination: { page: 0, perPage: 10 } });
     expect(Object.fromEntries(light.spans.map(span => [span.traceId, previews(span)]))).toEqual(expected);
+  });
+});
+
+describe('outside parent span ID column (ClickHouse v-next)', () => {
+  let client: ClickHouseClient;
+  const config = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+
+  beforeAll(() => {
+    client = createClient(config);
+  });
+
+  beforeEach(async () => {
+    await dropAll(client);
+  });
+
+  afterAll(async () => {
+    await dropAll(client);
+    await client.close();
+  });
+
+  it('adds the column to existing tables while the views keep copying rows', async () => {
+    const store = new ObservabilityStorageClickhouseVNext(config);
+    await store.init();
+    // A deployment from before the column: the tables lack it, and the views were created without it.
+    await client.command({ query: `DROP VIEW ${MV_TRACE_ROOTS}` });
+    await client.command({ query: `DROP VIEW ${MV_TRACE_BRANCHES}` });
+    for (const table of [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES]) {
+      await client.command({ query: `ALTER TABLE ${table} DROP COLUMN externalParentSpanId` });
+    }
+    await client.command({ query: TRACE_ROOTS_MV_DDL });
+    await client.command({ query: TRACE_BRANCHES_MV_DDL });
+    await client.insert({
+      table: TABLE_SPAN_EVENTS,
+      values: [
+        {
+          dedupeKey: 'trace-old:root-old',
+          traceId: 'trace-old',
+          spanId: 'root-old',
+          parentSpanId: null,
+          name: 'old run',
+          spanType: 'agent_run',
+          startedAt: '2026-08-01 10:00:00.000',
+          endedAt: '2026-08-01 10:00:01.000',
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    await store.init();
+    await store.createSpan({
+      span: {
+        traceId: 'trace-new',
+        spanId: 'root-new',
+        parentSpanId: null,
+        externalParentSpanId: 'outside-parent',
+        name: 'new run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        entityType: EntityType.AGENT,
+        startedAt: new Date('2026-08-01T11:00:00.000Z'),
+        endedAt: new Date('2026-08-01T11:00:01.000Z'),
+      },
+    });
+
+    const stored = await client.query({
+      query: `SELECT * FROM (
+          SELECT 'branches' AS t, spanId, externalParentSpanId FROM ${TABLE_TRACE_BRANCHES}
+          UNION ALL SELECT 'roots' AS t, spanId, externalParentSpanId FROM ${TABLE_TRACE_ROOTS}
+          UNION ALL SELECT 'spans' AS t, spanId, externalParentSpanId FROM ${TABLE_SPAN_EVENTS}
+        ) ORDER BY t, spanId`,
+      format: 'JSONEachRow',
+    });
+    expect(await stored.json()).toEqual(
+      ['branches', 'roots', 'spans'].flatMap(t => [
+        { t, spanId: 'root-new', externalParentSpanId: 'outside-parent' },
+        { t, spanId: 'root-old', externalParentSpanId: null },
+      ]),
+    );
+
+    const response = await store.queryTraces(
+      planTraceQuery(
+        parseTraceQueryRequest({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' } }),
+      ),
+    );
+    if (!('traces' in response)) throw new Error('Expected traces');
+    expect(response.traces.map(trace => [trace.traceId, trace.parentSpanId, trace.externalParentSpanId])).toEqual([
+      ['trace-new', null, 'outside-parent'],
+      ['trace-old', null, null],
+    ]);
   });
 });

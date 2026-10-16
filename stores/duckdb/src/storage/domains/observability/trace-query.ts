@@ -118,6 +118,7 @@ const TRACE_SELECT = `
   r.name AS name,
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
+  r.externalParentSpanId AS externalParentSpanId,
   r.metadata AS metadata,
   r.inputPreview AS inputPreview,
   r.outputPreview AS outputPreview,
@@ -373,8 +374,10 @@ export interface CompiledDuckDBTraceQuery {
 }
 
 // Columns stored on each root event row, so a predicate over them has the same value on the raw
-// event as on the current root. `startedAt` is excluded: it is derived from the preceding event.
-// Computed fields (status, durationMs, metadata.*) and tags stay in `candidates`, as in PostgreSQL.
+// event as on the root's current row. `startedAt` is excluded: it is derived from the preceding
+// event.
+// Computed fields (status, durationMs, metadata.*) and tags stay in `candidate_roots`, as in
+// PostgreSQL.
 const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'traceId',
   'threadId',
@@ -404,12 +407,17 @@ function rootPushdownPredicates(predicate: TrustedTraceQueryPredicate | undefine
 }
 
 /**
- * Builds the selection CTEs. `root_trace_ids` narrows the root scan to traces that could have a
- * qualifying current root before the window functions run: some root event carries the current
- * root's own conditions (ended, tenant, pushed `where` conjuncts) and some root event has a
- * timestamp in the window (the current root's `startedAt` is a root event's timestamp in its
- * trace). This only removes traces that cannot qualify; `root_events` / `current_roots` still see
- * every root event of the remaining traces, and the full `where` is applied in `candidates`.
+ * Builds the selection CTEs. A trace can have several roots (spans with no parent, e.g. several
+ * runs under one outside request); `current_roots` holds each root's current row (its latest
+ * completed event, else its latest event), and `root_scope` the complete roots that start in the
+ * window. Each root is judged on its own, so a later root that is still running hides nothing.
+ *
+ * `root_trace_ids` narrows the root scan to traces that could have a qualifying root before the
+ * window functions run: some root event carries a root's own conditions (ended, tenant, pushed
+ * `where` conjuncts) and some root event has a timestamp in the window (a root's `startedAt` is a
+ * root event's timestamp in its trace). This only removes traces that cannot qualify;
+ * `root_events` / `current_roots` still see every root event of the remaining traces, and the
+ * full `where` is applied to each root in `candidate_roots`.
  */
 function compileDuckDBTraceScope(
   relatedCollections: Set<RelatedCollection>,
@@ -474,7 +482,12 @@ function compileDuckDBTraceScope(
     `current_roots AS (
       SELECT * EXCLUDE (rootRank)
       FROM (
-        SELECT *, row_number() OVER (PARTITION BY traceId ORDER BY cursorId DESC) AS rootRank
+        SELECT
+          *,
+          row_number() OVER (
+            PARTITION BY traceId, spanId
+            ORDER BY CASE WHEN endedAt IS NULL THEN 1 ELSE 0 END ASC, cursorId DESC
+          ) AS rootRank
         FROM root_events
       )
       WHERE rootRank = 1
@@ -490,6 +503,11 @@ function compileDuckDBTraceScope(
       ].join('\n        AND ')}
     )`,
   ];
+
+  // Related records belong to the trace, not to one of its roots: join each in-scope trace once.
+  if (relatedCollections.size > 0) {
+    ctes.push(`scope_trace_ids AS (SELECT DISTINCT traceId FROM root_scope)`);
+  }
 
   if (relatedCollections.has('spans')) {
     ctes.push(`span_bounds AS (
@@ -512,7 +530,7 @@ function compileDuckDBTraceScope(
           ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
         ) AS currentRank
       FROM span_events e
-      INNER JOIN root_scope roots ON roots.traceId = e.traceId
+      INNER JOIN scope_trace_ids roots ON roots.traceId = e.traceId
       WHERE e.timestamp >= (SELECT minTs FROM span_bounds)
         AND e.timestamp <= (SELECT maxTs FROM span_bounds)${tenantConditions('e')
           .map(condition => `\n        AND ${condition}`)
@@ -554,7 +572,7 @@ function compileDuckDBTraceScope(
     ctes.push(`current_scores AS (
       SELECT s.*
       FROM score_events s
-      INNER JOIN root_scope roots ON roots.traceId = s.traceId${tenantWhere('s')}
+      INNER JOIN scope_trace_ids roots ON roots.traceId = s.traceId${tenantWhere('s')}
     )`);
     values.push(...tenantValues);
   }
@@ -563,7 +581,7 @@ function compileDuckDBTraceScope(
     ctes.push(`current_feedback AS (
       SELECT f.*
       FROM feedback_events f
-      INNER JOIN root_scope roots ON roots.traceId = f.traceId${tenantWhere('f')}
+      INNER JOIN scope_trace_ids roots ON roots.traceId = f.traceId${tenantWhere('f')}
     )`);
     values.push(...tenantValues);
   }
@@ -572,8 +590,17 @@ function compileDuckDBTraceScope(
 }
 
 /**
+ * Keeps each trace's representative root (alias `r`): its earliest root by `startedAt`, then
+ * `spanId`.
+ */
+const REPRESENTATIVE_ROOT_SQL = `QUALIFY row_number() OVER (PARTITION BY r.traceId ORDER BY r.startedAt ASC, r.spanId ASC) = 1`;
+
+/**
  * Builds the trace selection stages shared by trace queries and trace aggregates: root scope,
- * related-collection scopes, and a `candidates` CTE projecting `columns` from matching roots.
+ * related-collection scopes, `candidate_roots` (every root matching `where`, judged per root), and
+ * `candidates`, projecting `columns` from each trace's representative candidate root. Trace rows,
+ * sort values, cursors, and aggregates come from `candidates`; thread groups read
+ * `candidate_roots`, so a thread qualifies through any root.
  */
 export function compileDuckDBTraceCandidates(
   plan: Pick<TrustedTraceQueryPlan, 'timeRange' | 'where' | 'scope'>,
@@ -594,11 +621,18 @@ export function compileDuckDBTraceCandidates(
     values.push(...predicate.values);
   }
 
-  ctes.push(`candidates AS (
-    SELECT ${columns}
+  ctes.push(
+    `candidate_roots AS (
+    SELECT *
     FROM root_scope r
     WHERE ${predicateSql}
-  )`);
+  )`,
+    `candidates AS (
+    SELECT ${columns}
+    FROM candidate_roots r
+    ${REPRESENTATIVE_ROOT_SQL}
+  )`,
+  );
   return { ctes, values };
 }
 
@@ -617,7 +651,7 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
     return {
       sql: `${candidates}
 SELECT threadId
-FROM candidates
+FROM candidate_roots
 WHERE threadId IS NOT NULL ${pageCondition}
 GROUP BY threadId
 ORDER BY threadId ASC
@@ -748,8 +782,15 @@ function discoveryRegistry(scope: TrustedTraceQueryValuesPlan['predicateScope'])
   return FEEDBACK_FIELDS;
 }
 
+/** Discovery reads each in-scope trace's representative root, like the trace rows it describes. */
+const DISCOVERY_ROOTS_CTE = `discovery_roots AS (
+    SELECT *
+    FROM root_scope r
+    ${REPRESENTATIVE_ROOT_SQL}
+  )`;
+
 function discoverySource(scope: TrustedTraceQueryValuesPlan['predicateScope']): string {
-  if (scope === 'trace') return 'root_scope r';
+  if (scope === 'trace') return 'discovery_roots r';
   if (scope === 'spans') return 'current_spans s';
   if (scope === 'scores') return 'current_scores s';
   return 'current_feedback s';
@@ -763,13 +804,14 @@ export function compileDuckDBTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledDuckDBTraceQuery {
   const { ctes, values } = compileDuckDBTraceScope(new Set(), plan.scope, plan.timeRange);
+  ctes.push(DISCOVERY_ROOTS_CTE);
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower(?)) > 0` : '';
   return {
     sql: `WITH ${ctes.join(',\n  ')}
 SELECT 'metadata.' || entry.key AS path, count(*) AS occurrences
-FROM root_scope r, LATERAL json_each(r.metadata) entry
+FROM discovery_roots r, LATERAL json_each(r.metadata) entry
 WHERE entry.type = 'VARCHAR'
   AND trim(json_extract_string(entry.value, '$')) <> ''
   AND entry.key <> ''
@@ -790,10 +832,11 @@ export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan)
     plan.scope,
     plan.timeRange,
   );
+  if (plan.predicateScope === 'trace') ctes.push(DISCOVERY_ROOTS_CTE);
   let fieldSql: string;
   let source = discoverySource(plan.predicateScope);
   if (plan.predicateScope === 'trace' && plan.path === 'tags') {
-    // One row per (current root, distinct tag); unnest of NULL yields no rows.
+    // One row per (representative root, distinct tag); unnest of NULL yields no rows.
     fieldSql = 'unnest(list_distinct(TRY_CAST(r.tags AS VARCHAR[])))';
     source = `${source} WHERE r.tags IS NOT NULL`;
   } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
@@ -912,6 +955,14 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
   }
 }
 
+// Older core versions validate trace rows with a strict schema that predates this field.
+const TRACE_ROWS_CARRY_EXTERNAL_PARENT = 'externalParentSpanId' in coreStorage.traceQueryTraceSchema.shape;
+
+function externalParentField(row: Record<string, unknown>): { externalParentSpanId?: string | null } {
+  if (!TRACE_ROWS_CARRY_EXTERNAL_PARENT) return {};
+  return { externalParentSpanId: row.externalParentSpanId == null ? null : String(row.externalParentSpanId) };
+}
+
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
   if (plan.paginationMode === 'page') {
@@ -927,6 +978,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
         name: row.name,
         entityId: row.entityId ?? null,
         parentSpanId: row.parentSpanId ?? null,
+        ...externalParentField(row),
         createdAt: asIsoTimestamp(row.startedAt),
         metadata: parseJson(row.metadata) ?? null,
         inputPreview: apiPreview(row.inputPreview),
@@ -982,6 +1034,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     name: row.name,
     entityId: row.entityId ?? null,
     parentSpanId: row.parentSpanId ?? null,
+    ...externalParentField(row),
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: parseJson(row.metadata) ?? null,
     inputPreview: apiPreview(row.inputPreview),

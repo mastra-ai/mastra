@@ -306,6 +306,9 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string
 
+  /** Parent span id from an external tracing system, such as an OpenTelemetry span. Not a Mastra parent */
+  externalParentSpanId?: string
+
   /** TRUE if the span is the root span of a trace */
   isRootSpan: boolean
 }

@@ -336,7 +336,7 @@ describe('MastraStorageExporter', () => {
         });
       });
 
-      it('should store bridged root spans without their external parent', async () => {
+      it('should store bridged root spans as roots and keep their external parent apart', async () => {
         mockObservabilityStore.observabilityStrategy = {
           preferred: 'realtime',
           supported: ['realtime', 'batch-with-updates', 'insert-only'],
@@ -363,9 +363,17 @@ describe('MastraStorageExporter', () => {
         const records = mockObservabilityStore.batchCreateSpans.mock.calls.flatMap((call: any) => call[0].records);
         expect(records).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ spanId: 'root-span', parentSpanId: null }),
-            expect.objectContaining({ spanId: 'resumed-root-span', parentSpanId: 'suspended-span' }),
-            expect.objectContaining({ spanId: 'child-span', parentSpanId: 'root-span' }),
+            expect.objectContaining({
+              spanId: 'root-span',
+              parentSpanId: null,
+              externalParentSpanId: 'external-parent',
+            }),
+            expect.objectContaining({
+              spanId: 'resumed-root-span',
+              parentSpanId: 'suspended-span',
+              externalParentSpanId: null,
+            }),
+            expect.objectContaining({ spanId: 'child-span', parentSpanId: 'root-span', externalParentSpanId: null }),
           ]),
         );
       });

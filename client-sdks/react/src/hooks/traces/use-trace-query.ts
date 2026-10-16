@@ -100,15 +100,21 @@ export function lightSpanToTraceQueryTrace(span: LightSpanRecord): TraceQueryTra
   return row as TraceQueryTrace;
 }
 
+const startsBefore = (a: LightSpanRecord, b: LightSpanRecord): boolean => {
+  const diff = new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
+  return diff < 0 || (diff === 0 && a.spanId < b.spanId);
+};
+
+/** Legacy stores return one row per root span, and a trace started outside Mastra can hold
+ *  several. Each trace is listed once, at its first position, by its earliest-started root
+ *  among the loaded rows; an earlier root on a later page replaces the row in place. */
 export function selectLegacyTraceQueryTraces(data: { pages: ListTracesLightResponse[] }): TraceQueryTrace[] {
-  const seen = new Set<string>();
-  return data.pages.flatMap(page =>
-    page.spans.flatMap(span => {
-      if (seen.has(span.traceId)) return [];
-      seen.add(span.traceId);
-      return [lightSpanToTraceQueryTrace(span)];
-    }),
-  );
+  const earliestByTraceId = new Map<string, LightSpanRecord>();
+  for (const span of data.pages.flatMap(page => page.spans)) {
+    const current = earliestByTraceId.get(span.traceId);
+    if (!current || startsBefore(span, current)) earliestByTraceId.set(span.traceId, span);
+  }
+  return [...earliestByTraceId.values()].map(lightSpanToTraceQueryTrace);
 }
 
 export function getLegacyTraceQueryNextPageParam(lastPage: ListTracesLightResponse): number | undefined {

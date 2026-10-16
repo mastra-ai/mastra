@@ -260,6 +260,7 @@ export class ObservabilityMySQL extends ObservabilityStorage {
           sql: ` WHERE ${quoteIdentifier('traceId', 'column name')} = ? AND ${quoteIdentifier('parentSpanId', 'column name')} IS NULL`,
           args: [traceId],
         },
+        orderBy: `${quoteIdentifier('startedAt', 'column name')} ASC, ${quoteIdentifier('spanId', 'column name')} ASC`,
         limit: 1,
       });
 
@@ -335,6 +336,7 @@ export class ObservabilityMySQL extends ObservabilityStorage {
         traceId: span.traceId,
         spanId: span.spanId,
         parentSpanId: span.parentSpanId,
+        externalParentSpanId: span.externalParentSpanId,
         name: span.name,
         entityType: span.entityType,
         entityId: span.entityId,

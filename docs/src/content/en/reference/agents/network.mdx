@@ -192,7 +192,7 @@ await agent.network(`
                     type: 'string',
                     isOptional: true,
                     description:
-                      'Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.',
+                      'Trace ID to use for this execution (1-32 hexadecimal characters). If provided, the run joins that trace as a top-level run instead of starting a new trace.',
                   },
                 ],
               },
@@ -203,7 +203,7 @@ await agent.network(`
                     type: 'string',
                     isOptional: true,
                     description:
-                      'Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.',
+                      'Parent span ID to use for this execution (1-16 hexadecimal characters). Mastra exports it to external tracing systems and stores it as `externalParentSpanId` instead of `parentSpanId`, so the run is a top-level run in Mastra storage.',
                   },
                 ],
               },

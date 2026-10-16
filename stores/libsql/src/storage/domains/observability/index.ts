@@ -185,6 +185,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       const rows = await this.#db.selectMany<SpanRecord>({
         tableName: TABLE_SPANS,
         whereClause: { sql: ' WHERE traceId = ? AND parentSpanId IS NULL', args: [traceId] },
+        orderBy: 'startedAt ASC, spanId ASC',
         limit: 1,
       });
 

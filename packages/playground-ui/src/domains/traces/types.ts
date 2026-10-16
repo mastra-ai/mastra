@@ -34,6 +34,13 @@ export type UISpan = {
    * timeline paints such a row differently since the term is nowhere on it.
    */
   matchedInPayloadOnly?: boolean;
+  /**
+   * Set on nodes built by the timeline itself (no span record behind them): clicking one only
+   * expands or collapses it, and it is left out of span details and prev/next navigation.
+   */
+  isVirtual?: boolean;
+  /** On a virtual "Started outside Mastra" node: the id of the outside span its children share. */
+  externalParentSpanId?: string | null;
 };
 
 export type UISpanStyle = {

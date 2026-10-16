@@ -243,7 +243,7 @@ describe('Postgres advanced trace query', () => {
         parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', limit: 10 }),
       ),
     );
-    expect(values.text).toContain(`SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r`);
+    expect(values.text).toContain(`SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM trace_roots r`);
     expect(values.text).toContain('GROUP BY value');
     expect(values.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 11]);
   });
@@ -607,11 +607,12 @@ describe('Postgres advanced trace query', () => {
       ],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
       parentSpanId: null,
+      externalParentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
       inputPreview: 'Help with my order',
@@ -811,14 +812,17 @@ describe('Postgres advanced trace delta polling', () => {
     expect(query).toHaveBeenCalledWith('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
   });
 
-  it('filters and deduplicates completed roots before watermark ordering and limiting', () => {
+  it('picks each trace representative root before applying the watermark, ordering, and limit', () => {
     const compiled = compilePostgresTraceQuery('public', deltaPlan('100:4'), 'data', '200');
     expect(compiled.text).toContain('newer."cursorId" > r."cursorId"');
     expect(compiled.text).toContain('NOT r."isPending"');
     expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
-    expect(compiled.text).toContain('(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)');
-    expect(compiled.text).toContain('"xactId" < $5::xid8');
-    expect(compiled.text).toContain('ORDER BY "xactId" ASC, "cursorId" ASC');
+    expect(compiled.text).toContain('(d."xactId", d."cursorId") > ($3::xid8, $4::bigint)');
+    expect(compiled.text).toContain('d."xactId" < $5::xid8');
+    const final = compiled.text.slice(compiled.text.lastIndexOf('SELECT * FROM candidates'));
+    expect(final).toContain('WHERE ("xactId", "cursorId") > ($3::xid8, $4::bigint)');
+    expect(final).toContain('"xactId" < $5::xid8');
+    expect(final).toContain('ORDER BY "xactId" ASC, "cursorId" ASC');
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, '100', '4', '200', 2]);
   });
 
