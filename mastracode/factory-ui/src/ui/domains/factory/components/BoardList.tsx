@@ -12,7 +12,7 @@ import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, stageTintClass } from './BoardIcons';
 
-const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
+export const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 
 /** Every stage shares one grid, so a column lines up from the first stage to the last. */
 export function BoardList({ children }: { children: ReactNode }) {
