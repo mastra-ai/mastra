@@ -85,6 +85,34 @@ const factoryTypingStatus: TypingStatusFn = chunk => {
 };
 
 /**
+ * What a sender sees pinned when they open a fresh AI Assistant thread with
+ * the bot. The messages are written as real asks so a click starts a useful
+ * run rather than a "what can you do" turn. Slack shows at most four.
+ */
+const factorySuggestedPrompts: NonNullable<SlackAdapterChannelConfig['suggestedPrompts']> = {
+  title: 'Ask your Factory',
+  prompts: [
+    {
+      title: 'What can you do?',
+      message:
+        'Explain what you can do from Slack: how you start sessions, what investigate / plan / build mean, and how I open a PR.',
+    },
+    {
+      title: 'Investigate an issue',
+      message: 'Investigate this issue and report what you find before changing anything: <paste a link or describe it>',
+    },
+    {
+      title: 'Plan a change',
+      message: 'Write an implementation plan for: <describe the change>',
+    },
+    {
+      title: 'Build and open a PR',
+      message: 'Build this change and open a pull request when it is ready: <describe the change>',
+    },
+  ],
+};
+
+/**
  * Drops keys the caller set to `undefined` so spreading the overrides cannot
  * erase the Factory defaults they sit on top of.
  */
@@ -92,6 +120,20 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
   return Object.fromEntries(
     Object.entries(options ?? {}).filter(([, value]) => value !== undefined),
   ) as SlackAdapterChannelConfig;
+}
+
+/**
+ * Factory defaults under the caller's overrides. `grouped` folds tool activity
+ * into Slack's native "Thinking Steps" widget on the streaming reply, so a long
+ * run shows progress in place instead of a bare typing indicator — but it only
+ * exists on the streaming driver, so a caller who turns streaming off gets
+ * per-tool cards instead.
+ */
+function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
+  const shared = { typingStatus: factoryTypingStatus, suggestedPrompts: factorySuggestedPrompts };
+  return overrides.streaming === false
+    ? { ...shared, toolDisplay: 'cards', ...overrides }
+    : { ...shared, toolDisplay: 'grouped', ...overrides };
 }
 
 export class SlackIntegration implements FactoryIntegration {
@@ -139,11 +181,7 @@ export class SlackIntegration implements FactoryIntegration {
       modelDefaults: ctx.storage.modelDefaults,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
-      adapterOptions: {
-        toolDisplay: 'hidden',
-        typingStatus: factoryTypingStatus,
-        ...adapterOverrides(this.#config.adapterOptions),
-      },
+      adapterOptions: factoryAdapterOptions(adapterOverrides(this.#config.adapterOptions)),
     });
   }
 

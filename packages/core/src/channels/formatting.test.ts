@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatArgsSummary,
   formatResult,
+  formatTaskTitle,
   formatToolApproval,
   formatToolApproved,
   formatToolDenied,
@@ -126,6 +127,40 @@ describe('formatArgsSummary', () => {
 
   it('returns an empty string when the input is invalid JSON string', () => {
     expect(formatArgsSummary('not json {')).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatTaskTitle
+// ---------------------------------------------------------------------------
+
+describe('formatTaskTitle', () => {
+  it('uses the description alone when the tool provides one', () => {
+    expect(
+      formatTaskTitle('execute_command', 'ls -la /workspace', {
+        command: 'ls -la /workspace',
+        description: 'Listing files in /workspace',
+      }),
+    ).toBe('Listing files in /workspace');
+  });
+
+  it('truncates a long description at 80 characters', () => {
+    const result = formatTaskTitle('execute_command', '', { description: 'x'.repeat(100) });
+    expect(result).toHaveLength(81);
+    expect(result.endsWith('…')).toBe(true);
+  });
+
+  it('falls back to name and args without a description', () => {
+    expect(formatTaskTitle('view', 'src/index.ts', { path: 'src/index.ts' })).toBe('view src/index.ts');
+  });
+
+  it('falls back to the bare name when there are no args', () => {
+    expect(formatTaskTitle('list_threads', '', {})).toBe('list_threads');
+  });
+
+  it('ignores a blank or non-string description', () => {
+    expect(formatTaskTitle('view', 'a.ts', { description: '  ', path: 'a.ts' })).toBe('view a.ts');
+    expect(formatTaskTitle('view', 'a.ts', { description: 42, path: 'a.ts' })).toBe('view a.ts');
   });
 });
 

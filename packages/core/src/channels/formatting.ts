@@ -13,6 +13,7 @@ const ui = () => chatModule();
 
 const TOOL_PREFIXES = ['mastra_workspace_'];
 const MAX_ARG_SUMMARY_LENGTH = 35;
+const MAX_TASK_TITLE_LENGTH = 80;
 const MAX_RESULT_LENGTH = 300;
 
 export function stripToolPrefix(name: string): string {
@@ -43,6 +44,21 @@ export function formatArgsSummary(args: unknown): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * One-line title for a tool's row in a plan/task widget. A tool that
+ * describes itself (e.g. `execute_command`'s `description`) gets that line
+ * verbatim — "Listing files in /workspace" reads better than
+ * "execute_command ls -la". Otherwise fall back to `name args`.
+ */
+export function formatTaskTitle(displayName: string, argsSummary: string, args: unknown): string {
+  const description = args && typeof args === 'object' ? (args as Record<string, unknown>).description : undefined;
+  if (typeof description === 'string' && description.trim()) {
+    const line = description.trim();
+    return line.length > MAX_TASK_TITLE_LENGTH ? line.slice(0, MAX_TASK_TITLE_LENGTH) + '…' : line;
+  }
+  return argsSummary ? `${displayName} ${argsSummary}` : displayName;
 }
 
 export function formatResult(result: unknown, isError?: boolean): string {

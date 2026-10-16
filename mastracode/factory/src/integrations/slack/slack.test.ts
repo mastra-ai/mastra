@@ -56,6 +56,7 @@ function makeThread({ isDM = false } = {}) {
     isDM,
     post: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     postEphemeral: vi.fn().mockResolvedValue({ id: 'eph-1' }),
+    startTyping: vi.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -748,15 +749,6 @@ describe('pre-dispatch error feedback', () => {
     });
   });
 
-  it.each(['onMention', 'onDirectMessage'] as const)('reports subscription lookup failure in %s', async slot => {
-    const f = fixture(slot);
-    f.thread.isSubscribed.mockRejectedValue(new Error('subscription unavailable'));
-    await f.run();
-    expect(f.defaultHandler).not.toHaveBeenCalled();
-    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
-    expect(f.record().error.message).toBe('subscription unavailable');
-  });
-
   it.each([
     ['plain failure', 'plain failure'],
     ['', 'Unknown error'],
@@ -818,21 +810,6 @@ describe('pre-dispatch error feedback', () => {
     expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
     expect(f.defaultHandler).not.toHaveBeenCalled();
     expect(f.thread.post).not.toHaveBeenCalled();
-    expect(f.output).not.toHaveBeenCalled();
-  });
-
-  it.each(['lookup', 'card'])('does not turn a post-dispatch %s failure into pre-dispatch feedback', async source => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const f = fixture();
-    const error = new Error('post-dispatch failed');
-    f.thread.isSubscribed.mockResolvedValue(false);
-    const listThreads = vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] });
-    if (source === 'lookup') listThreads.mockRejectedValue(error);
-    else f.thread.post.mockRejectedValue(error);
-    const getStorage = () => ({ getStore: async () => ({ listThreads }) });
-    await expect(f.run({ getStorage })).rejects.toBe(error);
-    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
-    expect(f.thread.post.mock.calls.filter(([text]: [unknown]) => text === reply)).toHaveLength(0);
     expect(f.output).not.toHaveBeenCalled();
   });
 
@@ -1221,100 +1198,107 @@ describe('repo-backed thread ids (resolveThreadId)', () => {
   });
 });
 
-describe('View Session card link', () => {
-  function makeCardDeps({
-    link = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' },
-    internalThread = { id: 'uuid-thread-1', resourceId: 'channel:slack:C-1:1700.42' },
-    projects = makeProjects([{ id: 'fp-1' }]),
-  }: {
-    link?: { orgId?: string; userId: string; defaultFactoryProjectId?: string } | null;
-    internalThread?: { id: string; resourceId: string } | null;
-    projects?: any;
-  } = {}) {
+describe('new session announcement', () => {
+  it("posts nothing of its own: the agent's first line is the acknowledgement", async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const accountLinks = {
+      getAccountLink: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
+      setDefaultFactory: vi.fn().mockResolvedValue(true),
+    } as any;
+    const store = { listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'uuid-thread-1', resourceId: 'us-42' }] }) };
+    const mastra = { getStorage: () => ({ getStore: () => Promise.resolve(store) }) };
+    const deps = { accountLinks, projects: makeProjects([{ id: 'fp-1', name: 'Acme' }]), mastra };
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    thread.post = vi.fn();
+    const defaultHandler = vi.fn();
+
+    await createHandlers(deps as any).onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(thread.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('early typing status', () => {
+  function makeDeps(link: { orgId?: string; userId: string; defaultFactoryProjectId?: string } | null) {
     const accountLinks = {
       getAccountLink: vi.fn().mockResolvedValue(link),
       setDefaultFactory: vi.fn().mockResolvedValue(true),
     } as any;
     const store = {
-      listThreads: vi.fn().mockResolvedValue({ threads: internalThread ? [internalThread] : [] }),
+      listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'uuid-thread-1', resourceId: 'us-42' }] }),
     };
     const mastra = { getStorage: () => ({ getStore: () => Promise.resolve(store) }) };
-    return { accountLinks, projects, mastra };
+    return { accountLinks, projects: makeProjects([{ id: 'fp-1' }]), mastra };
   }
+  const linked = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' };
 
-  function makeCardThread() {
+  function makeTypingThread() {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
-    thread.isSubscribed = vi.fn().mockResolvedValue(false);
-    thread.post = vi.fn();
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
     return thread;
   }
 
-  it('a repo-backed thread deep-links to the user-session workspace route with no resourceId param', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeCardDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'us-42' } });
+  it('a linked sender sees the bot thinking before the run is dispatched', async () => {
+    const deps = makeDeps(linked);
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
+    const order: string[] = [];
+    thread.startTyping.mockImplementation(async () => void order.push('typing'));
+    const defaultHandler = vi.fn(async () => void order.push('run'));
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
-    expect(thread.post).toHaveBeenCalledTimes(1);
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    // The workspace segment already IS the resourceId — the param would duplicate it.
-    expect(actions.children[0].url).toBe(
-      'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1',
-    );
-    expect(actions.children[0].url).not.toContain('resourceId=');
+    expect(thread.startTyping).toHaveBeenCalledWith('is thinking...');
+    expect(order).toEqual(['typing', 'run']);
   });
 
-  it('an unrouted repo-backed thread keeps the param, having no workspace segment to carry it', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    // Repo-backed resourceId AND no routing: isolates the `!gate.routed` half of
-    // the predicate, which the chat-only unrouted case below cannot distinguish.
-    const { projects: _unused, ...deps } = makeCardDeps({
-      internalThread: { id: 'uuid-thread-1', resourceId: 'us-42' },
-    });
+  it('a subscribed follow-up gets the same early status', async () => {
+    const deps = makeDeps(linked);
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    expect(actions.children[0].url).toBe('https://mc.example.com/threads/uuid-thread-1?resourceId=us-42');
+    expect(thread.startTyping).toHaveBeenCalledWith('is thinking...');
   });
 
-  it('a chat-only thread keeps the channel workspace segment', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeCardDeps();
+  it('an unlinked sender gets the Connect card, never a typing status', async () => {
+    const deps = makeDeps(null);
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    expect(actions.children[0].url).toBe(
-      'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1' +
-        `?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
-    );
+    expect(thread.startTyping).not.toHaveBeenCalled();
   });
 
-  it('an unrouted sender falls back to the factory-agnostic redirect', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    // No projects domain → gate passes without routing (pre-routing behavior).
-    const { projects: _unused, ...deps } = makeCardDeps();
+  it('respects typingStatus: false on the adapter options', async () => {
+    const deps = { ...makeDeps(linked), adapterOptions: { typingStatus: false as const } };
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    expect(actions.children[0].url).toBe(
-      `https://mc.example.com/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
-    );
+    expect(thread.startTyping).not.toHaveBeenCalled();
+  });
+
+  it('a failing status call does not stop the run', async () => {
+    const deps = makeDeps(linked);
+    const handlers = createHandlers(deps as any);
+    const thread = makeTypingThread();
+    thread.startTyping.mockRejectedValue(new Error('slack down'));
+    const defaultHandler = vi.fn().mockResolvedValue(undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });
 
@@ -1334,15 +1318,6 @@ describe('Slack threads create no work items', () => {
     return { accountLinks, projects, mastra, workItems: { upsert } as any, upsert };
   }
 
-  function expectSessionCard(thread: any, url: string) {
-    expect(thread.post).toHaveBeenCalledTimes(1);
-    const card = thread.post.mock.calls[0][0];
-    expect(card.title).toBe('New session started');
-    const button = card.children.find((c: any) => c.type === 'actions').children[0];
-    expect(button.label).toBe('View session');
-    expect(button.url).toBe(url);
-  }
-
   function makeWorkItemThread() {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
@@ -1351,7 +1326,7 @@ describe('Slack threads create no work items', () => {
     return thread;
   }
 
-  it('a routed DM starts the session and posts its card without creating a work item', async () => {
+  it('a routed DM starts the session without creating a work item', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const deps = makeWorkItemDeps();
     const thread = makeWorkItemThread();
@@ -1365,11 +1340,11 @@ describe('Slack threads create no work items', () => {
     );
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expectSessionCard(thread, 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
+    expect(thread.post).not.toHaveBeenCalled();
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 
-  it('a routed @-mention starts the session and posts its card without creating a work item', async () => {
+  it('a routed @-mention starts the session without creating a work item', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const deps = makeWorkItemDeps();
     const thread = makeWorkItemThread();
@@ -1378,7 +1353,7 @@ describe('Slack threads create no work items', () => {
     await createHandlers(deps as any).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expectSessionCard(thread, 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
+    expect(thread.post).not.toHaveBeenCalled();
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 
@@ -1396,10 +1371,7 @@ describe('Slack threads create no work items', () => {
     );
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expectSessionCard(
-      thread,
-      'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?resourceId=channel%3Aslack%3AC-1%3A1700.42',
-    );
+    expect(thread.post).not.toHaveBeenCalled();
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 });

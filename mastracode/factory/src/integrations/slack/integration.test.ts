@@ -1,11 +1,12 @@
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { createSlackAdapter } from '@mastra/slack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SlackIntegration } from './integration.js';
 
 vi.mock('@mastra/slack', () => ({
   createSlackAdapter: vi.fn(() => ({ __adapter: true })),
 }));
-
-import { SlackIntegration } from './integration.js';
 
 function ctxWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -70,8 +71,32 @@ describe('SlackIntegration.channels', () => {
 
     const config = integration.channels(ctxWith());
 
-    expect(config.adapters.slack.toolDisplay).toBe('hidden');
+    expect(config.adapters.slack.toolDisplay).toBe('grouped');
     expect(config.adapters.slack.typingStatus).toBeTypeOf('function');
+  });
+
+  it('pins Factory suggested prompts on the adapter and keeps them off the channel entry', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+
+    const config = integration.channels(ctxWith());
+
+    expect(createSlackAdapter).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        suggestedPrompts: expect.objectContaining({
+          prompts: expect.arrayContaining([expect.objectContaining({ title: 'What can you do?' })]),
+        }),
+      }),
+    );
+    expect(config.adapters.slack).not.toHaveProperty('suggestedPrompts');
+  });
+
+  it('lets a caller replace the suggested prompts', () => {
+    const suggestedPrompts = { prompts: [{ title: 'Hi', message: 'Say hi' }] };
+    const integration = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { suggestedPrompts } });
+
+    integration.channels(ctxWith());
+
+    expect(createSlackAdapter).toHaveBeenLastCalledWith(expect.objectContaining({ suggestedPrompts }));
   });
 
   it('preserves an explicit typingStatus: false override', () => {

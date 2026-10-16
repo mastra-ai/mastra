@@ -99,6 +99,7 @@ import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
 import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
@@ -1219,6 +1220,7 @@ export class MastraFactory {
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
+          const channelReplyProcessor = new FactoryChannelReplyProcessor();
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
           const sessionsProcessor =
             workItemsStorage && storage.isDomainReady('source-control')
@@ -1239,7 +1241,7 @@ export class MastraFactory {
               : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [environmentProcessor, ...sessionsProcessor, factoryProcessor];
+            return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor, factoryProcessor];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1247,7 +1249,7 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [environmentProcessor, ...sessionsProcessor];
+          return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor];
         },
         outputProcessors: [new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
