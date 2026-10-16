@@ -20,6 +20,8 @@ export interface FakeRecord {
   metadata?: unknown;
 }
 export interface FakeNode {
+  /** Storage node id — deliberately distinct from the provider address, as in core. */
+  id: string;
   address: string;
   input: StaticKnowledgeNodeInput;
   records: Map<string, FakeRecord>;
@@ -32,9 +34,10 @@ export interface FakeImporter extends StaticKnowledgeImporterOperations {
 
 export function createFakeImporter(role: 'owner' | 'edit' = 'owner'): FakeImporter {
   const nodes = new Map<string, FakeNode>();
+  let nextNodeId = 0;
   const makeHandle = (node: FakeNode): StaticKnowledgeNodeHandle => ({
-    node: {} as never,
-    id: node.address,
+    node: { id: node.id, name: node.input.name, metadata: node.input.metadata } as never,
+    id: node.id,
     async appendKnowledge(input: StaticKnowledgeRecordInput) {
       const id = input.id ?? `auto-${node.records.size}`;
       node.records.set(id, { id, text: input.text, metadata: input.metadata });
@@ -44,6 +47,8 @@ export function createFakeImporter(role: 'owner' | 'edit' = 'owner'): FakeImport
       return [...node.records.values()].map(r => ({ id: r.id, text: r.text, metadata: r.metadata }) as never);
     },
     async removeKnowledge(id: string) {
+      // Mirrors core: removal requires owner authority over the binding.
+      if (importer.role !== 'owner') throw new Error('Knowledge importer requires owner authority to remove knowledge');
       const record = node.records.get(id);
       if (!record) return null;
       node.records.delete(id);
@@ -63,7 +68,7 @@ export function createFakeImporter(role: 'owner' | 'edit' = 'owner'): FakeImport
     async upsertNode(address, input) {
       let node = nodes.get(address);
       if (!node) {
-        node = { address, input, records: new Map() };
+        node = { id: `node-${++nextNodeId}`, address, input, records: new Map() };
         nodes.set(address, node);
       } else {
         node.input = input;

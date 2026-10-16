@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { KnowledgeImporterCronTrigger, KnowledgeImporterState } from '@mastra/core/knowledge';
+import type {
+  KnowledgeImporterCronTrigger,
+  KnowledgeImporterState,
+  StaticKnowledgeImporterOperations,
+  StaticKnowledgeNodeHandle,
+} from '@mastra/core/knowledge';
 import { z } from 'zod';
 
 import type { ImporterProviderContext } from './importer-registry.js';
@@ -226,6 +231,85 @@ export function contentRecordId(content: unknown): string {
 export function boundText(text: string, max = MAX_RECORD_TEXT): string {
   if (text.length <= max) return text;
   return text.slice(0, max);
+}
+
+/** Provider point-lookup verdict for one importer-owned node. Only `removed` deletes. */
+export type ImporterNodeProbeResult = 'removed' | 'present' | 'uncertain';
+
+export interface ReconcileImporterNodesOptions {
+  readonly importer: StaticKnowledgeImporterOperations;
+  readonly state: KnowledgeImporterState;
+  /** Durable state key holding the last fully-handled address. */
+  readonly cursorKey: string;
+  /** Only nodes whose `metadata.address` starts with one of these are probed. */
+  readonly addressPrefixes: readonly string[];
+  /** Owner authority over the binding. Core refuses removal without it, so `false` makes reconcile a no-op. */
+  readonly canRemove: boolean;
+  /**
+   * Positive provider lookup. Return `uncertain` for definitive-but-ambiguous
+   * answers (404/403); throw on transport failures so the cursor does not advance.
+   */
+  readonly probe: (address: string, signal: AbortSignal) => Promise<ImporterNodeProbeResult>;
+  readonly signal: AbortSignal;
+  /** Maximum nodes probed per call. */
+  readonly limit: number;
+}
+
+export interface ReconcileImporterNodesResult {
+  readonly probed: number;
+  readonly removedRecords: number;
+  /** `true` when the walk reached the last candidate and cleared the cursor. */
+  readonly wrapped: boolean;
+}
+
+/**
+ * Removes records from importer-owned nodes the provider positively reports as
+ * removed. List/search APIs omit tombstones and incremental runs never fully
+ * enumerate, so absence proves nothing — each node is probed by address
+ * instead. Candidates come only from `importer.listNodes()` (source + exact
+ * scope); the address comes from node metadata (`handle.id` is the storage node
+ * id) and must round-trip through `getNode`. Nodes are kept; only records go,
+ * through core's ownership-checked `removeKnowledge`. The address cursor is
+ * written after each candidate is fully handled, so a crash replays at most one
+ * candidate, and removal replay is idempotent. Reaching the end clears the
+ * cursor; the next call restarts from the first address.
+ */
+export async function reconcileImporterNodes(
+  options: ReconcileImporterNodesOptions,
+): Promise<ReconcileImporterNodesResult> {
+  const { importer, state, cursorKey, addressPrefixes, probe, signal, limit } = options;
+  if (!options.canRemove || limit <= 0 || signal.aborted) return { probed: 0, removedRecords: 0, wrapped: false };
+
+  const cursor = await readResumeCursor(state, cursorKey);
+  const candidates: { address: string; handle: StaticKnowledgeNodeHandle }[] = [];
+  for (const handle of await importer.listNodes()) {
+    const address = (handle.node.metadata as { address?: unknown } | undefined)?.address;
+    if (typeof address !== 'string' || !addressPrefixes.some(prefix => address.startsWith(prefix))) continue;
+    if (cursor !== undefined && address <= cursor) continue;
+    candidates.push({ address, handle });
+  }
+  candidates.sort((a, b) => (a.address < b.address ? -1 : a.address > b.address ? 1 : 0));
+
+  let probed = 0;
+  let removedRecords = 0;
+  for (const { address, handle } of candidates.slice(0, limit)) {
+    if (signal.aborted) return { probed, removedRecords, wrapped: false };
+    if ((await importer.getNode(address))?.id === handle.id) {
+      probed++;
+      const verdict = await probe(address, signal);
+      if (signal.aborted) return { probed, removedRecords, wrapped: false };
+      if (verdict === 'removed') {
+        for (const record of await handle.listKnowledge()) {
+          if (await handle.removeKnowledge(record.id)) removedRecords++;
+        }
+      }
+    }
+    await writeResumeCursor(state, cursorKey, address);
+  }
+
+  const wrapped = candidates.length <= limit;
+  if (wrapped) await clearResumeCursor(state, cursorKey);
+  return { probed, removedRecords, wrapped };
 }
 
 export interface PagedRunLimits {
