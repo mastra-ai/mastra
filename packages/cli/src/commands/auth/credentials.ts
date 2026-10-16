@@ -26,7 +26,7 @@ export interface Credentials {
 }
 
 /** Which CLI entry point started the browser login. Sent to the platform for signup attribution. */
-export type LoginSource = 'create-mastra' | 'mastra-create' | 'create-factory' | 'mastra-cli';
+export type LoginSource = 'create-mastra' | 'mastra-cli-create' | 'create-factory' | 'mastra-cli';
 
 export interface LoginOptions {
   skipOnInput?: boolean;
