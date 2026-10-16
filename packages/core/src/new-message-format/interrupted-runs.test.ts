@@ -327,3 +327,15 @@ describe('what a live reader sees', () => {
     expect(log.find(a => a.type === 'text' && a.role === 'assistant')).toMatchObject({ text: 'Half an answer' });
   });
 });
+
+describe('how a stopped run is labelled', () => {
+  it('an early return with no abort and no error ends the run interrupted, not error', async () => {
+    const memory = new InMemoryActionStorage();
+    const { model } = scriptedModel([textTurn('Half an answer')]);
+    for await (const action of runAgent({ model, threadId: 't1', memory, input: 'hi' })) {
+      if (action.type === 'text-delta') break;
+    }
+    const log = await memory.listActions({ threadId: 't1' });
+    expect(log.filter(a => a.type === 'run-end')).toEqual([expect.objectContaining({ finishReason: 'interrupted' })]);
+  });
+});

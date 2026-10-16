@@ -175,7 +175,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
    * or run-end. Stops the start gate first, with no await before the closers are computed, so a late
    * tool-started is either already in `own` or refused.
    */
-  const closeRun = (): MastraAction[] => {
+  const closeRun = (streamFailed: boolean): MastraAction[] => {
     stopped = true;
     markStopped();
     const wasAborted = !!abortedBy || !!options.abortSignal?.aborted;
@@ -192,7 +192,8 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
       const runEnd = closers.findIndex(a => a.type === 'run-end');
       if (runEnd >= 0) closers.splice(runEnd, 1, runAborted);
       else closers.push(runAborted);
-    } else {
+    } else if (streamFailed || failure) {
+      // A provider error or a throw. A consumer's early return is not an error: its run-end stays interrupted.
       const runEnd = closers.findIndex(a => a.type === 'run-end');
       if (runEnd >= 0) closers[runEnd] = { ...closers[runEnd]!, finishReason: 'error' } as PersistableAction;
     }
@@ -255,7 +256,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     if (!ended) {
       // Marked first: a consumer that returns while these are yielded must not close the run twice.
       ended = true;
-      for (const closer of closeRun()) yield closer;
+      for (const closer of closeRun(true)) yield closer;
     }
   } catch (error) {
     failure = { error };
@@ -263,7 +264,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   } finally {
     // An early return or a throw: close the run without yielding. Writes still in flight (a tool-started)
     // land first: the queue keeps id order.
-    if (!ended) closeRun();
+    if (!ended) closeRun(false);
     try {
       await flush();
     } catch (error) {
