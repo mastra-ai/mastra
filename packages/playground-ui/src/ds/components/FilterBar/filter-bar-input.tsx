@@ -73,7 +73,7 @@ function FilterBarInputImpl({
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState<Item | null>(null);
@@ -330,7 +330,7 @@ function FilterBarInputImpl({
         modal={false}
       >
         <div
-          ref={setAnchor}
+          ref={anchorRef}
           data-slot="filter-bar-input-trigger"
           className={cn(
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
@@ -370,7 +370,7 @@ function FilterBarInputImpl({
         <ComboboxPrimitive.Portal container={container}>
           <ComboboxPrimitive.Positioner
             // Base UI anchors to the input, which starts after the filter icon; align with the pill instead.
-            anchor={anchor}
+            anchor={anchorRef}
             align="start"
             sideOffset={MENU_SIDE_OFFSET}
             positionMethod={FLOATING_POSITION_METHOD}
