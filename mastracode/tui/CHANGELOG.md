@@ -1,5 +1,29 @@
 # mastracode
 
+## 0.47.2-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`f885386`](https://github.com/mastra-ai/mastra/commit/f885386b79be0e4d784067b0e26608971e0cc788), [`f6a9762`](https://github.com/mastra-ai/mastra/commit/f6a9762b12ae9dad6a154f73ed3099a2ee472d0c), [`9a012c2`](https://github.com/mastra-ai/mastra/commit/9a012c28a66406610e903c15423d5f6c94b62581), [`12a8a89`](https://github.com/mastra-ai/mastra/commit/12a8a89938ee5dbad91edb5b4da26cd68c95fabd), [`12a8a89`](https://github.com/mastra-ai/mastra/commit/12a8a89938ee5dbad91edb5b4da26cd68c95fabd), [`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/observability@1.20.2-alpha.0
+  - @mastra/core@1.78.1-alpha.0
+  - @mastra/code-sdk@1.15.0-alpha.0
+  - @mastra/memory@1.39.0-alpha.0
+  - @mastra/agent-browser@0.5.4-alpha.0
+  - @mastra/stagehand@0.3.6-alpha.0
+  - @mastra/tavily@1.1.3-alpha.0
+  - @mastra/fastembed@1.3.4-alpha.0
+  - @mastra/mcp@2.4.2-alpha.0
+  - @mastra/schema-compat@1.3.16-alpha.0
+  - @mastra/github-signals@0.5.2-alpha.0
+  - @mastra/duckdb@1.14.2-alpha.0
+  - @mastra/libsql@1.26.3-alpha.0
+  - @mastra/pg@1.31.3-alpha.0
+  - @mastra/voice-deepgram@0.13.2-alpha.0
+  - @mastra/voice-openai@0.13.3-alpha.0
+
 ## 0.47.1
 
 ### Patch Changes
