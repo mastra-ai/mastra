@@ -108,7 +108,7 @@ Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', valu
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are extracted for the selected page and aren't filterable. Costs, token counts, truncation flags, full payloads, metadata and attributes aren't returned. A null stored preview is generated from its payload at read time without saving it back; an empty stored preview means there's nothing to preview.
 
-DuckDB currently returns null for parent/root entity type, ID and name, and for `executionSource`. Filters on those fields use null semantics. Parent/root version IDs remain available. Update core and the storage adapter together for this contract; newer adapters don't advertise span queries with older core contracts.
+DuckDB currently returns null for parent/root entity type, ID and name, and for `executionSource`. Filters on those fields use null semantics. Parent/root version IDs remain available. Core and storage adapters can be updated independently. Older adapters may omit newly added response fields, which core returns as null; newer filters require an adapter that supports them. With older core, adapters retain the earlier query contract, although cost is reported as missing because these adapters no longer fetch cost metrics.
 
 ## Querying traces
 

@@ -154,8 +154,6 @@ function iso(value: string): string {
 }
 
 export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQueryPlan, timeoutMs: number) {
-  if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY)
-    throw new Error('querySpans requires an updated @mastra/core span-query contract');
   const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   const run = async <T>(compiled: { query: string; query_params: Record<string, unknown> }) => {
     const remaining = Math.floor(deadline - performance.now());

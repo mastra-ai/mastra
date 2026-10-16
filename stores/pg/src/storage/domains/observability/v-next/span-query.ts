@@ -95,6 +95,12 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   const after = afterCursor(plan, values);
   values.push(plan.limit + 1);
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
+  // Older core still accepts model/provider predicates. Keep their source fields available
+  // for that contract; newer core rejects them and only extracts values for the selected page.
+  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
+    ? ''
+    : `CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
+       CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider,`;
   // Completed records win; the greatest end time follows existing getSpan semantics.
   // Payload columns are read only after page selection, inside the same snapshot.
   // A completed span ends at or after it starts, so the end-time bound only prunes partitions.
@@ -105,6 +111,7 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   ), current_spans AS MATERIALIZED (
     SELECT DISTINCT ON (${identities})
       ${fields.map(field => `"${field}"`).join(', ')}, "startedAt", "endedAt", "cursorId"::text AS version,
+      ${legacyModelFields}
       (EXTRACT(EPOCH FROM ("endedAt" - "startedAt")) * 1000)::float8 AS "durationMs",
       CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
       error IS NOT NULL AS "hasError"
@@ -159,8 +166,6 @@ type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | '
 };
 
 export async function querySpans(client: DbClient, schema: string, plan: TrustedSpanQueryPlan, timeoutMs: number) {
-  if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY)
-    throw new Error('querySpans requires an updated @mastra/core span-query contract');
   const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   return runWithPostgresTraceQueryTimeout(
     client,
@@ -174,7 +179,7 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
         endedAt: endedAt.toISOString(),
       }));
       const page = rows.slice(0, plan.limit);
-      if (!page.length) return coreStorage.buildSpanQueryResponse(plan, [], []);
+      if (!page.length) return buildSpanQueryResponse(plan, [], []);
       const remaining = async () => {
         const ms = Math.floor(deadline - performance.now());
         if (ms <= 0) throw new coreStorage.TraceQueryExecutionError();

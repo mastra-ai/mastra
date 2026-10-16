@@ -99,6 +99,11 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
   const after = afterCursor(plan);
   values.push(plan.timeRange.from, plan.timeRange.to, ...predicate.values, ...after.values, plan.limit + 1);
   const join = identityFields.map(field => `e.${field} IS NOT DISTINCT FROM c.${field}`).join(' AND ');
+  // Preserve predicates accepted by older core without adding JSON work to the new contract.
+  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
+    ? ''
+    : `CASE WHEN json_type(e.attributes, '$.model') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.model') END AS model,
+       CASE WHEN json_type(e.attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.provider') END AS provider,`;
   // Start timestamps select identities; all events for those identities participate in reconstruction.
   const sql = `WITH candidates AS MATERIALIZED (
     SELECT ${identities} FROM span_events
@@ -108,6 +113,7 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
   ), ranked AS (
     SELECT ${fields.map(field => (missingFields.has(field) ? `CAST(NULL AS VARCHAR) AS ${field}` : `e.${field}`)).join(', ')},
       min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${identityFields.map(field => `e.${field}`).join(', ')}) AS startedAt, e.endedAt, e.cursorId,
+      ${legacyModelFields}
       date_diff('millisecond', min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${identityFields.map(field => `e.${field}`).join(', ')}), e.endedAt) AS durationMs,
       CASE WHEN e.error IS NULL THEN 'success' ELSE 'error' END AS status,
       CASE WHEN e.error IS NULL THEN NULL ELSE 'error' END AS error,
@@ -135,8 +141,6 @@ type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | '
 };
 
 export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPlan) {
-  if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY)
-    throw new Error('querySpans requires an updated @mastra/core span-query contract');
   const deadline = performance.now() + coreStorage.TRACE_QUERY_DEFAULT_TIMEOUT_MS;
   const query = async <T>(sql: string, values: unknown[]) => {
     const remaining = Math.floor(deadline - performance.now());
@@ -158,7 +162,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     endedAt: endedAt.toISOString(),
   }));
   const page = rows.slice(0, plan.limit);
-  if (!page.length) return coreStorage.buildSpanQueryResponse(plan, [], []);
+  if (!page.length) return buildSpanQueryResponse(plan, [], []);
   const payloadValues: unknown[] = [];
   const payloadWhere = page
     .map(row => {

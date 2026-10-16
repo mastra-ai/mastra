@@ -4,6 +4,7 @@ import { DuckDBStore } from '../index';
 
 vi.mock('@mastra/core/storage', async importOriginal => ({
   ...(await importOriginal<typeof import('@mastra/core/storage')>()),
+  planSpanQuery: undefined,
   SPAN_QUERY_FIELD_REGISTRY: undefined,
 }));
 

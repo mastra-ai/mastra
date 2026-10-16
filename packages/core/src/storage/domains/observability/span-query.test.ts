@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSpanQueryResponse,
   createSpanQueryPreview,
   encodeSpanQueryCursor,
   parseSpanQueryRequest,
@@ -99,6 +100,40 @@ describe('span query model cost', () => {
 });
 
 describe('span query contract', () => {
+  it('accepts rows from older adapters and ignores their legacy metrics argument', () => {
+    const legacyRow = {
+      ...identity,
+      parentSpanId: row.parentSpanId,
+      name: row.name,
+      spanType: row.spanType,
+      status: row.status,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+      durationMs: row.durationMs,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      entityName: row.entityName,
+      model: null,
+      provider: null,
+    };
+    // Published adapters invoke this function with their older selected-row shape.
+    const result = buildSpanQueryResponse(
+      planSpanQuery({ timeRange }),
+      [legacyRow as Parameters<typeof buildSpanQueryResponse>[1][number]],
+      [{ ...identity, inputPreview: 'legacy input', outputPreview: null, errorPreview: null }],
+      [],
+    );
+    expect(result.spans[0]).toMatchObject({
+      ...legacyRow,
+      threadId: null,
+      parentEntityName: null,
+      inputPreview: 'legacy input',
+    });
+    expect(Object.values(result.spans[0]!)).not.toContain(undefined);
+    expect(result.spans[0]).not.toHaveProperty('cost');
+    expect(result.spans[0]).not.toHaveProperty('inputTruncated');
+  });
+
   it('defaults to bounded keyset pagination without accepting authorization in the request', () => {
     expect(parseSpanQueryRequest({ timeRange })).toEqual({
       timeRange,

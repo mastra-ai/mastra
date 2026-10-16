@@ -41,9 +41,31 @@ export function readPreview(preview: unknown, payload?: unknown, jsonEncoded = f
 
 /** Older response builders may shorten previews or turn empty strings into null. */
 export function buildSpanQueryResponse(...args: Parameters<typeof coreStorage.buildSpanQueryResponse>) {
-  if (canGeneratePreviews) return coreStorage.buildSpanQueryResponse(...args);
   const [plan, selected, payloads] = args;
-  const response = coreStorage.buildSpanQueryResponse(plan, selected, []);
+  // Older core validates rows strictly, so do not pass newly added or adapter-only fields.
+  const compatibleSelected = coreStorage.SPAN_QUERY_FIELD_REGISTRY
+    ? selected
+    : (selected.map(row => ({
+        organizationId: row.organizationId,
+        resourceId: row.resourceId,
+        traceId: row.traceId,
+        spanId: row.spanId,
+        parentSpanId: row.parentSpanId,
+        name: row.name,
+        spanType: row.spanType,
+        status: row.status,
+        startedAt: row.startedAt,
+        endedAt: row.endedAt,
+        durationMs: row.durationMs,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        entityName: row.entityName,
+        model: row.model,
+        provider: row.provider,
+      })) as typeof selected);
+  // Older core builders iterate the fourth metrics argument. No costs are fetched by these adapters.
+  if (canGeneratePreviews) return coreStorage.buildSpanQueryResponse(plan, compatibleSelected, payloads, []);
+  const response = coreStorage.buildSpanQueryResponse(plan, compatibleSelected, [], []);
   const byIdentity = new Map(payloads.map(payload => [coreStorage.spanQueryIdentityKey(payload), payload]));
   for (const span of response.spans) {
     const payload = byIdentity.get(coreStorage.spanQueryIdentityKey(span));
