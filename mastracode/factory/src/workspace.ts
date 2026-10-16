@@ -112,6 +112,17 @@ export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-review',
 ]);
 
+/** Skills written for a board card run; a session without an active run binding may not discover or load them. */
+export const BOARD_ROLE_FACTORY_SKILLS = new Set(['factory-complete-issue', 'factory-plan', 'factory-triage']);
+
+export type FactorySkillAccess = 'unbound' | 'bound' | 'review';
+
+function isFactorySkillVisible(name: string, access: FactorySkillAccess): boolean {
+  if (REVIEW_ONLY_FACTORY_SKILLS.has(name)) return access === 'review';
+  if (BOARD_ROLE_FACTORY_SKILLS.has(name)) return access !== 'unbound';
+  return true;
+}
+
 /**
  * Skill caches rescanned outside the workspace resolver. The resolver records
  * which role each cache was last scanned for; a rescan it did not perform makes
@@ -121,7 +132,7 @@ const rescannedOutsideResolver = new WeakMap<object, Promise<void>>();
 
 /**
  * Rescan a session's skill cache so a role gained after the cache was built
- * (a review binding minted after the session's workspace resolved) takes effect.
+ * (a run binding minted after the session's workspace resolved) takes effect.
  * The source still checks the live binding, so this never widens access.
  */
 export async function rescanFactorySkills(skills: NonNullable<Workspace['skills']>): Promise<void> {
@@ -145,7 +156,7 @@ export class FactorySkillSource implements SkillSource {
     fallbackSkillRoots: string[],
     localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
     /** Evaluated per call because a session's bound role changes across stages. */
-    readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
+    readonly skillAccess: () => Promise<FactorySkillAccess> = () => Promise.resolve('review'),
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
@@ -160,11 +171,11 @@ export class FactorySkillSource implements SkillSource {
     return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
   }
 
-  /** True when the path is inside a review-only skill that this session may not use. */
-  async #isHiddenReviewPath(relativePath: string): Promise<boolean> {
+  /** True when the path is inside a binding-gated skill that this session may not use. */
+  async #isHiddenPath(relativePath: string): Promise<boolean> {
     const skillName = relativePath.split(path.sep)[0];
-    if (!skillName || !REVIEW_ONLY_FACTORY_SKILLS.has(skillName)) return false;
-    return !(await this.isReviewSession());
+    if (!skillName || isFactorySkillVisible(skillName, 'unbound')) return false;
+    return !isFactorySkillVisible(skillName, await this.skillAccess());
   }
 
   /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
@@ -176,7 +187,7 @@ export class FactorySkillSource implements SkillSource {
   async exists(skillPath: string): Promise<boolean> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
-    if (await this.#isHiddenReviewPath(relative)) return false;
+    if (await this.#isHiddenPath(relative)) return false;
     if (this.#localSource && (await this.#localSource.exists(relative))) return true;
     return this.#bundledSource.exists(relative);
   }
@@ -184,21 +195,21 @@ export class FactorySkillSource implements SkillSource {
   async stat(skillPath: string): Promise<SkillSourceStat> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
     const relative = this.#factoryPath(skillPath);
-    if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    if (await this.#isHiddenPath(relative)) throw skillSourceEnoent(skillPath);
     return (await this.#layerFor(relative)).stat(relative);
   }
 
   async readFile(skillPath: string): Promise<string | Buffer> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
     const relative = this.#factoryPath(skillPath);
-    if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    if (await this.#isHiddenPath(relative)) throw skillSourceEnoent(skillPath);
     return (await this.#layerFor(relative)).readFile(relative);
   }
 
   async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
     if (this.#isFactoryPath(skillPath)) {
       const relative = this.#factoryPath(skillPath);
-      if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+      if (await this.#isHiddenPath(relative)) throw skillSourceEnoent(skillPath);
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
@@ -213,8 +224,9 @@ export class FactorySkillSource implements SkillSource {
       // Local entries override bundled names.
       for (const entry of localEntries) merged.set(entry.name, entry);
       const entries = [...merged.values()];
-      if (relative !== '' || (await this.isReviewSession())) return entries;
-      return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
+      if (relative !== '') return entries;
+      const access = await this.skillAccess();
+      return entries.filter(entry => isFactorySkillVisible(entry.name, access));
     }
     const entries = await this.fallback.readdir(skillPath);
     if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
@@ -295,12 +307,12 @@ class UnmaterializedAwareSkillSource implements SkillSource {
   }
 }
 
-function createFactorySkillExtension(isReviewSession: () => Promise<boolean>): WorkspaceSkillExtension {
+function createFactorySkillExtension(skillAccess: () => Promise<FactorySkillAccess>): WorkspaceSkillExtension {
   return {
     id: 'web-factory',
     paths: [FACTORY_SKILLS_MOUNT],
     createSource: (fallback, fallbackSkillRoots) =>
-      new FactorySkillSource(fallback, fallbackSkillRoots, resolveLocalFactorySkillsPath(), isReviewSession),
+      new FactorySkillSource(fallback, fallbackSkillRoots, resolveLocalFactorySkillsPath(), skillAccess),
   };
 }
 
@@ -309,6 +321,14 @@ function isActiveReviewBinding(
   orgId: string | undefined,
 ): boolean {
   return runBinding?.role === 'review' && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+}
+
+function factorySkillAccess(
+  runBinding: { role: string; status: string; orgId: string } | null | undefined,
+  orgId: string | undefined,
+): FactorySkillAccess {
+  if (isActiveReviewBinding(runBinding, orgId)) return 'review';
+  return runBinding?.status === 'active' && !!orgId && runBinding.orgId === orgId ? 'bound' : 'unbound';
 }
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
@@ -575,13 +595,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
   const constructedWorkspaces = new Map<string, Workspace>();
-  // Review-skill visibility last used to populate each workspace's skill cache.
-  const skillCacheReviewState = new Map<string, boolean>();
+  // Skill access last used to populate each workspace's skill cache.
+  const skillCacheAccess = new Map<string, FactorySkillAccess>();
   const skillCacheRefreshes = new Map<string, Promise<void>>();
-  // The review check of the latest request to resolve each workspace. The skill
-  // source outlives the request that built it, so it must gate on this rather
-  // than on the context it was constructed with.
-  const skillReviewChecks = new Map<string, () => Promise<boolean>>();
+  // The skill access check of the latest request to resolve each workspace. The
+  // skill source outlives the request that built it, so it must gate on this
+  // rather than on the context it was constructed with.
+  const skillAccessChecks = new Map<string, () => Promise<FactorySkillAccess>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -904,22 +924,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!binding || !ctx?.threadId) return binding;
       return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
     };
-    // Fails closed: without a readable active review binding, review skills stay hidden.
-    const isReviewSession = async (): Promise<boolean> => {
-      if (!workItems) return false;
+    // Fails closed: without a readable active run binding, binding-gated skills stay hidden.
+    const sessionSkillAccess = async (): Promise<FactorySkillAccess> => {
+      if (!workItems) return 'unbound';
       try {
-        return isActiveReviewBinding(await findSessionBinding(), session.orgId);
+        return factorySkillAccess(await findSessionBinding(), session.orgId);
       } catch {
-        return false;
+        return 'unbound';
       }
     };
     const effectiveSkillExtension =
-      skillExtension ??
-      createFactorySkillExtension((): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)());
+      skillExtension ?? createFactorySkillExtension(() => (skillAccessChecks.get(workspaceId) ?? sessionSkillAccess)());
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
-    if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
+    if (!skillExtension) skillAccessChecks.set(workspaceId, sessionSkillAccess);
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
@@ -1082,7 +1101,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
-            skillCacheReviewState.delete(workspaceId);
+            skillCacheAccess.delete(workspaceId);
           }
         }
         throw error;
@@ -1104,7 +1123,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (existing) {
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
       // The skill cache does not recheck the source on get(), so rescan when the
-      // session's role flips; otherwise a cached review skill outlives the review binding.
+      // session's role flips; otherwise a cached binding-gated skill outlives its binding.
       if (!skillExtension) {
         // An outside rescan makes the recorded role untrustworthy. Wait for it to
         // settle first, so the refresh below starts a scan for the current role
@@ -1115,11 +1134,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           await outside;
           if (rescannedOutsideResolver.get(existing.skills!) === outside)
             rescannedOutsideResolver.delete(existing.skills!);
-          skillCacheReviewState.delete(workspaceId);
+          skillCacheAccess.delete(workspaceId);
           return true;
         };
         await consumeOutsideRescan();
-        let isReview = await isReviewSession();
+        let access = await sessionSkillAccess();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
         // been started for the opposite role) and re-read the role afterwards.
@@ -1127,22 +1146,22 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const inFlight = skillCacheRefreshes.get(workspaceId);
           if (inFlight) {
             await inFlight;
-            isReview = await isReviewSession();
+            access = await sessionSkillAccess();
             continue;
           }
           if (await consumeOutsideRescan()) {
-            isReview = await isReviewSession();
+            access = await sessionSkillAccess();
             continue;
           }
-          if (skillCacheReviewState.get(workspaceId) === isReview) break;
-          const target = isReview;
+          if (skillCacheAccess.get(workspaceId) === access) break;
+          const target = access;
           const pending = (async () => {
             await existing.skills?.refresh();
-            skillCacheReviewState.set(workspaceId, target);
+            skillCacheAccess.set(workspaceId, target);
           })().finally(() => skillCacheRefreshes.delete(workspaceId));
           skillCacheRefreshes.set(workspaceId, pending);
           await pending;
-          isReview = await isReviewSession();
+          access = await sessionSkillAccess();
         }
       }
       // A materialization kicked off by another caller may still be running.
@@ -1512,8 +1531,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       async () => {
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
-        skillCacheReviewState.delete(workspaceId);
-        skillReviewChecks.delete(workspaceId);
+        skillCacheAccess.delete(workspaceId);
+        skillAccessChecks.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.

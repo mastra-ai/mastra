@@ -145,6 +145,7 @@ import {
   peekSessionEnvironmentTeardown,
 } from './session/environment-state-processor.js';
 import {
+  BOARD_ROLE_FACTORY_SKILLS,
   createWorkspaceFactory,
   FactorySkillSource,
   REVIEW_ONLY_FACTORY_SKILLS,
@@ -152,6 +153,7 @@ import {
   rescanFactorySkills,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
+import type { FactorySkillAccess } from './workspace.js';
 
 const tempDirs: string[] = [];
 
@@ -1295,7 +1297,7 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
-  it('hides review skills from a thread that does not own the session binding', async () => {
+  it('hides binding-gated skills from a thread that does not own the session binding', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
@@ -1308,7 +1310,28 @@ describe('GitHub session workspace preparation', () => {
     await workspace.skills?.maybeRefresh();
 
     expect(await workspace.skills?.get('factory-review')).toBeFalsy();
-    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+    expect(await workspace.skills?.get('factory-plan')).toBeFalsy();
+    expect((await workspace.skills?.get('configure-factory-rules'))?.instructions).toBeTruthy();
+  });
+
+  it('shows board-role skills once an unbound session is bound to a card run', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect(await workspace.skills?.get('factory-plan')).toBeFalsy();
+    expect(await workspace.skills?.get('factory-triage')).toBeFalsy();
+    expect(await workspace.skills?.get('factory-complete-issue')).toBeFalsy();
+
+    mocks.runBindingRole = 'plan';
+    const reused = (await resolver({ requestContext }))!;
+
+    expect(reused).toBe(workspace);
+    expect((await reused.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+    expect(await reused.skills?.get('factory-review')).toBeFalsy();
   });
 
   it('hides review skills when a thread that does not own the binding reuses a kickoff-built workspace', async () => {
@@ -3169,30 +3192,34 @@ describe('FactorySkillSource layering', () => {
     await expect(source.readdir(path.join(mount, 'missing-skill'))).rejects.toThrow('ENOENT');
   });
 
-  it('hides review-only skills from sessions without an active review binding', async () => {
-    let isReview = false;
-    const source = new FactorySkillSource(fallbackStub, [], undefined, async () => isReview);
+  it('shows each skill group only to the sessions its access level allows', async () => {
+    let access: FactorySkillAccess = 'unbound';
+    const source = new FactorySkillSource(fallbackStub, [], undefined, async () => access);
     const reviewSkill = path.join(mount, 'factory-review', 'SKILL.md');
+    const planSkill = path.join(mount, 'factory-plan', 'SKILL.md');
+    const visibleNames = async () => (await source.readdir(mount)).map(entry => entry.name).sort();
 
-    const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
-    expect(hiddenNames).toEqual([
+    expect(await visibleNames()).toEqual(['configure-factory-rules']);
+    for (const name of [...REVIEW_ONLY_FACTORY_SKILLS, ...BOARD_ROLE_FACTORY_SKILLS]) {
+      expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
+      await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');
+    }
+    await expect(source.readFile(planSkill)).rejects.toThrow('ENOENT');
+    await expect(source.stat(reviewSkill)).rejects.toThrow('ENOENT');
+
+    // Access is re-evaluated per call, so the same source follows a binding change.
+    access = 'bound';
+    expect(await visibleNames()).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
       'factory-plan',
       'factory-triage',
     ]);
-    for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
-      expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
-      await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');
-    }
+    expect(String(await source.readFile(planSkill))).toContain('# Factory Plan');
     await expect(source.readFile(reviewSkill)).rejects.toThrow('ENOENT');
-    await expect(source.stat(reviewSkill)).rejects.toThrow('ENOENT');
-    expect(String(await source.readFile(path.join(mount, 'factory-plan', 'SKILL.md')))).toContain('# Factory Plan');
 
-    // The role is re-evaluated per call, so the same source follows a role change.
-    isReview = true;
-    const visibleNames = (await source.readdir(mount)).map(entry => entry.name);
-    expect(visibleNames).toEqual(expect.arrayContaining([...REVIEW_ONLY_FACTORY_SKILLS]));
+    access = 'review';
+    expect(await visibleNames()).toEqual(expect.arrayContaining([...REVIEW_ONLY_FACTORY_SKILLS]));
     expect(await source.exists(reviewSkill)).toBe(true);
     expect((await source.stat(reviewSkill)).type).toBe('file');
   });

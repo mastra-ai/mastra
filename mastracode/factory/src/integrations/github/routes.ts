@@ -28,6 +28,7 @@ import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
+import { USER_SESSION_BRANCH_PREFIX } from '../../session/user-session-branch.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
@@ -57,7 +58,6 @@ import {
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
-const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /**
@@ -1396,7 +1396,7 @@ function buildProjectGitRoutes({
         const requestedBranch = body.branch;
         let branch: string;
         if (requestedBranch === undefined) {
-          branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
+          branch = `${USER_SESSION_BRANCH_PREFIX}session-${sessionId}`;
         } else if (typeof requestedBranch === 'string' && isValidGitRefSandbox(requestedBranch)) {
           branch = requestedBranch;
         } else {

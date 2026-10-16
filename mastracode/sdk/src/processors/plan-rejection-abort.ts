@@ -1,8 +1,10 @@
 /**
  * Processor that aborts the agentic loop immediately after a `submit_plan` tool
- * returns a rejection result. This prevents the model from generating any text
- * after the user clicks "Request Changes" — the tool result is persisted in
- * thread history (for context on the next run) but no follow-up LLM call is made.
+ * returns a rejection the user will follow up on in their next message. This
+ * prevents the model from generating any text after the user clicks "Request
+ * Changes" — the tool result is persisted in thread history (for context on the
+ * next run) but no follow-up LLM call is made. A rejection that already carries
+ * the user's feedback keeps the loop running so the model revises right away.
  */
 import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors';
 
@@ -22,27 +24,31 @@ type ToolResultPart = {
 
 function resultText(result: unknown): string {
   if (typeof result === 'string') return result;
-  if (result && typeof result === 'object') {
-    const content = (result as { content?: unknown }).content;
-    if (typeof content === 'string') return content;
+  if (result && typeof result === 'object' && 'content' in result && typeof result.content === 'string') {
+    return result.content;
   }
   return '';
 }
 
-/**
- * Returns true when the invocation is a completed `submit_plan` rejection.
- */
+function waitsForUserFeedback(result: unknown): boolean {
+  if (result && typeof result === 'object' && 'submittedPlan' in result) {
+    const { submittedPlan } = result;
+    if (submittedPlan && typeof submittedPlan === 'object') {
+      const rejected = 'action' in submittedPlan && submittedPlan.action === 'rejected';
+      const carriesFeedback = 'feedback' in submittedPlan && Boolean(submittedPlan.feedback);
+      return rejected && !carriesFeedback;
+    }
+  }
+  return resultText(result).startsWith(PLAN_REJECTED_PREFIX);
+}
+
 function isPlanRejection(inv: ToolInvocation | undefined): boolean {
   if (!inv || inv.state !== 'result' || inv.toolName !== 'submit_plan') return false;
-  return resultText(inv.result).startsWith(PLAN_REJECTED_PREFIX);
+  return waitsForUserFeedback(inv.result);
 }
 
 function isPlanRejectionResultPart(part: ToolResultPart): boolean {
-  return (
-    part.type === 'tool_result' &&
-    part.name === 'submit_plan' &&
-    resultText(part.result).startsWith(PLAN_REJECTED_PREFIX)
-  );
+  return part.type === 'tool_result' && part.name === 'submit_plan' && waitsForUserFeedback(part.result);
 }
 
 export class PlanRejectionAbortProcessor implements Processor<'plan-rejection-abort'> {

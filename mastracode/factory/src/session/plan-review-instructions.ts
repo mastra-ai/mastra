@@ -1,0 +1,2 @@
+export const PLAN_REVIEW_INSTRUCTIONS = `When the user asks for a plan, or the request is ambiguous or spans several areas, a public API, a data shape or a migration, get the plan approved before changing files: explore read-only, write it to one markdown file directly inside \`.artifacts/plans/\` (the reviewer can't open \`.mastracode/plans/\`), then call \`submit_plan\` with that path. Otherwise act directly.
+`;

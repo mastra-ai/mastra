@@ -21,8 +21,7 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
-import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
+import type { BuiltinToolId } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -80,7 +79,7 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
-import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
+import { readFactorySessionScope } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
@@ -104,6 +103,7 @@ import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
+import { createFactoryHostInstructions } from './session/host-instructions.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
@@ -136,6 +136,7 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
+
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -1107,46 +1108,11 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
-        hostInstructions: async ({ requestContext }) => {
-          const context = requestContext.get('controller') as
-            | AgentControllerRequestContext<MastraCodeState>
-            | undefined;
-          // The SDK resolves this callback before it loads repository
-          // AGENTS.md/CLAUDE.md. A controller recreated after restart has
-          // only initialState, and a partially persisted one can keep
-          // `factoryProjectId` while `untrustedCheckout` is gone, so the
-          // presence of the project id alone proves nothing. Heal whenever any
-          // trust field the recovery writes is missing, now, not later when
-          // the agent's tools are assembled. Unbound sessions never gain these
-          // fields and pay one binding lookup per prompt.
-          if (context?.threadId && context.resourceId) {
-            const current = context.getState();
-            const trustStateComplete =
-              Boolean(current.factoryProjectId) &&
-              Boolean(current.factoryOrgId) &&
-              typeof current.untrustedCheckout === 'boolean';
-            if (!trustStateComplete) {
-              const recovered = await resolveFactorySessionAddress({
-                requestContext,
-                storage: workItemsStorage,
-                forceBindingLookup: true,
-                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-              });
-              if (recovered?.binding) {
-                const state = context.getState();
-                if (
-                  state.factoryProjectId !== recovered.binding.factoryProjectId ||
-                  (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
-                ) {
-                  throw new Error(
-                    'Factory review session security state could not be restored before prompt creation.',
-                  );
-                }
-              }
-            }
-          }
-          return undefined;
-        },
+        hostInstructions: createFactoryHostInstructions({
+          workItems: workItemsStorage,
+          readySourceControlSessions: () =>
+            storage.isDomainReady('source-control') ? sourceControlSessions : undefined,
+        }),
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
         // rather than per session, so webhook-recreated sessions keep it too.

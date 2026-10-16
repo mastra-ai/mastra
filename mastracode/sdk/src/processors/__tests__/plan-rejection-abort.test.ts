@@ -6,7 +6,7 @@ type AnyMessage = Record<string, unknown>;
 function assistantWithToolResult(opts: {
   toolName: string;
   state?: string;
-  result: { content?: string } | string;
+  result: Record<string, unknown> | string;
   legacy?: boolean;
 }): AnyMessage {
   const inv = {
@@ -80,15 +80,32 @@ describe('PlanRejectionAbortProcessor', () => {
     expect(abort).toHaveBeenCalledOnce();
   });
 
-  it('aborts when the rejection includes inline feedback', async () => {
+  it('aborts on a structured rejection without feedback', async () => {
     const messages = [
       assistantWithToolResult({
         toolName: 'submit_plan',
-        result: { content: 'Plan was not approved. The user wants revisions.\n\nUser feedback: fix step 3' },
+        result: {
+          content: 'Plan was not approved. Stop now.',
+          submittedPlan: { path: '.artifacts/plans/ship.md', action: 'rejected' },
+        },
       }),
     ];
     const abort = await run(messages, 1);
     expect(abort).toHaveBeenCalledOnce();
+  });
+
+  it('does NOT abort when the rejection carries inline feedback', async () => {
+    const messages = [
+      assistantWithToolResult({
+        toolName: 'submit_plan',
+        result: {
+          content: 'Plan was not approved. Revise it.',
+          submittedPlan: { path: '.artifacts/plans/ship.md', action: 'rejected', feedback: 'fix step 3' },
+        },
+      }),
+    ];
+    const abort = await run(messages, 1);
+    expect(abort).not.toHaveBeenCalled();
   });
 
   it('aborts when the result is a bare string', async () => {

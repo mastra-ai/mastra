@@ -73,26 +73,27 @@ describe('resolveSkillResumeInvocation', () => {
 });
 
 describe('resolveSkillInvocation', () => {
-  it('rescans a skill cache built before the session was given its review binding', async () => {
-    let scannedAsReview = false;
-    const skills = {
-      maybeRefresh: vi.fn(async () => {}),
-      refresh: vi.fn(async () => {
-        scannedAsReview = true;
-      }),
-      get: vi.fn(async () =>
-        scannedAsReview ? { name: 'factory-review', instructions: SKILL_INSTRUCTIONS } : undefined,
-      ),
-    };
-    const controller = makeController({ session: { getWorkspace: () => ({ skills }) } });
+  it.each(['factory-review', 'factory-plan'])(
+    'rescans a skill cache built before the session was given the binding %s needs',
+    async name => {
+      let scannedWithBinding = false;
+      const skills = {
+        maybeRefresh: vi.fn(async () => {}),
+        refresh: vi.fn(async () => {
+          scannedWithBinding = true;
+        }),
+        get: vi.fn(async () => (scannedWithBinding ? { name, instructions: SKILL_INSTRUCTIONS } : undefined)),
+      };
+      const controller = makeController({ session: { getWorkspace: () => ({ skills }) } });
 
-    const resolved = await resolveSkillInvocation(controller, { resourceId: 'card-1', name: 'factory-review' });
+      const resolved = await resolveSkillInvocation(controller, { resourceId: 'card-1', name });
 
-    expect(resolved.skillName).toBe('factory-review');
-    expect(skills.refresh).toHaveBeenCalledTimes(1);
-  });
+      expect(resolved.skillName).toBe(name);
+      expect(skills.refresh).toHaveBeenCalledTimes(1);
+    },
+  );
 
-  it('does not rescan for a missing skill that is not review-only', async () => {
+  it('does not rescan for a missing skill that no binding unlocks', async () => {
     const skills = {
       maybeRefresh: vi.fn(async () => {}),
       refresh: vi.fn(async () => {}),
