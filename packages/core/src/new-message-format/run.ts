@@ -130,6 +130,14 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
         pending = [...batch.filter(a => !refused.has(a)), ...pending];
         for (const list of [own, extra])
           for (let i = list.length - 1; i >= 0; i--) if (refused.has(list[i] as PersistableAction)) list.splice(i, 1);
+        // Closers already queued behind this batch (an early return) were computed while its tool-starteds
+        // counted; without them those calls did not run.
+        const notStarted = new Set([...refused].map(a => (a as { toolCallId: string }).toolCallId));
+        pending = pending.map(a =>
+          a.type === 'tool-error' && a.code === 'TOOL_OUTCOME_UNKNOWN' && notStarted.has(a.toolCallId)
+            ? ({ ...a, code: 'TOOL_NOT_STARTED', errorText: TOOL_NOT_STARTED_TEXT } as PersistableAction)
+            : a,
+        );
         throw error;
       }
     });
@@ -163,6 +171,9 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     const started: PersistableAction = { ...stamp(), type: 'tool-started', toolCallId, toolName };
     pending.push(started);
     own.push(started);
+    // Queued for streaming now, to keep id order with the stream; a failed batch takes it back out (see
+    // flush). Nothing later is streamed before this save settles: the call's outcome waits on this callback,
+    // and the stream's exit path waits on the queue.
     extra.push(started);
     try {
       await flush();
@@ -201,9 +212,12 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
    * or run-end. Stops the start gate first, with no await before the closers are computed, so a late
    * tool-started is either already in `own` or refused.
    */
-  const closeRun = (streamFailed: boolean): MastraAction[] => {
+  const stop = () => {
     stopped = true;
     markStopped();
+  };
+  const closeRun = (streamFailed: boolean): MastraAction[] => {
+    stop();
     const wasAborted = !!abortedBy || !!options.abortSignal?.aborted;
     const out: MastraAction[] = takeExtra();
     for (const action of converter.drain?.() ?? []) {
@@ -288,6 +302,10 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     if (!ended) {
       // Marked first: a consumer that returns while these are yielded must not close the run twice.
       ended = true;
+      // Shut the gate, then let in-flight tool-started writes settle, so the saved ones are streamed with
+      // the closers and the failed ones aren't.
+      stop();
+      await writes;
       for (const closer of closeRun(true)) yield closer;
     }
   } catch (error) {
