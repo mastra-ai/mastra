@@ -1,13 +1,5 @@
 import type { DatasetItem } from '@mastra/client-js';
-import {
-  BracesIcon,
-  FileInputIcon,
-  FileOutputIcon,
-  ListChecksIcon,
-  RouteIcon,
-  TagIcon,
-  WrenchIcon,
-} from 'lucide-react';
+import { BracesIcon, FileInputIcon, FileOutputIcon, RouteIcon, TagIcon, WrenchIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 export interface DatasetItemSection {
@@ -45,12 +37,6 @@ export const datasetItemSections: DatasetItemSection[] = [
     value: item => (item.expectedTrajectory != null ? toJson(item.expectedTrajectory) : undefined),
   },
   { key: 'toolMocks', title: 'Tool Mocks', icon: <WrenchIcon />, value: item => toJson(item.toolMocks ?? []) },
-  {
-    key: 'scorerIds',
-    title: 'Scorers',
-    icon: <ListChecksIcon />,
-    value: item => (item.scorerIds === undefined ? 'Inherited from dataset' : toJson(item.scorerIds)),
-  },
   {
     key: 'requestContext',
     title: 'Request Context',

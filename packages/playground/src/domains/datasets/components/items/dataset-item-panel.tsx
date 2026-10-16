@@ -117,8 +117,6 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
   const [metadataValue, setMetadataValue] = useState('');
   const [trajectoryValue, setTrajectoryValue] = useState('');
   const [toolMocksValue, setToolMocksValue] = useState('');
-  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(item.scorerIds !== undefined);
-  const [selectedScorerIds, setSelectedScorerIds] = useState(item.scorerIds ?? []);
   const [requestContextValue, setRequestContextValue] = useState('');
 
   // Validation error state
@@ -135,8 +133,6 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
-      setScorerOverrideEnabled(item.scorerIds !== undefined);
-      setSelectedScorerIds(item.scorerIds ?? []);
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
@@ -225,15 +221,8 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
       }
     }
 
-    let scorerIds: string[] | null | undefined;
-    if (scorerOverrideEnabled) {
-      scorerIds = selectedScorerIds;
-    } else if (item.scorerIds !== undefined) {
-      scorerIds = null;
-    }
-
     try {
-      const updatedItem = await updateItem.mutateAsync({
+      await updateItem.mutateAsync({
         datasetId,
         itemId: item.id,
         input: parsedInput,
@@ -241,13 +230,10 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
         toolMocks: parsedToolMocks,
-        scorerIds,
         requestContext: parsedRequestContext,
       });
 
       toast.success('Item updated successfully');
-      setScorerOverrideEnabled(updatedItem.scorerIds !== undefined);
-      setSelectedScorerIds(updatedItem.scorerIds ?? []);
       setIsEditing(false);
       setValidationErrors(null);
     } catch (error) {
@@ -268,8 +254,6 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
     setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
-    setScorerOverrideEnabled(item.scorerIds !== undefined);
-    setSelectedScorerIds(item.scorerIds ?? []);
     setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
@@ -356,10 +340,6 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
             setTrajectoryValue={setTrajectoryValue}
             toolMocksValue={toolMocksValue}
             setToolMocksValue={setToolMocksValue}
-            scorerOverrideEnabled={scorerOverrideEnabled}
-            setScorerOverrideEnabled={setScorerOverrideEnabled}
-            selectedScorerIds={selectedScorerIds}
-            setSelectedScorerIds={setSelectedScorerIds}
             requestContextValue={requestContextValue}
             setRequestContextValue={setRequestContextValue}
             validationErrors={validationErrors}

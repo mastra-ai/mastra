@@ -198,7 +198,6 @@ function DatasetItemVersionsComparePage() {
             ) : leftItem ? (
               <DatasetItemDetails
                 item={leftItem}
-                showScorers
                 diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
             ) : (
@@ -233,7 +232,6 @@ function DatasetItemVersionsComparePage() {
             ) : rightItem ? (
               <DatasetItemDetails
                 item={rightItem}
-                showScorers
                 diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
               />
             ) : (

@@ -19,11 +19,6 @@ export const itemWithScorers: DatasetItem = {
   scorerIds: ['quality'],
 };
 
-export const itemWithEmptyScorers: DatasetItem = {
-  ...baseItem,
-  scorerIds: [],
-};
-
 export const itemWithTextPayload: DatasetItem = {
   ...baseItem,
   input: 'What is the weather in Seattle?',

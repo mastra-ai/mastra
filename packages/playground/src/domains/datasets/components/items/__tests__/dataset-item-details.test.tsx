@@ -74,15 +74,6 @@ describe('DatasetItemDetails', () => {
     });
   });
 
-  describe('when scorers are requested', () => {
-    it('renders the scorers section', () => {
-      render(<DatasetItemDetails item={baseItem} showScorers />);
-
-      expect(screen.getByText('Scorers')).not.toBeNull();
-      expect(screen.getByText(/Inherited from dataset/)).not.toBeNull();
-    });
-  });
-
   describe('when the input and ground truth are plain strings', () => {
     it('renders them as text, without JSON quotes', () => {
       render(<DatasetItemDetails item={itemWithTextPayload} />);

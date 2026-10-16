@@ -17,21 +17,18 @@ export interface DatasetItemDetailsProps {
   item: DatasetItem;
   /** When set, each code section highlights the lines that differ from the same field on `against`. */
   diff?: { against: DatasetItem; side: 'a' | 'b' };
-  /** Shows the scorer override section; the version compare view needs it so scorer changes stay visible in the diff. */
-  showScorers?: boolean;
 }
 
 /**
  * Read-only details of a dataset item: metadata key/values plus code sections.
  * Shared by the item side panel and the version/item compare views.
  */
-export function DatasetItemDetails({ item, diff, showScorers = false }: DatasetItemDetailsProps) {
+export function DatasetItemDetails({ item, diff }: DatasetItemDetailsProps) {
   return (
     <div className={sectionStackClass}>
       <ComparisonMetricList metrics={metadataMetrics(item)} />
 
       {datasetItemSections.map(section => {
-        if (section.key === 'scorerIds' && !showScorers) return null;
         // Outside diffs, payloads read like experiment results; diffs keep the code view for line highlighting.
         if (section.payload && !diff) {
           const payload = section.payload(item);

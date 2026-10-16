@@ -8,15 +8,8 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import { DatasetItemPanel } from '../dataset-item-panel';
-import {
-  baseItem,
-  itemWithEmptyScorers,
-  itemWithMocks,
-  itemWithScorers,
-  itemWithUuid,
-} from './fixtures/dataset-item-panel';
+import { baseItem, itemWithMocks, itemWithScorers, itemWithUuid } from './fixtures/dataset-item-panel';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -25,7 +18,6 @@ const BASE_URL = 'http://localhost:4111';
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a {...props}>{children}</a>
 );
-const scorerControlTestTimeout = 15_000;
 
 const renderPanel = (item: DatasetItem, navigate: (path: string) => void = () => {}) => {
   // The panel embeds CompareWithList, which fetches the dataset's items.
@@ -50,30 +42,9 @@ const renderPanel = (item: DatasetItem, navigate: (path: string) => void = () =>
   );
 };
 
-const useScorerHandler = () => {
-  server.use(http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(itemScorers)));
-};
-
 const enterEditMode = async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Open actions menu' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
-};
-
-const openScorerSelector = async () => {
-  const selector = await screen.findByRole('combobox');
-  await waitFor(() => expect(selector.hasAttribute('disabled')).toBe(false));
-  // The scorer field searches in itself and opens on mousedown (a real press), which fireEvent.click doesn't send.
-  fireEvent.mouseDown(selector);
-};
-
-const selectScorer = async (name: string) => {
-  await openScorerSelector();
-  const option = await screen.findByRole('option', { name: new RegExp(name, 'i') });
-  fireEvent.pointerDown(option, { pointerType: 'mouse' });
-  fireEvent.click(option, { detail: 1 });
-  // A multi-select keeps its list open for more picks; Escape closes it like a keyboard user would.
-  fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
-  await waitFor(() => expect(screen.queryByRole('option', { name: new RegExp(name, 'i') })).toBeNull());
 };
 
 afterEach(() => cleanup());
@@ -124,130 +95,32 @@ describe('DatasetItemPanel', () => {
     });
   });
 
-  describe('when an inherited item is edited', () => {
-    it(
-      'starts with the dataset scorer override disabled',
-      async () => {
-        renderPanel(baseItem);
-        await enterEditMode();
+  describe('when an item is edited', () => {
+    it('does not offer a scorer override', async () => {
+      renderPanel(baseItem);
+      await enterEditMode();
 
-        expect(screen.getByRole('switch', { name: 'Override dataset scorers' }).getAttribute('aria-checked')).toBe(
-          'false',
-        );
-        expect(screen.queryByRole('combobox')).toBeNull();
-      },
-      scorerControlTestTimeout,
-    );
-
-    it(
-      'offers only resolvable registered and stored scorers',
-      async () => {
-        useScorerHandler();
-        renderPanel(baseItem);
-        await enterEditMode();
-
-        fireEvent.click(screen.getByRole('switch', { name: 'Override dataset scorers' }));
-        await openScorerSelector();
-
-        expect(await screen.findByRole('option', { name: /Quality scorer/i })).not.toBeNull();
-        expect(screen.getByRole('option', { name: /Stored judge/i })).not.toBeNull();
-        expect(screen.queryByRole('option', { name: /Unavailable scorer/i })).toBeNull();
-      },
-      scorerControlTestTimeout,
-    );
-
-    it(
-      'persists selected scorer IDs through the dataset item API',
-      async () => {
-        useScorerHandler();
-        const capture = vi.fn<(body: unknown) => void>();
-        server.use(
-          http.patch(`${BASE_URL}/api/datasets/ds-1/items/item-1`, async ({ request }) => {
-            capture(await request.json());
-            return HttpResponse.json({ ...itemWithScorers, datasetVersion: 2, scorerIds: ['stored-judge'] });
-          }),
-        );
-        renderPanel(baseItem);
-        await enterEditMode();
-
-        fireEvent.click(screen.getByRole('switch', { name: 'Override dataset scorers' }));
-        await selectScorer('Stored judge');
-        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-
-        await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-        expect(capture.mock.calls[0]?.[0]).toMatchObject({ scorerIds: ['stored-judge'] });
-      },
-      scorerControlTestTimeout,
-    );
-
-    it(
-      'persists an enabled override with no selection as an empty array',
-      async () => {
-        useScorerHandler();
-        const capture = vi.fn<(body: unknown) => void>();
-        server.use(
-          http.patch(`${BASE_URL}/api/datasets/ds-1/items/item-1`, async ({ request }) => {
-            capture(await request.json());
-            return HttpResponse.json({ ...itemWithEmptyScorers, datasetVersion: 2 });
-          }),
-        );
-        renderPanel(baseItem);
-        await enterEditMode();
-
-        fireEvent.click(screen.getByRole('switch', { name: 'Override dataset scorers' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-
-        await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-        expect(capture.mock.calls[0]?.[0]).toMatchObject({ scorerIds: [] });
-      },
-      scorerControlTestTimeout,
-    );
+      expect(screen.getByRole('button', { name: 'Save Changes' })).not.toBeNull();
+      expect(screen.queryByRole('switch', { name: 'Override dataset scorers' })).toBeNull();
+    });
   });
 
-  describe('when an existing scorer override is edited', () => {
-    it(
-      'persists null when the override is disabled',
-      async () => {
-        const capture = vi.fn<(body: unknown) => void>();
-        server.use(
-          http.patch(`${BASE_URL}/api/datasets/ds-1/items/item-1`, async ({ request }) => {
-            capture(await request.json());
-            return HttpResponse.json({ ...baseItem, datasetVersion: 2 });
-          }),
-        );
-        renderPanel(itemWithScorers);
-        await enterEditMode();
+  describe('when an item with a scorer override is edited', () => {
+    it('saves without touching its scorers', async () => {
+      const capture = vi.fn<(body: unknown) => void>();
+      server.use(
+        http.patch(`${BASE_URL}/api/datasets/ds-1/items/item-1`, async ({ request }) => {
+          capture(await request.json());
+          return HttpResponse.json({ ...itemWithScorers, datasetVersion: 2 });
+        }),
+      );
+      renderPanel(itemWithScorers);
+      await enterEditMode();
 
-        const toggle = screen.getByRole('switch', { name: 'Override dataset scorers' });
-        expect(toggle.getAttribute('aria-checked')).toBe('true');
-        fireEvent.click(toggle);
-        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
-        await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-        expect(capture.mock.calls[0]?.[0]).toMatchObject({ scorerIds: null });
-      },
-      scorerControlTestTimeout,
-    );
-
-    it(
-      'restores the persisted override after canceling edits',
-      async () => {
-        useScorerHandler();
-        renderPanel(itemWithScorers);
-        await enterEditMode();
-
-        fireEvent.click(screen.getByRole('switch', { name: 'Override dataset scorers' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        await enterEditMode();
-
-        expect(screen.getByRole('switch', { name: 'Override dataset scorers' }).getAttribute('aria-checked')).toBe(
-          'true',
-        );
-        expect(await screen.findByRole('combobox')).not.toBeNull();
-        // The persisted scorer shows as one chip in the field.
-        expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(1);
-      },
-      scorerControlTestTimeout,
-    );
+      await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+      expect(capture.mock.calls[0]?.[0]).not.toHaveProperty('scorerIds');
+    });
   });
 });
