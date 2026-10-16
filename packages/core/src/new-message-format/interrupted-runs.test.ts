@@ -356,6 +356,65 @@ describe('two pending approvals in one run', () => {
     expect(repairOpenRun(log)).toEqual([]);
     expectValidToolPairs(prompts.at(-1));
   });
+
+  it('a consumer that returns after seeing the first answer leaves the approved call open for the last one', async () => {
+    const executed: string[] = [];
+    const deleteFile = createTool({
+      id: 'deleteFile',
+      description: 'Deletes a file',
+      inputSchema: z.object({ path: z.string() }),
+      requireApproval: true,
+      execute: async ({ path }) => {
+        executed.push(path);
+        return { deleted: true };
+      },
+    });
+    const twoCalls = [
+      { type: 'stream-start', warnings: [] },
+      { type: 'tool-call', toolCallId: 'c1', toolName: 'deleteFile', input: JSON.stringify({ path: '/a' }) },
+      { type: 'tool-call', toolCallId: 'c2', toolName: 'deleteFile', input: JSON.stringify({ path: '/b' }) },
+      ...toolCallTurn('x', 'x', {}).slice(-1),
+    ];
+    const { model } = scriptedModel([twoCalls, textTurn('Done.')]);
+    const agent = new Agent({ id: 'files', name: 'files', instructions: 'Files.', model, tools: { deleteFile } });
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { files: agent }, storage, logger: false });
+    const store = (await storage.getStore('memory'))!;
+    const memory = { thread: 'th1', resource: 'u1' };
+
+    const first = await (await agent.stream('Delete /a and /b', { memory })).result;
+    const runId = first.actions[0]!.runId!;
+    const request = first.actions.find(a => a.type === 'tool-approval-requested' && a.toolCallId === 'c1')!;
+    // The client disconnects as soon as it sees its answer acknowledged.
+    for await (const action of runAgent({
+      model: model as never,
+      threadId: 'th1',
+      resourceId: 'u1',
+      runId,
+      memory: store,
+      append: [
+        {
+          type: 'tool-approval-responded',
+          toolCallId: 'c1',
+          toolName: 'deleteFile',
+          approvalId: (request as { approvalId: string }).approvalId,
+          approved: true,
+        },
+      ],
+    })) {
+      if (action.type === 'tool-approval-responded') break;
+    }
+    const between = await store.listActions({ threadId: 'th1' });
+    expect(between.some(a => a.type === 'tool-error' || a.type === 'tool-denied')).toBe(false);
+    expect(between.filter(a => a.type === 'run-end').map(a => a.finishReason)).toEqual(['tool-calls']);
+
+    await (
+      await agent.approveToolCall({ runId, toolCallId: 'c2', memory })
+    ).result;
+    expect([...executed].sort()).toEqual(['/a', '/b']);
+    const log = await store.listActions({ threadId: 'th1' });
+    expect(repairOpenRun(log)).toEqual([]);
+  });
 });
 
 describe('what a live reader sees', () => {

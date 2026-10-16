@@ -254,18 +254,19 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     return [...out, ...closers];
   };
   try {
-    await flush();
-    for (const action of [...repairs, ...runStart, ...input]) yield action;
-
-    // A run with several approval requests resumes only once every one of them has an answer.
+    // A run with several approval requests resumes only once every one of them has an answer. Decided before
+    // anything is written or yielded: a consumer that returns after seeing its answer, or a failed write, must
+    // not close a waiting run, or the calls approved so far would close as not started.
     const runLog = [...history.filter(a => a.runId === runId), ...input];
     const answered = new Set(runLog.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
-    if (runLog.some(a => a.type === 'tool-approval-requested' && !answered.has(a.approvalId))) {
-      // Waiting, not interrupted: the run already ended with `tool-calls`, and its approved calls stay open
-      // for the resume that answers the last approval.
-      ended = true;
-      return;
-    }
+    const waiting = runLog.some(a => a.type === 'tool-approval-requested' && !answered.has(a.approvalId));
+    // Waiting, not interrupted: the run already ended with `tool-calls`, and its approved calls stay open for
+    // the resume that answers the last approval.
+    if (waiting) ended = true;
+
+    await flush();
+    for (const action of [...repairs, ...runStart, ...input]) yield action;
+    if (waiting) return;
 
     const instructions = [options.instructions, ...system].filter(Boolean).join('\n\n');
     const result = streamText({
