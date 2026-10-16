@@ -46,7 +46,7 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
 
 // A resume or time travel the run can't accept: another caller claimed it, it is still running,
 // or it isn't waiting to be resumed.
-const RESUME_ALREADY_CLAIMED_CODES = new Set([
+const RUN_CLAIM_CONFLICT_CODES = new Set([
   'WORKFLOW_RESUME_ALREADY_CLAIMED',
   'AGENT_RESUME_ALREADY_CLAIMED',
   'WORKFLOW_RUN_NOT_SUSPENDED',
@@ -55,8 +55,8 @@ const RESUME_ALREADY_CLAIMED_CODES = new Set([
   'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
 ]);
 
-function isResumeAlreadyClaimedError(error: unknown): error is Error {
-  return error instanceof Error && RESUME_ALREADY_CLAIMED_CODES.has((error as { id?: unknown }).id as string);
+function isRunClaimConflictError(error: unknown): error is Error {
+  return error instanceof Error && RUN_CLAIM_CONFLICT_CODES.has((error as { id?: unknown }).id as string);
 }
 
 /**
@@ -156,10 +156,10 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  // A losing concurrent resume, or a recover of a run that is live or suspended, is a conflict on
-  // run state, not a malformed request, so it maps to 409 and clients can distinguish it from a
-  // 400/500 and re-read the run.
-  if (isResumeAlreadyClaimedError(error) || isDurableRunConflictError(error)) {
+  // A losing concurrent resume or time travel, or a recover of a run that is live or suspended, is
+  // a conflict on run state, not a malformed request, so it maps to 409 and clients can
+  // distinguish it from a 400/500 and re-read the run.
+  if (isRunClaimConflictError(error) || isDurableRunConflictError(error)) {
     throw new HTTPException(409, {
       message: error.message,
       stack: error.stack,

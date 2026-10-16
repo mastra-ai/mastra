@@ -334,7 +334,7 @@ try {
 }
 ```
 
-Over HTTP, a losing time travel call returns `409 Conflict`.
+Over HTTP, `POST /api/workflows/:workflowId/time-travel-async` returns `409 Conflict` for a losing call. The `time-travel` and `time-travel-stream` endpoints respond before the time travel finishes, so a losing call doesn't change their status code.
 
 Calling `timeTravel()` again after the previous call finished is still allowed and re-runs the target step.
 

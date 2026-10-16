@@ -4954,7 +4954,6 @@ export class Run<
       stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
     });
 
-    const callName = operation === 'resume' ? 'resume()' : 'timeTravel()';
     const expectedStatus = operation === 'resume' ? 'suspended' : snapshot.status;
 
     if (!persistsRunningState) {
@@ -4965,7 +4964,7 @@ export class Run<
         this.#mastra
           ?.getLogger()
           ?.warn(
-            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent ${callName} calls for run ${this.runId} cannot be de-duplicated. Concurrent calls may execute downstream steps more than once.`,
+            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated. Concurrent calls may execute downstream steps more than once.`,
           );
       }
       return;
@@ -4979,7 +4978,7 @@ export class Run<
       this.#mastra
         ?.getLogger()
         ?.warn(
-          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${callName} calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
+          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
         );
       return;
     }
@@ -5017,7 +5016,7 @@ export class Run<
         details: {
           workflowId: this.workflowId,
           runId: this.runId,
-          expectedStatus: expectedStatus ?? 'unknown',
+          expectedStatus,
           actualStatus: current.status ?? 'unknown',
         },
       });
@@ -5727,14 +5726,12 @@ export class Run<
           workflowName: this.workflowId,
           runId: this.runId,
         });
-        const claimedContext = (snapshot.context ?? {}) as Record<string, { status?: string }>;
-        const currentContext = (current?.context ?? {}) as Record<string, { status?: string }>;
-        const claimedStepIds = Object.keys(claimedContext);
-        const currentStepIds = Object.keys(currentContext);
+        const claimedStepIds = Object.keys(snapshot.context);
+        const currentStepIds = Object.keys(current?.context ?? {});
         const engineNeverStarted =
           current?.status === 'running' &&
           currentStepIds.length === claimedStepIds.length &&
-          claimedStepIds.every(stepId => currentContext[stepId]?.status === claimedContext[stepId]?.status) &&
+          claimedStepIds.every(stepId => current.context[stepId]?.status === snapshot.context[stepId]?.status) &&
           JSON.stringify(current?.activePaths ?? []) === JSON.stringify(snapshot.activePaths ?? []) &&
           JSON.stringify(current?.activeStepsPath ?? {}) === JSON.stringify(snapshot.activeStepsPath ?? {}) &&
           JSON.stringify(current?.suspendedPaths ?? {}) === JSON.stringify(snapshot.suspendedPaths ?? {});
