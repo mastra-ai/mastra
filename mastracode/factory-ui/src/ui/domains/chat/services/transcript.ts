@@ -95,7 +95,12 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
+  | MessageEntry
+  | NoticeEntry
+  | PromptEntry
+  | NotificationEntry
+  | NotificationSummaryEntry
+  | SubagentEntry;
 
 export interface TranscriptState {
   entries: TimelineEntry[];
@@ -811,6 +816,7 @@ function upsertMessage(
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
     idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    if (idx === -1) idx = indexOfUnclaimedOptimisticCopy(entries, message);
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -819,7 +825,7 @@ function upsertMessage(
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : undefined;
   // The viewer's own message sent from another client (e.g. the TUI) has no optimistic copy to hide behind.
-  const ownSignalWithoutEcho = message.role === 'signal' && idx === -1 && !hasOptimisticCopy(entries, message);
+  const ownSignalWithoutEcho = message.role === 'signal' && idx === -1;
   const nextMessage =
     filtered?.message ??
     preserveOptimisticUserContent(
@@ -839,13 +845,15 @@ function upsertMessage(
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
 }
 
-function hasOptimisticCopy(entries: TimelineEntry[], message: MastraDBMessage): boolean {
+// A composer bubble keeps its local message id until its echo signal claims it, so each send is consumed once.
+function indexOfUnclaimedOptimisticCopy(entries: TimelineEntry[], message: MastraDBMessage): number {
   const texts = new Set(drawableTexts(message));
-  return entries.some(
+  return entries.findIndex(
     entry =>
       entry.kind === 'message' &&
       entry.message.role === 'user' &&
       entry.id.startsWith('local-') &&
+      entry.message.id === entry.id &&
       drawableTexts(entry.message).some(text => texts.has(text)),
   );
 }

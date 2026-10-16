@@ -1862,4 +1862,27 @@ describe('live user signals sent by someone else', () => {
     const entry = state.entries.find(e => 'id' in e && e.id === 'sig-3');
     expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from the TUI' }]);
   });
+
+  it('draws a same-text message from another client after the composer send was echoed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const me = { id: 'user_me', name: 'Me' };
+    state = transcriptReducer(state, { type: 'localUser', text: 'yes' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-4', 'yes', me) },
+      viewerId: 'user_me',
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-5', 'yes', me) },
+      viewerId: 'user_me',
+    });
+
+    const drawable = state.entries.filter(
+      entry => entry.kind === 'message' && messageParts(entry).some(part => (part as { text?: string }).text === 'yes'),
+    );
+    expect(drawable).toHaveLength(2);
+    expect(drawable[0]?.id).toMatch(/^local-/);
+    expect(drawable[1]?.id).toBe('sig-5');
+  });
 });
