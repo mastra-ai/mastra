@@ -145,6 +145,37 @@ describe('User session visibility', () => {
     expect(screen.queryByRole('menuitem', { name: 'Make private' })).not.toBeInTheDocument();
   });
 
+  it('disables the visibility change while one is in flight', async () => {
+    let release = () => {};
+    const answered = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const requested: string[] = [];
+    useFactoryFixtures(() => [session]);
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/user-sessions/:sessionId/visibility`, async ({ request }) => {
+        const { visibility } = (await request.json()) as { visibility: 'org' | 'private' };
+        requested.push(visibility);
+        await answered;
+        return HttpResponse.json({ session: { ...session, visibility } });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
+    await openActions(user, name);
+    await user.click(await screen.findByRole('menuitem', { name: 'Share with organization' }));
+    await openActions(user, name);
+    const pending = await screen.findByRole('menuitem', { name: 'Share with organization' });
+    expect(pending).toHaveAttribute('aria-disabled', 'true');
+    await user.click(pending);
+
+    release();
+    await waitForMutationsIdle(client);
+    expect(requested).toEqual(['org']);
+  });
+
   it('reports a failed change and keeps the session private', async () => {
     useFactoryFixtures(() => [session]);
     server.use(

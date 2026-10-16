@@ -43,6 +43,7 @@ export function SessionNavRow({
   regeneratingTitle,
   visibility,
   onVisibilityChange,
+  changingVisibility,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
@@ -70,6 +71,8 @@ export function SessionNavRow({
   visibility?: 'org' | 'private';
   /** Omitted for sessions the viewer does not own: the server only lets owners change visibility. */
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
+  /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
+  changingVisibility?: boolean;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
@@ -129,6 +132,7 @@ export function SessionNavRow({
             regeneratingTitle={regeneratingTitle}
             visibility={visibility}
             onVisibilityChange={onVisibilityChange}
+            changingVisibility={changingVisibility}
           />
         )}
       </span>
@@ -185,6 +189,7 @@ function SessionActionsMenu({
   regeneratingTitle,
   visibility,
   onVisibilityChange,
+  changingVisibility,
 }: {
   name: string;
   anchor: RefObject<HTMLElement | null>;
@@ -196,6 +201,7 @@ function SessionActionsMenu({
   regeneratingTitle?: boolean;
   visibility?: 'org' | 'private';
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
+  changingVisibility?: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -225,7 +231,10 @@ function SessionActionsMenu({
           </DropdownMenu.Item>
         ) : null}
         {onVisibilityChange && visibility ? (
-          <DropdownMenu.Item onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}>
+          <DropdownMenu.Item
+            disabled={changingVisibility}
+            onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}
+          >
             {visibility === 'private' ? <Users /> : <Lock />}
             {visibility === 'private' ? 'Share with organization' : 'Make private'}
           </DropdownMenu.Item>
