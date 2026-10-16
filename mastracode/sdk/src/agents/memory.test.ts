@@ -751,6 +751,18 @@ describe('getDynamicMemory', () => {
     }
   });
 
+  it('always gives Factory sessions resource-scoped OM, whatever the session state or config says', async () => {
+    getOmScopeMock.mockReturnValue('thread');
+    const { config } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      factoryProjectId: 'factory-1',
+      omScope: 'thread',
+    });
+
+    expect(getOmScopeMock).not.toHaveBeenCalled();
+    expect(config.options.observationalMemory.scope).toBe('resource');
+  });
+
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
