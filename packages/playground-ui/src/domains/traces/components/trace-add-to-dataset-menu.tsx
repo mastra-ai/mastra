@@ -14,15 +14,9 @@ export function TraceAddToDatasetMenu({ selectedSpanId, onSave }: TraceAddToData
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button
-            size="sm"
-            tooltip="Add to dataset"
-            // In a header narrower than 900px, collapse to a round icon button so the trace
-            // summary keeps its room; the label stays for screen readers.
-            className="@max-[900px]:w-control-sm @max-[900px]:px-0"
-          >
+          <Button size="sm">
             <PlusIcon />
-            <span className="@max-[900px]:sr-only">Add to dataset</span>
+            Add to dataset
           </Button>
         }
       />
