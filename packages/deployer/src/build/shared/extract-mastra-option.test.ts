@@ -69,8 +69,12 @@ describe('Extract Mastra option', () => {
         `import { prefix } from '@repo/built';
 import { suffix } from 'lib-only';
 import { token } from 'shared';
+// enum is not erasable, so Node's type stripping can't load this file if it is left external
+enum Separator {
+  Space = ' ',
+}
 export const libToken = token;
-export const greet = (name: string): string => \`\${prefix} \${name}\${suffix}\`;
+export const greet = (name: string): string => \`\${prefix}\${Separator.Space}\${name}\${suffix}\`;
 `,
       );
       await link('store/lib-only', 'packages/lib/node_modules/lib-only');
