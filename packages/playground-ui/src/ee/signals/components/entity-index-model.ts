@@ -46,5 +46,16 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
 
 export function entityStatusLabel(status: EntityLearningProgressStatus | undefined): string {
   if (!status) return 'Unavailable';
+  if (status === 'collecting') return 'Analyzing';
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+/**
+ * Collecting agents already have traces; none has finished analysis yet. The API
+ * reports traces collected, not analysis progress, so that is all the copy can say.
+ */
+export function analyzingDescription(traceCount: number | undefined): string {
+  const pending = 'Signals appear when analysis finishes.';
+  if (traceCount === undefined) return pending;
+  return `${numberFormatter.format(traceCount)} ${traceCount === 1 ? 'trace' : 'traces'} collected. ${pending}`;
 }

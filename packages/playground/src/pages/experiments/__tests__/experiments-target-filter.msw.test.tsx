@@ -103,16 +103,16 @@ describe('Experiments page — target filter from URL', () => {
     renderPage('/experiments?targetType=agent&targetId=nobody');
 
     expect(await screen.findByText('Target')).toBeDefined();
-    expect(screen.getByRole('button', { name: /reset/i })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Experiments filters' })).toBeDefined();
     expect(screen.queryByText('No Experiments yet')).toBeNull();
   });
 
-  it('clears the target params when filters are reset', async () => {
+  it('clears both target params when the Target type chip is removed', async () => {
     setupHandlers();
     renderPage('/experiments?dataset=dataset-1&targetType=agent&targetId=agent-1');
 
-    fireEvent.click(await screen.findByRole('button', { name: /reset/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Target type filter' }));
 
-    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments'));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments?dataset=dataset-1'));
   });
 });

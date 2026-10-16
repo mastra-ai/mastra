@@ -1,6 +1,6 @@
 {
   "name": "@internal/core",
-  "version": "0.1.2",
+  "version": "0.1.3-alpha.1",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -78,6 +78,46 @@
         "default": "./dist/routes/index.cjs"
       }
     },
+    "./durable": {
+      "import": {
+        "types": "./dist/durable/index.d.ts",
+        "default": "./dist/durable/index.js"
+      },
+      "require": {
+        "types": "./dist/durable/index.d.cts",
+        "default": "./dist/durable/index.cjs"
+      }
+    },
+    "./knowledge-compat": {
+      "import": {
+        "types": "./dist/knowledge-compat/index.d.ts",
+        "default": "./dist/knowledge-compat/index.js"
+      },
+      "require": {
+        "types": "./dist/knowledge-compat/index.d.cts",
+        "default": "./dist/knowledge-compat/index.cjs"
+      }
+    },
+    "./memory": {
+      "import": {
+        "types": "./dist/memory/index.d.ts",
+        "default": "./dist/memory/index.js"
+      },
+      "require": {
+        "types": "./dist/memory/index.d.cts",
+        "default": "./dist/memory/index.cjs"
+      }
+    },
+    "./frontmatter": {
+      "import": {
+        "types": "./dist/frontmatter/index.d.ts",
+        "default": "./dist/frontmatter/index.js"
+      },
+      "require": {
+        "types": "./dist/frontmatter/index.d.cts",
+        "default": "./dist/frontmatter/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -86,6 +126,9 @@
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsdown --config tsdown.config.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"

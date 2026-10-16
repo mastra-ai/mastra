@@ -7,6 +7,7 @@ import { inputGroupClassName, inputGroupControlClassName } from '@/ds/components
 import { Icon } from '@/ds/icons/Icon';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
 
 type InputNumberProps = Omit<NumberFieldPrimitive.Root.Props, 'className'> & {
@@ -45,12 +46,13 @@ type InputNumberInputProps = Omit<NumberFieldPrimitive.Input.Props, 'className'>
   className?: string;
 };
 
-function InputNumberInput({ className, ...props }: InputNumberInputProps) {
+function InputNumberInput({ className, autoComplete, ...props }: InputNumberInputProps) {
   return (
     <NumberFieldPrimitive.Input
       data-slot="input-number-input"
       className={cn(inputGroupControlClassName, className)}
       {...props}
+      {...textFieldAutofillProps(autoComplete)}
     />
   );
 }

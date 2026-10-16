@@ -6,7 +6,10 @@ class TemporalExecutionEngine {
   constructor(params) {
     this.startToCloseTimeout = params?.options?.startToCloseTimeout ?? '1 minute';
     this.activityHandle = proxyActivities({
-      startToCloseTimeout: this.startToCloseTimeout
+      startToCloseTimeout: this.startToCloseTimeout,
+      ...(params?.options?.retry !== undefined && {
+        retry: params.options.retry
+      })
     });
   }
   async execute(params) {

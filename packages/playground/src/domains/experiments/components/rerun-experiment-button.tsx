@@ -26,6 +26,7 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
   const scorerIds = useExperimentScorerIds(experiment);
 
   const initialTargetType = DIALOG_TARGET_TYPES.find(type => type === experiment.targetType);
+  const isActive = experiment.status === 'running' || experiment.status === 'pending';
 
   // Only targets the run dialog can submit are rerunnable (caller-run/external and
   // unsupported target types are not).
@@ -35,8 +36,12 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
     <>
       <Button
         variant="primary"
+        size="sm"
         onClick={() => setOpen(true)}
-        tooltip="Run this experiment again with the same configuration"
+        disabled={isActive}
+        tooltip={
+          isActive ? 'Available once this run finishes' : 'Run this experiment again with the same configuration'
+        }
         icon={<Play />}
       >
         Rerun

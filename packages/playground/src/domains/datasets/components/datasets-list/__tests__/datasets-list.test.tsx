@@ -46,8 +46,13 @@ describe('DatasetsList', () => {
       renderList();
       const row = screen.getByRole('link', { name: /Dataset A/ });
       expect(row.getAttribute('href')).toBe('/datasets/ds-a');
-      expect(within(row).getByText('Customer support examples')).toBeTruthy();
       expect(within(row).getByText('v3')).toBeTruthy();
+    });
+
+    it('does not render the Description column or dataset descriptions', () => {
+      renderList();
+      expect(screen.queryByText('Description')).toBeNull();
+      expect(screen.queryByText('Customer support examples')).toBeNull();
     });
 
     it('shows the first two tags with an overflow count', () => {
@@ -121,6 +126,20 @@ describe('DatasetsList', () => {
     it('does not show dataset links', () => {
       renderList({ tagFilter: 'missing' });
       expect(screen.queryAllByRole('link')).toHaveLength(0);
+    });
+  });
+
+  describe('when no loaded dataset matches and more pages can still load', () => {
+    it('does not claim that no dataset matches', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: true });
+      expect(screen.queryByText('No datasets match your filters')).toBeNull();
+    });
+  });
+
+  describe('when no dataset matches and every page is loaded', () => {
+    it('says that no dataset matches the filters', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: false });
+      expect(screen.getByText('No datasets match your filters')).toBeTruthy();
     });
   });
 

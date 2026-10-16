@@ -603,7 +603,13 @@ export class DatasetsPG extends DatasetsStorage {
       let paramIndex = 1;
 
       if (args.filters) {
-        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, datasetIds, name } =
+          args.filters;
+        if (datasetIds !== undefined) {
+          // = ANY of an empty array is false, so [] matches no datasets.
+          conditions.push(`"id" = ANY($${paramIndex++}::text[])`);
+          queryParams.push(datasetIds);
+        }
         if (organizationId !== undefined) {
           conditions.push(`"organizationId" = $${paramIndex++}`);
           queryParams.push(organizationId);

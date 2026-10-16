@@ -158,6 +158,18 @@ export function getFactoryAuthOrgId(user: FactoryAuthUser | undefined): string |
 }
 
 /**
+ * The org rung a user's rows are keyed by: the organization they belong to, or a
+ * per-user rung for personal (no-org) accounts so their rows never land in the
+ * shared `local` scope. Every writer and reader of a `(org, user)` row must
+ * agree on this, so it lives here rather than being re-derived per call site.
+ */
+export function factoryUserOrgId(user: FactoryAuthUser | undefined): string | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  return getFactoryAuthOrgId(user) ?? `user:${userId}`;
+}
+
+/**
  * Resolve the tenant identity `(orgId, userId)` from the authenticated user on
  * the context. Returns `undefined` when there is no signed-in user (auth
  * disabled or unauthenticated). `orgId` is `undefined` for personal accounts;
@@ -393,6 +405,19 @@ export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): Ma
  *
  * Returns `undefined` when there is no valid session (or auth is disabled).
  */
+function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context): void {
+  // Forward a renewed session cookie (e.g. rotated by the shared API during
+  // verification) so the browser's cookie stays current. Best-effort.
+  try {
+    const pending = provider.consumePendingResponseHeaders?.(c.req.raw);
+    for (const [name, value] of Object.entries(pending ?? {})) {
+      c.header(name, value, { append: true });
+    }
+  } catch {
+    // never fail a request over header forwarding
+  }
+}
+
 export async function ensureFactoryAuthUser(
   provider: IMastraAuthProvider | undefined,
   c: Context,
@@ -403,6 +428,9 @@ export async function ensureFactoryAuthUser(
 
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
+  // Routes declared `requiresAuth: false` skip the gate, so this is their only
+  // authentication — forward a renewed session cookie from here too.
+  forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
   const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
@@ -783,6 +811,21 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
 }
 
 /**
+ * `/auth/*` routes for auth-disabled mode (`auth: null`). Only `/auth/me`, answering
+ * 404 — the UI's "auth disabled" signal. Without it the deployer's HTML catch-all
+ * answers `/auth/me` with 200 text/html and the UI retries forever.
+ */
+export function buildAuthDisabledRoutes(): ApiRoute[] {
+  return [
+    registerApiRoute('/auth/me', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => c.json({ authEnabled: false, authenticated: false }, 404),
+    }),
+  ];
+}
+
+/**
  * Channel webhook paths whose adapter verifies the platform's request signature,
  * making the delivery self-authenticating. Add a platform here only once its
  * adapter rejects unsigned or mis-signed requests.
@@ -797,6 +840,21 @@ const SESSION_FAVICON_PATHS = new Set([
   '/favicon-session-awaiting.svg',
   '/favicon-session-error.svg',
 ]);
+
+/**
+ * Request-context key marking a turn a signed-in person started over HTTP.
+ * Wakes, webhooks, channels and the dispatcher build their own request context
+ * and never carry it, so Factory management tools stay off those turns.
+ */
+export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
+
+/** With auth disabled there is no gate; this marks every HTTP request as interactive instead. */
+export function createFactoryInteractiveMarker() {
+  return async (c: Context, next: () => Promise<void>): Promise<void> => {
+    c.get('requestContext')?.set(FACTORY_INTERACTIVE_KEY, true);
+    await next();
+  };
+}
 
 /**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
@@ -862,6 +920,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
       authenticateRequest(provider, token, c.req.raw),
     );
+    forwardPendingResponseHeaders(provider, c);
 
     if (user) {
       const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
@@ -878,6 +937,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       const requestContext = c.get('requestContext');
       requestContext?.set('user', user);
       requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
+      requestContext?.set(FACTORY_INTERACTIVE_KEY, true);
       return next();
     }
 

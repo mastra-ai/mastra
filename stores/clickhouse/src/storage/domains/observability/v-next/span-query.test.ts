@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
-import { createSpanQueryTests } from '@internal/storage-test-utils';
+import { createPreviewTests, createSpanQueryTests } from '@internal/storage-test-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { SpanType } from '@mastra/core/observability';
 import { planSpanQuery, TraceQueryExecutionError, TraceQueryResourceLimitError } from '@mastra/core/storage';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { TABLE_SPAN_EVENTS } from './ddl';
+import { CH_INSERT_SETTINGS, spanRecordToRow } from './helpers';
 import { ObservabilityStorageClickhouseVNext } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -26,7 +29,72 @@ afterAll(async () => {
   await admin.command({ query: `DROP DATABASE ${database} SYNC` });
   await admin.close();
 });
-createSpanQueryTests(() => storage, { completionOnly: true });
+createSpanQueryTests(() => storage, { completionOnly: true, immutableStartedAt: true });
+createPreviewTests(() => storage, {
+  // The row as the writer stored it before the preview columns existed.
+  writeSpanWithoutPreviews: async span => {
+    await client.insert({
+      table: TABLE_SPAN_EVENTS,
+      values: [{ ...spanRecordToRow(span), inputPreview: null, outputPreview: null, errorPreview: null }],
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_INSERT_SETTINGS,
+    });
+  },
+});
+
+it('batches legacy payload reads while preserving stored previews and pagination', async () => {
+  await storage.dangerouslyClearAll();
+  const startedAt = new Date('2026-01-01T00:00:00Z');
+  const endedAt = new Date('2026-01-01T00:00:01Z');
+  await client.insert({
+    table: TABLE_SPAN_EVENTS,
+    values: Array.from({ length: 72 }, (_, index) => ({
+      ...spanRecordToRow({
+        traceId: 'batch-trace',
+        spanId: `span-${String(index).padStart(3, '0')}`,
+        parentSpanId: null,
+        name: 'legacy',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt,
+        endedAt,
+        input: `input ${index}`,
+        output: `output ${index}`,
+        error: null,
+      }),
+      inputPreview: index === 0 ? '' : index === 1 ? 'supplied' : null,
+      outputPreview: index === 0 ? '' : null,
+      errorPreview: index === 0 ? '' : null,
+    })),
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_INSERT_SETTINGS,
+  });
+  const request = {
+    timeRange: { from: startedAt.toISOString(), to: '2026-01-02T00:00:00Z' },
+    page: { limit: 71 },
+  };
+  const query = vi.spyOn(client, 'query');
+  try {
+    const result = await storage.querySpans(planSpanQuery(request));
+    const reads = query.mock.calls
+      .map(([args]) => args)
+      .filter(args => /any\(tuple\(input, output, error\)\)/.test(args.query));
+    expect(reads.map(args => (args.query_params!.page as unknown[]).length)).toEqual([32, 32, 6]);
+    expect(result.spans).toHaveLength(71);
+    expect(result.spans[0]).toMatchObject({ inputPreview: null, outputPreview: null, errorPreview: null });
+    expect(result.spans[1]).toMatchObject({ inputPreview: 'supplied', outputPreview: 'output 1' });
+    expect(result.spans.slice(1).map(span => span.outputPreview)).toEqual(
+      Array.from({ length: 70 }, (_, index) => `output ${index + 1}`),
+    );
+    expect(result.page.next).not.toBeNull();
+    const next = await storage.querySpans(planSpanQuery({ ...request, page: { limit: 71, after: result.page.next! } }));
+    expect(next.spans).toHaveLength(1);
+    expect(next.spans[0]).toMatchObject({ spanId: 'span-071', outputPreview: 'output 71' });
+    expect(next.page.next).toBeNull();
+  } finally {
+    query.mockRestore();
+  }
+});
 
 it('wraps unexpected database errors with span-query context', async () => {
   const cause = new Error('Connection refused');

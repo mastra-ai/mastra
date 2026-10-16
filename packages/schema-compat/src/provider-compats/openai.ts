@@ -102,25 +102,38 @@ function schemaValuesEqual(left: unknown, right: unknown, keyword?: string): boo
   );
 }
 
+export function isOpenAICompatibleModel(model: { provider?: string; modelId?: string }): boolean {
+  const provider = model.provider ?? '';
+  const modelId = model.modelId ?? '';
+  if (provider.includes('openai') || modelId.includes('openai')) return true;
+  // @ai-sdk/azure reports `azure.responses` / `azure.chat` / `azure.completion` for every deployment, and the model
+  // ID is a user-chosen deployment name. Only treat it as OpenAI when the name clearly contains an OpenAI model token
+  // (`gpt`, `chatgpt`, or an o-series like `o3`); custom names such as `production` keep the default behavior.
+  // Names that also contain another family (e.g. `claude-o3-test`) are excluded, since that family's layer must win.
+  // Tokens are matched case-insensitively and must be whole (a version digit may follow, e.g. `gpt5`, `llama3`).
+  return (
+    /^azure\.(chat|responses|completion)$/.test(provider) &&
+    /(^|[-_./:])(gpt|chatgpt)(?=$|[-_./:]|\d)|(^|[-_./:])o[1-9](?=$|[-_.:])/i.test(modelId) &&
+    !/(^|[-_./:])(claude|deepseek|meta|llama|codellama|mistral|ministral|mixtral|codestral|phi|grok|cohere)(?=$|[-_./:]|\d)/i.test(
+      modelId,
+    )
+  );
+}
+
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `jsonSchema7`;
   }
 
   isReasoningModel(): boolean {
-    // there isn't a good way to automatically detect reasoning models besides doing this.
-    // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
-    const modelId = this.getModel().modelId;
-    if (!modelId) return false;
-    return modelId.includes(`o3`) || modelId.includes(`o4`) || modelId.includes(`o1`);
+    // Match o-series only as a standalone token, so Azure deployment names like `my-o3-deployment` match
+    // but `demo1-gpt` or `proto3-chat` do not.
+    return /(^|[-_./:])o[1-9](?=$|[-_.:])/i.test(this.getModel().modelId ?? '');
   }
 
   shouldApply(): boolean {
     const model = this.getModel();
-    if (
-      !this.isReasoningModel() &&
-      (model.provider.includes(`openai`) || model.modelId?.includes(`openai`) || model.provider.includes(`groq`))
-    ) {
+    if (!this.isReasoningModel() && (isOpenAICompatibleModel(model) || model.provider.includes(`groq`))) {
       return true;
     }
 
@@ -457,6 +470,27 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 }
                 delete prop.type;
                 prop.anyOf = [propSchema, { type: 'null' }];
+              }
+            } else if (prop.type === undefined && Array.isArray(prop.anyOf)) {
+              // A typeless union (e.g. JSON Schema `anyOf: [string, number]`) still needs a null
+              // alternative, or making it required turns an optional field into a mandatory one.
+              const hasNull = prop.anyOf.some(branch => typeof branch !== 'boolean' && branch.type === 'null');
+              if (!hasNull) {
+                const constrained = genericConstraintKeywords.some(keyword => keyword in prop);
+                if (constrained) {
+                  // Sibling constraints like `enum`/`const` would still reject null, so move them into the non-null branch.
+                  const branch = { anyOf: prop.anyOf } as JSONSchema7;
+                  for (const keyword of genericConstraintKeywords) {
+                    if (keyword in prop) {
+                      // @ts-expect-error - keyword is a valid property for JSON Schema
+                      branch[keyword] = prop[keyword];
+                      delete prop[keyword];
+                    }
+                  }
+                  prop.anyOf = [branch, { type: 'null' }];
+                } else {
+                  prop.anyOf = [...prop.anyOf, { type: 'null' }];
+                }
               }
             }
           }

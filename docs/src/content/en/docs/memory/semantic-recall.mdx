@@ -433,6 +433,8 @@ Memory uses a single embedder for both storing and recalling messages, so pick o
 
 Multilingual E5 produces 1024-dimensional vectors. Your vector index must be created with matching dimensions, and E5 vectors can't be mixed with vectors from another embedder in the same index.
 
+FastEmbed models embed at most 512 tokens per input (roughly 2,000 to 2,500 characters of English text). Longer inputs are truncated, so text past the limit doesn't affect the embedding and can't be found by semantic recall. The AI SDK v3 FastEmbed models return a warning when this happens. The legacy v1 and v2 models don't. If you embed long documents with FastEmbed, chunk them to fit the window, for example with `maxSize: 1500` in `MDocument.chunk()`.
+
 ## PostgreSQL index optimization
 
 When using PostgreSQL as your vector store, you can optimize semantic recall performance by configuring the vector index. This is particularly important for large-scale deployments with thousands of messages.
@@ -441,11 +443,11 @@ PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an
 
 ```typescript {18-23}
 import { Memory } from '@mastra/memory'
-import { PgStore, PgVector } from '@mastra/pg'
+import { PostgresStore, PgVector } from '@mastra/pg'
 
 const agent = new Agent({
   memory: new Memory({
-    storage: new PgStore({
+    storage: new PostgresStore({
       id: 'agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),

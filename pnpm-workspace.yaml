@@ -67,7 +67,6 @@ patchedDependencies:
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0': patches/@joshwooding__vite-plugin-react-docgen-typescript@0.7.0.patch
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
-  gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
   react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
   vite-plugin-dts@4.5.4: patches/vite-plugin-dts@4.5.4.patch
@@ -320,7 +319,9 @@ overrides:
   client-js-e2e-tests-zod-v4>zod: ^4.6.5
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
-  better-auth: ^1.6.26
+  # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
+  better-auth: ^1.7.7
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<2.3.0: 2.3.0
@@ -371,7 +372,8 @@ overrides:
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.16: 3.4.16
-  hono@<4.13.8: 4.13.8
+  # Vanta 2026-10-09: AIKIDO-2026-901222 fixed in 4.13.11
+  hono@<4.13.13: 4.13.13
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.2
@@ -397,7 +399,8 @@ overrides:
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
   # Vanta 2026-10-07: GHSA-6qxp-vccf-f47h (MCP sdk 1.31.0 / client 2.2.0; published @mastra/mcp pins client 2.0.0); Aikido in-major floors
-  '@modelcontextprotocol/sdk@>=1.0.0 <1.31.0': 1.31.0
+  # Vanta 2026-10-12: AIKIDO-2026-365378/156139/344432 fixed in 1.32.0; use aged 1.32.1
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@modelcontextprotocol/client@>=2.0.0 <2.2.0': 2.2.0
   '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
@@ -540,6 +543,12 @@ overrides:
   'smol-toml@<1.9.0': 1.9.0
   'strnum@<2.4.2': 2.4.2
   'inline-style-parser@<0.2.9': 0.2.9
+  # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
+  'http-cache-semantics@<4.3.0': 4.3.0
+  # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
+  'handlebars@<4.7.10': 4.7.10
+  # Vanta 2026-10-09: AIKIDO-2026-231269, AIKIDO-2026-154218 (follow-redirects header leak on redirect); axios declares ^1.15.x
+  'follow-redirects@<1.16.1': 1.16.1
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false
