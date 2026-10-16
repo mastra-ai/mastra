@@ -143,7 +143,7 @@ export function BoardListRow({
                 </Button>
               }
             />
-            <DropdownMenu.Content align="end" className="min-w-44">
+            <DropdownMenu.Content align="end" className="min-w-44" onClick={stopRowClick}>
               {menu}
             </DropdownMenu.Content>
           </DropdownMenu>
