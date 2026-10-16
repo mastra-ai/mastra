@@ -19,12 +19,15 @@ export type ToolCardKind =
   | 'file_tree'
   | 'sandbox'
   | 'code_mode'
+  | 'studio_component'
   | 'mcp_app'
   | 'plain';
 
 export interface ToolCardContext {
   metadata?: MessageMetadata;
   mcpAppTools?: Record<string, unknown>;
+  /** Custom Studio component ids, keyed by the tool name the model calls. */
+  studioComponents?: Record<string, string>;
 }
 
 export interface ToolInteraction {
@@ -90,13 +93,13 @@ export function isHiddenTool(toolName: string): boolean {
 
 export function toolCardKind(
   { toolName, toolCallId, input, output }: ToolPartFields,
-  { metadata, mcpAppTools }: ToolCardContext,
+  { metadata, mcpAppTools, studioComponents }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
   if (isHiddenTool(toolName)) return 'hidden';
   // A question read back in history draws as a plain badge, but it is still a question: never folded away.
   if (toolName === 'ask_user') return 'ask_user';
-  const { suspended } = toolInteraction(metadata, toolName, toolCallId);
+  const { approval, suspended } = toolInteraction(metadata, toolName, toolCallId);
   if (
     toolName === SUBMIT_PLAN_TOOL_ID ||
     hasSubmitPlanToolId(suspended?.suspendPayload) ||
@@ -110,6 +113,8 @@ export function toolCardKind(
   if (toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES) return 'file_tree';
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
+  // A pending approval or suspension keeps the default badge, which owns those controls.
+  if (studioComponents?.[toolName] && !approval && !suspended) return 'studio_component';
   if (mcpAppTools?.[toolName]) return 'mcp_app';
   return 'plain';
 }

@@ -122,6 +122,8 @@ export class DevBundler extends Bundler {
       {
         sourcemap: sourcemapEnabled,
         analysisEntries: [entryFile, devServerAnalysisEntry],
+        toolUIRegistry: this.toolUIRegistry,
+        onToolUIWarning: message => this.logger.warn(message),
       },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
@@ -131,6 +133,30 @@ export class DevBundler extends Bundler {
     await this.writePackageJson(outputDir, new Map(), {});
 
     let lastFsAgentsModuleSource = fsRoutingWatchOptions?.preparedEntry.moduleSource;
+
+    // Rollup only re-transforms changed modules, so the registry accumulates across rebuilds.
+    // The esbuild context is recreated when new components appear; it rebuilds on its own when
+    // component files change.
+    let toolUIContext: Awaited<ReturnType<typeof this.buildToolUI>>;
+    let lastToolUIIds = '';
+    const toolUIWatcher: InputPluginOption = {
+      name: 'tool-ui-watcher',
+      buildEnd: async () => {
+        const toolUIIds = [...this.toolUIRegistry.keys()].sort().join(',');
+        if (toolUIIds === lastToolUIIds) {
+          return;
+        }
+        lastToolUIIds = toolUIIds;
+
+        await toolUIContext?.dispose();
+        toolUIContext = undefined;
+        try {
+          toolUIContext = await this.buildToolUI(outputDirectory, { watch: true });
+        } catch (error) {
+          this.logger.error('Failed to build Studio tool UI components', { error });
+        }
+      },
+    };
 
     const watcher = await createWatcher(
       {
@@ -201,6 +227,7 @@ export class DevBundler extends Bundler {
               );
             },
           },
+          ...(this.factory ? [] : [toolUIWatcher]),
         ],
         input: {
           index: join(__dirname, 'templates', this.factory ? 'factory-dev.entry.js' : 'dev.entry.js'),
@@ -212,6 +239,10 @@ export class DevBundler extends Bundler {
         sourcemap: sourcemapEnabled,
       },
     );
+
+    watcher.on('close', () => {
+      void toolUIContext?.dispose();
+    });
 
     devLogger.info('Preparing development environment...');
     return new Promise((resolve, reject) => {

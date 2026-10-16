@@ -733,6 +733,29 @@ export type ToolExecuteFunction<
   context: ToolExecuteContext<TContext, TRequestContext>,
 ) => Promise<TSchemaOut | ValidationError | void>;
 
+/** Props passed to a tool's custom Studio component. */
+export interface ToolStudioComponentProps<TInput = unknown, TOutput = unknown> {
+  /** The name the model used to call the tool. */
+  toolName: string;
+  toolCallId: string;
+  /** Tool input. Partial or missing while the model is still streaming arguments. */
+  input: TInput | undefined;
+  /** Tool output. Missing until the tool has finished executing. */
+  output: TOutput | undefined;
+  /** Tool call lifecycle state, e.g. `input-streaming`, `input-available`, `output-available`, `output-error`. */
+  state: string;
+  errorText?: string;
+}
+
+/** UI configuration for a tool. */
+export interface ToolUIConfig<TInput = unknown, TOutput = unknown> {
+  /**
+   * React component Studio uses to render this tool's calls in chat.
+   * It must be imported from a separate module so it can be excluded from the server bundle.
+   */
+  studioComponent?: (props: ToolStudioComponentProps<TInput, TOutput>) => unknown;
+}
+
 export interface ToolAction<
   TSchemaIn,
   TSchemaOut,
@@ -761,6 +784,20 @@ export interface ToolAction<
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional UI configuration used by Mastra Studio.
+   * @example
+   * ```typescript
+   * import { WeatherCard } from './weather-card';
+   *
+   * createTool({
+   *   id: 'get-weather',
+   *   // ...
+   *   ui: { studioComponent: WeatherCard },
+   * });
+   * ```
+   */
+  ui?: ToolUIConfig<TSchemaIn, TSchemaOut>;
   /**
    * Optional function to transform tool output before returning to the model.
    * Receives the raw tool output and returns a transformed representation.

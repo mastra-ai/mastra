@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { ToolStudioComponentsProvider } from '@mastra/playground-ui/domains/chat/tools/studio-components/studio-components-context';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -25,6 +26,7 @@ import {
 import { Link } from './lib/link';
 import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
+import { loadToolStudioComponent } from './lib/tool-studio-components';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
 import AgentBuilderCreate from './pages/agent-builder/agents/create';
@@ -535,7 +537,9 @@ function App() {
       <RoleImpersonationProvider>
         <PostHogProvider>
           <RoutePermissionsGate baseUrl={baseUrl}>
-            <RouterProvider router={router} />
+            <ToolStudioComponentsProvider loadComponent={loadToolStudioComponent}>
+              <RouterProvider router={router} />
+            </ToolStudioComponentsProvider>
           </RoutePermissionsGate>
         </PostHogProvider>
       </RoleImpersonationProvider>

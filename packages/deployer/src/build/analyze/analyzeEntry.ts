@@ -10,6 +10,7 @@ import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
 import { getPackageMetadata, getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
+import { extractToolUI } from '../plugins/extract-tool-ui';
 import { moduleAlias } from '../plugins/module-alias';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
@@ -98,6 +99,8 @@ function getInputPlugins(
       analysisExternals({ workspaceMap, externals, externalsPreset }),
       json(),
       esbuild({ define: env }),
+      // Strip Studio-only tool components so their browser deps (react) aren't analyzed as server deps
+      extractToolUI({ sourcemap: sourcemapEnabled }),
       commonjs({
         strictRequires: 'debug',
         ignoreTryCatch: false,

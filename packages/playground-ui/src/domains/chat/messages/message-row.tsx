@@ -26,6 +26,7 @@ import {
 } from '@/domains/chat/messages/signal-data';
 import { parseSkillActivation } from '@/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@/domains/chat/messages/skill-message';
+import { useToolStudioComponents } from '@/domains/chat/tools/studio-components/use-tool-studio-components';
 import { ToolCallEffects } from '@/domains/chat/tools/tool-call-effects';
 import { ToolCard } from '@/domains/chat/tools/tool-card';
 import type { DataMessagePart } from '@/domains/chat/tools/tool-card';
@@ -153,12 +154,16 @@ export const MessageRow = memo(function MessageRow({
   const running = useChatRunning();
   const isRunning = running.isRunning && running.activeRunId !== undefined && metadata?.runId === running.activeRunId;
   const { data: mcpAppTools } = useMcpAppTools();
+  const studioComponents = useToolStudioComponents();
   const parts = dbMessage?.content.parts ?? NO_PARTS;
   const revealed = useRevealedParts(parts, isStreaming(parts));
   const shownParts = isProse(parts, metadata) ? revealed : parts;
   const revealing = shownParts !== parts;
 
-  const toolContext = useMemo<ToolCardContext>(() => ({ metadata, mcpAppTools }), [metadata, mcpAppTools]);
+  const toolContext = useMemo<ToolCardContext>(
+    () => ({ metadata, mcpAppTools, studioComponents }),
+    [metadata, mcpAppTools, studioComponents],
+  );
   const toolGroups = useMemo(() => collectToolGroups(shownParts, toolContext), [shownParts, toolContext]);
 
   const sharedRenderers = useMemo<MessageRenderers>(() => {

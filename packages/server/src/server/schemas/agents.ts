@@ -188,6 +188,11 @@ export const serializedToolSchema = z.object({
   outputSchema: z.string().optional(),
   requestContextSchema: z.string().optional(),
   requireApproval: z.boolean().optional(),
+  ui: z
+    .object({
+      studioComponent: z.string().optional().describe('Id of the Studio component that renders calls to this tool'),
+    })
+    .optional(),
 });
 
 /**

@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { WeatherCard } from '../ui/weather-card';
 
 /**
  * File-based tool: the default export is registered on the agent with the tool
@@ -24,4 +25,5 @@ export default createTool({
       temperatureCelsius: 21,
     };
   },
+  ui: { studioComponent: WeatherCard },
 });

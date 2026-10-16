@@ -8,6 +8,7 @@ import { parse } from 'superjson';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { serializedToolSchema } from '../schemas/agents';
 import { getSerializedAgentTools } from './agents';
 import { createTestServerContext } from './test-utils';
 import {
@@ -826,6 +827,65 @@ describe('Tools Handlers', () => {
         expect(schema.properties).not.toHaveProperty('_background');
         expect(schema.properties).not.toHaveProperty('suspendedToolRunId');
         expect(schema.properties).not.toHaveProperty('resumeData');
+      });
+    });
+  });
+
+  describe('Studio tool UI serialization', () => {
+    const componentId = '0123456789abcdef';
+    const createUITool = (id: string, studioComponent: unknown) =>
+      createTool({
+        id,
+        description: 'A tool with a Studio component',
+        execute: async () => ({ ok: true }),
+        ui: { studioComponent: studioComponent as any },
+      });
+    const extractedTool = createUITool('extracted-tool', componentId);
+    const inlineTool = createUITool('inline-tool', () => null);
+    const invalidIdTool = createUITool('invalid-id-tool', '../../etc/passwd');
+
+    describe('getSerializedAgentTools', () => {
+      it('exposes the extracted studio component id', async () => {
+        const result = await getSerializedAgentTools({ [extractedTool.id]: extractedTool as any });
+
+        expect(result['extracted-tool'].ui).toEqual({ studioComponent: componentId });
+      });
+
+      it('omits a studio component that was not extracted at build time', async () => {
+        const result = await getSerializedAgentTools({ [inlineTool.id]: inlineTool as any });
+
+        expect(result['inline-tool']).not.toHaveProperty('ui');
+      });
+
+      it('omits a studio component id that is not a build-generated id', async () => {
+        const result = await getSerializedAgentTools({ [invalidIdTool.id]: invalidIdTool as any });
+
+        expect(result['invalid-id-tool']).not.toHaveProperty('ui');
+      });
+    });
+
+    describe('getToolByIdHandler', () => {
+      it('exposes the extracted studio component id', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await GET_TOOL_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: { [extractedTool.id]: extractedTool } as any,
+          toolId: 'extracted-tool',
+        });
+
+        expect(result.ui).toEqual({ studioComponent: componentId });
+      });
+
+      it('omits a studio component that was not extracted at build time', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await GET_TOOL_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: { [inlineTool.id]: inlineTool } as any,
+          toolId: 'inline-tool',
+        });
+
+        expect(result).not.toHaveProperty('ui');
+        expect(() => serializedToolSchema.parse(result)).not.toThrow();
       });
     });
   });

@@ -6,6 +6,7 @@ import { tmpdir } from 'os';
 import { toolUsingNativeBindings, toolWithNativeBindingPackageDep } from '@inner/inner-tools';
 import { lodashTool } from '@/tools/lodash';
 import { calculatorTool } from '@/tools/calculator-tool';
+import { weatherTool } from '@/tools/weather';
 import { helloWorldTool } from '@inner/hello-world';
 
 export const innerAgent = new Agent({
@@ -13,7 +14,14 @@ export const innerAgent = new Agent({
   name: 'Inner Agent',
   instructions: 'You are a helpful assistant.',
   model: openai('gpt-4o'),
-  tools: { helloWorldTool, lodashTool, toolUsingNativeBindings, toolWithNativeBindingPackageDep, calculatorTool },
+  tools: {
+    helloWorldTool,
+    lodashTool,
+    toolUsingNativeBindings,
+    toolWithNativeBindingPackageDep,
+    calculatorTool,
+    weatherTool,
+  },
 });
 
 // Minimal CLI browser provider stub. CLI providers expose no SDK tools by design —

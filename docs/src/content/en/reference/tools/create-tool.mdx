@@ -141,6 +141,27 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     isOptional: true,
   },
   {
+    name: 'ui',
+    type: 'ToolUIConfig',
+    description:
+      'Configuration for how Studio displays calls to this tool. See [custom Studio component](#custom-studio-component).',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ToolUIConfig',
+        parameters: [
+          {
+            name: 'studioComponent',
+            type: '(props: ToolStudioComponentProps<TInput, TOutput>) => unknown',
+            description:
+              'A React component that Studio renders for each call to this tool instead of the default tool card. Import it from a separate file so it stays out of the server bundle. Props are typed from `inputSchema` and `outputSchema`.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'requestContextSchema',
     type: 'StandardJSONSchemaV1',
     description:
@@ -605,6 +626,117 @@ export const weatherTool = createTool({
   },
 })
 ```
+
+## Custom Studio component
+
+Set `ui.studioComponent` to render calls to the tool with your own React component in the [Studio](/docs/studio/overview) chat. Define the component in its own `.tsx` file and import it into the tool file:
+
+```tsx title="src/mastra/tools/weather-card.tsx"
+import type { ToolStudioComponentProps } from '@mastra/core/tools'
+
+type WeatherInput = { location: string }
+type WeatherOutput = { location: string; temperatureCelsius: number; conditions: string }
+
+export function WeatherCard({
+  input,
+  output,
+  state,
+}: ToolStudioComponentProps<WeatherInput, WeatherOutput>) {
+  if (!output) {
+    return (
+      <p>
+        Checking the weather in {input?.location ?? '…'} ({state})
+      </p>
+    )
+  }
+
+  return (
+    <section>
+      <h3>{output.location}</h3>
+      <p>
+        {output.temperatureCelsius}°C, {output.conditions}
+      </p>
+    </section>
+  )
+}
+```
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+import { WeatherCard } from './weather-card'
+
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
+  }),
+  ui: {
+    studioComponent: WeatherCard,
+  },
+  execute: async ({ location }) => {
+    return {
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
+    }
+  },
+})
+```
+
+When Mastra bundles your server, it replaces the component with a generated ID and removes the import, so the component and `react` never load on the server. It builds each component separately for the browser and Studio loads it when a call to the tool appears in the chat.
+
+The component receives these props:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'toolName',
+    type: 'string',
+    description: 'The name the model used to call the tool.',
+  },
+  {
+    name: 'toolCallId',
+    type: 'string',
+    description: 'The ID of the tool call.',
+  },
+  {
+    name: 'input',
+    type: 'TInput | undefined',
+    description: 'The tool input. It can be partial while the model is still streaming arguments.',
+  },
+  {
+    name: 'output',
+    type: 'TOutput | undefined',
+    description: 'The tool result. It is `undefined` until the tool finishes.',
+  },
+  {
+    name: 'state',
+    type: 'string',
+    description:
+      "The call state, such as `'input-streaming'`, `'input-available'`, `'output-available'`, or `'output-error'`.",
+  },
+  {
+    name: 'errorText',
+    type: 'string',
+    description: 'The error message when the call fails.',
+    isOptional: true,
+  },
+]}
+/>
+
+Keep the following in mind:
+
+- Imports of `react`, `react-dom`, `@mastra/react`, and `@tanstack/react-query` (including their subpaths) use the copies that Studio already loads, so you don't need to install them to build the component. Install `@types/react` to type-check it. Hooks from `@mastra/react`, such as `useExecuteTool`, talk to the same server as Studio. Mastra bundles every other dependency into the component.
+- Import the component from another file, as either a named or default import. Mastra logs a warning and Studio shows the default tool card when the component is declared in the tool file itself.
+- Studio shows the default tool card while a call waits for approval or is suspended, and when the component fails to load or throws while rendering.
+- Components are built by `mastra dev` and `mastra build --studio`. During `mastra dev`, reload Studio to see edits to a component.
 
 ## Tool lifecycle hooks
 
