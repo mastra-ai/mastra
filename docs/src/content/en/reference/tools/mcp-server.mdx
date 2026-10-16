@@ -1768,6 +1768,7 @@ Records an occurrence, delivers it to matching push streams, and returns it with
 
 - Emitted events stay in the process that emitted them. Push streams and buffered polls only see events emitted by the same `MCPServer` instance, so a serverless or multi-instance deployment needs a `poll` source backed by shared storage.
 - The buffer is in memory. A restarted server treats earlier cursors as a gap and reports `truncated: true`.
+- Changes to the list of event types aren't announced yet. The server doesn't advertise `listChanged` or send `notifications/events/list_changed`, because the MCP TypeScript SDK 2.2.0 doesn't carry the `eventsListChanged` filter on `subscriptions/listen`. Clients should re-run `events/list` to see changed event types.
 
 ## Related information
 
