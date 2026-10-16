@@ -39,6 +39,7 @@ import {
   buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryAuthGate,
+  createFactoryInteractiveMarker,
   createFactoryRouteAuth,
   factoryUserOrgId,
   getFactoryAuthOrgId,
@@ -85,6 +86,7 @@ import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
+import type { FactoryStartCoordinator } from './rules/start-coordinator.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -136,6 +138,16 @@ import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
+import { deliverFactorySessionNotification } from './tools/deliver.js';
+import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
+import {
+  createSessionRunEndReporter,
+  createStageChangeNotifier,
+  createWorkItemRunEndReporter,
+} from './tools/reports.js';
+import type { FactoryReporting } from './tools/reports.js';
+import { observeSessionRunReports } from './tools/run-watch.js';
+import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -428,6 +440,7 @@ export class MastraFactory {
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
+  #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
@@ -790,6 +803,27 @@ export class MastraFactory {
           ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
         })
       : undefined;
+    // Factory messaging needs the controller and its notifications store, which exist once the mount is up.
+    const factoryMessaging = async () => {
+      const controller = this.#prepared?.base.controller;
+      const notifications = await controller?.getMastra()?.getStorage()?.getStore('notifications');
+      return controller && notifications ? { controller, notifications } : null;
+    };
+    const factoryReporting = async (): Promise<FactoryReporting | null> => {
+      const messaging = await factoryMessaging();
+      if (!messaging) return null;
+      return {
+        notifications: messaging.notifications,
+        deliver: (target, notification, options) =>
+          deliverFactorySessionNotification({
+            controller: messaging.controller,
+            sessions: sourceControlSessions,
+            target,
+            notification,
+            ...options,
+          }),
+      };
+    };
     const onTerminalStage = terminalCleanup
       ? (args: {
           orgId: string;
@@ -820,6 +854,10 @@ export class MastraFactory {
             return project?.autoApprovePlans ?? false;
           },
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          onTransitionCommitted: createStageChangeNotifier({
+            workItems: workItemsStorage,
+            reporting: factoryReporting,
+          }),
           ...(githubIntegration
             ? {
                 onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
@@ -1167,9 +1205,26 @@ export class MastraFactory {
         // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
+          const sessionsProcessor =
+            workItemsStorage && storage.isDomainReady('source-control')
+              ? [
+                  new FactorySessionsStateProcessor({
+                    authEnabled: routeAuth.enabled(),
+                    sessions: sourceControlSessions,
+                    projects: factoryProjectsStorage,
+                    workItems: workItemsStorage,
+                    boards: this.#boards,
+                    isRunning: async sessionId => {
+                      const session = await this.#prepared?.base.controller.getSessionByResource(sessionId);
+                      return session?.stream.isActive() ?? false;
+                    },
+                    notifications: async () => (await factoryMessaging())?.notifications ?? null,
+                  }),
+                ]
+              : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [environmentProcessor, factoryProcessor];
+            return [environmentProcessor, ...sessionsProcessor, factoryProcessor];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1177,7 +1232,7 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [environmentProcessor];
+          return [environmentProcessor, ...sessionsProcessor];
         },
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
@@ -1254,6 +1309,37 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
+                  if (storage.isDomainReady('source-control')) {
+                    const scope = await resolveFactoryToolScope({
+                      requestContext,
+                      authEnabled: routeAuth.enabled(),
+                      sessions: sourceControlSessions,
+                      projects: factoryProjectsStorage,
+                      workItems: workItemsStorage,
+                    });
+                    if (scope) {
+                      mergeTools(
+                        'factory-tools',
+                        createFactoryTools({
+                          scope,
+                          deps: {
+                            workItems: workItemsStorage,
+                            comments: workItemCommentsStorage,
+                            feed: commentsDomain,
+                            audit: auditStorage,
+                            boards: this.#boards,
+                            transitionService,
+                            auditRecorder: auditDomain,
+                            sessions: sourceControlSessions,
+                            sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
+                            intake: intakeStorage,
+                            startCoordinator: () => this.#startCoordinator,
+                            messaging: factoryMessaging,
+                          },
+                        }),
+                      );
+                    }
+                  }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
                   if (!ready && ensureReady) {
@@ -1341,7 +1427,8 @@ export class MastraFactory {
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
-            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+            onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
+              this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
                 transitionService: runtimeTransitionService,
@@ -1380,6 +1467,10 @@ export class MastraFactory {
                     }
                   : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                reportRunEnd: createWorkItemRunEndReporter({
+                  workItems: storage.getDomain<WorkItemsStorage>('work-items'),
+                  reporting: factoryReporting,
+                }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
@@ -1426,6 +1517,7 @@ export class MastraFactory {
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
+                createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
               ],
@@ -1464,6 +1556,11 @@ export class MastraFactory {
       }),
     );
 
+    const reportSessionRunEnd = createSessionRunEndReporter({
+      sessions: sourceControlSessions,
+      workItems: storage.getDomain<WorkItemsStorage>('work-items'),
+      reporting: factoryReporting,
+    });
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,
@@ -1479,6 +1576,16 @@ export class MastraFactory {
         sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(session, { audit: auditDomain });
+      // Every run end of a work or side session reaches whoever follows it,
+      // however the run started; re-attached when a session is created again.
+      observeSessionRunReports(session, (outcome, since) =>
+        reportSessionRunEnd({
+          sessionId: session.identity.getResourceId(),
+          threadId: session.thread.getId(),
+          outcome,
+          since,
+        }),
+      );
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation
@@ -1501,6 +1608,13 @@ export class MastraFactory {
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
         }),
+      { blocking: true },
+    );
+
+    // Factory tools fall in the SDK's `mcp` category (default `ask`); allow the
+    // no-approval ones per session before the session's first turn.
+    prepared.base.controller.onSessionCreated(
+      session => applyFactoryToolPermissions(session, { sessions: sourceControlSessions }),
       { blocking: true },
     );
 
