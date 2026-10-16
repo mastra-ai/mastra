@@ -575,10 +575,10 @@ const gitlab = new PlatformGitLabIntegration(); // Optionally { connectionId: 'c
 
 In Platform mode, issue, note, merge request and push events reach Factory by polling the Platform's event log for each connection, the same way Platform GitHub deployments do. Point the GitLab project webhook at the Platform's Nango forwarding URL, not at Factory; Platform mode needs neither `MASTRA_GITLAB_CONNECTION_ID` nor `MASTRA_GITLAB_WEBHOOK_SECRET`. The direct `/web/gitlab/webhook` route stays available when `MASTRA_GITLAB_WEBHOOK_SECRET` is set; do not point a project webhook at both Factory and the Platform, or each event is processed twice.
 
-| Variable                                     | Default | Purpose                                                               |
-| -------------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`     | `true`  | Set `false` to stop polling the Platform event log for GitLab events. |
-| `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | `20000` | Positive polling interval in milliseconds.                            |
+| Variable | Default | Purpose |
+| -------------------------------------------- | ------- |
+| `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED` | `true` | Set `false` to stop polling the Platform event log for GitLab events. |
+| `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | `20000` | Positive polling interval in milliseconds. |
 
 These sit next to `MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` and `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` and follow the same rules. One replica polls at a time; the cursor for each connection is stored in the integration settings table and only advances once a page of events has been processed. `diagnostics()` reports `pollingEnabled` and `pollingIntervalMs`.
 
@@ -647,6 +647,40 @@ A repository maintainer with write or admin access can start a Factory review fr
 ```
 
 `@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first Review pass for a missing or Intake card, restarts a completed card with `factory-rereview`, and is a no-op while the card is already Reviewing. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
+
+### Factory tools in user sessions
+
+A person's own Factory session (a user session) gets tools to find, file and manage the Factory's work items through its agent. Factory scopes the tools from the stored session row, never from the thread's `factoryProjectId` tag: the session must belong to a Factory in the caller's organization, and a private session only works for its owner. With authentication disabled, the shared `local` tenant applies. Sessions bound to a run (workers) only get `factory_message_origin`, so they can answer messages.
+
+| Tool                            | Input                                                                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory_list_work_items`       | Optional `query` (title text or `#number`), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` (default 25, max 50) |
+| `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    |
+| `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       |
+| `factory_create_work_item`      | `title`, `brief`, optional `repository` (`owner/name`, one this Factory links)                                                                  |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach), `plansPreapproved: true`                                  |
+| `factory_subscribe_work_item`   | `workItem`                                                                                                                                      |
+| `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      |
+| `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             |
+| `factory_retry_decision`        | `decisionId`                                                                                                                                    |
+| `factory_dismiss_decision`      | `decisionId`                                                                                                                                    |
+| `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                 |
+| `factory_signal_session`        | `sessionId`, `message` (up to 4000 characters), optional `priority` (`low`, `medium`, `high`, `urgent`; default `medium`)                       |
+| `factory_message_origin`        | `message`, `inReplyTo` (the message's notification id), optional `status` (`progress`, `blocked`, `done`, `failed`)                             |
+
+Read tools and `factory_message_origin` are available on every turn. The other tools only appear on turns a signed-in person started, so text arriving from a notification, webhook or channel can't drive them. The one exception is `factory_signal_session`: on those turns it can still message the active sessions of work items this session follows, so the session can answer the sessions it is waiting on. None of them asks for approval: they are allowed on the session when it's created, unless the person has set their own policy for the tool or for the `mcp` category.
+
+`factory_create_work_item` files the card as the caller in its board's first phase, exactly like **New card**, posts the brief as its first comment, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the parent item and plan pre-approval. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+
+#### Messaging between sessions
+
+`factory_signal_session` messages any other session in the same Factory that the caller can see: a work item's role session, or a teammate's session that isn't private. The message arrives as a `factory-session` notification on that session's own thread. Factory brings an offline session back online first, and the turn it wakes runs as that session's owner, with the owner's credentials, never as the sender.
+
+How a message is delivered depends on its priority. `urgent` always delivers, even into a running turn. `high` and `medium` wake an idle session; while it is busy, `high` arrives as a summary and then in full, and `medium` waits for the current step. `low` arrives as a summary. Agents can read the full text of any notification with `notification_inbox`. A session can send at most 10 messages and replies, together, to the same session thread in 10 minutes; past that, both tools refuse until the window moves on.
+
+`factory_message_origin` answers a message. `inReplyTo` must name a `factory-session` message that reached the answering session's own thread, and the reply goes to the session and thread that sent it, never to an address the agent supplies. Each message can be answered once, and replies and other notifications can't be answered, so two agents can't ping-pong. Replies arrive at `high` priority and carry an `in-reply-to` attribute. Messages and replies are recorded in the audit trail as `factory.agent.signaled`.
+
+The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
 ### Development
 

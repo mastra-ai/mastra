@@ -39,6 +39,7 @@ import {
   buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryAuthGate,
+  createFactoryInteractiveMarker,
   createFactoryRouteAuth,
   factoryUserOrgId,
   getFactoryAuthOrgId,
@@ -138,6 +139,7 @@ import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
+import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -1316,6 +1318,41 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
+                  if (storage.isDomainReady('source-control')) {
+                    const scope = await resolveFactoryToolScope({
+                      requestContext,
+                      authEnabled: routeAuth.enabled(),
+                      sessions: sourceControlSessions,
+                      projects: factoryProjectsStorage,
+                      workItems: workItemsStorage,
+                    });
+                    if (scope) {
+                      mergeTools(
+                        'factory-tools',
+                        createFactoryTools({
+                          scope,
+                          deps: {
+                            workItems: workItemsStorage,
+                            comments: workItemCommentsStorage,
+                            feed: commentsDomain,
+                            audit: auditStorage,
+                            boards: this.#boards,
+                            transitionService,
+                            auditRecorder: auditDomain,
+                            sessions: sourceControlSessions,
+                            messaging: async () => {
+                              const controller = this.#prepared?.base.controller;
+                              const notifications = await controller
+                                ?.getMastra()
+                                ?.getStorage()
+                                ?.getStore('notifications');
+                              return controller && notifications ? { controller, notifications } : null;
+                            },
+                          },
+                        }),
+                      );
+                    }
+                  }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
                   if (!ready && ensureReady) {
@@ -1487,6 +1524,7 @@ export class MastraFactory {
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
+                createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
               ],
@@ -1562,6 +1600,13 @@ export class MastraFactory {
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
         }),
+      { blocking: true },
+    );
+
+    // Factory tools fall in the SDK's `mcp` category (default `ask`); allow the
+    // no-approval ones per session before the session's first turn.
+    prepared.base.controller.onSessionCreated(
+      session => applyFactoryToolPermissions(session, { sessions: sourceControlSessions }),
       { blocking: true },
     );
 
