@@ -603,6 +603,12 @@ export class AgentController<TState = {}> {
           this.#sessionsById.delete(registryKey);
           continue;
         }
+        // Authorization above ran against the caller's resource. A session id is
+        // not a secret, so never hand a live session on another resource to a
+        // caller that named its own.
+        if (resourceId !== undefined && session.identity.getResourceId() !== resourceId) {
+          throw new Error(`Session ${registryKey} belongs to another resource`);
+        }
         // An exact thread binding is part of the createSession contract
         // ("existing threads are resumed; missing threads are created with this
         // id"), so honor it on cached sessions too. Without this, whichever
