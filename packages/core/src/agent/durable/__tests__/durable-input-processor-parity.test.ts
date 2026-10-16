@@ -16,23 +16,15 @@
  *     `[Agent:script] - Input processor error` with no model call, finish chunk, completed step, or
  *     persisted mutation. This is the COR-1413 regression contract.
  *
- * The `throws` shape uses `runT44ThrowsDirect` to pin the rejection message and the absence of model,
- * stream, tool, and memory side effects explicitly. The resulting contract is identical across plain,
- * durable, and evented engines.
+ * The `throws` shape runs through the parity helper and keeps explicit assertions for the rejection,
+ * absence of model and tool activity, and memory side effects.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
-import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -198,184 +190,6 @@ async function runT44(mode: Mode) {
   return { results, memories, inputs };
 }
 
-/** COR-1413: every engine rejects before the model, stream completion, or tool execution. */
-const THROWS_CONTRACT: Record<string, unknown> = {
-  modelCalls: 0,
-  finishes: 0,
-  errors: 0,
-  tripwire: false,
-  steps: 0,
-  text: null,
-  thrown: true,
-};
-
-const THROWS_CONTRACTS: Record<ParityEngine, Record<string, unknown>> = {
-  plain: THROWS_CONTRACT,
-  durable: THROWS_CONTRACT,
-  evented: THROWS_CONTRACT,
-};
-
-/** What a direct run of the `throws` shape recorded on one engine. */
-interface ThrowCaseState {
-  /** Model calls the run made. */
-  requests: number;
-  /** Chunk types the public stream yielded, in order. */
-  chunkTypes: string[];
-  /** The failure chunk's payload, when the stream carried one. */
-  failurePayload: unknown;
-  /** Text the stream streamed — the harness's `text`. */
-  streamedText: string;
-  /** `finish` chunks the stream yielded — the harness's `finishes`. */
-  finishes: number;
-  /** `step` tool executions that completed — the harness's `steps`. */
-  steps: number;
-  /** Times `processInput` ran. */
-  inputs: number;
-  /** The first model request's user messages, serialised. */
-  requestUser: string;
-  /** The persisted user messages, serialised. */
-  memoryUser: string;
-  /** Set when the run rejected — the harness's `thrown`. */
-  thrown?: string;
-}
-
-/**
- * Drives one engine through the `throws` shape so the test can pin rejection text and side effects
- * that sit outside the parity snapshot, including memory and completed tool executions.
- */
-async function runT44ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
-  const requests: Array<{ prompt?: unknown }> = [];
-  const model = new MockLanguageModelV2({
-    doStream: async (options: unknown) => {
-      requests.push(options as { prompt?: unknown });
-      return {
-        stream: convertArrayToReadableStream(
-          (requests.length === 1
-            ? toolCallTape('step', { n: 1 }, 't44-step-1')
-            : textOnlyTape(`finished ${STEPS} steps`)) as never[],
-        ),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      };
-    },
-  });
-  const state: ThrowCaseState = {
-    requests: 0,
-    chunkTypes: [],
-    failurePayload: undefined,
-    streamedText: '',
-    finishes: 0,
-    steps: 0,
-    inputs: 0,
-    requestUser: '',
-    memoryUser: '',
-  };
-  const memory = new MockMemory();
-  const agent = new Agent({
-    id: 't44-agent',
-    name: 'T44 Agent',
-    instructions: 'Use the step tool until you have finished.',
-    model: model as LanguageModelV2,
-    tools: {
-      step: createTool({
-        id: 'step',
-        description: 'Record one completed step.',
-        inputSchema: z.object({ n: z.number() }),
-        execute: async ({ n }) => {
-          state.steps += 1;
-          return { done: n };
-        },
-      }),
-    },
-    memory,
-    inputProcessors: [createInputProbe(PROCESSOR_ID, 'throw', () => (state.inputs += 1))],
-  });
-  const pubsub = new EventEmitterPubSub();
-  const runner =
-    engine === 'plain'
-      ? agent
-      : engine === 'durable'
-        ? createDurableAgent({ agent, pubsub })
-        : createEventedAgent({ agent });
-  const host = new Mastra({
-    agents: { 't44-agent': runner } as never,
-    storage: new InMemoryStore(),
-    logger: false,
-  });
-
-  const thread = `${THREAD}-throw`;
-  const resource = `${RESOURCE}-throw`;
-  const options = {
-    maxSteps: MAX_STEPS,
-    runId: `t44-run-throw-${engine}`,
-    memory: { thread, resource },
-  };
-
-  let cleanup: (() => Promise<void>) | undefined;
-  let output: { fullStream: AsyncIterable<{ type: string; payload?: unknown }> } | undefined;
-  try {
-    if (engine === 'plain') {
-      output = (await agent.stream('hello there', options)) as never;
-    } else {
-      const result = await (
-        runner as unknown as {
-          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
-        }
-      ).stream('hello there', options);
-      output = result.output;
-      cleanup = result.cleanup;
-    }
-  } catch (error) {
-    state.thrown = String((error as Error)?.message ?? error).slice(0, 200);
-  }
-  if (output) {
-    try {
-      for await (const chunk of output.fullStream) {
-        state.chunkTypes.push(chunk.type);
-        if (chunk.type === 'text-delta') {
-          state.streamedText += String((chunk.payload as { text?: string } | undefined)?.text ?? '');
-        }
-        if (chunk.type === 'finish') state.finishes += 1;
-        if (['error', 'abort', 'tripwire'].includes(chunk.type)) state.failurePayload = chunk.payload;
-      }
-    } catch (error) {
-      state.thrown = state.thrown ?? String((error as Error)?.message ?? error).slice(0, 200);
-    }
-  }
-  state.requests = requests.length;
-  state.requestUser = JSON.stringify(
-    requests[0]?.prompt === undefined
-      ? []
-      : (requests[0].prompt as Array<{ role?: string }>).filter(m => m.role === 'user'),
-  );
-  // Teardown runs even if the recall throws, so this run's host cannot outlive the test.
-  try {
-    const { messages } = await memory.recall({ threadId: thread, resourceId: resource });
-    state.memoryUser = JSON.stringify(messages.filter(message => message.role === 'user'));
-  } finally {
-    try {
-      if (cleanup) await cleanup();
-    } finally {
-      await host.shutdown();
-    }
-  }
-  return state;
-}
-
-/** The harness's `done()` contract fields, read from a direct run's state. */
-function throwsContract(state: ThrowCaseState): Record<string, unknown> {
-  return {
-    modelCalls: state.requests,
-    finishes: state.finishes,
-    errors: state.chunkTypes.filter(type => ['error', 'abort', 'tripwire'].includes(type)).length,
-    tripwire: state.chunkTypes.includes('tripwire'),
-    steps: state.steps,
-    text: state.streamedText || null,
-    // The harness app's agent name prefixes the rejection (`[Agent:script]`), so only whether the run
-    // rejected is stable across hosts; the wording is asserted separately below.
-    thrown: state.thrown !== undefined,
-  };
-}
-
 describe('T44 input processors (plain, durable, evented)', () => {
   it('lets an input mutation reach the model request and memory', async () => {
     const { results, memories, inputs } = await runT44('mutate');
@@ -467,26 +281,21 @@ describe('T44 input processors (plain, durable, evented)', () => {
   });
 
   it('fails closed on a throwing input processor for every engine', async () => {
-    const states = new Map<ParityEngine, ThrowCaseState>();
-    for (const engine of ENGINES) {
-      states.set(engine, await runT44ThrowsDirect(engine));
-    }
+    const { results, memories, inputs } = await runT44('throw');
 
     for (const engine of ENGINES) {
-      const state = states.get(engine)!;
+      const observation = results[engine]!;
+      const turn = observation.turns[0]!;
+      expect(inputs.get(engine), `${engine}: processInput runs`).toBe(1);
+      expect(turn.error?.message, `${engine}: rejects`).toContain('Input processor error');
+      expect(observation.requests, `${engine}: model calls`).toHaveLength(0);
+      expect(turn.chunkTypes, `${engine}: stream chunks`).toHaveLength(0);
+      expect(committedSteps(turn), `${engine}: step tool executions`).toBe(0);
 
-      // harness: `run settled` — a hung run would time out here — and `processInput ran exactly once`.
-      expect(state.inputs, `${engine}: processInput runs`).toBe(1);
-
-      // harness: every engine rejects and names the input-processor failure.
-      expect(state.thrown, `${engine}: rejects`).toContain('Input processor error');
-
-      // harness: the `throw` mode never mutates, so no mutation reaches the request or memory.
-      expect(state.requestUser, `${engine}: no mutation reached the model request`).not.toContain(MUTATION);
-      expect(state.memoryUser, `${engine}: no mutation reached memory`).not.toContain(MUTATION);
-      expect(state.steps, `${engine}: step tool executions`).toBe(THROWS_CONTRACTS[engine].steps);
-
-      expect(throwsContract(state), `${engine} contract`).toEqual(THROWS_CONTRACTS[engine]);
+      const { messages } = await memories
+        .get(engine)!
+        .recall({ threadId: `${THREAD}-throw`, resourceId: `${RESOURCE}-throw` });
+      expect(JSON.stringify(messages), `${engine}: no mutation reached memory`).not.toContain(MUTATION);
     }
   });
 });

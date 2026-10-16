@@ -1,7 +1,13 @@
+import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  invalidateTenantCredentialSnapshots,
+  registerTenantCredentialResolver,
+  resetTenantCredentialResolverForTests,
+} from '../routes/tenant-credentials.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   createSourceControlSessionLookup,
@@ -401,7 +407,31 @@ describe('hydrateFactorySession', () => {
     expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
   });
 
-  it('keeps going when the default model is unknown', async () => {
+  it("runs on a connected provider's default model when no default was chosen and the mode default has no credential", async () => {
+    const seeded = await createFactoryStorageForTests();
+    registerTenantCredentialResolver(seeded.credentials);
+    try {
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'anthropic', { type: 'api_key', key: 'org-key' });
+      const { session, double } = createSessionDouble();
+      const args = { orgId: 'org-1', modelScope: 'factory', ownerUserId: 'user-1' } as const;
+
+      await expect(hydrateFactorySession(session, args)).resolves.toBe(PROVIDER_DEFAULT_MODELS.anthropic);
+      expect(double.model.switch).toHaveBeenCalledExactlyOnceWith(PROVIDER_DEFAULT_MODELS.anthropic);
+
+      // Once the mode default's provider is connected too, the mode default stays.
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', {
+        type: 'api_key',
+        key: 'org-openai',
+      });
+      invalidateTenantCredentialSnapshots({ orgId: 'org-1' });
+      const fresh = createSessionDouble();
+      await expect(hydrateFactorySession(fresh.session, args)).resolves.toBe('openai/gpt-5.5');
+    } finally {
+      resetTenantCredentialResolverForTests();
+    }
+  });
+
+  it('keeps going but reports no selected model when the default model is unknown', async () => {
     const { session, double } = createSessionDouble();
     double.model.switch.mockRejectedValueOnce(new Error('unknown model'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -446,13 +476,65 @@ describe('hydrateFactorySession', () => {
 });
 
 describe('resolveFactorySessionModel', () => {
+  it('resolves the Factory model for a run and the owner default for a session in hybrid scope', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'anthropic/factory-model' },
+    });
+    await seeded.modelDefaults.set({ orgId: 'org-1', userId: 'owner-1', modelId: 'openai/owner-model' });
+    const resolve = (context: 'run' | 'session') =>
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        ownerUserId: 'owner-1',
+        context,
+      });
+
+    await expect(resolve('run')).resolves.toEqual({ modelScope: 'factory', modelId: 'anthropic/factory-model' });
+    await expect(resolve('session')).resolves.toEqual({ modelScope: 'user', modelId: 'openai/owner-model' });
+  });
+
+  it('ignores the context outside hybrid scope', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const factory = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Org', modelScope: 'factory', defaultModelId: 'anthropic/factory-model' },
+    });
+    const user = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Mine', modelScope: 'user', defaultModelId: 'anthropic/factory-model' },
+    });
+    await seeded.modelDefaults.set({ orgId: 'org-1', userId: 'owner-1', modelId: 'openai/owner-model' });
+    const resolve = (factoryProjectId: string, context: 'run' | 'session') =>
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId,
+        orgId: 'org-1',
+        ownerUserId: 'owner-1',
+        context,
+      });
+
+    await expect(resolve(factory.id, 'session')).resolves.toEqual({
+      modelScope: 'factory',
+      modelId: 'anthropic/factory-model',
+    });
+    await expect(resolve(user.id, 'run')).resolves.toEqual({ modelScope: 'user', modelId: 'openai/owner-model' });
+  });
+
   it("uses the project's model under factory scope", async () => {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
     await seeded.projects.update({
       orgId: 'org-1',
       id: project.id,
-      input: { defaultModelId: 'anthropic/claude-opus-5' },
+      input: { modelScope: 'factory', defaultModelId: 'anthropic/claude-opus-5' },
     });
 
     await expect(
@@ -462,6 +544,7 @@ describe('resolveFactorySessionModel', () => {
         factoryProjectId: project.id,
         orgId: 'org-1',
         ownerUserId: 'user-1',
+        context: 'session',
       }),
     ).resolves.toEqual({ modelScope: 'factory', modelId: 'anthropic/claude-opus-5' });
   });
@@ -483,6 +566,7 @@ describe('resolveFactorySessionModel', () => {
         factoryProjectId: project.id,
         orgId: 'org-1',
         ownerUserId: 'owner-1',
+        context: 'session',
       }),
     ).resolves.toEqual({ modelScope: 'user', modelId: 'openai/owner-model' });
   });
@@ -503,6 +587,7 @@ describe('resolveFactorySessionModel', () => {
         factoryProjectId: project.id,
         orgId: 'org-1',
         ownerUserId: 'owner-1',
+        context: 'session',
       }),
     ).resolves.toEqual({ modelScope: 'user' });
   });
@@ -520,6 +605,7 @@ describe('resolveFactorySessionModel', () => {
         factoryProjectId: project.id,
         orgId: 'org-1',
         ownerUserId: 'owner-1',
+        context: 'session',
       }),
     ).resolves.toEqual({ modelScope: 'user' });
   });
@@ -534,6 +620,7 @@ describe('resolveFactorySessionModel', () => {
       factoryProjectId: project.id,
       orgId: 'org-1',
       ownerUserId: 'owner-1',
+      context: 'session' as const,
     };
     await expect(resolveFactorySessionModel({ ...args, projects: undefined })).rejects.toThrow('policy is unavailable');
     await expect(resolveFactorySessionModel({ ...args, factoryProjectId: undefined })).rejects.toThrow(

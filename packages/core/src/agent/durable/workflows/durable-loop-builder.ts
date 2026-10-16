@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../../../error';
 import type { PubSub } from '../../../events/pubsub';
 import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
 import { AgenticLoopBuilder } from '../../../loop/loop-builder';
@@ -18,7 +19,7 @@ import { createEventedWorkflow, createWorkflow } from '../../../workflows/create
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
-import { DurableStepIds, DurableAgentDefaults } from '../constants';
+import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
 import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -536,6 +537,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               accumulatedSteps: state.accumulatedSteps,
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
+              completionStartTime: state.completionStartTime,
             };
           },
           { id: 'map-to-llm-input' },
@@ -549,6 +551,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             return (llmOutput.toolCalls ?? []).map(toolCall => ({
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
+              completionStartTime: llmOutput.completionStartTime,
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
@@ -784,6 +787,25 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // stop past stopWhen, all grounded in persisted step records under
       // at-least-once redelivery. `runMaxSteps` is always finite here, so
       // the default ladder's hasFiniteMaxSteps question never arises.
+      const stopWhen = rt.stopWhen
+        ? (Array.isArray(rt.stopWhen) ? rt.stopWhen : [rt.stopWhen]).map(condition => async (context: any) => {
+            try {
+              return await (condition as (context: any) => boolean | PromiseLike<boolean>)(context);
+            } catch (error) {
+              const originalError = getErrorFromUnknown(error);
+              throw new MastraError(
+                {
+                  id: DURABLE_STOP_WHEN_ERROR_ID,
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.USER,
+                  text: originalError.message,
+                  details: { name: originalError.name, message: originalError.message },
+                },
+                originalError,
+              );
+            }
+          })
+        : undefined;
       const decision = await decideContinuation({
         policy: { mode: 'durable' },
         pendingFeedbackStop: state.pendingFeedbackStop ?? false,
@@ -792,7 +814,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // Retries stay bounded by maxProcessorRetries.
         underMaxSteps: state.accumulatedSteps.filter(s => s.finishReason !== 'retry').length < runMaxSteps,
         steps: state.accumulatedSteps,
-        stopWhen: rt.stopWhen,
+        stopWhen,
         consumeDelegationBail: () => {
           if (state.delegationBailed) {
             // Reset the flag so it doesn't carry forward
@@ -858,9 +880,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         },
         logger: rt.logger,
       }).catch(async error => {
-        // User continuation policy can throw after the step has completed. Preserve that step's
-        // boundary on the stream before the workflow propagates the policy error.
-        await emitStepFinish(state.lastStepResult?.isContinued === true);
+        if ((error as { id?: unknown })?.id !== DURABLE_STOP_WHEN_ERROR_ID) {
+          await emitStepFinish(state.lastStepResult?.isContinued === true);
+        }
         throw error;
       });
 
@@ -1066,6 +1088,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+              // Rebuilt spans end from snapshots taken at run start, so the clock the
+              // steps carried is applied here: the loop state's for the originals, the
+              // registry's for a resumed segment's fresh spans.
+              const clock = reg?.resumeModelSpanData ? reg.resumeCompletionStartTime : state.completionStartTime;
+              const completionStartTime = clock ? new Date(clock) : undefined;
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan = observability.rebuildSpan(
@@ -1086,13 +1113,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
                       ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                      ...(completionStartTime ? { completionStartTime } : {}),
                     },
                     usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
                 }
                 if (agentSpanData) {
                   const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
-                  agentSpan?.end({ output: { text: finalText } });
+                  agentSpan?.end({
+                    output: { text: finalText },
+                    ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+                  });
                 }
               }
             } catch (error) {

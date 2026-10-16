@@ -5,11 +5,11 @@ import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { useMastraClient } from '@mastra/react';
 import { useSpanDetail } from '@mastra/react/hooks/traces';
 import { useQuery } from '@tanstack/react-query';
-import { EyeIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets';
+import type { SaveAsDatasetItemDialogProps } from '@/domains/datasets';
 import type { SpanRecord } from '@/domains/traces/types';
-import type { SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import type { DataPanelProps } from '@/ds/components/DataPanel';
+import { getShortId } from '@/ds/components/Text';
 
 type TraceAsItemDialogProps = {
   /** Full span record — if provided, used directly (no fetch). */
@@ -19,7 +19,8 @@ type TraceAsItemDialogProps = {
   traceId?: string;
   isOpen: boolean;
   onClose: () => void;
-  level?: SideDialogRootProps['level'];
+  depth?: DataPanelProps['depth'];
+  renderCreateDatasetDialog?: SaveAsDatasetItemDialogProps['renderCreateDatasetDialog'];
 };
 
 function getInitialInput(traceDetails?: SpanRecord): string {
@@ -44,7 +45,8 @@ export function TraceAsItemDialog({
   traceId,
   isOpen,
   onClose,
-  level = 2,
+  depth,
+  renderCreateDatasetDialog,
 }: TraceAsItemDialogProps) {
   const client = useMastraClient();
 
@@ -98,15 +100,12 @@ export function TraceAsItemDialog({
       initialTrajectory={initialTrajectory}
       trajectoryLoading={isTrajectoryLoading}
       initialToolMocks={initialToolMocks}
-      breadcrumb={
-        <TextAndIcon>
-          <EyeIcon /> {getShortId(traceId)}
-        </TextAndIcon>
-      }
+      breadcrumb={getShortId(traceId)}
       isOpen={isOpen}
       onClose={onClose}
-      level={level}
+      depth={depth}
       source={traceId ? { type: 'trace', referenceId: traceId } : undefined}
+      renderCreateDatasetDialog={renderCreateDatasetDialog}
     />
   );
 }

@@ -1,12 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
+import { isProviderConnected } from './useProviderConnection';
 import { queryKeys } from '../../../../api/keys';
 import { availableModelsQueryOptions } from '../../../../hooks/useAvailableModels';
+import { providersQueryOptions } from '../../../../hooks/use-providers';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
 import {
   createFactoryProject,
+  deleteFactoryProject,
   fetchFactoryProject,
   renameFactoryProject,
   unlinkRepository,
@@ -14,6 +17,8 @@ import {
 } from '../services/github';
 import {
   clearOnboardingFlow,
+  completeOnboardingSchema,
+  onboardingModelPlan,
   persistOnboardingFactory,
   persistOnboardingLinkedRepositories,
   readOnboardingFactory,
@@ -30,28 +35,50 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
   }
 }
 
-export function useCompleteFactorySetup() {
-  const { baseUrl } = useApiConfig();
+export function useCompleteFactorySetup({ local }: { local: boolean }) {
+  const { baseUrl, client } = useApiConfig();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const link = useLinkRepositoryMutation();
   const setPersonalDefault = useSetDefaultModel();
   return useMutation({
     mutationFn: async (draft: OnboardingDraft) => {
-      const repo = draft.repository;
-      if (!repo) throw new Error('Choose a repository before creating your factory.');
-      const factoryModel = draft.model?.modelId ?? draft.personal?.modelId;
-      if (!factoryModel) throw new Error('Choose a model before creating your factory.');
-      const personalModel = draft.personal?.modelId;
-      const availableModels = await queryClient.fetchQuery({ ...availableModelsQueryOptions(baseUrl), staleTime: 0 });
-      const unavailableModel = [factoryModel, personalModel].find(
-        modelId => modelId && !availableModels.some(available => available.id === modelId),
-      );
-      if (unavailableModel) throw new Error(`${unavailableModel} is no longer available. Choose another model.`);
+      const parsed = completeOnboardingSchema.safeParse(draft);
+      if (!parsed.success) throw new Error('Choose your setup and its required models before creating your factory.');
+      const setup = parsed.data;
+      const repo = setup.repository;
+      const modelScope = setup.modelScope;
+      const plan = onboardingModelPlan(setup);
+      const [providers, catalogs] = await Promise.all([
+        queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
+        Promise.all(
+          plan.checks.map(({ scope }) =>
+            queryClient.fetchQuery({
+              ...availableModelsQueryOptions(baseUrl, { scope }),
+              staleTime: 0,
+            }),
+          ),
+        ),
+      ]);
+      for (const [index, { scope, choice }] of plan.checks.entries()) {
+        const account = scope === 'org' ? 'the company account' : 'your account';
+        if (!catalogs[index].some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
+          throw new Error(`${choice.modelId} is no longer available for ${account}. Choose another model.`);
+        }
+        const provider = providers.providers.find(item => item.provider === choice.providerId);
+        if (!provider || !isProviderConnected(provider, local ? undefined : scope, choice.method)) {
+          throw new Error(`The connection for ${account} has changed. Review your provider connection.`);
+        }
+      }
 
       const pendingId = readOnboardingFactory();
-      const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
-      const factory = existing ?? (await createFactoryProject(baseUrl, repo.name));
+      let existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
+      if (existing && existing.modelScope !== modelScope) {
+        // Recreate the unfinished project rather than bypassing the admin gate on scope changes.
+        await deleteFactoryProject(baseUrl, existing.id);
+        existing = undefined;
+      }
+      const factory = existing ?? (await createFactoryProject(baseUrl, repo.name, undefined, modelScope));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
       if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
@@ -70,8 +97,8 @@ export function useCompleteFactorySetup() {
         },
       });
       await Promise.all([
-        updateFactoryDefaultModel(baseUrl, factory.id, factoryModel),
-        personalModel ? setPersonalDefault.mutateAsync(personalModel) : undefined,
+        updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
+        plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
       ]);
       return factory.id;
     },

@@ -102,6 +102,18 @@ describe('resolveClient', () => {
     vi.stubEnv('MASTRA_ORG_ID', 'org_env');
     expect(resolveClient({ accessToken: TOKEN }).headers['x-organization-id']).toBe('org_env');
   });
+
+  it('omits x-mastra-project-id unless configured', () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    const client = resolveClient({ accessToken: TOKEN });
+    expect(client.headers['x-mastra-project-id']).toBeUndefined();
+  });
+
+  it('sends x-mastra-project-id from the option or MASTRA_PROJECT_ID', () => {
+    expect(resolveClient({ accessToken: TOKEN, projectId: 'proj_1' }).headers['x-mastra-project-id']).toBe('proj_1');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    expect(resolveClient({ accessToken: TOKEN }).headers['x-mastra-project-id']).toBe('proj_env');
+  });
 });
 
 describe('listProjectConnections', () => {

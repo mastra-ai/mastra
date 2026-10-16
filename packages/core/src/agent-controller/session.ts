@@ -899,14 +899,21 @@ export class SessionThread {
   }
 
   /**
-   * Transfer the active thread to a new owner.
+   * Transfer a thread to a new owner. Defaults to the active thread; pass
+   * `threadId` to transfer another thread of this resource without switching to it.
    *
    * Transfers are serialized within this process. Hosts needing strict durable
    * compare-and-set semantics should commit that change in their own store before
    * mirroring it here.
    */
-  async transferOwnership({ toOwnerId }: { toOwnerId: string }): Promise<void> {
-    const threadId = this.requireId();
+  async transferOwnership({
+    toOwnerId,
+    threadId: requestedThreadId,
+  }: {
+    toOwnerId: string;
+    threadId?: string;
+  }): Promise<void> {
+    const threadId = requestedThreadId ?? this.requireId();
 
     await withThreadOwnershipMutex(threadId, async () => {
       const store = this.#store;
@@ -5333,6 +5340,42 @@ export class Session<TState = unknown> {
           : messageInput,
         target,
       );
+
+    if (wasActive) {
+      await result.accepted;
+    } else {
+      await this.waitForAcceptedRunCompletion(result.accepted, { waitForDelivery: false });
+    }
+  }
+
+  /**
+   * Queue a typed signal for the next run, or send it immediately when this
+   * session is idle. Shares the Agent runtime queue used by `queueMessage()`.
+   * Unlike `queueMessage()`, no author is inferred from the request context:
+   * set `signal.author` when the signal is human-authored.
+   */
+  async queueSignal(
+    signal: AgentSignalInput,
+    {
+      tracingContext,
+      tracingOptions,
+      requestContext: requestContextInput,
+    }: {
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      requestContext?: RequestContext;
+    } = {},
+  ): Promise<void> {
+    await this.machinery.authorizeExecute?.(requestContextInput);
+    const wasActive = this.stream.isActive();
+    const target = await this.prepareMessageTarget({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
+      // See queueMessage: a queued run must not inherit the active run's abort signal.
+      abortSignal: wasActive ? new AbortController().signal : undefined,
+    });
+    const result = this.machinery.getAgent().queueSignal(signal, target);
 
     if (wasActive) {
       await result.accepted;

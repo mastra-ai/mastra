@@ -590,6 +590,32 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
   return candidate.__isCreatedSignal === true;
 }
 
+/**
+ * Typed `AGENT_RUN` span attributes describing the signal that started a run. Returns
+ * `undefined` when the run input is not a created signal. Contents stay in the span input.
+ */
+export function signalSpanAttributes(input: unknown):
+  | {
+      id: string;
+      type: string;
+      tagName?: string;
+      attributes?: Record<string, string | number | boolean | null>;
+    }
+  | undefined {
+  if (!isCreatedAgentSignal(input)) return undefined;
+  const attributes = input.attributes
+    ? Object.fromEntries(Object.entries(input.attributes).filter(([, value]) => value !== undefined))
+    : undefined;
+  return {
+    id: input.id,
+    type: input.type,
+    ...(input.tagName ? { tagName: input.tagName } : {}),
+    ...(attributes && Object.keys(attributes).length > 0
+      ? { attributes: attributes as Record<string, string | number | boolean | null> }
+      : {}),
+  };
+}
+
 export function createSignal(
   input: Extract<AgentSignalInput, { type: 'state' }>,
 ): Extract<CreatedAgentSignal, { type: 'state' }>;

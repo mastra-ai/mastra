@@ -400,6 +400,49 @@ describe('Environment settings', () => {
     expect(patches[0]).toEqual({ settings: { privileged: true } });
   });
 
+  it('renders a oneOf of consts as a select labelled by title and saves the numeric value', async () => {
+    useFactory();
+    const environment = environmentPayload({
+      sandbox: {
+        provider: 'platform',
+        settingsSchema: {
+          type: 'object',
+          properties: {
+            memoryMb: {
+              type: 'integer',
+              title: 'Memory',
+              default: 1024,
+              oneOf: [
+                { const: 1024, title: '1 GB' },
+                { const: 8192, title: '8 GB' },
+              ],
+            },
+          },
+        },
+        capabilities: { template: true, builds: { available: true, history: false } },
+      },
+      settings: {},
+    });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const memory = await screen.findByRole('combobox', { name: 'Memory' });
+    expect(memory).toHaveTextContent('1 GB (default)');
+    await user.click(memory);
+    expect(await screen.findAllByRole('option')).toHaveLength(2);
+    await user.click(screen.getByRole('option', { name: '8 GB' }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { memoryMb: 8192 } });
+
+    await user.click(memory);
+    await user.click(await screen.findByRole('option', { name: '1 GB (default)' }));
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ settings: { memoryMb: null } });
+  });
+
   it('saves decimals for number settings, strings as typed, and clears both with null', async () => {
     useFactory();
     const environment = environmentPayload({
