@@ -509,3 +509,37 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+
+  # The Changesets release PR gates every release, so a red suite there should not wait for
+  # someone to open the PR. Calls (e.g. the alpha cron) send their own alert.
+  notify-release-pr-failure:
+    name: Notify Slack of release PR failure
+    needs:
+      [
+        changes,
+        prebuild,
+        affected-tests,
+        test-suite,
+        e2e-tests,
+        mastracode-e2e,
+        combined-stores-tests,
+        workspace-tests,
+        memory-test,
+      ]
+    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.full_suite == 'true' && contains(needs.*.result, 'failure')
+    runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Slack action
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Post to Slack
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          text: ':rotating_light: Release PR tests failed: <${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }} ${{ github.event.pull_request.title }}>. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View the run>.'
