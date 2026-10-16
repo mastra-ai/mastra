@@ -9,9 +9,6 @@ vi.mock('@internal/ai-v6', () => ({
 vi.mock('@internal/ai-sdk-v5', () => ({
   embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
 }));
-vi.mock('@internal/ai-sdk-v4', () => ({
-  embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
-}));
 
 function createMemory() {
   return new Memory({

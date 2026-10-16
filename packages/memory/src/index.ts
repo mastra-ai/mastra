@@ -1,6 +1,5 @@
-import { embedMany } from '@internal/ai-sdk-v4';
-import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
+import type { TextPart } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
@@ -1613,7 +1612,7 @@ ${workingMemory}`;
     bigint,
     {
       chunks: string[];
-      embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      embeddings: Awaited<ReturnType<typeof embedManyV5>>['embeddings'];
       usage?: { tokens: number };
       dimension: number | undefined;
     }
@@ -1641,20 +1640,8 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
-    const specVersion = this.embedder.specificationVersion;
-
-    switch (specVersion) {
-      case 'v3':
-        embedFn = embedManyV6;
-        break;
-      case 'v2':
-        embedFn = embedManyV5;
-        break;
-      default:
-        embedFn = embedMany;
-        break;
-    }
+    const embedFn: typeof embedManyV5 | typeof embedManyV6 =
+      this.embedder.specificationVersion === 'v3' ? embedManyV6 : embedManyV5;
 
     const promise = embedFn({
       values: chunks,

@@ -97,7 +97,7 @@ describe('Memory.copyThread / cloneThread', () => {
         embeddings: values.map(() => new Array(dim).fill(0.1)),
       })),
       modelId: 'mock-embedder',
-      specificationVersion: 'v1',
+      specificationVersion: 'v2',
       provider: 'mock',
     } as any;
 

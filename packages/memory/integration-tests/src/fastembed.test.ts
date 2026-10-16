@@ -15,10 +15,3 @@ describe('FastEmbed V2 Tests', () => {
     version: 'v2',
   });
 });
-
-// V1 Tests (AI SDK v4 legacy)
-describe('FastEmbed V1 Legacy Tests', () => {
-  getFastembedTests({
-    version: 'v1',
-  });
-});

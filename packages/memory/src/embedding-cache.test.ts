@@ -19,14 +19,6 @@ vi.mock('@internal/ai-sdk-v5', () => ({
     warnings: [],
   })),
 }));
-vi.mock('@internal/ai-sdk-v4', () => ({
-  embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
-    values,
-    embeddings: values.map(() => [0.1, 0.2]),
-    usage: { tokens: 1 },
-    warnings: [],
-  })),
-}));
 
 function createMemory() {
   return new Memory({
