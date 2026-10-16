@@ -5,14 +5,12 @@ type UserPart = Exclude<CoreUserMessage['content'], string>[number];
 const messageParts = (message: CoreUserMessage): UserPart[] => {
   const parts: UserPart[] =
     typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content;
-  const inheritedOptions = message.providerOptions ?? message.experimental_providerMetadata;
+  const inheritedOptions = message.providerOptions;
   if (!inheritedOptions) return parts;
 
   return parts.map(part => {
     const providerOptions = { ...inheritedOptions };
-    for (const [provider, options] of Object.entries(
-      part.providerOptions ?? part.experimental_providerMetadata ?? {},
-    )) {
+    for (const [provider, options] of Object.entries(part.providerOptions ?? {})) {
       providerOptions[provider] = { ...providerOptions[provider], ...options };
     }
     return { ...part, providerOptions };

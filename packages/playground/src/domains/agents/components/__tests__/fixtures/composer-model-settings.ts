@@ -12,8 +12,6 @@ export const v2Agent: GetAgentResponse = {
   modelVersion: 'v2',
   modelList: undefined,
   defaultOptions: {},
-  defaultGenerateOptionsLegacy: {},
-  defaultStreamOptionsLegacy: {},
 };
 
 export const agentsResponse: Record<string, GetAgentResponse> = { 'agent-1': v2Agent };

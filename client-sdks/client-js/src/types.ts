@@ -1,8 +1,6 @@
 import type { JSONValue, ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
-  AgentGenerateOptions,
-  AgentStreamOptions,
   SerializableStructuredOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
@@ -347,8 +345,6 @@ export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'> & {
   hasBrowser?: boolean;
   workspaceId?: string;
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
-  defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
-  defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
   requestContextSchema?: string;
   editor?: AgentEditorConfig;
 };
@@ -370,32 +366,6 @@ export interface GetAgentBrowserSessionResponse {
 }
 
 export type ClientToolsResolver = () => ToolsInput | undefined;
-
-export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
-  model?: string;
-  output?: T;
-  experimental_output?: T;
-  requestContext?: RequestContext | Record<string, any>;
-  clientTools?: ToolsInput;
-  clientToolsResolver?: ClientToolsResolver;
-} & WithoutMethods<
-  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentGenerateOptions<any>, 'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools'>
->;
-
-export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
-  model?: string;
-  output?: T;
-  experimental_output?: T;
-  requestContext?: RequestContext | Record<string, any>;
-  clientTools?: ToolsInput;
-  clientToolsResolver?: ClientToolsResolver;
-} & WithoutMethods<
-  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentStreamOptions<any>, 'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools'>
->;
 
 export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
   SerializableStructuredOutputOptions<OUTPUT>,

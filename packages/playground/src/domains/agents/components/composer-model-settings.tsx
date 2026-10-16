@@ -76,23 +76,17 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
     return null;
   }
 
-  const modelVersion = agent?.modelVersion;
-  const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
   const supportsThreadSubscription = agent?.supportsMemory !== false;
 
   let radioValue: string | undefined;
 
   if (agent) {
-    if (isSupportedModel) {
-      if (settings?.modelSettings?.chatWithGenerate) {
-        radioValue = 'generate';
-      } else if (settings?.modelSettings?.chatWithLegacyStream || !supportsThreadSubscription) {
-        radioValue = 'stream';
-      } else {
-        radioValue = 'streamSubscription';
-      }
+    if (settings?.modelSettings?.chatWithGenerate) {
+      radioValue = 'generate';
+    } else if (settings?.modelSettings?.chatWithLegacyStream || !supportsThreadSubscription) {
+      radioValue = 'stream';
     } else {
-      radioValue = settings?.modelSettings?.chatWithGenerateLegacy ? 'generateLegacy' : 'streamLegacy';
+      radioValue = 'streamSubscription';
     }
   }
 
@@ -138,7 +132,6 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       ...settings,
                       modelSettings: {
                         ...settings?.modelSettings,
-                        chatWithGenerateLegacy: value === 'generateLegacy',
                         chatWithGenerate: value === 'generate',
                         chatWithLegacyStream: value === 'stream',
                       },
@@ -146,33 +139,15 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   }
                   className="flex flex-col gap-3"
                 >
-                  {!isSupportedModel && (
-                    <FieldItem disabled={!canEditSettings}>
-                      <RadioGroupItem value="generateLegacy" className="text-foreground" />
-                      <FieldLabel>Generate (Legacy)</FieldLabel>
-                    </FieldItem>
-                  )}
-                  {isSupportedModel && (
-                    <FieldItem disabled={!canEditSettings}>
-                      <RadioGroupItem value="generate" className="text-foreground" />
-                      <FieldLabel>Generate</FieldLabel>
-                    </FieldItem>
-                  )}
-                  {!isSupportedModel && (
-                    <FieldItem disabled={!canEditSettings}>
-                      <RadioGroupItem value="streamLegacy" className="text-foreground" />
-                      <FieldLabel>Stream (Legacy)</FieldLabel>
-                    </FieldItem>
-                  )}
-                  {isSupportedModel && (
-                    <StreamSubscriptionRadio supported={supportsThreadSubscription} disabled={!canEditSettings} />
-                  )}
-                  {isSupportedModel && (
-                    <FieldItem disabled={!canEditSettings}>
-                      <RadioGroupItem value="stream" className="text-foreground" />
-                      <FieldLabel>Stream</FieldLabel>
-                    </FieldItem>
-                  )}
+                  <FieldItem disabled={!canEditSettings}>
+                    <RadioGroupItem value="generate" className="text-foreground" />
+                    <FieldLabel>Generate</FieldLabel>
+                  </FieldItem>
+                  <StreamSubscriptionRadio supported={supportsThreadSubscription} disabled={!canEditSettings} />
+                  <FieldItem disabled={!canEditSettings}>
+                    <RadioGroupItem value="stream" className="text-foreground" />
+                    <FieldLabel>Stream</FieldLabel>
+                  </FieldItem>
                 </RadioGroup>
               </Entry>
 

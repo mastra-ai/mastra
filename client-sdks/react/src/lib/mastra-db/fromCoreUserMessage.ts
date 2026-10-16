@@ -22,7 +22,7 @@ const coreUserMessageToParts = (coreUserMessage: CoreUserMessage): MastraMessage
             return { type: 'text' as const, text: part.text };
           }
           case 'image': {
-            const mimeType = part.mimeType ?? 'image/*';
+            const mimeType = part.mediaType ?? 'image/*';
             return {
               type: 'file' as const,
               mimeType,
@@ -32,8 +32,8 @@ const coreUserMessageToParts = (coreUserMessage: CoreUserMessage): MastraMessage
           case 'file': {
             return {
               type: 'file' as const,
-              mimeType: part.mimeType,
-              data: encodeFilePartDataForStorage(part.data, part.mimeType),
+              mimeType: part.mediaType,
+              data: encodeFilePartDataForStorage(part.data, part.mediaType),
               ...(part.filename !== undefined ? { filename: part.filename } : {}),
             };
           }

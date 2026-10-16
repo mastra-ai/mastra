@@ -1276,9 +1276,6 @@ importers:
       '@ai-sdk/provider':
         specifier: ^2.0.3
         version: 2.0.3
-      '@internal/ai-sdk-v4':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v4
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../packages/_vendored/ai_v5
@@ -1361,9 +1358,6 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
     devDependencies:
-      '@internal/ai-sdk-v4':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v4
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../packages/_vendored/ai_v5

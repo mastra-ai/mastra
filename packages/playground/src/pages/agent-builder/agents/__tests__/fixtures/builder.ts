@@ -65,8 +65,6 @@ export const oneOtherAgent: Record<string, GetAgentResponse> = {
     modelVersion: 'v2',
     modelList: undefined,
     defaultOptions: {},
-    defaultGenerateOptionsLegacy: {},
-    defaultStreamOptionsLegacy: {},
   },
 };
 export const emptyTools: Record<string, GetToolResponse> = {};
