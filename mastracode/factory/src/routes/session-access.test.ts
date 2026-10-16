@@ -156,11 +156,16 @@ describe('createSessionAccessGuard', () => {
     await expect(res.json()).resolves.toEqual({ reached: true, bound: 'teammate' });
   });
 
-  it('checks both the query and body resourceId, since handlers may read either', async () => {
+  it('rejects a query and body naming different resources, since handlers may read either', async () => {
     const path = `/web/config/om/observer/model?resourceId=${SHARED_ID}`;
-    expect((await post(teammate, path, { resourceId: PRIVATE_ID, modelId: 'x' })).status).toBe(404);
+    expect((await post(teammate, path, { resourceId: PRIVATE_ID, modelId: 'x' })).status).toBe(400);
     const memory = `/api/memory/threads?resourceId=${SHARED_ID}`;
-    expect((await post(teammate, memory, { resourceId: PRIVATE_ID })).status).toBe(404);
+    expect((await post(teammate, memory, { resourceId: PRIVATE_ID })).status).toBe(400);
+    // Both resources visible to the caller still conflict: the bound resource must be unambiguous.
+    expect((await post(owner, memory, { resourceId: PRIVATE_ID })).status).toBe(400);
+
+    const same = await post(owner, `/api/memory/threads?resourceId=${PRIVATE_ID}`, { resourceId: PRIVATE_ID });
+    await expect(same.json()).resolves.toEqual({ reached: true, bound: PRIVATE_ID });
   });
 
   it('hides runs on private sessions the caller cannot see from the active-runs list', async () => {
