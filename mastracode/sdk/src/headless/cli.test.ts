@@ -538,7 +538,10 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       stdoutSpy.mockRestore();
     }
 
-    const lines = written.trimEnd().split('\n').map(line => JSON.parse(line));
+    const lines = written
+      .trimEnd()
+      .split('\n')
+      .map(line => JSON.parse(line));
     expect(lines.map(line => line.type)).toEqual([
       'agent_start',
       'tool_start',
