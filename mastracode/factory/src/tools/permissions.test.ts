@@ -14,6 +14,16 @@ function factoryRow(sessionId: string): SourceControlSession {
   return { sessionId, orgId: 'org-1', userId: 'user-1', factoryProjectId: 'project-1' } as SourceControlSession;
 }
 
+function deps(
+  row: (id: string) => SourceControlSession | null = factoryRow,
+  bound = false,
+): Parameters<typeof applyFactoryToolPermissions>[1] {
+  return {
+    sessions: { getBySessionId: async id => row(id) },
+    workItems: { hasRunBindingForSession: async () => bound },
+  };
+}
+
 function fakeSession(rules: PermissionRules = { categories: {}, tools: {} }) {
   let state = { permissionRules: rules };
   return {
@@ -33,25 +43,29 @@ function fakeSession(rules: PermissionRules = { categories: {}, tools: {} }) {
 describe('applyFactoryToolPermissions', () => {
   it('allows every listed tool on a Factory session', async () => {
     const session = fakeSession();
-    await applyFactoryToolPermissions(session, { sessions: { getBySessionId: async id => factoryRow(id) } }, TOOLS);
+    await applyFactoryToolPermissions(session, deps(), TOOLS);
     expect(session.rules().tools).toEqual({ factory_list_work_items: 'allow', factory_inspect_work_item: 'allow' });
   });
 
   it("leaves a person's own per-tool policy alone", async () => {
     const session = fakeSession({ categories: {}, tools: { factory_list_work_items: 'ask' } });
-    await applyFactoryToolPermissions(session, { sessions: { getBySessionId: async id => factoryRow(id) } }, TOOLS);
+    await applyFactoryToolPermissions(session, deps(), TOOLS);
     expect(session.rules().tools).toEqual({ factory_list_work_items: 'ask', factory_inspect_work_item: 'allow' });
   });
 
   it('leaves everything alone when the person set the mcp category policy', async () => {
     const session = fakeSession({ categories: { mcp: 'ask' }, tools: {} });
-    await applyFactoryToolPermissions(session, { sessions: { getBySessionId: async id => factoryRow(id) } }, TOOLS);
+    await applyFactoryToolPermissions(session, deps(), TOOLS);
     expect(session.rules().tools).toEqual({});
   });
 
   it('does nothing for a session with no Factory row', async () => {
     const session = fakeSession();
-    await applyFactoryToolPermissions(session, { sessions: { getBySessionId: async () => null } }, TOOLS);
+    await applyFactoryToolPermissions(
+      session,
+      deps(() => null),
+      TOOLS,
+    );
     expect(session.rules().tools).toEqual({});
   });
 
@@ -59,10 +73,26 @@ describe('applyFactoryToolPermissions', () => {
     const session = fakeSession();
     await applyFactoryToolPermissions(
       session,
-      { sessions: { getBySessionId: async id => ({ ...factoryRow(id), factoryProjectId: null }) } },
+      deps(id => ({ ...factoryRow(id), factoryProjectId: null })),
       TOOLS,
     );
     expect(session.rules().tools).toEqual({});
+  });
+
+  it('allows only reporting back on a work session, so its own stage moves keep asking', async () => {
+    const session = fakeSession();
+    await applyFactoryToolPermissions(session, deps(factoryRow, true), [...TOOLS, 'factory_transition_work_item']);
+    expect(session.rules().tools).toEqual({ factory_message_origin: 'allow' });
+  });
+
+  it('allows only reporting back on a side session', async () => {
+    const session = fakeSession();
+    await applyFactoryToolPermissions(
+      session,
+      deps(id => ({ ...factoryRow(id), originSessionId: 'parent' }) as SourceControlSession),
+      TOOLS,
+    );
+    expect(session.rules().tools).toEqual({ factory_message_origin: 'allow' });
   });
 
   it('persists the allow into session state when registered as a blocking session-created listener', async () => {
@@ -88,11 +118,7 @@ describe('applyFactoryToolPermissions', () => {
       ],
     });
     await controller.init();
-    controller.onSessionCreated(
-      session =>
-        applyFactoryToolPermissions(session, { sessions: { getBySessionId: async id => factoryRow(id) } }, TOOLS),
-      { blocking: true },
-    );
+    controller.onSessionCreated(session => applyFactoryToolPermissions(session, deps(), TOOLS), { blocking: true });
 
     const session = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
 
