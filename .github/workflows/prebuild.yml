@@ -551,8 +551,16 @@ jobs:
             exit 0
           fi
 
-          # This run is still in progress, so the newest completed run is the previous one.
-          if ! previous=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
+          # A re-run keeps its run ID, so its previous state is the earlier attempt of this run.
+          previous=''
+          if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then
+            previous=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$((GITHUB_RUN_ATTEMPT - 1))" \
+              --jq '.conclusion // ""' 2>/dev/null || true)
+            [ "$previous" = "cancelled" ] && previous=''
+          fi
+
+          # Otherwise this run is still in progress, so the newest completed run is the previous one.
+          if [ -z "$previous" ] && ! previous=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
             -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=20 \
             --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .conclusion != \"cancelled\")][0].conclusion // \"none\""); then
             echo "::warning::Could not read the previous run; alerting on failure only."
