@@ -42,6 +42,9 @@ function stubSources() {
         ],
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: true, installations: [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: true, connected: true, workspace: null }),
     ),
@@ -122,6 +125,56 @@ async function expectPortalView() {
 }
 
 describe('Board source and Linear project filters', () => {
+  it('offers connected providers and Manual, but not unconnected sources', async () => {
+    stubSources();
+    const view = renderBoard();
+    await waitForMutationsIdle(view.client);
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
+    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['GitHub', 'Linear', 'Manual']);
+  });
+
+  it('keeps a saved filter on a disconnected source labelled and selectable', async () => {
+    stubSources();
+    const view = renderBoard('?source=gitlab');
+    await waitForMutationsIdle(view.client);
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+    expect(await screen.findByText('GitLab')).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
+    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
+      'GitHub',
+      'GitLab',
+      'Linear',
+      'Manual',
+    ]);
+  });
+
+  it('offers only Manual when configured providers are disconnected', async () => {
+    stubSources();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, workspace: null }),
+      ),
+    );
+    const view = renderBoard();
+    await waitForMutationsIdle(view.client);
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
+    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Manual']);
+  });
+
   describe('when a hosted Linear project is selected', () => {
     it('keeps matching live and stored cards across the board after saving and reloading the view', async () => {
       stubHostedSources();
@@ -233,7 +286,7 @@ describe('Board source and Linear project filters', () => {
     expect(view.router.state.location.search).toContain('label=feature');
   });
 
-  it('merges selected source feeds and restores the Intake selector after clearing the filter', async () => {
+  it('merges selected source feeds and restores all sources after clearing the filter', async () => {
     stubSources();
     const view = renderBoard();
     await screen.findByText('GitHub: update dependencies');
@@ -245,7 +298,7 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Intake source filter' }));
     await screen.findByText('Manual follow-up');
-    expect(screen.queryByText('Portal: add account switcher')).not.toBeInTheDocument();
+    expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
     expect(view.router.state.location.search).not.toContain('source=');
   });
 
@@ -266,6 +319,38 @@ describe('Board source and Linear project filters', () => {
     await screen.findByText('Portal: later page');
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
   });
+  it('pages a healthy feed without retrying a failed provider', async () => {
+    stubSources();
+    let githubAttempts = 0;
+    let linearPageRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => {
+        githubAttempts++;
+        return HttpResponse.json({ error: 'GitHub feed unavailable' }, { status: 502 });
+      }),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) => {
+        if (new URL(request.url).searchParams.has('after')) {
+          linearPageRequests++;
+          return HttpResponse.json({
+            issues: [linearIssue('ENG-105', 'project-a', 'Portal: later page')],
+            nextCursor: null,
+          });
+        }
+        return HttpResponse.json({ issues: [linearIssues[0]], nextCursor: 'next-page' });
+      }),
+    );
+
+    renderBoard('?source=github&source=linear');
+    await screen.findAllByText('GitHub: GitHub feed unavailable');
+    await screen.findByText('Portal: add account switcher');
+    const githubAttemptsBeforePaging = githubAttempts;
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
+    await screen.findByText('Portal: later page');
+    expect(linearPageRequests).toBe(1);
+    expect(githubAttempts).toBe(githubAttemptsBeforePaging);
+    expect(screen.getAllByText('GitHub: GitHub feed unavailable')).not.toHaveLength(0);
+  });
+
   it('retries a failed page in a combined feed without losing the other source cards', async () => {
     stubSources();
     let pageAttempts = 0;
@@ -286,7 +371,7 @@ describe('Board source and Linear project filters', () => {
     await waitForMutationsIdle(view.client);
     await screen.findByText('Portal: add account switcher');
     fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
-    await screen.findByText('Linear page unavailable');
+    await screen.findByText('Linear: Linear page unavailable');
     expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByText('Portal: later page');

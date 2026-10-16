@@ -6,8 +6,6 @@ import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import { resolveFactorySessionAddress } from '../rules/binding-context.js';
 import type { FactorySessionSourceLookup } from '../rules/binding-context.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { SUPERVISOR_INSTRUCTIONS } from '../supervisor/instructions.js';
-import { parseSupervisorResourceId } from '../supervisor/session.js';
 import { PLAN_REVIEW_INSTRUCTIONS } from './plan-review-instructions.js';
 
 type SessionController = AgentControllerRequestContext<MastraCodeState>;
@@ -21,7 +19,6 @@ interface FactoryHostInstructionsDeps {
 export function createFactoryHostInstructions(deps: FactoryHostInstructionsDeps) {
   return async ({ requestContext }: { requestContext: RequestContext }): Promise<string | undefined> => {
     const controller = requestContext.get('controller') as SessionController | undefined;
-    if (parseSupervisorResourceId(controller?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
     if (!controller?.threadId || !controller.resourceId) return undefined;
     const binding = await restoreTrustStateBeforePrompt(controller, requestContext, deps);
     const planReviewAvailable = binding === 'unbound' && !requestContext.get('channel');

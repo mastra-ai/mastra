@@ -134,6 +134,105 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     });
   }
 
+  it('uses processed step text when an output processor collapses text parts', async () => {
+    const model = scriptedModel([[...textPart('t1', 'secret '), ...textPart('t2', 'stuff'), finish('stop')]]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'collapse-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message =>
+              message.role === 'assistant'
+                ? {
+                    ...message,
+                    content: {
+                      ...message.content,
+                      content: 'REDACTED',
+                      parts: [{ type: 'text', text: 'REDACTED' }],
+                    },
+                  }
+                : message,
+            ),
+        },
+      ],
+    });
+
+    const stream = await agent.stream('hi');
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('REDACTED');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['REDACTED']);
+    expect(fullOutput.text).toBe('REDACTED');
+  });
+
+  it('keeps feedback continuation steps iteration-local with an output processor', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'MORE'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [passThrough],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say MORE.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('firstMORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
+    expect(fullOutput.text).toBe('firstMORE');
+  });
+
+  it('keeps processed feedback continuation text iteration-local', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'more'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'uppercase-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                parts: message.content.parts?.map(part =>
+                  part.type === 'text' ? { ...part, text: part.text.toUpperCase() } : part,
+                ),
+              },
+            })),
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('FIRSTMORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
+    expect(fullOutput.text).toBe('firstMORE');
+  });
+
   for (const [label, rewrite, step, expected] of [
     ['redacts', '[REDACTED]', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], '[REDACTED]'],
     ['clears', '', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], ''],
@@ -166,4 +265,287 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
       expect(text).toBe(expected);
     });
   }
+
+  it('keeps the resolved text consistent when a processor removes the response', async () => {
+    const model = scriptedModel([[...textPart('t1', 'Hello there.'), finish('stop')]]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'remove-response',
+          processOutputResult: async ({ messages }) => messages.filter(message => message.role !== 'assistant'),
+        },
+      ],
+    });
+
+    const stream = await agent.stream('hi', { maxSteps: 1 });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['']);
+    expect(fullOutput.text).toBe('');
+    expect(await stream.text).toBe('');
+  });
+
+  it('reconciles the final step when a processor replaces the response under a new id', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'abcdef'), finish('stop')],
+      [...textPart('t2', 'ghij'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'replace-response-id',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            const parts = response.content?.parts ?? [];
+            const rewritten = parts.map(part =>
+              part.type === 'text' ? { ...part, text: part.text.replace('abcdef', 'ab') } : part,
+            );
+            return messages.map(message =>
+              message.id === response.id
+                ? {
+                    ...message,
+                    id: 'replaced-response',
+                    content: {
+                      ...message.content,
+                      content: rewritten.map(part => (part.type === 'text' ? part.text : '')).join(''),
+                      parts: rewritten,
+                    },
+                  }
+                : message,
+            );
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The processor is still matched to the step it rewrote, so the final step carries only the
+    // current iteration's text instead of the whole accumulated response.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'ghij']);
+    expect(fullOutput.text).toBe('abcdefghij');
+  });
+
+  it('reconciles the final step when a processor keeps the response and appends a revised one', async () => {
+    const model = scriptedModel([[...textPart('t1', 'abcdef'), finish('stop')]]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'append-revised-response',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            // Current-iteration-only, so the revision carries no earlier-iteration boundary.
+            const parts = [{ type: 'text' as const, text: 'REVISED' }];
+            return [
+              ...messages,
+              {
+                ...response,
+                id: `${response.id}-revised`,
+                content: {
+                  ...response.content,
+                  content: 'REVISED',
+                  parts,
+                },
+              },
+            ];
+          },
+        },
+      ],
+    });
+
+    const stream = await agent.stream('hi', { maxSteps: 1 });
+    const fullOutput = await stream.getFullOutput();
+
+    // Keeping the original response means the id it had before processing still resolves, so an id
+    // lookup alone reports the stale message. The reconciled step text must come from the response
+    // the resolved output text is read from, otherwise the step disagrees with the streamed text.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['REVISED']);
+    expect(fullOutput.text).toBe('REVISED');
+    expect(await stream.text).toBe('REVISED');
+  });
+
+  it('keeps a continuation step scoped to its iteration when a processor appends a revised response', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'abcdef'), finish('stop')],
+      [...textPart('t2', 'ghij'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'append-revised-response',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            // Current-iteration-only, so the revision carries no earlier-iteration boundary.
+            const parts = [{ type: 'text' as const, text: 'REVISED' }];
+            return [
+              ...messages,
+              {
+                ...response,
+                id: `${response.id}-revised`,
+                content: {
+                  ...response.content,
+                  content: 'REVISED',
+                  parts,
+                },
+              },
+            ];
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The earlier iteration keeps its model text; the final step still carries only the appended
+    // revision, so full output accumulates the per-iteration step text instead of the whole response.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'REVISED']);
+    expect(fullOutput.text).toBe('abcdefREVISED');
+  });
+
+  it('keeps every part of an appended response when the original offset is nonzero', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'abcdef'), finish('stop')],
+      [...textPart('t2', 'ghij'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'append-two-part-revision',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            // Two text parts, all belonging to the current iteration.
+            const parts = [
+              { type: 'text' as const, text: 'REV' },
+              { type: 'text' as const, text: 'ISED' },
+            ];
+            return [
+              ...messages,
+              {
+                ...response,
+                id: `${response.id}-revised`,
+                content: {
+                  ...response.content,
+                  content: 'REVISED',
+                  parts,
+                },
+              },
+            ];
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The original response has two parts (offset derived against the pre-processing message), but the
+    // appended response is current-iteration-only, so its offset is zero. Applying the original offset
+    // would drop its first part, making the step and full output disagree with the streamed text.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'REVISED']);
+    expect(fullOutput.text).toBe('abcdefREVISED');
+    expect(await stream.text).toBe('REVISED');
+  });
+
+  it('keeps the current iteration when a processor splits its text into more parts', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'more'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'split-final-text',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            const parts = [...(response.content?.parts ?? [])].filter(part => part.type !== 'step-start');
+            const lastTextIndex = parts.findLastIndex(part => part.type === 'text');
+            if (lastTextIndex === -1) return messages;
+            // Split the current iteration's text into more parts, keeping earlier iterations and the
+            // message id. The rewrite changes the resolved text and rebuilding the parts drops the
+            // boundary marker, matching a processor that rebuilds the response.
+            const text = parts[lastTextIndex]!.type === 'text' ? parts[lastTextIndex]!.text : '';
+            const midpoint = Math.ceil(text.length / 2);
+            const nextParts = [
+              ...parts.slice(0, lastTextIndex),
+              { type: 'text' as const, text: text.slice(0, midpoint).toUpperCase() },
+              { type: 'text' as const, text: text.slice(midpoint).toUpperCase() },
+              ...parts.slice(lastTextIndex + 1),
+            ];
+            const nextContent = nextParts.map(part => (part.type === 'text' ? part.text : '')).join('');
+            return messages.map(message =>
+              message.id === response.id
+                ? { ...message, content: { ...message.content, content: nextContent, parts: nextParts } }
+                : message,
+            );
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The response keeps its id but now has more parts than before processing. The earlier iteration's
+    // text must stay out of the final step, so full output does not duplicate the `first` prefix.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
+    expect(fullOutput.text).toBe('firstMORE');
+    expect(await stream.text).toBe('firstMORE');
+  });
 });

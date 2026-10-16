@@ -16,10 +16,6 @@ import { DatasetItemsToolbar } from './dataset-items-toolbar';
 
 export interface DatasetItemsProps {
   items: DatasetItem[];
-  /** Page-level content rendered before the list actions in the toolbar row. */
-  leftSlot?: React.ReactNode;
-  /** Page-level actions rendered at the end of the toolbar row. */
-  rightSlot?: React.ReactNode;
   /** Page-level content rendered on its own row, between the toolbar and the list. */
   belowToolbarSlot?: React.ReactNode;
   isLoading: boolean;
@@ -62,8 +58,6 @@ export interface DatasetItemsProps {
  */
 export function DatasetItems({
   items,
-  leftSlot,
-  rightSlot,
   belowToolbarSlot,
   isLoading,
   onItemClick,
@@ -148,8 +142,6 @@ export function DatasetItems({
         onImportClick={onImportClick ?? (() => {})}
         onImportJsonClick={onImportJsonClick ?? (() => {})}
         hasItems={items.length > 0}
-        leftSlot={leftSlot}
-        rightSlot={rightSlot}
         searchQuery={searchQuery}
         onSearchChange={onSearchChange}
         selectedCount={selection.selectedCount}

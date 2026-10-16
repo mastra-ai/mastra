@@ -3,7 +3,7 @@ import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -17,6 +17,7 @@ import {
   menuSeparatorClass,
   menuShortcutClass,
 } from '@/ds/primitives/menu-item';
+import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -81,12 +82,12 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
         <ContextMenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
           <ContextMenuPrimitive.Popup
+            ref={ref}
             data-slot="context-menu-content"
-            className={cn(menuPopupClass, menu.containerClassName, className)}
+            className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
-            {...menu.getContainerProps(props, ref)}
           >
-            <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+            <MenuScrollArea menu={menu}>{children}</MenuScrollArea>
           </ContextMenuPrimitive.Popup>
         </ContextMenuPrimitive.Positioner>
       </ContextMenuPrimitive.Portal>
@@ -236,12 +237,12 @@ const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubCon
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
         <ContextMenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
           <ContextMenuPrimitive.Popup
+            ref={ref}
             data-slot="context-menu-sub-content"
-            className={cn(menuPopupClass, menu.containerClassName, className)}
+            className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
-            {...menu.getContainerProps(props, ref)}
           >
-            <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+            <MenuScrollArea menu={menu}>{children}</MenuScrollArea>
           </ContextMenuPrimitive.Popup>
         </ContextMenuPrimitive.Positioner>
       </ContextMenuPrimitive.Portal>

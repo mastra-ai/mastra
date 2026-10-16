@@ -18,8 +18,6 @@ export interface DatasetItemsViewProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
-  leftSlot?: React.ReactNode;
-  rightSlot?: React.ReactNode;
   belowToolbarSlot?: React.ReactNode;
 }
 
@@ -29,8 +27,6 @@ export function DatasetItemsView({
   datasetId,
   onAddItemClick,
   onNavigateToDataset,
-  leftSlot,
-  rightSlot,
   belowToolbarSlot,
 }: DatasetItemsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -132,8 +128,6 @@ export function DatasetItemsView({
       <div className="grid h-full overflow-auto">
         <DatasetItems
           items={items}
-          leftSlot={leftSlot}
-          rightSlot={rightSlot}
           belowToolbarSlot={belowToolbarSlot}
           isLoading={isItemsLoading}
           onItemClick={handleItemClick}

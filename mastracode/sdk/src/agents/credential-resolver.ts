@@ -81,11 +81,37 @@ export async function prepareCredentialTenant(requestContext?: RequestContext): 
   requestContext.set(CREDENTIAL_POLICY_KEY, token);
   trustedTenants.set(token, { sourceContext });
   const tenant = await credentialTenantResolver(sourceContext);
-  if (!tenant) throw new Error('Tenant model credential policy could not be resolved.');
+  if (!tenant) throw unresolvedTenantError(sourceContext, Boolean(inheritedPolicy));
   trustedTenants.set(token, { tenant, sourceContext });
 }
 
-export function withCredentialTenantPreparation<T>(resolve: (ctx: { requestContext: RequestContext }) => T) {
+/**
+ * Explain a failed tenant resolution. The message is safe to show the end user
+ * (channels post it into the chat); the warning carries non-secret diagnostics
+ * and the stack, which is what locates a caller that dropped the request context.
+ */
+function unresolvedTenantError(sourceContext: RequestContext, inherited: boolean): Error {
+  const authenticated = resolveAuthenticatedCredentialTenant(sourceContext) !== undefined;
+  const error = new Error(
+    authenticated
+      ? 'Tenant model credential policy could not be resolved: no credential policy applies to this request.'
+      : 'Tenant model credential policy could not be resolved: the request has no authenticated user.',
+  );
+  const controller = sourceContext.get('controller') as { resourceId?: unknown; threadId?: unknown } | undefined;
+  console.warn('[MastraCode] Tenant model credential policy could not be resolved', {
+    reason: authenticated ? 'no-policy-for-principal' : 'missing-user-context',
+    hasUser: sourceContext.get('user') !== undefined,
+    inheritedPolicy: inherited,
+    hasControllerResource: typeof controller?.resourceId === 'string',
+    hasControllerThread: typeof controller?.threadId === 'string',
+    stack: error.stack,
+  });
+  return error;
+}
+
+export function withCredentialTenantPreparation<T>(
+  resolve: (ctx: { requestContext: RequestContext }) => T | Promise<T>,
+) {
   return async (ctx: { requestContext: RequestContext }): Promise<T> => {
     await prepareCredentialTenant(ctx.requestContext);
     return resolve(ctx);
