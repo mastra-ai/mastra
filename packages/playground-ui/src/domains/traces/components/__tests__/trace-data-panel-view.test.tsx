@@ -294,42 +294,6 @@ describe('TraceDataPanelView — Add to dataset', () => {
     });
   });
 
-  describe('when the panel is too narrow for the button', () => {
-    // jsdom has no layout, so every measured width is 0: an observer that reports at once
-    // makes the header read as narrow.
-    class ImmediateResizeObserver implements ResizeObserver {
-      constructor(private callback: ResizeObserverCallback) {}
-      observe() {
-        this.callback([], this);
-      }
-      unobserve() {}
-      disconnect() {}
-    }
-    beforeEach(() => vi.stubGlobal('ResizeObserver', ImmediateResizeObserver));
-    afterEach(() => vi.unstubAllGlobals());
-
-    it('moves both options into the trace actions menu', () => {
-      const onSaveAsDatasetItem = vi.fn();
-      render(
-        <TraceDataPanelView
-          {...baseProps}
-          spans={nestedSpanFixture}
-          initialSpanId="child"
-          onSaveAsDatasetItem={onSaveAsDatasetItem}
-        />,
-      );
-
-      expect(screen.queryByRole('button', { name: 'Add to dataset' })).toBeNull();
-      openTraceActions();
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Add span to dataset' }));
-      expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root', spanId: 'child' });
-
-      openTraceActions();
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Add full trace to dataset' }));
-      expect(onSaveAsDatasetItem).toHaveBeenLastCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
-    });
-  });
-
   describe('when there is no save handler', () => {
     it('does not render', () => {
       render(<TraceDataPanelView {...baseProps} />);

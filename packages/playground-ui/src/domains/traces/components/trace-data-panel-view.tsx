@@ -1,6 +1,5 @@
 import {
   ChartGanttIcon,
-  CircleDotIcon,
   CircleGaugeIcon,
   DownloadIcon,
   Link2Icon,
@@ -16,7 +15,6 @@ import type { ReactNode } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
-import { useIsAtMostWidth } from '../hooks/use-is-at-most-width';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
@@ -235,11 +233,13 @@ export function TraceDataPanelView({
   // Mirrors the side column's `@max-[501px]` container query: the layout collapses in CSS, but
   // tooltips render in a portal outside the container, so they need the width in JS.
   const [sideColumnElement, setSideColumnElement] = useState<HTMLDivElement | null>(null);
-  const compactSide = useIsAtMostWidth(sideColumnElement, 500);
-  // Below this width the labelled "Add to dataset" button would push the trace summary out of
-  // the header, so its options move into the trace actions menu instead.
-  const [headerElement, setHeaderElement] = useState<HTMLDivElement | null>(null);
-  const compactHeader = useIsAtMostWidth(headerElement, 1150);
+  const [compactSide, setCompactSide] = useState(false);
+  useEffect(() => {
+    if (!sideColumnElement || !('ResizeObserver' in globalThis)) return;
+    const observer = new ResizeObserver(() => setCompactSide(sideColumnElement.clientWidth <= 500));
+    observer.observe(sideColumnElement);
+    return () => observer.disconnect();
+  }, [sideColumnElement]);
   const chosenSideView = controlledSideView ?? uncontrolledSideView;
   const sideView = (sideViews.find(view => view.value === chosenSideView) ?? sideViews[0])?.value;
   const handleSideViewChange = (view: TraceSideView) => {
@@ -317,14 +317,11 @@ export function TraceDataPanelView({
     <TraceSummaryDescription rootSpan={rootSpan} usage={usage} entityHref={entityHref} LinkComponent={LinkComponent} />
   );
 
-  const canAddToDataset = !isOnTracePage && !!onSaveAsDatasetItem;
-  const addToDataset = (spanId?: string) => {
-    if (!traceId) return;
-    onSaveAsDatasetItem?.({ traceId, rootSpanId: rootSpan?.spanId, spanId });
-  };
-
-  const addToDatasetMenu = canAddToDataset && !compactHeader && (
-    <TraceAddToDatasetMenu selectedSpanId={selectedSpanId} onSave={addToDataset} />
+  const addToDatasetMenu = traceId && !isOnTracePage && onSaveAsDatasetItem && (
+    <TraceAddToDatasetMenu
+      selectedSpanId={selectedSpanId}
+      onSave={spanId => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId, spanId })}
+    />
   );
 
   const traceActionsMenu = traceId && (
@@ -337,18 +334,6 @@ export function TraceDataPanelView({
         }
       />
       <DropdownMenu.Content align="end">
-        {canAddToDataset && compactHeader && (
-          <>
-            <DropdownMenu.Item disabled={!selectedSpanId} onSelect={() => addToDataset(selectedSpanId)}>
-              <CircleDotIcon />
-              Add span to dataset
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => addToDataset()}>
-              <ListTreeIcon />
-              Add full trace to dataset
-            </DropdownMenu.Item>
-          </>
-        )}
         {!isOnTracePage && onAddTraceMocksToItem && (
           <DropdownMenu.Item onSelect={() => onAddTraceMocksToItem({ traceId })}>
             <WrenchIcon />
@@ -423,7 +408,8 @@ export function TraceDataPanelView({
       {traceId && (
         <>
           {headerSlot}
-          <DataPanel.Header ref={setHeaderElement}>
+          {/* A size container, so header actions can collapse to icons when the panel is narrow. */}
+          <DataPanel.Header className="@container">
             {isOnTracePage ? (
               <>
                 <DataPanel.HeaderContent>
