@@ -64,7 +64,9 @@ describe('READ_AGENT_PLAN_ROUTE', () => {
           agentId: 'plan-agent',
           path,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Plan capability not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, { message: 'Plan capability not found', code: 'PLAN_CAPABILITY_NOT_FOUND' }),
+      );
     });
   });
 
@@ -84,7 +86,7 @@ describe('READ_AGENT_PLAN_ROUTE', () => {
           agentId: 'plan-agent',
           path,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Invalid plan path' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Invalid plan path', code: 'PLAN_PATH_INVALID' }));
     });
   });
 

@@ -78,6 +78,8 @@ import {
   MASTRA_CLIENT_TYPE_HEADER,
   isStudioClientTypeHeader,
 } from '../constants';
+import type { ServerErrorCode, ServerProblem } from '../error-codes';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import { listFeedbackResponseSchema } from '../schemas/feedback';
 import { observabilityStorageCapabilitiesSchema } from '../schemas/system';
@@ -133,10 +135,12 @@ function createNewRoute<
     preserveHttpExceptions?: boolean;
     isCoreSupported?: () => boolean;
     onUnsupportedCore?: () => never;
+    /** Business code returned when the handler fails without a more specific code. */
+    errorCode: ServerErrorCode;
     handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>>;
   },
 ) {
-  const { handler, preserveHttpExceptions, isCoreSupported, onUnsupportedCore, ...schemas } = config;
+  const { handler, preserveHttpExceptions, isCoreSupported, onUnsupportedCore, errorCode, ...schemas } = config;
   return createRoute({
     ...def,
     ...schemas,
@@ -149,13 +153,14 @@ function createNewRoute<
           if (onUnsupportedCore) onUnsupportedCore();
           throw new HTTPException(501, {
             message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
+            code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
           });
         }
 
         return await handler(params);
       } catch (error) {
         if (preserveHttpExceptions && error instanceof HTTPException) throw error;
-        return handleError(error, `Error calling: '${def.summary.toLocaleLowerCase()}'`);
+        return handleError(error, { message: `Error calling: '${def.summary.toLocaleLowerCase()}'`, code: errorCode });
       }
     }) as ServerRouteHandler<
       InferParams<TPathSchema, TQuerySchema, TBodySchema>,
@@ -169,30 +174,50 @@ function createNewRoute<
 // Trace query route
 // ============================================================================
 
+type TraceQueryErrorBody = { code: ServerErrorCode; message: string; issues?: unknown[] };
+
+/** Adds the `problem` envelope shared by every server error body to a trace-query error body. */
+function withTraceQueryProblem(body: TraceQueryErrorBody) {
+  const problem: ServerProblem = { code: body.code };
+  if (body.issues) problem.metadata = { issues: body.issues };
+  return { ...body, problem };
+}
+
+const traceQueryProblemSchema = z
+  .object({
+    code: z.string(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
 const traceQueryMalformedBodyErrorSchema = z
   .object({
     error: z.literal('Invalid request body'),
     issues: z.array(z.object({ field: z.literal('body'), message: z.string() }).strict()),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryBodyTooLargeErrorSchema = z
   .object({
     error: z.literal('Request body too large'),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryMalformedCursorErrorSchema = z
   .object({
-    code: z.literal('TRACE_QUERY_CURSOR_MALFORMED'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_CURSOR_MALFORMED),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryCursorConflictErrorSchema = z
   .object({
-    code: z.literal('TRACE_QUERY_CURSOR_CONFLICT'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_CURSOR_CONFLICT),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
@@ -206,58 +231,65 @@ const traceQueryValidationIssueSchema = z
 
 const traceQueryValidationResponseSchema = z
   .object({
-    code: z.literal('TRACE_QUERY_INVALID'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_INVALID),
     message: z.string(),
     issues: z.array(traceQueryValidationIssueSchema),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryUnsupportedErrorSchema = z
   .object({
-    code: z.literal('TRACE_QUERY_UNSUPPORTED'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryTimeoutErrorSchema = z
   .object({
-    code: z.literal('TRACE_QUERY_EXECUTION_TIMEOUT'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_EXECUTION_TIMEOUT),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryResourceLimitErrorSchema = z
   .object({
-    code: z.literal('TRACE_QUERY_RESOURCE_LIMIT'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_RESOURCE_LIMIT),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryDiscoveryUnsupportedErrorSchema = z
   .object({
-    code: z.literal('TRACE_QUERY_DISCOVERY_UNSUPPORTED'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryValidationError: ValidationErrorHook = error => ({
   status: 422,
-  body: {
-    code: 'TRACE_QUERY_INVALID',
+  body: withTraceQueryProblem({
+    code: SERVER_ERROR_CODES.TRACE_QUERY_INVALID,
     message: 'The trace query is invalid',
     issues: error.issues.map(issue => ({
       code: 'invalid_request',
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
       message: issue.message,
     })),
-  },
+  }),
 });
 
-function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, body: Record<string, unknown>): never {
-  const message = typeof body.message === 'string' ? body.message : 'Trace query failed';
+function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, body: TraceQueryErrorBody): never {
+  const problemBody = withTraceQueryProblem(body);
   throw new HTTPException(status, {
-    message,
-    res: new Response(JSON.stringify(body), {
+    message: body.message,
+    code: body.code,
+    metadata: problemBody.problem.metadata,
+    res: new Response(JSON.stringify(problemBody), {
       status,
       headers: { 'content-type': 'application/json' },
     }),
@@ -266,7 +298,7 @@ function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, b
 
 const throwTraceQueryDiscoveryCoreUnsupported = () =>
   throwTraceQueryError(501, {
-    code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+    code: SERVER_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED,
     message: 'Trace query discovery requires a newer @mastra/core. Please upgrade.',
   });
 
@@ -281,7 +313,7 @@ function resolveTraceQueryScope(
     | 'TRACE_QUERY_UNSUPPORTED'
     | 'TRACE_QUERY_DISCOVERY_UNSUPPORTED'
     | 'TRACE_AGGREGATE_UNSUPPORTED'
-    | 'SPAN_QUERY_UNSUPPORTED' = 'TRACE_QUERY_UNSUPPORTED',
+    | 'SPAN_QUERY_UNSUPPORTED' = SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
 ): coreStorage.TraceQueryTenantScope | undefined {
   const organizationId = requestContext.get('organizationId');
   if (typeof organizationId !== 'string' || organizationId.length === 0) return undefined;
@@ -297,6 +329,7 @@ function resolveTraceQueryScope(
 }
 
 export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
+  errorCode: SERVER_ERROR_CODES.TRACES_QUERY_FAILED,
   bodySchema: coreStorage.traceQueryRequestSchema,
   responseSchema: coreStorage.traceQueryResponseSchema,
   onValidationError: traceQueryValidationError,
@@ -358,11 +391,14 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
-        throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
+        throw new HTTPException(501, {
+          message: 'This storage provider does not support observability delta polling',
+          code: SERVER_ERROR_CODES.OBSERVABILITY_DELTA_POLLING_UNSUPPORTED,
+        });
       }
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
-        throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
+        throwTraceQueryError(501, { code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED, message: error.message });
       }
       throw error;
     }
@@ -421,16 +457,17 @@ if (QUERY_TRACES.openapi) {
 
 const traceAggregateUnsupportedErrorSchema = z
   .object({
-    code: z.literal('TRACE_AGGREGATE_UNSUPPORTED'),
+    code: z.literal(SERVER_ERROR_CODES.TRACE_AGGREGATE_UNSUPPORTED),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 /** Never echoes caller input: only the predicate-complexity issue keeps its own fixed message. */
 const traceAggregateValidationError: ValidationErrorHook = error => ({
   status: 422,
-  body: {
-    code: 'TRACE_QUERY_INVALID',
+  body: withTraceQueryProblem({
+    code: SERVER_ERROR_CODES.TRACE_QUERY_INVALID,
     message: 'The trace aggregate query is invalid',
     issues: error.issues.map(issue => {
       const predicateTooComplex =
@@ -443,10 +480,11 @@ const traceAggregateValidationError: ValidationErrorHook = error => ({
           : 'The value does not match the trace-aggregate request contract',
       };
     }),
-  },
+  }),
 });
 
 export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, {
+  errorCode: SERVER_ERROR_CODES.TRACES_AGGREGATE_FAILED,
   bodySchema: coreStorage.traceAggregateRequestSchema,
   responseSchema: coreStorage.traceAggregateResponseSchema,
   onValidationError: traceAggregateValidationError,
@@ -455,7 +493,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
   isCoreSupported: supportsTraceAggregateCore,
   onUnsupportedCore: () =>
     throwTraceQueryError(501, {
-      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      code: SERVER_ERROR_CODES.TRACE_AGGREGATE_UNSUPPORTED,
       message: 'Trace aggregation requires a newer @mastra/core. Please upgrade.',
     }),
   handler: async ({
@@ -474,7 +512,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     try {
       plan = coreStorage.planTraceAggregate(
         { timeRange, where, groupBy, interval, measures, having, orderBy, limit },
-        { scope: resolveTraceQueryScope(requestContext, 'TRACE_AGGREGATE_UNSUPPORTED') },
+        { scope: resolveTraceQueryScope(requestContext, SERVER_ERROR_CODES.TRACE_AGGREGATE_UNSUPPORTED) },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -492,7 +530,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
-        throwTraceQueryError(501, { code: 'TRACE_AGGREGATE_UNSUPPORTED', message: error.message });
+        throwTraceQueryError(501, { code: SERVER_ERROR_CODES.TRACE_AGGREGATE_UNSUPPORTED, message: error.message });
       }
       throw error;
     }
@@ -537,25 +575,27 @@ if (AGGREGATE_TRACES.openapi) {
 
 const spanQueryUnsupportedErrorSchema = z
   .object({
-    code: z.literal('SPAN_QUERY_UNSUPPORTED'),
+    code: z.literal(SERVER_ERROR_CODES.SPAN_QUERY_UNSUPPORTED),
     message: z.string(),
+    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const spanQueryValidationError: ValidationErrorHook = error => ({
   status: 422,
-  body: {
-    code: 'TRACE_QUERY_INVALID',
+  body: withTraceQueryProblem({
+    code: SERVER_ERROR_CODES.TRACE_QUERY_INVALID,
     message: 'The span query is invalid',
     issues: error.issues.map(issue => ({
       code: 'invalid_request',
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
       message: issue.message,
     })),
-  },
+  }),
 });
 
 export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
+  errorCode: SERVER_ERROR_CODES.SPANS_QUERY_FAILED,
   bodySchema: coreStorage.spanQueryRequestSchema,
   responseSchema: coreStorage.spanQueryResponseSchema,
   onValidationError: spanQueryValidationError,
@@ -564,7 +604,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
   isCoreSupported: supportsSpanQueryCore,
   onUnsupportedCore: () =>
     throwTraceQueryError(501, {
-      code: 'SPAN_QUERY_UNSUPPORTED',
+      code: SERVER_ERROR_CODES.SPAN_QUERY_UNSUPPORTED,
       message: 'Span queries require a newer @mastra/core. Please upgrade.',
     }),
   handler: async ({ mastra, requestContext, timeRange, where, orderBy, page }) => {
@@ -572,7 +612,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       plan = coreStorage.planSpanQuery(
         { timeRange, where, orderBy, page },
-        { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED') },
+        { scope: resolveTraceQueryScope(requestContext, SERVER_ERROR_CODES.SPAN_QUERY_UNSUPPORTED) },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -594,7 +634,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
-        throwTraceQueryError(501, { code: 'SPAN_QUERY_UNSUPPORTED', message: error.message });
+        throwTraceQueryError(501, { code: SERVER_ERROR_CODES.SPAN_QUERY_UNSUPPORTED, message: error.message });
       }
       throw error;
     }
@@ -655,6 +695,7 @@ if (QUERY_SPANS.openapi) {
 }
 
 export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_FIELDS, {
+  errorCode: SERVER_ERROR_CODES.TRACE_QUERY_FIELDS_GET_FAILED,
   bodySchema: coreStorage.getTraceQueryFieldsArgsSchema,
   responseSchema: coreStorage.getTraceQueryFieldsResponseSchema,
   onValidationError: traceQueryValidationError,
@@ -665,7 +706,7 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   handler: async ({ mastra, requestContext, timeRange, predicateScope, search, limit }) => {
     const args = { timeRange, predicateScope, search, limit };
     const plan = coreStorage.planTraceQueryObservedFields(args, {
-      scope: resolveTraceQueryScope(requestContext, 'TRACE_QUERY_DISCOVERY_UNSUPPORTED'),
+      scope: resolveTraceQueryScope(requestContext, SERVER_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED),
     });
     let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
     try {
@@ -674,7 +715,10 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
-        throwTraceQueryError(501, { code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED', message: error.message });
+        throwTraceQueryError(501, {
+          code: SERVER_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED,
+          message: error.message,
+        });
       }
       throw error;
     }
@@ -722,6 +766,7 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
 });
 
 export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_VALUES, {
+  errorCode: SERVER_ERROR_CODES.TRACE_QUERY_VALUES_GET_FAILED,
   bodySchema: coreStorage.getTraceQueryValuesArgsSchema,
   responseSchema: coreStorage.getTraceQueryValuesResponseSchema,
   onValidationError: traceQueryValidationError,
@@ -732,7 +777,7 @@ export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   handler: async ({ mastra, requestContext, timeRange, predicateScope, path, search, limit }) => {
     const plan = coreStorage.planTraceQueryValues(
       { timeRange, predicateScope, path, search, limit },
-      { scope: resolveTraceQueryScope(requestContext, 'TRACE_QUERY_DISCOVERY_UNSUPPORTED') },
+      { scope: resolveTraceQueryScope(requestContext, SERVER_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED) },
     );
     let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
     try {
@@ -741,7 +786,10 @@ export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
-        throwTraceQueryError(501, { code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED', message: error.message });
+        throwTraceQueryError(501, {
+          code: SERVER_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED,
+          message: error.message,
+        });
       }
       throw error;
     }
@@ -785,6 +833,7 @@ for (const route of [GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES]) {
 }
 
 export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
+  errorCode: SERVER_ERROR_CODES.OBSERVABILITY_THREADS_QUERY_FAILED,
   bodySchema: coreStorage.queryThreadsInputSchema,
   responseSchema: coreStorage.queryThreadsResultSchema,
   onValidationError: traceQueryValidationError,
@@ -792,7 +841,7 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
   preserveHttpExceptions: true,
   onUnsupportedCore: () =>
     throwTraceQueryError(501, {
-      code: 'TRACE_QUERY_UNSUPPORTED',
+      code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
       message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
     }),
   handler: async ({ mastra, requestContext, traces, where, page }) => {
@@ -823,7 +872,7 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
-        throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
+        throwTraceQueryError(501, { code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED, message: error.message });
       }
       throw error;
     }
@@ -875,6 +924,7 @@ if (QUERY_THREADS.openapi) {
 // ============================================================================
 
 export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
+  errorCode: SERVER_ERROR_CODES.OBSERVABILITY_LOGS_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(logsFilterSchema, logsOrderBySchema),
   responseSchema: listLogsResponseSchema,
   handler: async ({ mastra, mode, after, limit, ...params }) => {
@@ -904,6 +954,7 @@ export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
 // ============================================================================
 
 export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
+  errorCode: SERVER_ERROR_CODES.SCORES_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(scoresFilterSchema, scoresOrderBySchema),
   responseSchema: obsListScoresResponseSchema,
   handler: async ({ mastra, mode, after, limit, ...params }) => {
@@ -929,6 +980,7 @@ export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
 });
 
 export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
+  errorCode: SERVER_ERROR_CODES.SCORE_CREATE_FAILED,
   bodySchema: createScoreBodySchema,
   responseSchema: createScoreResponseSchema,
   handler: async ({ mastra, score }) => {
@@ -941,12 +993,14 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
 });
 
 export const DELETE_SCORES = createNewRoute(NEW_ROUTE_DEFS.DELETE_SCORES, {
+  errorCode: SERVER_ERROR_CODES.SCORES_DELETE_FAILED,
   bodySchema: deleteScoresArgsSchema,
   responseSchema: deleteScoresResponseSchema,
   handler: async ({ mastra, ...params }) => {
     if (!coreFeatures.has('observability-signal-deletion')) {
       throw new HTTPException(501, {
         message: 'Score deletion requires a newer @mastra/core with observability signal deletion support.',
+        code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
       });
     }
     const args = pickParams(deleteScoresArgsSchema, params);
@@ -957,6 +1011,7 @@ export const DELETE_SCORES = createNewRoute(NEW_ROUTE_DEFS.DELETE_SCORES, {
 });
 
 export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
+  errorCode: SERVER_ERROR_CODES.SCORE_GET_FAILED,
   pathParamSchema: z.object({ scoreId: z.string() }),
   responseSchema: z.object({ score: scoreRecordSchema.nullable() }),
   handler: async ({ mastra, scoreId }) => {
@@ -967,6 +1022,7 @@ export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
 });
 
 export const GET_SCORE_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_AGGREGATE, {
+  errorCode: SERVER_ERROR_CODES.SCORE_AGGREGATE_GET_FAILED,
   bodySchema: getScoreAggregateArgsSchema,
   responseSchema: getScoreAggregateResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -977,6 +1033,7 @@ export const GET_SCORE_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_AGGRE
 });
 
 export const GET_SCORE_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_BREAKDOWN, {
+  errorCode: SERVER_ERROR_CODES.SCORE_BREAKDOWN_GET_FAILED,
   bodySchema: getScoreBreakdownArgsSchema,
   responseSchema: getScoreBreakdownResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -987,6 +1044,7 @@ export const GET_SCORE_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_BREAK
 });
 
 export const GET_SCORE_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_TIME_SERIES, {
+  errorCode: SERVER_ERROR_CODES.SCORE_TIME_SERIES_GET_FAILED,
   bodySchema: getScoreTimeSeriesArgsSchema,
   responseSchema: getScoreTimeSeriesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -997,6 +1055,7 @@ export const GET_SCORE_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_TIM
 });
 
 export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PERCENTILES, {
+  errorCode: SERVER_ERROR_CODES.SCORE_PERCENTILES_GET_FAILED,
   bodySchema: getScorePercentilesArgsSchema,
   responseSchema: getScorePercentilesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1011,6 +1070,7 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 // ============================================================================
 
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
   handler: async ({ mastra, requestContext, request, mode, after, limit, ...params }) => {
@@ -1046,6 +1106,7 @@ export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
 });
 
 export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_CREATE_FAILED,
   bodySchema: createFeedbackBodySchema,
   responseSchema: createFeedbackResponseSchema,
   handler: async ({ mastra, requestContext, feedback }) => {
@@ -1068,12 +1129,14 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
 });
 
 export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_DELETE_FAILED,
   bodySchema: deleteFeedbackArgsSchema,
   responseSchema: deleteFeedbackResponseSchema,
   handler: async ({ mastra, ...params }) => {
     if (!coreFeatures.has('observability-signal-deletion')) {
       throw new HTTPException(501, {
         message: 'Feedback deletion requires a newer @mastra/core with observability signal deletion support.',
+        code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
       });
     }
     const args = pickParams(deleteFeedbackArgsSchema, params);
@@ -1084,6 +1147,7 @@ export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
 });
 
 export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDATE_FEEDBACK_REVIEW_STATUS, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_REVIEW_STATUS_UPDATE_FAILED,
   pathParamSchema: z.object({ feedbackId: z.string() }),
   bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
   responseSchema: feedbackRecordSchema,
@@ -1094,6 +1158,7 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
 });
 
 export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_AGGREGATE, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_AGGREGATE_GET_FAILED,
   bodySchema: getFeedbackAggregateArgsSchema,
   responseSchema: getFeedbackAggregateResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1104,6 +1169,7 @@ export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
 });
 
 export const GET_FEEDBACK_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_BREAKDOWN, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_BREAKDOWN_GET_FAILED,
   bodySchema: getFeedbackBreakdownArgsSchema,
   responseSchema: getFeedbackBreakdownResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1114,6 +1180,7 @@ export const GET_FEEDBACK_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
 });
 
 export const GET_FEEDBACK_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_TIME_SERIES, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_TIME_SERIES_GET_FAILED,
   bodySchema: getFeedbackTimeSeriesArgsSchema,
   responseSchema: getFeedbackTimeSeriesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1124,6 +1191,7 @@ export const GET_FEEDBACK_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBA
 });
 
 export const GET_FEEDBACK_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_PERCENTILES, {
+  errorCode: SERVER_ERROR_CODES.FEEDBACK_PERCENTILES_GET_FAILED,
   bodySchema: getFeedbackPercentilesArgsSchema,
   responseSchema: getFeedbackPercentilesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1138,6 +1206,7 @@ export const GET_FEEDBACK_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBA
 // ============================================================================
 
 export const LIST_METRICS = createNewRoute(NEW_ROUTE_DEFS.LIST_METRICS, {
+  errorCode: SERVER_ERROR_CODES.METRICS_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(metricsFilterSchema, metricsOrderBySchema),
   responseSchema: listMetricsResponseSchema,
   handler: async ({ mastra, mode, after, limit, ...params }) => {
@@ -1163,6 +1232,7 @@ export const LIST_METRICS = createNewRoute(NEW_ROUTE_DEFS.LIST_METRICS, {
 });
 
 export const GET_METRIC_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_AGGREGATE, {
+  errorCode: SERVER_ERROR_CODES.METRIC_AGGREGATE_GET_FAILED,
   bodySchema: getMetricAggregateArgsSchema,
   responseSchema: getMetricAggregateResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1173,6 +1243,7 @@ export const GET_METRIC_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_AGG
 });
 
 export const GET_METRIC_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_BREAKDOWN, {
+  errorCode: SERVER_ERROR_CODES.METRIC_BREAKDOWN_GET_FAILED,
   bodySchema: getMetricBreakdownArgsSchema,
   responseSchema: getMetricBreakdownResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1183,6 +1254,7 @@ export const GET_METRIC_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_BRE
 });
 
 export const GET_METRIC_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_TIME_SERIES, {
+  errorCode: SERVER_ERROR_CODES.METRIC_TIME_SERIES_GET_FAILED,
   bodySchema: getMetricTimeSeriesArgsSchema,
   responseSchema: getMetricTimeSeriesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1193,6 +1265,7 @@ export const GET_METRIC_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_T
 });
 
 export const GET_METRIC_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_PERCENTILES, {
+  errorCode: SERVER_ERROR_CODES.METRIC_PERCENTILES_GET_FAILED,
   bodySchema: getMetricPercentilesArgsSchema,
   responseSchema: getMetricPercentilesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1207,6 +1280,7 @@ export const GET_METRIC_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_P
 // ============================================================================
 
 export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, {
+  errorCode: SERVER_ERROR_CODES.METRIC_NAMES_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getMetricNamesArgsSchema.partial()),
   responseSchema: getMetricNamesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1217,6 +1291,7 @@ export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, 
 });
 
 export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LABEL_KEYS, {
+  errorCode: SERVER_ERROR_CODES.METRIC_LABEL_KEYS_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getMetricLabelKeysArgsSchema),
   responseSchema: getMetricLabelKeysResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1227,6 +1302,7 @@ export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LA
 });
 
 export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LABEL_VALUES, {
+  errorCode: SERVER_ERROR_CODES.METRIC_LABEL_VALUES_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getMetricLabelValuesArgsSchema),
   responseSchema: getMetricLabelValuesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1237,6 +1313,7 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
 });
 
 export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, {
+  errorCode: SERVER_ERROR_CODES.ENTITY_TYPES_LIST_FAILED,
   responseSchema: getEntityTypesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1245,6 +1322,7 @@ export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, 
 });
 
 export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, {
+  errorCode: SERVER_ERROR_CODES.ENTITY_NAMES_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getEntityNamesArgsSchema.partial()),
   responseSchema: getEntityNamesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1255,6 +1333,7 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
 });
 
 export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES, {
+  errorCode: SERVER_ERROR_CODES.SERVICE_NAMES_LIST_FAILED,
   responseSchema: getServiceNamesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1263,6 +1342,7 @@ export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES
 });
 
 export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, {
+  errorCode: SERVER_ERROR_CODES.ENVIRONMENTS_LIST_FAILED,
   responseSchema: getEnvironmentsResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1271,6 +1351,7 @@ export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, 
 });
 
 export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
+  errorCode: SERVER_ERROR_CODES.TAGS_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getTagsArgsSchema.partial()),
   responseSchema: getTagsResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1311,7 +1392,10 @@ export const GET_CAPABILITIES = createRoute({
         capabilities: getObservabilityStorageCapabilities(observabilityStore),
       };
     } catch (error) {
-      return handleError(error, "Error calling: 'get observability capabilities'");
+      return handleError(error, {
+        message: "Error calling: 'get observability capabilities'",
+        code: SERVER_ERROR_CODES.OBSERVABILITY_CAPABILITIES_GET_FAILED,
+      });
     }
   },
 });

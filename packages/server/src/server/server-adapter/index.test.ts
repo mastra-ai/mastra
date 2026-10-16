@@ -324,7 +324,10 @@ describe('custom route forwarding', () => {
     const response = await adapter.handleCustomRouteRequestForTest('http://localhost/explode', 'GET', {}, undefined);
 
     expect(response!.status).toBe(500);
-    await expect(response!.json()).resolves.toEqual({ error: 'Internal Server Error' });
+    await expect(response!.json()).resolves.toEqual({
+      error: 'Internal Server Error',
+      problem: { code: 'UNEXPECTED_ERROR' },
+    });
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(errorSpy.mock.calls[0]![0]).toContain('GET /explode');
     expect(errorSpy.mock.calls[0]![1]).toMatchObject({ method: 'GET', path: '/explode' });
@@ -1344,15 +1347,17 @@ describe('registerUserMiddleware default implementation', () => {
 });
 
 describe('getCustomHTTPExceptionResponse', () => {
-  it('returns an attached JSON response with normalized status and headers', async () => {
+  it('adds the exception problem to an attached JSON response that has none', async () => {
     const error = new HTTPException(409, {
+      code: 'TRACE_QUERY_CURSOR_CONFLICT',
+      metadata: { cursor: 'abc' },
       res: Response.json(
         { code: 'TRACE_QUERY_CURSOR_CONFLICT', message: 'The cursor does not match the query' },
         { status: 400, headers: { 'X-Trace-Error': 'cursor' } },
       ),
     });
 
-    const response = getCustomHTTPExceptionResponse(error);
+    const response = await getCustomHTTPExceptionResponse(error);
 
     expect(response?.status).toBe(409);
     expect(response?.headers.get('content-type')).toContain('application/json');
@@ -1360,17 +1365,60 @@ describe('getCustomHTTPExceptionResponse', () => {
     await expect(response?.json()).resolves.toEqual({
       code: 'TRACE_QUERY_CURSOR_CONFLICT',
       message: 'The cursor does not match the query',
+      problem: { code: 'TRACE_QUERY_CURSOR_CONFLICT', metadata: { cursor: 'abc' } },
     });
   });
 
-  it('returns an attached text response without consuming it', async () => {
+  it('keeps a valid problem already present in an attached JSON response', async () => {
+    const body = { error: 'Bad cursor', problem: { code: 'TRACE_QUERY_CURSOR_MALFORMED', metadata: { issues: [] } } };
+    const error = new HTTPException(400, {
+      code: 'TRACE_QUERY_INVALID',
+      res: Response.json(body),
+    });
+
+    const response = await getCustomHTTPExceptionResponse(error);
+
+    await expect(response?.json()).resolves.toEqual(body);
+  });
+
+  it('replaces an invalid problem in an attached JSON response', async () => {
+    const error = new HTTPException(400, {
+      code: 'TRACE_QUERY_INVALID',
+      res: Response.json({ error: 'Bad query', problem: { code: 'NOT_IN_CATALOG' } }),
+    });
+
+    const response = await getCustomHTTPExceptionResponse(error);
+
+    await expect(response?.json()).resolves.toEqual({
+      error: 'Bad query',
+      problem: { code: 'TRACE_QUERY_INVALID' },
+    });
+  });
+
+  it('wraps a non-object JSON body with the exception message and problem', async () => {
+    const error = new HTTPException(400, {
+      message: 'Bad query',
+      code: 'TRACE_QUERY_INVALID',
+      res: Response.json(['not', 'an', 'object']),
+    });
+
+    const response = await getCustomHTTPExceptionResponse(error);
+
+    await expect(response?.json()).resolves.toEqual({
+      error: 'Bad query',
+      problem: { code: 'TRACE_QUERY_INVALID' },
+    });
+  });
+
+  it('returns an attached text response unchanged', async () => {
     const error = new HTTPException(418, {
+      code: 'UNEXPECTED_ERROR',
       res: new Response('custom text', {
         headers: { 'Content-Type': 'text/custom', 'X-Custom-Error': 'true' },
       }),
     });
 
-    const response = getCustomHTTPExceptionResponse(error);
+    const response = await getCustomHTTPExceptionResponse(error);
 
     expect(response?.status).toBe(418);
     expect(response?.headers.get('content-type')).toBe('text/custom');
@@ -1378,15 +1426,17 @@ describe('getCustomHTTPExceptionResponse', () => {
     await expect(response?.text()).resolves.toBe('custom text');
   });
 
-  it('ignores message-only HTTP exceptions', () => {
-    expect(getCustomHTTPExceptionResponse(new HTTPException(404, { message: 'Not found' }))).toBeUndefined();
+  it('ignores message-only HTTP exceptions', async () => {
+    await expect(
+      getCustomHTTPExceptionResponse(new HTTPException(404, { message: 'Not found', code: 'AGENT_NOT_FOUND' })),
+    ).resolves.toBeUndefined();
   });
 
   it.each([
     { status: 409, res: Response.json({ code: 'NOT_TRUSTED' }) },
     { status: 409, getResponse: () => Response.json({ code: 'NOT_TRUSTED' }) },
-  ])('ignores non-HTTPException values', error => {
-    expect(getCustomHTTPExceptionResponse(error)).toBeUndefined();
+  ])('ignores non-HTTPException values', async error => {
+    await expect(getCustomHTTPExceptionResponse(error)).resolves.toBeUndefined();
   });
 });
 

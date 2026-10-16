@@ -4,11 +4,13 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  formatErrorResponse,
   getCustomHTTPExceptionResponse,
   isSafeObjectKey,
   isZodError,
@@ -136,8 +138,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             status = (err as any).details.status;
           }
         }
+        const { body } = formatErrorResponse(error);
         ctx.status = status;
-        ctx.body = { error: error.message || 'Unknown error' };
+        ctx.body = { ...body, error: error.message || 'Unknown error' };
 
         // The route handler already logged this 501 at warn level. Skip the emit when only
         // Koa's default listener would receive it, since that prints to console.error.
@@ -380,7 +383,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // If this is an auth error (not just a success-with-headers), return error response
       if (authError.error) {
         ctx.status = authError.status;
-        ctx.body = { error: authError.error };
+        ctx.body = { error: authError.error, problem: authError.problem };
         return;
       }
     }
@@ -390,9 +393,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
     if (params.bodyParseError) {
       ctx.status = 400;
+      const issues = [{ field: 'body', message: params.bodyParseError.message }];
       ctx.body = {
         error: 'Invalid request body',
-        issues: [{ field: 'body', message: params.bodyParseError.message }],
+        issues,
+        problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON, metadata: { issues } },
       };
       return;
     }
@@ -411,9 +416,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
+        const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
         ctx.body = {
           error: 'Invalid query parameters',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          issues,
+          problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
         };
         return;
       }
@@ -433,9 +440,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
+        const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
         ctx.body = {
           error: 'Invalid request body',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          issues,
+          problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
         };
         return;
       }
@@ -456,9 +465,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
+        const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
         ctx.body = {
           error: 'Invalid path parameters',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          issues,
+          problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
         };
         return;
       }
@@ -494,6 +505,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           ctx.body = {
             error: permissionError.error,
             message: permissionError.message,
+            problem: permissionError.problem,
           };
           return;
         }
@@ -508,7 +520,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
     if (fgaError) {
       ctx.status = fgaError.status;
-      ctx.body = { error: fgaError.error, message: fgaError.message };
+      ctx.body = { error: fgaError.error, message: fgaError.message, problem: fgaError.problem };
       return;
     }
 
@@ -529,7 +541,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         });
         (ctx as any)._mastraLoggedNotImplementedError = httpStatus === 501 ? error : undefined;
       }
-      const customResponse = getCustomHTTPExceptionResponse(error);
+      const customResponse = await getCustomHTTPExceptionResponse(error);
       if (customResponse) {
         ctx.status = customResponse.status;
         customResponse.headers.forEach((value, name) => ctx.set(name, value));
@@ -964,7 +976,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
               if (authError.error) {
                 ctx.status = authError.status;
-                ctx.body = { error: authError.error };
+                ctx.body = { error: authError.error, problem: authError.problem };
                 return;
               }
             }
@@ -988,6 +1000,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
                 ctx.body = {
                   error: permissionError.error,
                   message: permissionError.message,
+                  problem: permissionError.problem,
                 };
                 return;
               }
@@ -1004,7 +1017,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           });
           if (fgaError) {
             ctx.status = fgaError.status;
-            ctx.body = { error: fgaError.error, message: fgaError.message };
+            ctx.body = { error: fgaError.error, message: fgaError.message, problem: fgaError.problem };
             return;
           }
         }

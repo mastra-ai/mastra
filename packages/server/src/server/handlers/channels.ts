@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/di';
 import { coreFeatures } from '@mastra/core/features';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   channelPlatformPathParams,
@@ -26,7 +27,10 @@ import { handleError } from './error';
 
 function assertChannelsAvailable(): void {
   if (!coreFeatures.has('channels')) {
-    throw new HTTPException(501, { message: 'Channels require a newer version of @mastra/core' });
+    throw new HTTPException(501, {
+      message: 'Channels require a newer version of @mastra/core',
+      code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
+    });
   }
 }
 
@@ -50,6 +54,8 @@ async function getChannelOrThrow(mastra: Mastra, platform: string): Promise<Chan
     const available = channels.map(c => c.id).join(', ');
     throw new HTTPException(404, {
       message: `Channel "${platform}" is not registered. Available: ${available || 'none'}`,
+      code: SERVER_ERROR_CODES.CHANNEL_PLATFORM_NOT_REGISTERED,
+      metadata: { platform },
     });
   }
   return channel;
@@ -95,7 +101,11 @@ async function assertChannelAgentWriteAccess(
   }
 
   if (action === 'connect') {
-    throw new HTTPException(404, { message: `Agent "${agentId}" not found` });
+    throw new HTTPException(404, {
+      message: `Agent "${agentId}" not found`,
+      code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
+      metadata: { agentId },
+    });
   }
 
   // Disconnect against an unknown agentId = orphan cleanup (stored agent was
@@ -107,7 +117,7 @@ async function assertChannelAgentWriteAccess(
   if (hasAdminBypass(requestContext, 'channels')) return;
   if (hasScopedPermission({ requestContext, resource: 'channels', action: 'write' })) return;
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: SERVER_ERROR_CODES.CHANNEL_INSTALLATION_NOT_FOUND });
 }
 
 // ============================================================================
@@ -141,7 +151,10 @@ export const LIST_CHANNEL_PLATFORMS_ROUTE = createRoute({
         };
       });
     } catch (error) {
-      return handleError(error, 'Error listing channel platforms');
+      return handleError(error, {
+        message: 'Error listing channel platforms',
+        code: SERVER_ERROR_CODES.CHANNEL_PLATFORMS_LIST_FAILED,
+      });
     }
   },
 });
@@ -170,7 +183,10 @@ export const LIST_CHANNEL_INSTALLATIONS_ROUTE = createRoute({
 
       return await channel.listInstallations();
     } catch (error) {
-      return handleError(error, 'Error listing channel installations');
+      return handleError(error, {
+        message: 'Error listing channel installations',
+        code: SERVER_ERROR_CODES.CHANNEL_INSTALLATIONS_LIST_FAILED,
+      });
     }
   },
 });
@@ -197,6 +213,8 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
       if (!channel.connect) {
         throw new HTTPException(400, {
           message: `Channel "${platform}" does not support programmatic connection`,
+          code: SERVER_ERROR_CODES.CHANNEL_PROGRAMMATIC_CONNECTION_UNSUPPORTED,
+          metadata: { platform },
         });
       }
 
@@ -204,7 +222,10 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
 
       return await channel.connect(agentId, options);
     } catch (error) {
-      return handleError(error, 'Error connecting agent to channel');
+      return handleError(error, {
+        message: 'Error connecting agent to channel',
+        code: SERVER_ERROR_CODES.CHANNEL_CONNECT_FAILED,
+      });
     }
   },
 });
@@ -244,7 +265,10 @@ export const RECONCILE_CHANNEL_ROUTE = createRoute({
 
       return await channel.reconcileInstallation(agentId);
     } catch (error) {
-      return handleError(error, 'Error reconciling channel installation');
+      return handleError(error, {
+        message: 'Error reconciling channel installation',
+        code: SERVER_ERROR_CODES.CHANNEL_INSTALLATION_RECONCILE_FAILED,
+      });
     }
   },
 });
@@ -270,6 +294,8 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
       if (!channel.disconnect) {
         throw new HTTPException(400, {
           message: `Channel "${platform}" does not support programmatic disconnection`,
+          code: SERVER_ERROR_CODES.CHANNEL_PROGRAMMATIC_CONNECTION_UNSUPPORTED,
+          metadata: { platform },
         });
       }
 
@@ -278,7 +304,10 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
       await channel.disconnect(agentId);
       return { success: true };
     } catch (error) {
-      return handleError(error, 'Error disconnecting agent from channel');
+      return handleError(error, {
+        message: 'Error disconnecting agent from channel',
+        code: SERVER_ERROR_CODES.CHANNEL_DISCONNECT_FAILED,
+      });
     }
   },
 });

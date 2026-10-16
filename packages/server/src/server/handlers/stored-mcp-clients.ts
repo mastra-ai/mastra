@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   storedMCPClientIdPathParams,
@@ -40,12 +41,18 @@ export const LIST_STORED_MCP_CLIENTS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const scope = await getStoredResourceScope(mastra, requestContext);
@@ -60,7 +67,10 @@ export const LIST_STORED_MCP_CLIENTS_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error listing stored MCP clients');
+      return handleError(error, {
+        message: 'Error listing stored MCP clients',
+        code: SERVER_ERROR_CODES.STORED_MCP_CLIENTS_LIST_FAILED,
+      });
     }
   },
 });
@@ -85,24 +95,37 @@ export const GET_STORED_MCP_CLIENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const mcpClient = await mcpClientStore.getByIdResolved(storedMCPClientId, { status });
 
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored MCP client with id ${storedMCPClientId} not found`,
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_NOT_FOUND,
+          metadata: { storedMCPClientId },
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       return mcpClient;
     } catch (error) {
-      return handleError(error, 'Error getting stored MCP client');
+      return handleError(error, {
+        message: 'Error getting stored MCP client',
+        code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_GET_FAILED,
+      });
     }
   },
 });
@@ -125,12 +148,18 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       // Derive ID from name if not explicitly provided
@@ -139,13 +168,18 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive MCP client ID from name. Please provide an explicit id.',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_ID_DERIVATION_FAILED,
         });
       }
 
       // Check if MCP client with this ID already exists
       const existing = await mcpClientStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `MCP client with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `MCP client with id ${id} already exists`,
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_ALREADY_EXISTS,
+          metadata: { storedMCPClientId: id },
+        });
       }
 
       await mcpClientStore.create({
@@ -163,12 +197,18 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       // Use draft status since newly created entities start as drafts
       const resolved = await mcpClientStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created MCP client' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created MCP client',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_CREATED_RESOLVE_FAILED,
+        });
       }
 
       return resolved;
     } catch (error) {
-      return handleError(error, 'Error creating stored MCP client');
+      return handleError(error, {
+        message: 'Error creating stored MCP client',
+        code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_CREATE_FAILED,
+      });
     }
   },
 });
@@ -203,18 +243,28 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       // Check if MCP client exists
       const existing = await mcpClientStore.getById(storedMCPClientId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored MCP client with id ${storedMCPClientId} not found`,
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_NOT_FOUND,
+          metadata: { storedMCPClientId },
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -255,12 +305,18 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       // Return the resolved MCP client with the latest (draft) version so the UI sees its edits
       const resolved = await mcpClientStore.getByIdResolved(storedMCPClientId, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated MCP client' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated MCP client',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_UPDATED_RESOLVE_FAILED,
+        });
       }
 
       return resolved;
     } catch (error) {
-      return handleError(error, 'Error updating stored MCP client');
+      return handleError(error, {
+        message: 'Error updating stored MCP client',
+        code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_UPDATE_FAILED,
+      });
     }
   },
 });
@@ -283,18 +339,28 @@ export const DELETE_STORED_MCP_CLIENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       // Check if MCP client exists
       const existing = await mcpClientStore.getById(storedMCPClientId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored MCP client with id ${storedMCPClientId} not found`,
+          code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_NOT_FOUND,
+          metadata: { storedMCPClientId },
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
@@ -305,7 +371,10 @@ export const DELETE_STORED_MCP_CLIENT_ROUTE = createRoute({
         message: `MCP client ${storedMCPClientId} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, 'Error deleting stored MCP client');
+      return handleError(error, {
+        message: 'Error deleting stored MCP client',
+        code: SERVER_ERROR_CODES.STORED_MCP_CLIENT_DELETE_FAILED,
+      });
     }
   },
 });

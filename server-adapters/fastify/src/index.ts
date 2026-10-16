@@ -3,11 +3,13 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  formatErrorResponse,
   getCustomHTTPExceptionResponse,
   isSafeObjectKey,
   isZodError,
@@ -580,7 +582,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         // If this is an auth error (not just a success-with-headers), return error response
         if (authError.error) {
-          return reply.status(authError.status).send({ error: authError.error });
+          return reply.status(authError.status).send({ error: authError.error, problem: authError.problem });
         }
       }
 
@@ -588,9 +590,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
       // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
       if (params.bodyParseError) {
+        const issues = [{ field: 'body', message: params.bodyParseError.message }];
         return reply.status(400).send({
           error: 'Invalid request body',
-          issues: [{ field: 'body', message: params.bodyParseError.message }],
+          issues,
+          problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON, metadata: { issues } },
         });
       }
 
@@ -605,9 +609,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'query');
             return reply.status(status).send(body);
           }
+          const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
           return reply.status(400).send({
             error: 'Invalid query parameters',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            issues,
+            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
           });
         }
       }
@@ -623,9 +629,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'body');
             return reply.status(status).send(body);
           }
+          const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
           return reply.status(400).send({
             error: 'Invalid request body',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            issues,
+            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
           });
         }
       }
@@ -642,9 +650,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'path');
             return reply.status(status).send(body);
           }
+          const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
           return reply.status(400).send({
             error: 'Invalid path parameters',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            issues,
+            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
           });
         }
       }
@@ -678,6 +688,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             return reply.status(permissionError.status).send({
               error: permissionError.error,
               message: permissionError.message,
+              problem: permissionError.problem,
             });
           }
         }
@@ -690,7 +701,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(typeof params.body === 'object' ? params.body : {}),
       });
       if (fgaError) {
-        return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+        return reply
+          .status(fgaError.status)
+          .send({ error: fgaError.error, message: fgaError.message, problem: fgaError.problem });
       }
 
       try {
@@ -709,31 +722,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method: route.method,
           });
         }
-        const customResponse = getCustomHTTPExceptionResponse(error);
+        const customResponse = await getCustomHTTPExceptionResponse(error);
         if (customResponse) {
           customResponse.headers.forEach((value, name) => reply.header(name, value));
           await reply.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
           return;
         }
 
-        // Check if it's an HTTPException or MastraError with a status code
-        let status = 500;
-        if (error && typeof error === 'object') {
-          // Check for direct status property (HTTPException)
-          if ('status' in error) {
-            status = (error as any).status;
-          }
-          // Check for MastraError with status in details
-          else if (
-            'details' in error &&
-            error.details &&
-            typeof error.details === 'object' &&
-            'status' in error.details
-          ) {
-            status = (error.details as any).status;
-          }
-        }
-        await reply.status(status).send({ error: error instanceof Error ? error.message : 'Unknown error' });
+        const { status, body } = formatErrorResponse(error);
+        await reply.status(status).send(body);
       }
     };
 
@@ -749,7 +746,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       route.maxBodySize !== undefined
         ? (error: Error & { code?: string }, _request: FastifyRequest, reply: FastifyReply) => {
             if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
-              return reply.status(413).send({ error: 'Request body too large' });
+              return reply.status(413).send({
+                error: 'Request body too large',
+                problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: maxSize } },
+              });
             }
             throw error;
           }
@@ -824,7 +824,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             }
           }
           if (authError.error) {
-            return reply.status(authError.status).send({ error: authError.error });
+            return reply.status(authError.status).send({ error: authError.error, problem: authError.problem });
           }
         }
 
@@ -853,6 +853,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
               return reply.status(permissionError.status).send({
                 error: permissionError.error,
                 message: permissionError.message,
+                problem: permissionError.problem,
               });
             }
           }
@@ -867,7 +868,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             : {}),
         });
         if (fgaError) {
-          return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+          return reply
+            .status(fgaError.status)
+            .send({ error: fgaError.error, message: fgaError.message, problem: fgaError.problem });
         }
 
         const response = await this.handleCustomRouteRequest(

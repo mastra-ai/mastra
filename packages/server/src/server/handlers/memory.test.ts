@@ -548,7 +548,13 @@ describe('Memory Handlers', () => {
           threadId: undefined as any,
           agentId: 'test-agent',
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Argument "threadId" is required',
+          code: 'REQUEST_ARGUMENT_REQUIRED',
+          metadata: { argument: 'threadId' },
+        }),
+      );
     });
 
     it('should throw 404 when thread is not found', async () => {
@@ -566,7 +572,7 @@ describe('Memory Handlers', () => {
           threadId: 'non-existent',
           agentId: 'test-agent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' }));
       expect(spy).toHaveBeenCalledWith({ threadId: 'non-existent' });
     });
 
@@ -647,7 +653,9 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           messages: [] as MastraDBMessage[],
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'Memory is not initialized', code: 'MEMORY_NOT_CONFIGURED' }),
+      );
     });
 
     it('should throw error when messages are not provided', async () => {
@@ -663,7 +671,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           messages: undefined as unknown as MastraDBMessage[],
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Messages are required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Messages are required', code: 'MESSAGES_REQUIRED' }));
     });
 
     it('should throw error when messages is not an array', async () => {
@@ -679,7 +687,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           messages: 'not-an-array' as unknown as MastraDBMessage[],
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Messages should be an array' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Messages should be an array', code: 'MESSAGES_REQUIRED' }));
     });
 
     it('should save messages successfully', async () => {
@@ -754,7 +762,10 @@ describe('Memory Handlers', () => {
           messages,
         }),
       ).rejects.toThrow(
-        new HTTPException(400, { message: 'All messages for the same threadId must use the same resourceId.' }),
+        new HTTPException(400, {
+          message: 'All messages for the same threadId must use the same resourceId.',
+          code: 'MESSAGES_THREAD_RESOURCE_MISMATCH',
+        }),
       );
     });
 
@@ -1052,7 +1063,9 @@ describe('Memory Handlers', () => {
           agentId: undefined as any,
           resourceId: 'test-resource',
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'Memory is not initialized', code: 'MEMORY_NOT_CONFIGURED' }),
+      );
     });
 
     it('should throw error when resourceId is not provided', async () => {
@@ -1068,7 +1081,13 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           resourceId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Argument "resourceId" is required',
+          code: 'REQUEST_ARGUMENT_REQUIRED',
+          metadata: { argument: 'resourceId' },
+        }),
+      );
     });
 
     it('should create thread successfully', async () => {
@@ -1207,7 +1226,13 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           page: 0,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Argument "threadId" is required',
+          code: 'REQUEST_ARGUMENT_REQUIRED',
+          metadata: { argument: 'threadId' },
+        }),
+      );
     });
 
     it('should throw 404 when thread is not found', async () => {
@@ -1226,7 +1251,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           page: 0,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' }));
     });
 
     it('should return paginated messages for valid thread', async () => {
@@ -1634,7 +1659,7 @@ describe('Memory Handlers', () => {
           messageIds: undefined as any,
           agentId: 'test-agent',
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'messageIds is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'messageIds is required', code: 'MESSAGE_IDS_REQUIRED' }));
     });
 
     it('should use storage fallback when storage is configured but no agentId provided', async () => {
@@ -1769,7 +1794,12 @@ describe('Memory Handlers', () => {
           messageIds: ['orphaned-message'],
           agentId: 'test-agent',
         }),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: unable to verify message thread access' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: unable to verify message thread access',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
       expect(require).not.toHaveBeenCalled();
       expect(deleteSpy).not.toHaveBeenCalled();
     });
@@ -1934,7 +1964,12 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             threadId: 'user-b-thread',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toThrow(
+          new HTTPException(403, {
+            message: 'Access denied: thread belongs to a different resource',
+            code: 'THREAD_ACCESS_DENIED',
+          }),
+        );
       });
 
       it('should allow access when resourceId matches thread owner', async () => {
@@ -2186,7 +2221,12 @@ describe('Memory Handlers', () => {
             threadId: 'user-b-thread',
             page: 0,
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toThrow(
+          new HTTPException(403, {
+            message: 'Access denied: thread belongs to a different resource',
+            code: 'THREAD_ACCESS_DENIED',
+          }),
+        );
       });
     });
 
@@ -2236,7 +2276,12 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             threadId: 'support',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toThrow(
+          new HTTPException(403, {
+            message: 'Access denied: thread belongs to a different resource',
+            code: 'THREAD_ACCESS_DENIED',
+          }),
+        );
 
         expect(spy).not.toHaveBeenCalled();
         const thread = await mockMemory.getThreadById({ threadId: 'support' });
@@ -2277,7 +2322,12 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             threadId: 'user-b-thread',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toThrow(
+          new HTTPException(403, {
+            message: 'Access denied: thread belongs to a different resource',
+            code: 'THREAD_ACCESS_DENIED',
+          }),
+        );
       });
 
       it('should allow deletion when resourceId matches thread owner', async () => {
@@ -2314,7 +2364,12 @@ describe('Memory Handlers', () => {
             threadId: 'user-b-thread',
             title: 'Hacked Title',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toThrow(
+          new HTTPException(403, {
+            message: 'Access denied: thread belongs to a different resource',
+            code: 'THREAD_ACCESS_DENIED',
+          }),
+        );
       });
     });
 
@@ -2434,7 +2489,10 @@ describe('Memory Handlers', () => {
             messages,
           }),
         ).rejects.toThrow(
-          new HTTPException(403, { message: 'Access denied: cannot save messages for a different resource' }),
+          new HTTPException(403, {
+            message: 'Access denied: cannot save messages for a different resource',
+            code: 'MESSAGES_RESOURCE_ACCESS_DENIED',
+          }),
         );
       });
 
@@ -2501,7 +2559,12 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             messages,
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toThrow(
+          new HTTPException(403, {
+            message: 'Access denied: thread belongs to a different resource',
+            code: 'THREAD_ACCESS_DENIED',
+          }),
+        );
       });
 
       it('should allow saving messages to new thread that does not exist yet', async () => {
@@ -2807,6 +2870,7 @@ describe('Memory Handlers', () => {
         ).rejects.toThrow(
           new HTTPException(403, {
             message: 'Access denied: thread belongs to a different resource',
+            code: 'THREAD_ACCESS_DENIED',
           }),
         );
       });

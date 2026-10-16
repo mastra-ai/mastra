@@ -1,5 +1,6 @@
 import { EMBEDDING_MODELS } from '@mastra/core/llm';
 import type { MastraVector, QueryResult, IndexStats, VectorFilter } from '@mastra/core/vector';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   vectorNamePathParams,
@@ -48,12 +49,19 @@ interface QueryRequest {
 
 function getVector(mastra: Context['mastra'], vectorName?: string): MastraVector {
   if (!vectorName) {
-    throw new HTTPException(400, { message: 'Vector name is required' });
+    throw new HTTPException(400, {
+      message: 'Vector name is required',
+      code: SERVER_ERROR_CODES.VECTOR_STORE_NAME_REQUIRED,
+    });
   }
 
   const vector = mastra.getVector(vectorName);
   if (!vector) {
-    throw new HTTPException(404, { message: `Vector store ${vectorName} not found` });
+    throw new HTTPException(404, {
+      message: `Vector store ${vectorName} not found`,
+      code: SERVER_ERROR_CODES.VECTOR_STORE_NOT_FOUND,
+      metadata: { vectorName },
+    });
   }
 
   return vector;
@@ -70,14 +78,17 @@ export async function upsertVectors({
 }: VectorContext & UpsertRequest) {
   try {
     if (!indexName || !vectors || !Array.isArray(vectors)) {
-      throw new HTTPException(400, { message: 'Invalid request index. indexName and vectors array are required.' });
+      throw new HTTPException(400, {
+        message: 'Invalid request index. indexName and vectors array are required.',
+        code: SERVER_ERROR_CODES.VECTOR_VECTORS_REQUIRED,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
     const result = await vector.upsert({ indexName, vectors, metadata, ids });
     return { ids: result };
   } catch (error) {
-    return handleError(error, 'Error upserting vectors');
+    return handleError(error, { message: 'Error upserting vectors', code: SERVER_ERROR_CODES.VECTORS_UPSERT_FAILED });
   }
 }
 
@@ -93,18 +104,22 @@ export async function createIndex({
     if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
       throw new HTTPException(400, {
         message: 'Invalid request index, indexName and positive dimension number are required.',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_DIMENSION_INVALID,
       });
     }
 
     if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
-      throw new HTTPException(400, { message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct' });
+      throw new HTTPException(400, {
+        message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_METRIC_INVALID,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
     await vector.createIndex({ indexName, dimension, metric });
     return { success: true };
   } catch (error) {
-    return handleError(error, 'Error creating index');
+    return handleError(error, { message: 'Error creating index', code: SERVER_ERROR_CODES.VECTOR_INDEX_CREATE_FAILED });
   }
 }
 
@@ -120,14 +135,17 @@ export async function queryVectors({
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & QueryRequest) {
   try {
     if (!indexName || !queryVector || !Array.isArray(queryVector)) {
-      throw new HTTPException(400, { message: 'Invalid request query. indexName and queryVector array are required.' });
+      throw new HTTPException(400, {
+        message: 'Invalid request query. indexName and queryVector array are required.',
+        code: SERVER_ERROR_CODES.VECTOR_QUERY_VECTOR_REQUIRED,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
     const results: QueryResult[] = await vector.query({ indexName, queryVector, topK, filter, includeVector });
     return results;
   } catch (error) {
-    return handleError(error, 'Error querying vectors');
+    return handleError(error, { message: 'Error querying vectors', code: SERVER_ERROR_CODES.VECTORS_QUERY_FAILED });
   }
 }
 
@@ -139,7 +157,10 @@ export async function listIndexes({ mastra, vectorName }: Pick<VectorContext, 'm
     const indexes = await vector.listIndexes();
     return indexes.filter(Boolean);
   } catch (error) {
-    return handleError(error, 'Error listing indexes');
+    return handleError(error, {
+      message: 'Error listing indexes',
+      code: SERVER_ERROR_CODES.VECTOR_INDEXES_LIST_FAILED,
+    });
   }
 }
 
@@ -151,7 +172,10 @@ export async function describeIndex({
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & { indexName?: string }) {
   try {
     if (!indexName) {
-      throw new HTTPException(400, { message: 'Index name is required' });
+      throw new HTTPException(400, {
+        message: 'Index name is required',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
@@ -163,7 +187,10 @@ export async function describeIndex({
       metric: stats.metric?.toLowerCase(),
     };
   } catch (error) {
-    return handleError(error, 'Error describing index');
+    return handleError(error, {
+      message: 'Error describing index',
+      code: SERVER_ERROR_CODES.VECTOR_INDEX_DESCRIBE_FAILED,
+    });
   }
 }
 
@@ -175,14 +202,17 @@ export async function deleteIndex({
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & { indexName?: string }) {
   try {
     if (!indexName) {
-      throw new HTTPException(400, { message: 'Index name is required' });
+      throw new HTTPException(400, {
+        message: 'Index name is required',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
     await vector.deleteIndex({ indexName });
     return { success: true };
   } catch (error) {
-    return handleError(error, 'Error deleting index');
+    return handleError(error, { message: 'Error deleting index', code: SERVER_ERROR_CODES.VECTOR_INDEX_DELETE_FAILED });
   }
 }
 
@@ -204,7 +234,10 @@ export async function listVectorStores({ mastra }: Pick<VectorContext, 'mastra'>
 
     return { vectors: vectorList };
   } catch (error) {
-    return handleError(error, 'Error listing vector stores');
+    return handleError(error, {
+      message: 'Error listing vector stores',
+      code: SERVER_ERROR_CODES.VECTOR_STORES_LIST_FAILED,
+    });
   }
 }
 
@@ -228,14 +261,17 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
       const { indexName, vectors, metadata, ids } = params;
 
       if (!indexName || !vectors || !Array.isArray(vectors)) {
-        throw new HTTPException(400, { message: 'Invalid request index. indexName and vectors array are required.' });
+        throw new HTTPException(400, {
+          message: 'Invalid request index. indexName and vectors array are required.',
+          code: SERVER_ERROR_CODES.VECTOR_VECTORS_REQUIRED,
+        });
       }
 
       const vector = getVector(mastra, vectorName);
       const result = await vector.upsert({ indexName, vectors, metadata, ids });
       return { ids: result };
     } catch (error) {
-      return handleError(error, 'Error upserting vectors');
+      return handleError(error, { message: 'Error upserting vectors', code: SERVER_ERROR_CODES.VECTORS_UPSERT_FAILED });
     }
   },
 });
@@ -258,18 +294,25 @@ export const CREATE_INDEX_ROUTE = createRoute({
       if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
         throw new HTTPException(400, {
           message: 'Invalid request index, indexName and positive dimension number are required.',
+          code: SERVER_ERROR_CODES.VECTOR_INDEX_DIMENSION_INVALID,
         });
       }
 
       if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
-        throw new HTTPException(400, { message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct' });
+        throw new HTTPException(400, {
+          message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct',
+          code: SERVER_ERROR_CODES.VECTOR_INDEX_METRIC_INVALID,
+        });
       }
 
       const vector = getVector(mastra, vectorName);
       await vector.createIndex({ indexName, dimension, metric });
       return { success: true };
     } catch (error) {
-      return handleError(error, 'Error creating index');
+      return handleError(error, {
+        message: 'Error creating index',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_CREATE_FAILED,
+      });
     }
   },
 });
@@ -292,6 +335,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
       if (!indexName || !queryVector || !Array.isArray(queryVector)) {
         throw new HTTPException(400, {
           message: 'Invalid request query. indexName and queryVector array are required.',
+          code: SERVER_ERROR_CODES.VECTOR_QUERY_VECTOR_REQUIRED,
         });
       }
 
@@ -306,7 +350,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
       });
       return results;
     } catch (error) {
-      return handleError(error, 'Error querying vectors');
+      return handleError(error, { message: 'Error querying vectors', code: SERVER_ERROR_CODES.VECTORS_QUERY_FAILED });
     }
   },
 });
@@ -327,7 +371,10 @@ export const LIST_INDEXES_ROUTE = createRoute({
       const indexes = await vector.listIndexes();
       return indexes.filter(Boolean);
     } catch (error) {
-      return handleError(error, 'Error listing indexes');
+      return handleError(error, {
+        message: 'Error listing indexes',
+        code: SERVER_ERROR_CODES.VECTOR_INDEXES_LIST_FAILED,
+      });
     }
   },
 });
@@ -345,7 +392,10 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
-        throw new HTTPException(400, { message: 'Index name is required' });
+        throw new HTTPException(400, {
+          message: 'Index name is required',
+          code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+        });
       }
 
       const vector = getVector(mastra, vectorName);
@@ -357,7 +407,10 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
         metric: stats.metric?.toLowerCase(),
       };
     } catch (error) {
-      return handleError(error, 'Error describing index');
+      return handleError(error, {
+        message: 'Error describing index',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_DESCRIBE_FAILED,
+      });
     }
   },
 });
@@ -375,14 +428,20 @@ export const DELETE_INDEX_ROUTE = createRoute({
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
-        throw new HTTPException(400, { message: 'Index name is required' });
+        throw new HTTPException(400, {
+          message: 'Index name is required',
+          code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+        });
       }
 
       const vector = getVector(mastra, vectorName);
       await vector.deleteIndex({ indexName: indexName });
       return { success: true };
     } catch (error) {
-      return handleError(error, 'Error deleting index');
+      return handleError(error, {
+        message: 'Error deleting index',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_DELETE_FAILED,
+      });
     }
   },
 });
@@ -412,7 +471,10 @@ export const LIST_VECTORS_ROUTE = createRoute({
 
       return { vectors: vectorList };
     } catch (error) {
-      return handleError(error, 'Error listing vector stores');
+      return handleError(error, {
+        message: 'Error listing vector stores',
+        code: SERVER_ERROR_CODES.VECTOR_STORES_LIST_FAILED,
+      });
     }
   },
 });
@@ -439,7 +501,7 @@ export const LIST_EMBEDDERS_ROUTE = createRoute({
 
       return { embedders: embeddersList };
     } catch (error) {
-      return handleError(error, 'Error listing embedders');
+      return handleError(error, { message: 'Error listing embedders', code: SERVER_ERROR_CODES.EMBEDDERS_LIST_FAILED });
     }
   },
 });

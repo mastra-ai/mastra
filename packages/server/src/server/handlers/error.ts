@@ -1,5 +1,7 @@
 import type { ZodError } from 'zod';
 
+import { SERVER_ERROR_CODES, isServerErrorCode } from '../error-codes';
+import type { ServerErrorCode, ServerProblem } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
@@ -113,12 +115,14 @@ export function isZodError(error: unknown): error is ZodError<any> {
 
 /**
  * Formats a ZodError into a structured validation error response.
- * Returns an object with an error message and an array of field-specific issues.
+ * Returns an object with an error message, an array of field-specific issues,
+ * and a `REQUEST_VALIDATION_FAILED` problem carrying the same issues.
  */
 export function formatZodError(
   error: ZodErrorLike,
   context: string,
-): { error: string; issues: Array<{ field: string; message: string }> } {
+  location?: 'query' | 'body' | 'path',
+): { error: string; issues: Array<{ field: string; message: string }>; problem: ServerProblem } {
   const issues = error.issues.map(e => ({
     field: e.path.length > 0 ? e.path.map(p => String(p)).join('.') : 'root',
     message: e.message,
@@ -127,20 +131,65 @@ export function formatZodError(
   return {
     error: `Invalid ${context}`,
     issues,
+    problem: {
+      code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+      metadata: location ? { issues, location } : { issues },
+    },
   };
 }
 
+/**
+ * Fallback used by `handleError` when the thrown error doesn't carry a more
+ * specific business code. `code` is the operation code of the endpoint
+ * (e.g. `AGENT_GET_FAILED`).
+ */
+export type HandleErrorFallback = {
+  message: string;
+  code: ServerErrorCode;
+  metadata?: Record<string, unknown>;
+};
+
+function getErrorId(error: unknown): string | undefined {
+  const id = error && typeof error === 'object' && 'id' in error ? error.id : undefined;
+  return typeof id === 'string' ? id : undefined;
+}
+
+/** Only plain-object MastraError `details` are forwarded; core fills them with ids such as `runId`. */
+function getErrorDetails(error: unknown): Record<string, unknown> | undefined {
+  const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return undefined;
+  return details as Record<string, unknown>;
+}
+
+function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Record<string, unknown> | undefined {
+  const merged = Object.assign({}, ...parts.filter(Boolean));
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
 // Helper to handle errors consistently
-export function handleError(error: unknown, defaultMessage: string): never {
+export function handleError(error: unknown, fallback: HandleErrorFallback): never {
+  // Already carries its own problem; rethrow as-is so nested handlers don't overwrite it.
+  if (error instanceof HTTPException) {
+    throw error;
+  }
+
   if (isModelNotAllowedError(error)) {
+    const modelPolicy = {
+      allowed: error.allowed,
+      attempted: error.attempted,
+      offendingLabel: error.offendingLabel,
+    };
+    const metadata = mergeMetadata(fallback.metadata, modelPolicy);
+    const problem: ServerProblem = metadata
+      ? { code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED, metadata }
+      : { code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED };
     const body = {
       error: {
         code: error.code,
         message: error.message,
-        allowed: error.allowed,
-        attempted: error.attempted,
-        offendingLabel: error.offendingLabel,
+        ...modelPolicy,
       },
+      problem,
     };
     const res = new Response(JSON.stringify(body), {
       status: 422,
@@ -150,8 +199,12 @@ export function handleError(error: unknown, defaultMessage: string): never {
       res,
       message: error.message,
       cause: error,
+      code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED,
+      metadata,
     });
   }
+
+  const errorId = getErrorId(error);
 
   // A losing concurrent resume, or a recover of a run that is live or suspended, is a conflict on
   // run state, not a malformed request, so it maps to 409 and clients can distinguish it from a
@@ -161,6 +214,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: isServerErrorCode(errorId) ? errorId : fallback.code,
+      metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
 
@@ -171,6 +226,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: SERVER_ERROR_CODES.OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT,
+      metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
 
@@ -179,6 +236,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: SERVER_ERROR_CODES.WORKFLOW_SCHEMA_VALIDATION_FAILED,
+      metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
 
@@ -193,6 +252,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: SERVER_ERROR_CODES.OBSERVABILITY_OPERATION_NOT_SUPPORTED,
+      metadata: fallback.metadata,
     });
   }
 
@@ -201,8 +262,11 @@ export function handleError(error: unknown, defaultMessage: string): never {
   const apiErrorStatus = apiError.status || apiError.details?.status || 500;
 
   throw new HTTPException(apiErrorStatus as StatusCode, {
-    message: apiError.message || defaultMessage,
+    message: apiError.message || fallback.message,
     stack: apiError.stack,
     cause: apiError.cause,
+    // An error whose id is already a catalog code keeps it; anything else gets the operation code.
+    code: isServerErrorCode(errorId) ? errorId : fallback.code,
+    metadata: fallback.metadata,
   });
 }

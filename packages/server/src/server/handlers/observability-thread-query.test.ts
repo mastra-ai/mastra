@@ -76,6 +76,7 @@ describe('QUERY_THREADS', () => {
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
         message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
+        problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
       });
       expect(getStore).not.toHaveBeenCalled();
     } finally {
@@ -100,6 +101,7 @@ describe('QUERY_THREADS', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Root duration predicates are not supported by the configured observability store',
+      problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
     });
     expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
   });
@@ -122,6 +124,7 @@ describe('QUERY_THREADS', () => {
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
         message: 'Context identifier predicates are not supported by the configured observability store',
+        problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
     }
@@ -146,6 +149,7 @@ describe('QUERY_THREADS', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Root duration predicates are not supported by the configured observability store',
+      problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
     });
     expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
   });
@@ -335,6 +339,7 @@ describe('QUERY_THREADS', () => {
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
         message: 'Advanced thread queries are not supported by the configured observability store',
+        problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
     }
@@ -352,6 +357,7 @@ describe('QUERY_THREADS', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Observability storage domain is not available',
+      problem: { code: 'TRACE_QUERY_UNSUPPORTED' },
     });
   });
 
@@ -368,6 +374,7 @@ describe('QUERY_THREADS', () => {
     expect(getDeclaredErrorSchema(504).parse(body)).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The query exceeded its execution timeout',
+      problem: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' },
     });
     expect(JSON.stringify(body)).not.toContain('driver');
   });

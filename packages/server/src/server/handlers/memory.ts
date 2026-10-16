@@ -5,6 +5,7 @@ import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -176,13 +177,19 @@ async function enforceDeleteMessagesThreadAccess({
   const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
 
   if (messages.some(message => !message.threadId)) {
-    throw new HTTPException(403, { message: 'Access denied: unable to verify message thread access' });
+    throw new HTTPException(403, {
+      message: 'Access denied: unable to verify message thread access',
+      code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
+    });
   }
 
   for (const threadId of threadIds) {
     const thread = await memoryStore.getThreadById({ threadId });
     if (!thread) {
-      throw new HTTPException(403, { message: 'Access denied: unable to verify message thread access' });
+      throw new HTTPException(403, {
+        message: 'Access denied: unable to verify message thread access',
+        code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
+      });
     }
 
     await enforceThreadAccess({
@@ -259,7 +266,7 @@ async function getMemoryFromContext({
         logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
         return null;
       }
-      throw new HTTPException(404, { message: 'Agent not found' });
+      throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
     }
   }
 
@@ -583,7 +590,10 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 
       return { result: false };
     } catch (error) {
-      return handleError(error, 'Error getting memory status');
+      return handleError(error, {
+        message: 'Error getting memory status',
+        code: SERVER_ERROR_CODES.MEMORY_STATUS_GET_FAILED,
+      });
     }
   },
 });
@@ -651,7 +661,10 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
         },
       };
     } catch (error) {
-      return handleError(error, 'Error getting memory configuration');
+      return handleError(error, {
+        message: 'Error getting memory configuration',
+        code: SERVER_ERROR_CODES.MEMORY_CONFIG_GET_FAILED,
+      });
     }
   },
 });
@@ -671,7 +684,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       // Verify agent has OM enabled
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
+        throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
       }
 
       const historyLimit = limit ?? 5;
@@ -696,30 +709,45 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
 
       const omConfig = await getOMConfigFromAgent(agent, requestContext);
       if (!omConfig?.enabled) {
-        throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
+        throw new HTTPException(400, {
+          message: 'Observational Memory is not enabled for this agent',
+          code: SERVER_ERROR_CODES.OBSERVATIONAL_MEMORY_NOT_ENABLED,
+        });
       }
 
       // Get storage from the agent's memory (not mastra.getStorage())
       // This ensures we use the same storage the agent uses for OM
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
+        throw new HTTPException(400, {
+          message: 'Memory is not configured for this agent',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       let memoryStore: MemoryStorage | undefined;
       try {
         memoryStore = await memory.storage.getStore('memory');
       } catch {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+        });
       }
       if (!memoryStore) {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+        });
       }
 
       // Determine the resourceId to use
       const effectiveResourceId = resourceId;
       if (!effectiveResourceId) {
-        throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
+        throw new HTTPException(400, {
+          message: 'resourceId is required for observational memory lookup',
+          code: SERVER_ERROR_CODES.OBSERVATIONAL_MEMORY_RESOURCE_ID_REQUIRED,
+        });
       }
 
       // For resource-scoped OM, lookup by resourceId only (threadId=null)
@@ -741,7 +769,10 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         history: history.length > 0 ? history : undefined,
       };
     } catch (error) {
-      return handleError(error, 'Error getting observational memory');
+      return handleError(error, {
+        message: 'Error getting observational memory',
+        code: SERVER_ERROR_CODES.OBSERVATIONAL_MEMORY_GET_FAILED,
+      });
     }
   },
 });
@@ -761,7 +792,7 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
     try {
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
+        throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
       }
 
       // Gateway proxy: poll the gateway OM record until buffering flags clear
@@ -788,13 +819,19 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
 
       const omConfig = await getOMConfigFromAgent(agent, requestContext);
       if (!omConfig?.enabled) {
-        throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
+        throw new HTTPException(400, {
+          message: 'Observational Memory is not enabled for this agent',
+          code: SERVER_ERROR_CODES.OBSERVATIONAL_MEMORY_NOT_ENABLED,
+        });
       }
 
       // Resolve the OM processor to call waitForBuffering
       const omProcessor = await agent.resolveProcessorById('observational-memory', requestContext);
       if (!omProcessor || typeof (omProcessor as any).waitForBuffering !== 'function') {
-        throw new HTTPException(400, { message: 'Observational Memory processor not available' });
+        throw new HTTPException(400, {
+          message: 'Observational Memory processor not available',
+          code: SERVER_ERROR_CODES.OBSERVATIONAL_MEMORY_PROCESSOR_UNAVAILABLE,
+        });
       }
 
       // Block until buffering completes (30s timeout)
@@ -803,22 +840,34 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       // After buffering, fetch the updated record
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
+        throw new HTTPException(400, {
+          message: 'Memory is not configured for this agent',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       let memoryStore: MemoryStorage | undefined;
       try {
         memoryStore = await memory.storage.getStore('memory');
       } catch {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+        });
       }
       if (!memoryStore) {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+        });
       }
 
       const effectiveResourceId = resourceId;
       if (!effectiveResourceId) {
-        throw new HTTPException(400, { message: 'resourceId is required' });
+        throw new HTTPException(400, {
+          message: 'resourceId is required',
+          code: SERVER_ERROR_CODES.RESOURCE_ID_REQUIRED,
+        });
       }
 
       const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
@@ -827,7 +876,10 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       return { record: record ?? null };
     } catch (error) {
       console.error('Error awaiting buffer status', error);
-      return handleError(error, 'Error awaiting buffer status');
+      return handleError(error, {
+        message: 'Error awaiting buffer status',
+        code: SERVER_ERROR_CODES.MEMORY_BUFFER_STATUS_AWAIT_FAILED,
+      });
     }
   },
 });
@@ -980,9 +1032,12 @@ export const LIST_THREADS_ROUTE = createRoute({
         }
       }
 
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
+      throw new HTTPException(400, {
+        message: 'Memory is not initialized',
+        code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+      });
     } catch (error) {
-      return handleError(error, 'Error listing threads');
+      return handleError(error, { message: 'Error listing threads', code: SERVER_ERROR_CODES.THREADS_LIST_FAILED });
     }
   },
 });
@@ -1039,7 +1094,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
       if (memory) {
         const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
         if (!thread) {
-          throw new HTTPException(404, { message: 'Thread not found' });
+          throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
         }
         await enforceThreadAccess({
           mastra,
@@ -1058,7 +1113,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         if (memoryStore) {
           const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId! });
           if (!thread) {
-            throw new HTTPException(404, { message: 'Thread not found' });
+            throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
           }
           await enforceThreadAccess({
             mastra,
@@ -1071,9 +1126,12 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         }
       }
 
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
+      throw new HTTPException(400, {
+        message: 'Memory is not initialized',
+        code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+      });
     } catch (error) {
-      return handleError(error, 'Error getting thread');
+      return handleError(error, { message: 'Error getting thread', code: SERVER_ERROR_CODES.THREAD_GET_FAILED });
     }
   },
 });
@@ -1108,7 +1166,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       validateBody({ threadId: effectiveThreadId });
 
       if (!effectiveThreadId) {
-        throw new HTTPException(400, { message: 'No threadId found' });
+        throw new HTTPException(400, { message: 'No threadId found', code: SERVER_ERROR_CODES.THREAD_ID_REQUIRED });
       }
 
       // Gateway proxy: list messages from gateway API
@@ -1120,6 +1178,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             throw new HTTPException(501, {
               message:
                 'Gateway memory message metadata filters are not supported by this gateway endpoint. Remove filter.metadata or query a local memory store.',
+              code: SERVER_ERROR_CODES.GATEWAY_MEMORY_METADATA_FILTER_UNSUPPORTED,
             });
           }
 
@@ -1144,7 +1203,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             order: orderBy?.direction?.toLowerCase(),
           });
           if (!result) {
-            throw new HTTPException(404, { message: 'Thread not found' });
+            throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
           }
           return {
             messages: result.messages.map(toLocalMessage),
@@ -1158,7 +1217,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       if (memory) {
         const thread = await memory.getThreadById({ threadId: effectiveThreadId });
         if (!thread) {
-          throw new HTTPException(404, { message: 'Thread not found' });
+          throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
         }
         await enforceThreadAccess({
           mastra,
@@ -1192,7 +1251,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         if (memoryStore) {
           const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId });
           if (!thread) {
-            throw new HTTPException(404, { message: 'Thread not found' });
+            throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
           }
           await enforceThreadAccess({
             mastra,
@@ -1222,7 +1281,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       // This allows the playground UI to gracefully handle agents without memory
       return { messages: [], uiMessages: [] };
     } catch (error) {
-      return handleError(error, 'Error getting messages');
+      return handleError(error, { message: 'Error getting messages', code: SERVER_ERROR_CODES.MESSAGES_LIST_FAILED });
     }
   }) as any,
 });
@@ -1282,7 +1341,10 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       });
       return { workingMemory, source, workingMemoryTemplate, threadExists };
     } catch (error) {
-      return handleError(error, 'Error getting working memory');
+      return handleError(error, {
+        message: 'Error getting working memory',
+        code: SERVER_ERROR_CODES.WORKING_MEMORY_GET_FAILED,
+      });
     }
   },
 });
@@ -1304,15 +1366,21 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       if (!messages) {
-        throw new HTTPException(400, { message: 'Messages are required' });
+        throw new HTTPException(400, { message: 'Messages are required', code: SERVER_ERROR_CODES.MESSAGES_REQUIRED });
       }
 
       if (!Array.isArray(messages)) {
-        throw new HTTPException(400, { message: 'Messages should be an array' });
+        throw new HTTPException(400, {
+          message: 'Messages should be an array',
+          code: SERVER_ERROR_CODES.MESSAGES_REQUIRED,
+        });
       }
 
       // The body schema is intentionally permissive (unknown[]); narrow to the
@@ -1332,6 +1400,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         } else if (existingResourceId !== message.resourceId) {
           throw new HTTPException(400, {
             message: 'All messages for the same threadId must use the same resourceId.',
+            code: SERVER_ERROR_CODES.MESSAGES_THREAD_RESOURCE_MISMATCH,
           });
         }
       }
@@ -1341,6 +1410,8 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       if (invalidMessages.length > 0) {
         throw new HTTPException(400, {
           message: `All messages must have threadId and resourceId fields. Found ${invalidMessages.length} invalid message(s).`,
+          code: SERVER_ERROR_CODES.MESSAGES_THREAD_AND_RESOURCE_REQUIRED,
+          metadata: { invalidMessageCount: invalidMessages.length },
         });
       }
 
@@ -1350,6 +1421,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         if (unauthorizedMessages.length > 0) {
           throw new HTTPException(403, {
             message: 'Access denied: cannot save messages for a different resource',
+            code: SERVER_ERROR_CODES.MESSAGES_RESOURCE_ACCESS_DENIED,
           });
         }
 
@@ -1390,7 +1462,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       const result = await memory.saveMessages({ messages: processedMessages as any, memoryConfig: {} });
       return result;
     } catch (error) {
-      return handleError(error, 'Error saving messages');
+      return handleError(error, { message: 'Error saving messages', code: SERVER_ERROR_CODES.MESSAGES_SAVE_FAILED });
     }
   },
 });
@@ -1440,7 +1512,10 @@ export const CREATE_THREAD_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
@@ -1462,7 +1537,10 @@ export const CREATE_THREAD_ROUTE = createRoute({
       });
       return result;
     } catch (error) {
-      return handleError(error, 'Error saving thread to memory');
+      return handleError(error, {
+        message: 'Error saving thread to memory',
+        code: SERVER_ERROR_CODES.THREAD_CREATE_FAILED,
+      });
     }
   },
 });
@@ -1504,7 +1582,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
           }
           const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
           if (!result) {
-            throw new HTTPException(404, { message: 'Thread not found' });
+            throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
           }
           return toLocalThread(result.thread);
         }
@@ -1515,12 +1593,15 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       const updatedAt = new Date();
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!thread) {
-        throw new HTTPException(404, { message: 'Thread not found' });
+        throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
       }
       await enforceThreadAccess({
         mastra,
@@ -1547,7 +1628,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
         resourceId: result.resourceId ?? null,
       };
     } catch (error) {
-      return handleError(error, 'Error updating thread');
+      return handleError(error, { message: 'Error updating thread', code: SERVER_ERROR_CODES.THREAD_UPDATE_FAILED });
     }
   },
 });
@@ -1588,7 +1669,10 @@ export const DELETE_THREAD_ROUTE = createRoute({
           }
           const deleteResult = await gwClient.deleteThread(effectiveThreadId!);
           if (!deleteResult.ok) {
-            throw new HTTPException(404, { message: 'Thread not found on gateway' });
+            throw new HTTPException(404, {
+              message: 'Thread not found on gateway',
+              code: SERVER_ERROR_CODES.THREAD_NOT_FOUND,
+            });
           }
           return { result: 'Thread deleted' };
         }
@@ -1596,12 +1680,15 @@ export const DELETE_THREAD_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!thread) {
-        throw new HTTPException(404, { message: 'Thread not found' });
+        throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
       }
       await enforceThreadAccess({
         mastra,
@@ -1615,7 +1702,7 @@ export const DELETE_THREAD_ROUTE = createRoute({
       await memory.deleteThread(effectiveThreadId!);
       return { result: 'Thread deleted' };
     } catch (error) {
-      return handleError(error, 'Error deleting thread');
+      return handleError(error, { message: 'Error deleting thread', code: SERVER_ERROR_CODES.THREAD_DELETE_FAILED });
     }
   },
 });
@@ -1641,13 +1728,16 @@ export const CLONE_THREAD_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       // Validate source thread ownership
       const sourceThread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!sourceThread) {
-        throw new HTTPException(404, { message: 'Source thread not found' });
+        throw new HTTPException(404, { message: 'Source thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
       }
       const cloneResourceId = effectiveResourceId ?? sourceThread.resourceId ?? undefined;
       await enforceThreadAccess({
@@ -1675,7 +1765,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error cloning thread');
+      return handleError(error, { message: 'Error cloning thread', code: SERVER_ERROR_CODES.THREAD_CLONE_FAILED });
     }
   },
 });
@@ -1703,6 +1793,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       if (scopeId) {
         throw new HTTPException(403, {
           message: 'Thread transfer requires a privileged (non-resource-scoped) context',
+          code: SERVER_ERROR_CODES.THREAD_TRANSFER_REQUIRES_PRIVILEGED_CONTEXT,
         });
       }
 
@@ -1716,6 +1807,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
         throw new HTTPException(403, {
           message:
             'Thread transfer requires explicit authorization. Configure an FGA provider (memory:write) to authorize privileged, non-resource-scoped transfers.',
+          code: SERVER_ERROR_CODES.THREAD_TRANSFER_REQUIRES_PRIVILEGED_CONTEXT,
         });
       }
 
@@ -1727,7 +1819,10 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
 
       const agent = agentId ? await getAgentFromContext({ mastra, agentId, requestContext }) : undefined;
       if (agent && (await isGatewayAgentAsync(agent))) {
-        throw new HTTPException(501, { message: 'Thread transfer is not supported for gateway agents' });
+        throw new HTTPException(501, {
+          message: 'Thread transfer is not supported for gateway agents',
+          code: SERVER_ERROR_CODES.THREAD_TRANSFER_UNSUPPORTED_FOR_GATEWAY_AGENT,
+        });
       }
 
       // Resolve either the agent's memory or, for agent-less (storage-backed) memory,
@@ -1735,14 +1830,17 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
       const memoryStore = memory ? undefined : await getStorageFromContext({ mastra })?.getStore('memory');
       if (!memory && !memoryStore) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       const sourceThread = memory
         ? await memory.getThreadById({ threadId: effectiveThreadId! })
         : await memoryStore!.getThreadById({ threadId: effectiveThreadId! });
       if (!sourceThread) {
-        throw new HTTPException(404, { message: 'Thread not found' });
+        throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
       }
 
       // Privileged context: ownership check is a no-op, but FGA MEMORY_WRITE still applies when configured.
@@ -1761,7 +1859,10 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
 
       return { ...result, resourceId: result.resourceId ?? null };
     } catch (error) {
-      return handleError(error, 'Error transferring thread');
+      return handleError(error, {
+        message: 'Error transferring thread',
+        code: SERVER_ERROR_CODES.THREAD_TRANSFER_FAILED,
+      });
     }
   },
 });
@@ -1792,11 +1893,14 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!thread) {
-        throw new HTTPException(404, { message: 'Thread not found' });
+        throw new HTTPException(404, { message: 'Thread not found', code: SERVER_ERROR_CODES.THREAD_NOT_FOUND });
       }
       await enforceThreadAccess({
         mastra,
@@ -1811,6 +1915,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
         if (!(await memory.supportsAtomicWorkingMemoryMerge())) {
           throw new HTTPException(400, {
             message: 'Working memory merge is not supported by the configured storage adapter',
+            code: SERVER_ERROR_CODES.WORKING_MEMORY_MERGE_UNSUPPORTED,
           });
         }
         try {
@@ -1822,7 +1927,10 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
           });
         } catch (error) {
           if (error instanceof MastraError && error.category === ErrorCategory.USER) {
-            throw new HTTPException(400, { message: error.message });
+            throw new HTTPException(400, {
+              message: error.message,
+              code: SERVER_ERROR_CODES.WORKING_MEMORY_MERGE_INVALID,
+            });
           }
           throw error;
         }
@@ -1837,7 +1945,10 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
       });
       return { success: true };
     } catch (error) {
-      return handleError(error, 'Error updating working memory');
+      return handleError(error, {
+        message: 'Error updating working memory',
+        code: SERVER_ERROR_CODES.WORKING_MEMORY_UPDATE_FAILED,
+      });
     }
   },
 });
@@ -1858,7 +1969,10 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (messageIds === undefined || messageIds === null) {
-        throw new HTTPException(400, { message: 'messageIds is required' });
+        throw new HTTPException(400, {
+          message: 'messageIds is required',
+          code: SERVER_ERROR_CODES.MESSAGE_IDS_REQUIRED,
+        });
       }
 
       // Normalize messageIds to the format expected by deleteMessages
@@ -1886,11 +2000,17 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       if (effectiveResourceId && stringIds.length > 0) {
         const storage = memory?.storage || getStorageFromContext({ mastra });
         if (!storage) {
-          throw new HTTPException(403, { message: 'Access denied: unable to verify message ownership' });
+          throw new HTTPException(403, {
+            message: 'Access denied: unable to verify message ownership',
+            code: SERVER_ERROR_CODES.MESSAGE_ACCESS_DENIED,
+          });
         }
         const memoryStore = await storage.getStore('memory');
         if (!memoryStore) {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
 
         await enforceDeleteMessagesThreadAccess({
@@ -1903,11 +2023,17 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       } else if (stringIds.length > 0) {
         const storage = memory?.storage || getStorageFromContext({ mastra });
         if (!storage) {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
         const memoryStore = await storage.getStore('memory');
         if (!memoryStore) {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
         await enforceDeleteMessagesThreadAccess({
           mastra,
@@ -1927,10 +2053,16 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
           if (memoryStore) {
             await memoryStore.deleteMessages(stringIds);
           } else {
-            throw new HTTPException(400, { message: 'Memory is not initialized' });
+            throw new HTTPException(400, {
+              message: 'Memory is not initialized',
+              code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+            });
           }
         } else {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
       }
 
@@ -1939,7 +2071,10 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
 
       return { success: true, message: `${count} message${count === 1 ? '' : 's'} deleted successfully` };
     } catch (error) {
-      return handleError(error, 'Error deleting messages');
+      return handleError(error, {
+        message: 'Error deleting messages',
+        code: SERVER_ERROR_CODES.MESSAGES_DELETE_FAILED,
+      });
     }
   },
 });
@@ -1974,7 +2109,10 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: SERVER_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       // Get memory configuration first to check scope
@@ -2177,7 +2315,7 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         searchType: hasSemanticRecall ? 'semantic' : 'text',
       };
     } catch (error) {
-      return handleError(error, 'Error searching memory');
+      return handleError(error, { message: 'Error searching memory', code: SERVER_ERROR_CODES.MEMORY_SEARCH_FAILED });
     }
   },
 });

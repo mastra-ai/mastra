@@ -29,6 +29,7 @@ import { stringify } from 'superjson';
 import { z } from 'zod/v4';
 import { MASTRA_IS_STUDIO_KEY, MASTRA_RESOURCE_ID_KEY, WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 
 import { HTTPException } from '../http-exception';
@@ -85,6 +86,7 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import type { HandleErrorFallback } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -213,7 +215,10 @@ async function validateDurableToolCallAccess({
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   if (!workflowsStore) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+    throw new HTTPException(403, {
+      message: 'Access denied: durable run belongs to a different resource',
+      code: SERVER_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
+    });
   }
   const workflowName = getDurableLoopWorkflowName(agent);
   const contextResourceId = getContextResourceId(requestContext);
@@ -248,7 +253,10 @@ async function validateDurableToolCallAccess({
       persistedResourceIds.size > 1 ||
       (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
     ) {
-      throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+      throw new HTTPException(403, {
+        message: 'Access denied: durable run belongs to a different resource',
+        code: SERVER_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
+      });
     }
 
     const ready =
@@ -259,16 +267,25 @@ async function validateDurableToolCallAccess({
 
     if (ready || Date.now() >= deadline || abortSignal?.aborted) {
       if (!workflowRun) {
-        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+        throw new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different resource',
+          code: SERVER_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
+        });
       }
 
       const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
       if (threadId && persistedThreadId !== threadId) {
-        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
+        throw new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different thread',
+          code: SERVER_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
+        });
       }
 
       if (!ready || input?.agentId !== agent.id) {
-        throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+        throw new HTTPException(403, {
+          message: 'Access denied: tool call is not suspended on this durable run',
+          code: SERVER_ERROR_CODES.DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED,
+        });
       }
       await validateRunOwnership({ resourceId: persistedResourceId }, contextResourceId, mastra);
       return;
@@ -966,7 +983,7 @@ export async function getAgentFromSystem({
   const logger = mastra.getLogger();
 
   if (!agentId) {
-    throw new HTTPException(400, { message: 'Agent ID is required' });
+    throw new HTTPException(400, { message: 'Agent ID is required', code: SERVER_ERROR_CODES.AGENT_ID_REQUIRED });
   }
 
   let agent: Agent | null | undefined;
@@ -1024,7 +1041,11 @@ export async function getAgentFromSystem({
   }
 
   if (!agent) {
-    throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
+    throw new HTTPException(404, {
+      message: `Agent with id ${agentId} not found`,
+      code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
+      metadata: { agentId },
+    });
   }
 
   return agent;
@@ -1380,7 +1401,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       return serializedAgents;
     } catch (error) {
-      return handleError(error, 'Error getting agents');
+      return handleError(error, { message: 'Error getting agents', code: SERVER_ERROR_CODES.AGENTS_LIST_FAILED });
     }
   },
 });
@@ -1411,7 +1432,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
       });
       return result;
     } catch (error) {
-      return handleError(error, 'Error getting agent');
+      return handleError(error, { message: 'Error getting agent', code: SERVER_ERROR_CODES.AGENT_GET_FAILED });
     }
   },
 });
@@ -1439,7 +1460,10 @@ export const CLONE_AGENT_ROUTE = createRoute({
     try {
       const editor = mastra.getEditor();
       if (!editor) {
-        return handleError(new Error('Editor is not configured on the Mastra instance'), 'Error cloning agent');
+        return handleError(new Error('Editor is not configured on the Mastra instance'), {
+          message: 'Error cloning agent',
+          code: SERVER_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+        });
       }
 
       const agent = await getAgentFromSystem({
@@ -1460,7 +1484,7 @@ export const CLONE_AGENT_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error cloning agent');
+      return handleError(error, { message: 'Error cloning agent', code: SERVER_ERROR_CODES.AGENT_CLONE_FAILED });
     }
   },
 });
@@ -1562,7 +1586,10 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error generating from agent');
+      return handleError(error, {
+        message: 'Error generating from agent',
+        code: SERVER_ERROR_CODES.AGENT_GENERATE_FAILED,
+      });
     }
   },
 });
@@ -1604,7 +1631,10 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       validateBody({ messages });
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
-        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+        throw new HTTPException(400, {
+          message: 'Both threadId or resourceId must be provided',
+          code: SERVER_ERROR_CODES.AGENT_THREAD_OR_RESOURCE_ID_REQUIRED,
+        });
       }
 
       // Validate thread ownership if accessing an existing thread
@@ -1634,7 +1664,10 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error generating from agent');
+      return handleError(error, {
+        message: 'Error generating from agent',
+        code: SERVER_ERROR_CODES.AGENT_GENERATE_FAILED,
+      });
     }
   },
 });
@@ -1675,7 +1708,10 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       validateBody({ messages });
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
-        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+        throw new HTTPException(400, {
+          message: 'Both threadId or resourceId must be provided',
+          code: SERVER_ERROR_CODES.AGENT_THREAD_OR_RESOURCE_ID_REQUIRED,
+        });
       }
 
       // Validate thread ownership if accessing an existing thread
@@ -1741,7 +1777,10 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       return streamResponse;
     } catch (error) {
-      return handleError(error, 'error streaming agent response');
+      return handleError(error, {
+        message: 'error streaming agent response',
+        code: SERVER_ERROR_CODES.AGENT_STREAM_FAILED,
+      });
     }
   },
 });
@@ -1846,7 +1885,10 @@ export const GET_PROVIDERS_ROUTE = createRoute({
       const providers = await buildProvidersList(mastra);
       return { providers };
     } catch (error) {
-      return handleError(error, 'Error fetching providers');
+      return handleError(error, {
+        message: 'Error fetching providers',
+        code: SERVER_ERROR_CODES.AGENT_PROVIDERS_LIST_FAILED,
+      });
     }
   },
 });
@@ -1966,7 +2008,10 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error streaming agent response');
+      return handleError(error, {
+        message: 'error streaming agent response',
+        code: SERVER_ERROR_CODES.AGENT_STREAM_FAILED,
+      });
     }
   },
 });
@@ -1987,16 +2032,21 @@ const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; 
  * status). Run/generation errors never reject `accepted`; they surface on the
  * `wake` output stream instead.
  */
-function handleSignalRoutingError(error: unknown, defaultMessage: string): never {
+function handleSignalRoutingError(error: unknown, fallback: HandleErrorFallback): never {
   if (
     error instanceof MastraError &&
     error.category === ErrorCategory.USER &&
     !(error as { status?: unknown }).status &&
     !(error as { details?: { status?: unknown } }).details?.status
   ) {
-    throw new HTTPException(400, { message: error.message, cause: error });
+    throw new HTTPException(400, {
+      message: error.message,
+      code: fallback.code,
+      metadata: fallback.metadata,
+      cause: error,
+    });
   }
-  return handleError(error, defaultMessage);
+  return handleError(error, fallback);
 }
 
 const sendAgentMessageResponseSchema = sendAgentSignalResponseSchema;
@@ -2073,7 +2123,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       }
 
       if (typeof (agent as { sendSignal?: unknown }).sendSignal !== 'function') {
-        throw new HTTPException(501, { message: 'agent signals are not supported by this Mastra core version' });
+        throw new HTTPException(501, {
+          message: 'agent signals are not supported by this Mastra core version',
+          code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
+        });
       }
 
       const agentSignal = signal as AgentSignalInput;
@@ -2098,7 +2151,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
-        throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
+        throw new HTTPException(400, {
+          message: 'resourceId and threadId are required when runId is not provided',
+          code: SERVER_ERROR_CODES.AGENT_THREAD_OR_RESOURCE_ID_REQUIRED,
+        });
       }
 
       const result = await agent.sendSignal(agentSignal, {
@@ -2116,7 +2172,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         ? { accepted: true as const, runId: settledRunId }
         : { accepted: true as const, runId: settledRunId, signal: result.signal };
     } catch (error) {
-      return handleSignalRoutingError(error, 'error sending agent signal');
+      return handleSignalRoutingError(error, {
+        message: 'error sending agent signal',
+        code: SERVER_ERROR_CODES.AGENT_SIGNAL_SEND_FAILED,
+      });
     }
   },
 });
@@ -2177,7 +2236,11 @@ async function handleAgentMessageRoute({
   }
 
   if (typeof (agent as unknown as Record<string, unknown>)[methodName] !== 'function') {
-    throw new HTTPException(501, { message: `agent ${methodName} is not supported by this Mastra core version` });
+    throw new HTTPException(501, {
+      message: `agent ${methodName} is not supported by this Mastra core version`,
+      code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
+      metadata: { methodName },
+    });
   }
 
   if (runId) {
@@ -2195,7 +2258,10 @@ async function handleAgentMessageRoute({
   }
 
   if (!effectiveResourceId || !effectiveThreadId) {
-    throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
+    throw new HTTPException(400, {
+      message: 'resourceId and threadId are required when runId is not provided',
+      code: SERVER_ERROR_CODES.AGENT_THREAD_OR_RESOURCE_ID_REQUIRED,
+    });
   }
 
   const result = await invoke(agent, {
@@ -2231,7 +2297,10 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
         invoke: (agent, target) => agent.sendMessage(params.message, target),
       });
     } catch (error) {
-      return handleSignalRoutingError(error, 'error sending agent message');
+      return handleSignalRoutingError(error, {
+        message: 'error sending agent message',
+        code: SERVER_ERROR_CODES.AGENT_MESSAGE_SEND_FAILED,
+      });
     }
   },
 });
@@ -2257,7 +2326,10 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
         invoke: (agent, target) => agent.queueMessage(params.message, target),
       });
     } catch (error) {
-      return handleSignalRoutingError(error, 'error queueing agent message');
+      return handleSignalRoutingError(error, {
+        message: 'error queueing agent message',
+        code: SERVER_ERROR_CODES.AGENT_MESSAGE_QUEUE_FAILED,
+      });
     }
   },
 });
@@ -2283,7 +2355,10 @@ export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
         invoke: (agent, target) => agent.queueSignal(params.signal, target),
       });
     } catch (error) {
-      return handleSignalRoutingError(error, 'error queueing agent signal');
+      return handleSignalRoutingError(error, {
+        message: 'error queueing agent signal',
+        code: SERVER_ERROR_CODES.AGENT_SIGNAL_QUEUE_FAILED,
+      });
     }
   },
 });
@@ -2314,12 +2389,14 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
       if (typeof (agent as { abortThreadStream?: unknown }).abortThreadStream !== 'function') {
         throw new HTTPException(501, {
           message: 'agent thread aborts are not supported by this Mastra core version',
+          code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
         });
       }
       if (clearPendingSignals && agent.__supportsThreadSignalCancellation !== true) {
         throw new HTTPException(501, {
           message:
             'clear-on-abort requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
+          code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
         });
       }
 
@@ -2327,7 +2404,7 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
       if (!effectiveThreadId) {
-        throw new HTTPException(400, { message: 'threadId is required' });
+        throw new HTTPException(400, { message: 'threadId is required', code: SERVER_ERROR_CODES.THREAD_ID_REQUIRED });
       }
 
       const memory = await agent.getMemory({ requestContext: serverRequestContext });
@@ -2349,7 +2426,10 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
       });
       return { aborted };
     } catch (error) {
-      return handleError(error, 'error aborting agent thread');
+      return handleError(error, {
+        message: 'error aborting agent thread',
+        code: SERVER_ERROR_CODES.AGENT_THREAD_ABORT_FAILED,
+      });
     }
   },
 });
@@ -2376,11 +2456,13 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
         throw new HTTPException(501, {
           message:
             'thread-wide cancellation requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
+          code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
         });
       }
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      if (!effectiveThreadId) throw new HTTPException(400, { message: 'threadId is required' });
+      if (!effectiveThreadId)
+        throw new HTTPException(400, { message: 'threadId is required', code: SERVER_ERROR_CODES.THREAD_ID_REQUIRED });
       const memory = await agent.getMemory({ requestContext });
       const thread = await memory?.getThreadById({ threadId: effectiveThreadId });
       await enforceThreadAccess({
@@ -2393,7 +2475,10 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
       });
       return agent.cancelQueuedMessages({ resourceId: effectiveResourceId, threadId: effectiveThreadId, signalIds });
     } catch (error) {
-      return handleError(error, 'error cancelling pending thread signals');
+      return handleError(error, {
+        message: 'error cancelling pending thread signals',
+        code: SERVER_ERROR_CODES.AGENT_PENDING_SIGNALS_CANCEL_FAILED,
+      });
     }
   },
 });
@@ -2426,6 +2511,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
         throw new HTTPException(501, {
           message: 'agent thread subscriptions are not supported by this Mastra core version',
+          code: SERVER_ERROR_CODES.MASTRA_CORE_VERSION_UNSUPPORTED,
         });
       }
 
@@ -2433,7 +2519,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
       if (!effectiveThreadId) {
-        throw new HTTPException(400, { message: 'threadId is required' });
+        throw new HTTPException(400, { message: 'threadId is required', code: SERVER_ERROR_CODES.THREAD_ID_REQUIRED });
       }
 
       if (withInitialHistory) {
@@ -2523,7 +2609,10 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         },
       });
     } catch (error) {
-      return handleError(error, 'error subscribing to agent thread');
+      return handleError(error, {
+        message: 'error subscribing to agent thread',
+        code: SERVER_ERROR_CODES.AGENT_THREAD_SUBSCRIBE_FAILED,
+      });
     }
   },
 });
@@ -2609,7 +2698,10 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error streaming agent response');
+      return handleError(error, {
+        message: 'error streaming agent response',
+        code: SERVER_ERROR_CODES.AGENT_STREAM_FAILED,
+      });
     }
   },
 });
@@ -2746,7 +2838,10 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
       return stream;
     } catch (error) {
-      return handleError(error, 'error observing agent stream');
+      return handleError(error, {
+        message: 'error observing agent stream',
+        code: SERVER_ERROR_CODES.AGENT_STREAM_OBSERVE_FAILED,
+      });
     }
   },
 });
@@ -2772,11 +2867,14 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_ID_REQUIRED,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -2801,7 +2899,10 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error approving tool call');
+      return handleError(error, {
+        message: 'error approving tool call',
+        code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_APPROVE_FAILED,
+      });
     }
   },
 });
@@ -2821,7 +2922,7 @@ async function validateSubscriptionToolCallThreadAccess({
   const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
   if (!effectiveThreadId) {
-    throw new HTTPException(400, { message: 'threadId is required' });
+    throw new HTTPException(400, { message: 'threadId is required', code: SERVER_ERROR_CODES.THREAD_ID_REQUIRED });
   }
 
   if (effectiveResourceId) {
@@ -2860,7 +2961,10 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       });
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_ID_REQUIRED,
+        });
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -2886,7 +2990,10 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
         abortSignal,
       });
     } catch (error) {
-      return handleError(error, 'error sending tool approval');
+      return handleError(error, {
+        message: 'error sending tool approval',
+        code: SERVER_ERROR_CODES.AGENT_TOOL_APPROVAL_SEND_FAILED,
+      });
     }
   },
 });
@@ -2926,11 +3033,15 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         if (!memory) {
           throw new HTTPException(403, {
             message: 'Access denied: agent has no memory configured to validate thread ownership',
+            code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
           });
         }
         const thread = await memory.getThreadById({ threadId: effectiveThreadId });
         if (!thread) {
-          throw new HTTPException(403, { message: 'Access denied: thread not found' });
+          throw new HTTPException(403, {
+            message: 'Access denied: thread not found',
+            code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
+          });
         }
         await enforceThreadAccess({
           mastra,
@@ -2950,7 +3061,10 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         page: query.page,
       });
     } catch (error) {
-      return handleError(error, 'error listing suspended runs');
+      return handleError(error, {
+        message: 'error listing suspended runs',
+        code: SERVER_ERROR_CODES.AGENT_SUSPENDED_RUNS_LIST_FAILED,
+      });
     }
   },
 });
@@ -2976,11 +3090,14 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_ID_REQUIRED,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3005,7 +3122,10 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error declining tool call');
+      return handleError(error, {
+        message: 'error declining tool call',
+        code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_DECLINE_FAILED,
+      });
     }
   },
 });
@@ -3026,7 +3146,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
@@ -3129,7 +3249,10 @@ export const RESUME_STREAM_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error resuming agent stream');
+      return handleError(error, {
+        message: 'error resuming agent stream',
+        code: SERVER_ERROR_CODES.AGENT_STREAM_RESUME_FAILED,
+      });
     }
   },
 });
@@ -3151,7 +3274,7 @@ export const RECOVER_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       const { runId, versions } = params;
@@ -3184,6 +3307,7 @@ export const RECOVER_ROUTE = createRoute({
       if (!isDurableAgentLike(agent)) {
         throw new HTTPException(400, {
           message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          code: SERVER_ERROR_CODES.AGENT_RECOVER_UNSUPPORTED,
         });
       }
 
@@ -3203,7 +3327,10 @@ export const RECOVER_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error recovering agent run');
+      return handleError(error, {
+        message: 'error recovering agent run',
+        code: SERVER_ERROR_CODES.AGENT_RUN_RECOVER_FAILED,
+      });
     }
   },
 });
@@ -3225,7 +3352,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
@@ -3330,7 +3457,10 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
 
       return streamResult.fullStream;
     } catch (error) {
-      return handleError(error, 'error resuming agent stream');
+      return handleError(error, {
+        message: 'error resuming agent stream',
+        code: SERVER_ERROR_CODES.AGENT_STREAM_RESUME_FAILED,
+      });
     }
   },
 });
@@ -3355,11 +3485,14 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_ID_REQUIRED,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3384,7 +3517,10 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'error approving tool call');
+      return handleError(error, {
+        message: 'error approving tool call',
+        code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_APPROVE_FAILED,
+      });
     }
   },
 });
@@ -3409,11 +3545,14 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_ID_REQUIRED,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3438,7 +3577,10 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'error declining tool call');
+      return handleError(error, {
+        message: 'error declining tool call',
+        code: SERVER_ERROR_CODES.AGENT_TOOL_CALL_DECLINE_FAILED,
+      });
     }
   },
 });
@@ -3485,7 +3627,10 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       return streamResult;
     } catch (error) {
-      return handleError(error, 'error streaming agent loop response');
+      return handleError(error, {
+        message: 'error streaming agent loop response',
+        code: SERVER_ERROR_CODES.AGENT_LOOP_STREAM_FAILED,
+      });
     }
   },
 });
@@ -3511,7 +3656,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3525,7 +3670,10 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       return streamResult;
     } catch (error) {
-      return handleError(error, 'error approving network tool call');
+      return handleError(error, {
+        message: 'error approving network tool call',
+        code: SERVER_ERROR_CODES.AGENT_NETWORK_TOOL_CALL_APPROVE_FAILED,
+      });
     }
   },
 });
@@ -3551,7 +3699,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: SERVER_ERROR_CODES.AGENT_RUN_ID_REQUIRED });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3565,7 +3713,10 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       return streamResult;
     } catch (error) {
-      return handleError(error, 'error declining network tool call');
+      return handleError(error, {
+        message: 'error declining network tool call',
+        code: SERVER_ERROR_CODES.AGENT_NETWORK_TOOL_CALL_DECLINE_FAILED,
+      });
     }
   },
 });
@@ -3595,7 +3746,10 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
 
       return { message: 'Agent model updated' };
     } catch (error) {
-      return handleError(error, 'error updating agent model');
+      return handleError(error, {
+        message: 'error updating agent model',
+        code: SERVER_ERROR_CODES.AGENT_MODEL_UPDATE_FAILED,
+      });
     }
   },
 });
@@ -3618,7 +3772,10 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
 
       return { message: 'Agent model reset to original' };
     } catch (error) {
-      return handleError(error, 'error resetting agent model');
+      return handleError(error, {
+        message: 'error resetting agent model',
+        code: SERVER_ERROR_CODES.AGENT_MODEL_RESET_FAILED,
+      });
     }
   },
 });
@@ -3640,14 +3797,20 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
 
       const modelList = await agent.getModelList();
       if (!modelList || modelList.length === 0) {
-        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+        throw new HTTPException(400, {
+          message: 'Agent model list is not found or empty',
+          code: SERVER_ERROR_CODES.AGENT_MODEL_LIST_EMPTY,
+        });
       }
 
       agent.reorderModels(reorderedModelIds);
 
       return { message: 'Model list reordered' };
     } catch (error) {
-      return handleError(error, 'error reordering model list');
+      return handleError(error, {
+        message: 'error reordering model list',
+        code: SERVER_ERROR_CODES.AGENT_MODEL_LIST_REORDER_FAILED,
+      });
     }
   },
 });
@@ -3669,12 +3832,19 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const modelList = await agent.getModelList();
       if (!modelList || modelList.length === 0) {
-        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+        throw new HTTPException(400, {
+          message: 'Agent model list is not found or empty',
+          code: SERVER_ERROR_CODES.AGENT_MODEL_LIST_EMPTY,
+        });
       }
 
       const modelConfig = modelList.find(config => config.id === modelConfigId);
       if (!modelConfig) {
-        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+        throw new HTTPException(404, {
+          message: `Model config with id ${modelConfigId} not found`,
+          code: SERVER_ERROR_CODES.AGENT_MODEL_CONFIG_NOT_FOUND,
+          metadata: { modelConfigId },
+        });
       }
 
       const newModel =
@@ -3691,7 +3861,10 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       return { message: 'Model updated in model list' };
     } catch (error) {
-      return handleError(error, 'error updating model in model list');
+      return handleError(error, {
+        message: 'error updating model in model list',
+        code: SERVER_ERROR_CODES.AGENT_MODEL_LIST_ITEM_UPDATE_FAILED,
+      });
     }
   },
 });
@@ -3793,6 +3966,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
         throw new HTTPException(400, {
           message:
             'No model with a configured API key found. Please set the required environment variable for your model provider.',
+          code: SERVER_ERROR_CODES.AGENT_MODEL_API_KEY_NOT_FOUND,
         });
       }
 
@@ -3816,7 +3990,10 @@ ${comment ? `User feedback: ${comment}` : ''}`,
 
       return (await result.object) as unknown as EnhanceInstructionsResponse;
     } catch (error) {
-      return handleError(error, 'Error enhancing instructions');
+      return handleError(error, {
+        message: 'Error enhancing instructions',
+        code: SERVER_ERROR_CODES.AGENT_INSTRUCTIONS_ENHANCE_FAILED,
+      });
     }
   },
 });
@@ -3834,7 +4011,10 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   requiresAuth: true,
   deprecated: true,
   handler: async () => {
-    throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
+    throw new HTTPException(410, {
+      message: 'This endpoint is deprecated. Please use /stream instead.',
+      code: SERVER_ERROR_CODES.ENDPOINT_DEPRECATED,
+    });
   },
 });
 
@@ -3860,7 +4040,10 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
         text: 'This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
       });
     } catch (error) {
-      return handleError(error, 'error streaming agent response');
+      return handleError(error, {
+        message: 'error streaming agent response',
+        code: SERVER_ERROR_CODES.AGENT_STREAM_FAILED,
+      });
     }
   },
 });
@@ -3899,7 +4082,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
+        throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
@@ -3908,7 +4091,11 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
       // Get the skill from the agent (searches both inline and workspace skills)
       const skill = await agent.getSkill(identifier, { requestContext });
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
+        throw new HTTPException(404, {
+          message: `Skill "${identifier}" not found`,
+          code: SERVER_ERROR_CODES.AGENT_SKILL_NOT_FOUND,
+          metadata: { skill: identifier },
+        });
       }
 
       return {
@@ -3925,7 +4112,10 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         assets: skill.assets,
       };
     } catch (error) {
-      return handleError(error, 'Error getting agent skill');
+      return handleError(error, {
+        message: 'Error getting agent skill',
+        code: SERVER_ERROR_CODES.AGENT_SKILL_GET_FAILED,
+      });
     }
   },
 });

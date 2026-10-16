@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core/mastra';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { Context } from 'hono';
 
 import { handleError } from './error';
@@ -23,6 +24,9 @@ export async function restartAllActiveWorkflowRunsHandler(c: Context) {
 
     return c.json({ message: 'Restarting all active workflow runs...' });
   } catch (error) {
-    return handleError(error, 'Error restarting active workflow runs');
+    return handleError(error, {
+      message: 'Error restarting active workflow runs',
+      code: SERVER_ERROR_CODES.WORKFLOW_ACTIVE_RUNS_RESTART_FAILED,
+    });
   }
 }
