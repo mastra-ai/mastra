@@ -629,7 +629,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   }
                 : undefined;
 
-            await flushForTrajectoryScorers(mastra, itemScorers);
+            await flushForTrajectoryScorers(mastra, itemScorers, execResult.traceId);
             const flatScores = await runScorersForItem(
               itemScorers,
               itemWithMetadataSnapshot(),

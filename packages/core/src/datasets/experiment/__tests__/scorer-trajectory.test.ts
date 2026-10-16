@@ -206,22 +206,22 @@ describe('trajectory scorer dispatch', () => {
 
   it('keeps scoring when the flush fails', async () => {
     (mastra.observability.flush as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('flush failed'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      const scorer = createCapturingScorer('traj-scorer');
+    const warn = vi.fn();
+    (mastra as any).getLogger = () => ({ warn });
+    const mockAgent = mastra.getAgentById('test-agent') as unknown as ReturnType<typeof createMockAgent>;
+    const generate = mockAgent.generate.getMockImplementation()!;
+    mockAgent.generate.mockImplementation(async () => ({ ...(await generate()), traceId: 'trace-1' }));
+    const scorer = createCapturingScorer('traj-scorer');
 
-      await runExperiment(mastra, {
-        datasetId,
-        targetType: 'agent',
-        targetId: 'test-agent',
-        scorers: [scorer],
-      });
+    await runExperiment(mastra, {
+      datasetId,
+      targetType: 'agent',
+      targetId: 'test-agent',
+      scorers: [scorer],
+    });
 
-      expect((scorer.capturedOutput as Trajectory).steps.map(s => s.name)).toEqual(['getWeather', 'convertUnits']);
-      expect(warn).toHaveBeenCalledWith('Failed to flush observability before reading the trace:', expect.any(Error));
-    } finally {
-      warn.mockRestore();
-    }
+    expect((scorer.capturedOutput as Trajectory).steps.map(s => s.name)).toEqual(['getWeather', 'convertUnits']);
+    expect(warn).toHaveBeenCalledWith('Failed to flush observability before reading the trace:', expect.any(Error));
   });
 
   it('non-trajectory scorers still receive the raw output', async () => {

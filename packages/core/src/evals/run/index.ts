@@ -17,6 +17,7 @@ import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
 import type { MastraScorer } from '../base';
+import { flushBeforeTraceRead } from '../flush-before-trace-read';
 import { snapshotRequestContextForScore } from '../request-context-snapshot';
 import { checkThresholdPassed, isScorerWithThreshold, validateThresholdConfig } from '../thresholds';
 import type {
@@ -359,15 +360,9 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     async (item: RunEvalsDataItem<any>) => {
       const targetResult = await executeTarget(target, item, targetOptions);
 
-      // Exporters buffer spans (the storage exporter waits up to 5 s before it
-      // writes). Flush so the trace is stored before gates and scorers read it,
-      // and before each scorer's addScore() looks it up. Best-effort: a failed
-      // flush only means the trace read below falls back.
-      try {
-        await mastra?.observability?.flush?.();
-      } catch (error) {
-        mastra?.getLogger?.()?.warn?.('Failed to flush observability before scoring:', error);
-      }
+      // Store the trace before gates and scorers read it, and before each
+      // scorer's addScore() looks it up.
+      await flushBeforeTraceRead(mastra, targetResult.traceId);
 
       // Run gates first
       if (gates) {
@@ -1218,7 +1213,7 @@ const TRACE_FALLBACK = 'trajectory scorers get a flat trajectory from the run ou
 /**
  * Attempts to extract a hierarchical trajectory from observability traces.
  * Falls back to undefined if storage is not available or trace cannot be fetched.
- * Expects the caller to have flushed observability, so a missing trace is logged.
+ * Expects the caller to have flushed observability first.
  */
 async function extractTrajectoryFromTraceStore(
   mastra: any,
@@ -1234,7 +1229,8 @@ async function extractTrajectoryFromTraceStore(
 
     const trace = await observabilityStore.getTrace({ traceId });
     if (!trace?.spans?.length) {
-      mastra?.getLogger?.()?.warn?.(`Trace ${traceId} was not found in observability storage; ${TRACE_FALLBACK}.`);
+      // Normal when no exporter writes to storage (for example, Langfuse only).
+      mastra?.getLogger?.()?.debug?.(`Trace ${traceId} was not found in observability storage; ${TRACE_FALLBACK}.`);
       return undefined;
     }
 

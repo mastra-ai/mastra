@@ -152,7 +152,7 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
           }
         : undefined;
 
-    await flushForTrajectoryScorers(mastra, scorers);
+    await flushForTrajectoryScorers(mastra, scorers, execResult.traceId);
     scores = await runScorersForItem(
       scorers,
       item,

@@ -1244,6 +1244,7 @@ describe('runEvals', () => {
             : null,
         );
         const warn = vi.spyOn(mastra.getLogger(), 'warn');
+        const debug = vi.spyOn(mastra.getLogger(), 'debug');
 
         let received: any;
         const probe = createScorer({
@@ -1269,7 +1270,7 @@ describe('runEvals', () => {
           gates: [gate],
           target,
         });
-        return { received, gateReceived, warn };
+        return { received, gateReceived, warn, debug };
       }
 
       it('uses the stored trace once observability is flushed', async () => {
@@ -1278,10 +1279,10 @@ describe('runEvals', () => {
         expect(gateReceived.steps.map((s: any) => s.stepType)).toEqual(['model_generation']);
       });
 
-      it('warns and uses the messages when the trace is not stored', async () => {
-        const { received, warn } = await runWithTraceStore({ storedOnFlush: false });
+      it('uses the messages when the trace is not stored', async () => {
+        const { received, debug } = await runWithTraceStore({ storedOnFlush: false });
         expect(received.steps.map((s: any) => s.name)).toEqual(['weatherTool', 'calendarTool']);
-        expect(warn).toHaveBeenCalledWith(
+        expect(debug).toHaveBeenCalledWith(
           expect.stringContaining('Trace trace-1 was not found in observability storage'),
         );
       });
@@ -1289,7 +1290,7 @@ describe('runEvals', () => {
       it('keeps scoring when the flush fails', async () => {
         const { received, warn } = await runWithTraceStore({ storedOnFlush: true, flushFails: true });
         expect(received.steps.map((s: any) => s.name)).toEqual(['weatherTool', 'calendarTool']);
-        expect(warn).toHaveBeenCalledWith('Failed to flush observability before scoring:', expect.any(Error));
+        expect(warn).toHaveBeenCalledWith('Failed to flush observability before reading the trace:', expect.any(Error));
       });
     });
   });
