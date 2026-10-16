@@ -2,7 +2,7 @@ import type { LanguageModel, ToolSet } from '@internal/ai-v7';
 import { stepCountIs, streamText } from '@internal/ai-v7';
 import { streamActions } from './from-ai-sdk';
 import { trimResentInput } from './input-filter';
-import { repairOpenRun } from './repair';
+import { repairOpenRun, TOOL_NOT_STARTED_TEXT } from './repair';
 import type { RepairCloser } from './repair';
 import { createActionIdGenerator } from './storage';
 import type { ListActionsQuery } from './storage';
@@ -108,17 +108,32 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   /** Everything of this run that was saved or is about to be, for closing it if it stops early. */
   const own: PersistableAction[] = [...runStart, ...input];
   // One write queue: batches commit in the order their ids were minted, so a reader paging by id never
-  // passes a row that lands later. Once a write fails, later rows can't be trusted to follow it.
+  // passes a row that lands later. Each batch is taken when its turn in the queue comes, so a failed batch
+  // goes back to the front of `pending` and the next flush retries it together with whatever followed: no
+  // row ever lands without the rows before it. A failure also shuts the start gate for the rest of the run,
+  // so a failed batch's tool-starteds are dropped: those tools never run, and their calls close as not
+  // started. A flush whose write fails rejects; callers that await it fail the run.
+  const extra: MastraAction[] = [];
   let writes: Promise<void> = Promise.resolve();
   let writeFailed = false;
   const flush = (): Promise<void> => {
-    if (!memory || pending.length === 0) return writes;
-    const batch = pending;
-    pending = [];
-    const write = writes.then(() => memory.saveActions({ actions: batch }));
-    writes = write.catch(() => {
-      writeFailed = true;
+    if (!memory) return writes;
+    const write = writes.then(async () => {
+      if (pending.length === 0) return;
+      const batch = pending;
+      pending = [];
+      try {
+        await memory.saveActions({ actions: batch });
+      } catch (error) {
+        writeFailed = true;
+        const refused = new Set(batch.filter(a => a.type === 'tool-started'));
+        pending = [...batch.filter(a => !refused.has(a)), ...pending];
+        for (const list of [own, extra])
+          for (let i = list.length - 1; i >= 0; i--) if (refused.has(list[i] as PersistableAction)) list.splice(i, 1);
+        throw error;
+      }
     });
+    writes = write.catch(() => {});
     return write;
   };
 
@@ -139,7 +154,8 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   const whenStopped = new Promise<void>(resolve => (markStopped = resolve));
   const halted = () => stopped || !!options.abortSignal?.aborted;
   const mayRun = new Set<string>();
-  const extra: MastraAction[] = [];
+  /** Calls the gate refused at execute. Their tool-started may be saved, but they did not run. */
+  const notRun = new Set<string>();
   const onToolExecutionStart = async (event: { toolCall: { toolCallId: string; toolName: string } }) => {
     const { toolCallId, toolName } = event.toolCall;
     await Promise.race([callSeen(toolCallId), aborted(options.abortSignal), whenStopped]);
@@ -155,7 +171,17 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     }
     if (!writeFailed && !halted()) mayRun.add(toolCallId);
   };
-  const tools = options.tools ? gateTools(options.tools, toolCallId => mayRun.has(toolCallId)) : undefined;
+  const tools = options.tools
+    ? gateTools(
+        options.tools,
+        // Checked again at execute: an abort or a failed write between the grant and the call still stops it.
+        toolCallId => {
+          if (mayRun.has(toolCallId) && !halted() && !writeFailed) return true;
+          notRun.add(toolCallId);
+          return false;
+        },
+      )
+    : undefined;
 
   const converter: { drain?: () => MastraAction[] } = {};
   let ended = false;
@@ -186,7 +212,13 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
       pending.push(action);
       own.push(action);
     }
-    const closers = close(repairOpenRun([...history, ...repairs, ...own], { resumingRunId: runId }));
+    // A refused call's tool-started is in the log, so repair would say its outcome is unknown; the gate knows
+    // it did not run.
+    const closers = close(repairOpenRun([...history, ...repairs, ...own], { resumingRunId: runId })).map(a =>
+      a.type === 'tool-error' && notRun.has(a.toolCallId)
+        ? ({ ...a, code: 'TOOL_NOT_STARTED', errorText: TOOL_NOT_STARTED_TEXT } as PersistableAction)
+        : a,
+    );
     if (wasAborted) {
       const runAborted = { ...(abortedBy ?? { type: 'run-aborted' }), ...stamp() } as PersistableAction;
       const runEnd = closers.findIndex(a => a.type === 'run-end');

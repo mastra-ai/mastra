@@ -339,3 +339,99 @@ describe('how a stopped run is labelled', () => {
     expect(log.filter(a => a.type === 'run-end')).toEqual([expect.objectContaining({ finishReason: 'interrupted' })]);
   });
 });
+
+describe('a failed write', () => {
+  const tools = {
+    deleteFile: tool({ inputSchema: z.object({ path: z.string() }), execute: async () => ({ deleted: true }) }),
+  };
+  const turns = () => scriptedModel([toolCallTurn('c1', 'deleteFile', { path: '/x' }), textTurn('Done.')]).model;
+  const hasCall = (batch: PersistableAction[]) => batch.some(a => a.type === 'tool-call');
+
+  it("a new call's failed tool-started batch is retried with what follows: the call is never skipped", async () => {
+    const memory = new ObservedStorage();
+    let failures = 0;
+    memory.fail = batch => hasStarted(batch) && hasCall(batch) && failures++ === 0;
+    let executed = 0;
+    const counted = {
+      deleteFile: tool({
+        inputSchema: z.object({ path: z.string() }),
+        execute: async () => {
+          executed++;
+          return { deleted: true };
+        },
+      }),
+    };
+    const { model, prompts } = scriptedModel([toolCallTurn('c1', 'deleteFile', { path: '/x' }), textTurn('Done.')]);
+    await drain(runAgent({ model, tools: counted, threadId: 't1', memory, input: 'delete /x' }));
+
+    expect(executed).toBe(0);
+    const log = await memory.listActions({ threadId: 't1' });
+    const types = log.map(a => a.type);
+    expect(types).toContain('tool-call');
+    expect(types).not.toContain('tool-started');
+    expect(types.indexOf('tool-call')).toBeLessThan(types.indexOf('tool-error'));
+    expect(log.find(a => a.type === 'tool-error')).toMatchObject({ toolCallId: 'c1', code: 'TOOL_NOT_STARTED' });
+    expect(types.at(-1)).toBe('run-end');
+    expect(repairOpenRun(log)).toEqual([]);
+    expectValidToolPairs(toModelMessages(log));
+    void prompts;
+  });
+
+  it('when the retry fails too, the run throws, and what finally writes still carries the rows before it', async () => {
+    const memory = new ObservedStorage();
+    let failures = 0;
+    // The new call's batch fails, then its retry at turn-end fails; finally's write then succeeds.
+    memory.fail = batch => (failures > 0 || (hasStarted(batch) && hasCall(batch))) && failures++ < 2;
+    await expect(
+      drain(runAgent({ model: turns(), tools, threadId: 't1', memory, input: 'delete /x' })),
+    ).rejects.toThrow('write failed');
+    const log = await memory.listActions({ threadId: 't1' });
+    const calls = new Set(log.flatMap(a => (a.type === 'tool-call' ? [a.toolCallId] : [])));
+    for (const a of log)
+      if (a.type === 'tool-error' || a.type === 'tool-result') expect(calls.has(a.toolCallId)).toBe(true);
+    expect(log.some(a => a.type === 'tool-call')).toBe(true);
+    expect(repairOpenRun(log)).toEqual([]);
+    expectValidToolPairs(toModelMessages(log));
+  });
+});
+
+describe('an abort between the grant and execute', () => {
+  // Hops 2–5 land after the callback grants the call and before the SDK calls execute.
+  it.each([2, 3, 4, 5])(
+    'an abort %i microtask hops after tool-started is saved: the tool does not run, closed as not started',
+    async hops => {
+      const controller = new AbortController();
+      class AbortAfterStart extends InMemoryActionStorage {
+        override async saveActions(args: { actions: PersistableAction[] }) {
+          await super.saveActions(args);
+          if (!hasStarted(args.actions)) return;
+          let p = Promise.resolve();
+          for (let i = 0; i < hops; i++) p = p.then(() => {});
+          void p.then(() => controller.abort());
+        }
+      }
+      const memory = new AbortAfterStart();
+      let executed = 0;
+      const tools = {
+        deleteFile: tool({
+          inputSchema: z.object({ path: z.string() }),
+          execute: async () => {
+            executed++;
+            return { deleted: true };
+          },
+        }),
+      };
+      const { model } = scriptedModel([toolCallTurn('c1', 'deleteFile', { path: '/x' }), textTurn('Done.')]);
+      await drain(
+        runAgent({ model, tools, threadId: 't1', memory, input: 'delete /x', abortSignal: controller.signal }),
+      );
+
+      expect(executed).toBe(0);
+      const log = await memory.listActions({ threadId: 't1' });
+      const types = log.filter(a => 'toolCallId' in a && a.toolCallId === 'c1').map(a => a.type);
+      expect(types).toEqual(['tool-call', 'tool-started', 'tool-error']);
+      expect(log.find(a => a.type === 'tool-error')).toMatchObject({ code: 'TOOL_NOT_STARTED' });
+      expect(repairOpenRun(log)).toEqual([]);
+    },
+  );
+});
