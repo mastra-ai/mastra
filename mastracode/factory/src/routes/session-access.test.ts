@@ -1,3 +1,4 @@
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { describe, expect, it } from 'vitest';
@@ -22,6 +23,7 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
+    c.set('requestContext' as never, new RequestContext() as never);
     await next();
   });
   app.use(
@@ -37,7 +39,14 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
   app.post('/api/agent-controller/:controllerId/sessions', async c =>
     c.json({ reached: true, body: await adapterBody(c) }),
   );
+  app.post('/api/agent-controller/:controllerId/sessions/:resourceId/resource', async c =>
+    c.json({ reached: true, body: await adapterBody(c) }),
+  );
   app.all('/api/agent-controller/:controllerId/sessions/*', c => c.json({ reached: true }));
+  // Memory handlers check thread ownership against the bound resource; echo it.
+  app.all('/api/memory/*', c =>
+    c.json({ reached: true, bound: (c.get('requestContext' as never) as RequestContext).get(MASTRA_RESOURCE_ID_KEY) }),
+  );
   app.get('/web/config/om', c => c.json({ reached: true }));
   app.post('/web/config/om/:role/model', async c => c.json({ reached: true, body: await adapterBody(c) }));
   return app;
@@ -113,5 +122,28 @@ describe('createSessionAccessGuard', () => {
 
   it('denies a signed-out caller addressing a private session', async () => {
     expect((await buildApp().request(`/api/agent-controller/code/sessions/${PRIVATE_ID}/stream`)).status).toBe(404);
+  });
+
+  it('refuses to re-key a session onto a private session the caller cannot see', async () => {
+    const path = '/api/agent-controller/code/sessions/teammate-own/resource';
+    expect((await post(teammate, path, { newResourceId: PRIVATE_ID })).status).toBe(404);
+
+    const shared = await post(teammate, path, { newResourceId: SHARED_ID });
+    await expect(shared.json()).resolves.toEqual({ reached: true, body: { newResourceId: SHARED_ID } });
+    expect((await post(owner, path, { newResourceId: PRIVATE_ID })).status).toBe(200);
+  });
+
+  it('404s memory routes addressing a private session the caller cannot see', async () => {
+    expect((await teammate.request(`/api/memory/threads?resourceId=${PRIVATE_ID}`)).status).toBe(404);
+    expect((await teammate.request(`/api/memory/threads/t-1?resourceId=${PRIVATE_ID}`)).status).toBe(404);
+    expect((await post(teammate, '/api/memory/threads', { resourceId: PRIVATE_ID })).status).toBe(404);
+
+    const allowed = await owner.request(`/api/memory/threads?resourceId=${PRIVATE_ID}`);
+    await expect(allowed.json()).resolves.toEqual({ reached: true, bound: PRIVATE_ID });
+  });
+
+  it('binds memory requests without a resourceId to the caller, so a bare threadId cannot reach another session', async () => {
+    const res = await teammate.request('/api/memory/threads/t-1');
+    await expect(res.json()).resolves.toEqual({ reached: true, bound: 'teammate' });
   });
 });
