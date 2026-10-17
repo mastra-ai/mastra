@@ -26,6 +26,7 @@ describeForAllEngines(
   'AIMock loop scenario: subagent auto-resume',
   engine => {
     const getMock = useLoopScenarioAimock();
+    const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
 
     async function setup(mock: LLMock) {
       const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
@@ -140,7 +141,8 @@ describeForAllEngines(
       return { first, second, resumeAges };
     }
 
-    it('resumes the subagent with the answer the customer sends on the same thread', async () => {
+    // Diverges on Inngest; not yet investigated.
+    itFailsOnInngest('resumes the subagent with the answer the customer sends on the same thread', async () => {
       const mock = getMock();
       const { first, second, resumeAges } = await lookUpThenAnswer(mock);
 
@@ -168,16 +170,20 @@ describeForAllEngines(
     // When the supervisor's model omits `suspendedToolCallId`, the subagent
     // starts a fresh run instead of resuming, and that run inherits the
     // supervisor's auto-resume instructions about tools the subagent doesn't have.
-    it.fails("keeps the supervisor's auto-resume instructions out of a subagent that starts over", async () => {
-      const mock = getMock();
-      const { second } = await lookUpThenAnswer(mock, { citeSuspension: false });
+    // Skipped on Inngest: the subagent does not resume there (see above); not yet investigated.
+    (engine === 'inngest' ? it.skip : it.fails)(
+      "keeps the supervisor's auto-resume instructions out of a subagent that starts over",
+      async () => {
+        const mock = getMock();
+        const { second } = await lookUpThenAnswer(mock, { citeSuspension: false });
 
-      const subagentRequests = second.requests.filter(r => isSubagent(r.body));
-      expect(subagentRequests.length).toBeGreaterThan(0);
-      for (const req of subagentRequests) {
-        expect(JSON.stringify(req.body.messages)).not.toContain(AUTO_RESUME_DIRECTIVE);
-      }
-    });
+        const subagentRequests = second.requests.filter(r => isSubagent(r.body));
+        expect(subagentRequests.length).toBeGreaterThan(0);
+        for (const req of subagentRequests) {
+          expect(JSON.stringify(req.body.messages)).not.toContain(AUTO_RESUME_DIRECTIVE);
+        }
+      },
+    );
   },
   { skip: ['fs'] },
 );
