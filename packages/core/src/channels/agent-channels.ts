@@ -1847,6 +1847,7 @@ export class AgentChannels {
       textFormat: adapterConfig?.textFormat,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
+      linkButtons: adapterConfig?.approvalButtons ?? APPROVAL_BUTTON_PLATFORMS.has(platform),
     };
   }
 
