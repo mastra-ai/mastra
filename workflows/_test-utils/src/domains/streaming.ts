@@ -1,3 +1,4 @@
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 /**
  * Streaming tests for workflows
  * Note: Basic streaming tests that don't require full stream consumption
@@ -467,8 +468,11 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
               { type: 'text-end', id: 't1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 10, text: 10, reasoning: undefined },
+                },
               },
             ],
           }),
@@ -491,8 +495,11 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
               { type: 'text-end', id: 't1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 10, text: 10, reasoning: undefined },
+                },
               },
             ],
           }),
@@ -557,13 +564,13 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
   if (Agent) {
     // Track what options were received
     let receivedOptions: any = null;
-    const doStreamSpy = vi.fn(async ({ prompt, temperature }: any) => {
+    const doStreamSpy = vi.fn<LanguageModelV4['doStream']>(async ({ prompt, temperature }) => {
       // Capture options that were passed
       receivedOptions = { temperature };
 
       // Check if instructions were overridden in the messages
-      const systemMessage = prompt?.find((m: any) => m.role === 'system');
-      if (systemMessage?.content) {
+      const systemMessage = prompt.find(m => m.role === 'system');
+      if (systemMessage?.role === 'system') {
         receivedOptions.instructionsOverridden = systemMessage.content.includes('overridden instructions');
       }
 
@@ -576,8 +583,11 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
             { type: 'text-end', id: 't1' },
             {
               type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 10, text: 10, reasoning: undefined },
+              },
             },
           ],
         }),
@@ -954,7 +964,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         const onChunkSpy = vi.fn();
         const maxSteps = 5;
 
-        const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }: { prompt: any; temperature: any }) => {
+        const doStreamSpy = vi.fn<LanguageModelV4['doStream']>(async ({ prompt, temperature }) => {
           const systemMessage = prompt?.find((m: any) => m.role === 'system');
           expect(systemMessage?.content).toContain('overridden instructions');
           expect(systemMessage?.content).not.toContain('original instructions');
@@ -969,8 +979,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                 { type: 'text-end', id: 't1' },
                 {
                   type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                  finishReason: { unified: 'stop', raw: 'stop' },
+                  usage: {
+                    inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 10, text: 10, reasoning: undefined },
+                  },
                 },
               ],
             }),
@@ -1052,9 +1065,12 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   {
                     type: 'finish',
                     id: '2',
-                    finishReason: 'stop',
+                    finishReason: { unified: 'stop', raw: 'stop' },
                     logprobs: undefined,
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1077,9 +1093,12 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   {
                     type: 'finish',
                     id: '2',
-                    finishReason: 'stop',
+                    finishReason: { unified: 'stop', raw: 'stop' },
                     logprobs: undefined,
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1187,8 +1206,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   { type: 'text-end', id: 't1' },
                   {
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 10, text: 10, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1212,8 +1234,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   { type: 'text-end', id: 't1' },
                   {
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 10, text: 10, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1296,8 +1321,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
               content: [{ type: 'text', text: 'Paris' }],
               warnings: [],
             }),
@@ -1311,8 +1339,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
               content: [{ type: 'text', text: 'London' }],
               warnings: [],
             }),
@@ -1427,8 +1458,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   controller.enqueue({ type: 'text-end', id: '1' });
                   controller.enqueue({
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   });
                   controller.close();
                 },
@@ -1509,8 +1543,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   controller.enqueue({ type: 'text-end', id: '1' });
                   controller.enqueue({
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   });
                   controller.close();
                 },
@@ -1598,8 +1635,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   controller.enqueue({ type: 'text-end', id: '1' });
                   controller.enqueue({
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   });
                   controller.close();
                 },
@@ -1670,8 +1710,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             model: new MockLanguageModelV4({
               doGenerate: async () => ({
                 rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
                 content: [{ type: 'text', text: articleJson }],
                 warnings: [],
               }),
@@ -1692,8 +1735,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                     controller.enqueue({ type: 'text-end', id: 'text-1' });
                     controller.enqueue({
                       type: 'finish',
-                      finishReason: 'stop',
-                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                      finishReason: { unified: 'stop', raw: 'stop' },
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 20, text: 20, reasoning: undefined },
+                      },
                     });
                     controller.close();
                   },
