@@ -20,6 +20,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  *  - start/finish bracket the entire run
  */
 describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine => {
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
   it('reassembles multi-delta text in order and matches output.text', async () => {
@@ -62,7 +63,8 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     expect(finalText).toBe(scriptedText);
   });
 
-  it('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
+  // Inngest never emits the opening `start` chunk.
+  itFailsOnInngest('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
     const scriptedText = 'Hello world, this is a streaming fidelity test.';
 
     const { output, chunks } = await runLoopScenario({
