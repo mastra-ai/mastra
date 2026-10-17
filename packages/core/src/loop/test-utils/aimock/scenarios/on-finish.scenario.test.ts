@@ -113,6 +113,63 @@ describeForAllEngines(
       expect(Array.isArray(toolResults)).toBe(true);
       expect(toolResults!.length).toBeGreaterThan(0);
     });
+
+    it('a defined onFinish does not swallow an API error from the stream', async () => {
+      const { chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Trigger an API error',
+        collectChunks: true,
+        onFinish: () => {},
+        onError: () => {},
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat' },
+            { error: { message: 'test error', type: 'server_error', code: 'server_error' }, status: 400 },
+          );
+        },
+      });
+
+      const error = chunks.find((c: any) => c.type === 'error');
+      expect(error).toBeDefined();
+      expect(JSON.stringify(error!.payload)).toContain('test error');
+    });
+
+    if (engine === 'normal' || engine === 'fs') {
+      it('onChunk receives tool-error chunks when a tool throws', async () => {
+        const seen: any[] = [];
+        const boom = createTool({
+          id: 'boom',
+          description: 'Always throws.',
+          inputSchema: z.object({}),
+          execute: async () => {
+            throw new Error('tool exploded');
+          },
+        });
+
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Call boom.',
+          tools: { boom },
+          stopWhen: stepCountIs(3),
+          onChunk: (event: any) => {
+            seen.push(event.chunk ?? event);
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              { toolCalls: [{ id: 'call_boom', name: 'boom', arguments: {} }] },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Recovered.' });
+          },
+        });
+
+        const toolError = seen.find(c => c.type === 'tool-error');
+        expect(toolError?.payload).toMatchObject({ toolCallId: 'call_boom', toolName: 'boom' });
+        expect(JSON.stringify(toolError?.payload)).toContain('tool exploded');
+      });
+    }
   },
   {},
 );
