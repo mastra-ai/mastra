@@ -253,6 +253,31 @@ describe('AGGREGATE_TRACES', () => {
     );
   });
 
+  it('gates time to first chunk predicates on the store advertising support', async () => {
+    const request = {
+      timeRange: TIME_RANGE,
+      where: { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+      measures: ['count'],
+    };
+    const older = createHarness(['trace-aggregate']);
+    const error = await captureHttpException(AGGREGATE_TRACES.handler(params(older.mastra, request)));
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Time to first chunk predicates are not supported by the configured observability store',
+    });
+    expect(older.observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+
+    const supported = createHarness(['trace-aggregate', 'trace-query-time-to-first-chunk']);
+    await AGGREGATE_TRACES.handler(params(supported.mastra, request));
+    expect(supported.observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'gt', value: 500 },
+      }),
+    );
+  });
+
   it('returns 501 before calling an older store for context identifier predicates', async () => {
     const wheres = [
       { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-1' } },
