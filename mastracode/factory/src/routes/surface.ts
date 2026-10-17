@@ -122,8 +122,6 @@ export interface FactoryApiRoutesDeps {
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
-  /** Organization this deployment serves; its admins may edit deployment-wide settings. */
-  deploymentOrganizationId?: string;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -137,6 +135,7 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
+    startCoordinator: FactoryStartCoordinator;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   }) => void;
 }
@@ -697,6 +696,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   if (transitionService && startCoordinator) {
     deps.onFactoryRuntime?.({
       transitionService,
+      startCoordinator,
       ...(sourceControlRegistrations.length > 0
         ? {
             prepareBinding: async (input: FactoryBindingPreparationInput) => {
@@ -746,7 +746,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },
-      deploymentOrganizationId: deps.deploymentOrganizationId,
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,

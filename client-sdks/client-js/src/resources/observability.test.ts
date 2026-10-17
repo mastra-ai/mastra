@@ -13,6 +13,7 @@ import type {
   QueryTracesGroupedInput,
   QueryTracesInput,
 } from './observability';
+import type { AggregateTracesArgs, AggregateTracesResponse } from './observability-route-types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -581,6 +582,77 @@ describe('Observability Methods', () => {
           body: JSON.stringify(request),
         }),
       );
+    });
+  });
+
+  describe('aggregateTraces()', () => {
+    const request: AggregateTracesArgs = {
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'duration.p95', 'cost.sum'],
+      orderBy: { field: 'count', direction: 'desc' },
+      limit: 10,
+    };
+    const response: AggregateTracesResponse = {
+      rows: [
+        {
+          dimensions: { entityName: 'support-agent' },
+          bucket: '2026-08-01T00:00:00.000Z',
+          measures: { count: 3, 'duration.p95': 1200, 'cost.sum': 0.02 },
+          cost: { coverage: 1, unit: 'USD' },
+        },
+      ],
+      truncated: false,
+    };
+
+    it('should post the aggregate request body unchanged with a typed response', async () => {
+      mockSuccessfulResponse(response);
+
+      const result = await client.aggregateTraces(request);
+
+      expectTypeOf(result).toEqualTypeOf<AggregateTracesResponse>();
+      expect(result).toEqual(response);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/aggregate`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+
+    it('should retry server errors and use the configured abort signal, like queryTraces()', async () => {
+      const controller = new AbortController();
+      const retryingClient = new MastraClient({
+        ...clientOptions,
+        retries: 1,
+        backoffMs: 0,
+        abortSignal: controller.signal,
+      });
+      vi.mocked(global.fetch).mockResolvedValueOnce(new Response('Unavailable', { status: 503 }));
+      mockSuccessfulResponse(response);
+
+      await expect(retryingClient.aggregateTraces(request)).resolves.toEqual(response);
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenLastCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/aggregate`,
+        expect.objectContaining({ signal: controller.signal }),
+      );
+    });
+
+    it('should not retry validation errors', async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({ code: 'TRACE_QUERY_VALIDATION', issues: [] }), { status: 422 }),
+      );
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(retryingClient.aggregateTraces(request)).rejects.toThrow();
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   });
 

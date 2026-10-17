@@ -52,6 +52,21 @@ function stubManualCreate(title: string) {
 }
 
 describe('Default grouped issue list', () => {
+  it('creates the first card directly from the empty state without an intake source', async () => {
+    renderBoard();
+    stubManualCreate('My first card');
+    const user = userEvent.setup();
+    const intake = await screen.findByTestId('board-column-intake');
+
+    await user.click(await within(intake).findByRole('button', { name: 'Create card' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Work item title' }), 'My first card');
+    await user.click(screen.getByRole('button', { name: 'Add work item to Intake' }));
+
+    const created = await within(intake).findByText('My first card');
+    await waitFor(() => expect(created).toBeVisible());
+    expect(within(intake).queryByRole('button', { name: 'Create card' })).not.toBeInTheDocument();
+  });
+
   it('collapses groups independently and expands them with the keyboard', async () => {
     renderBoard();
     const user = userEvent.setup();

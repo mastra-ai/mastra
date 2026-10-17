@@ -1467,10 +1467,14 @@ export function checkTrajectoryEfficiency(
     for (const step of steps) {
       if (step.children?.length) siblingLists.push(step.children);
     }
-    for (let i = 1; i < steps.length; i++) {
-      const prev = steps[i - 1]!;
+    // processor_run and model_generation steps are interleaved between tool calls in
+    // trace-derived trajectories, so they must not break adjacency.
+    let prev: TrajectoryStep | undefined;
+    for (let i = 0; i < steps.length; i++) {
       const curr = steps[i]!;
+      if (curr.stepType === 'processor_run' || curr.stepType === 'model_generation') continue;
       if (
+        prev &&
         prev.name === curr.name &&
         prev.stepType === curr.stepType &&
         (prev.stepType === 'tool_call' || prev.stepType === 'mcp_tool_call')
@@ -1485,6 +1489,7 @@ export function checkTrajectoryEfficiency(
           // If serialization fails, don't flag as redundant
         }
       }
+      prev = curr;
     }
   }
 

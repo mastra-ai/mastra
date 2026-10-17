@@ -2156,7 +2156,7 @@ export class AgentChannels {
     return memoryStore.saveThread({
       thread: {
         id: resolvedThreadId || defaultThreadId,
-        title: `${platform} conversation`,
+        title: '',
         resourceId: resolvedResourceId,
         createdAt: new Date(),
         updatedAt: new Date(),

@@ -646,16 +646,6 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
   });
 
-  const factorySupervisor = factory.command('supervisor').description('Inspect the Factory supervisor');
-  addAction(factorySupervisor, 'session', FACTORY_API_ROUTE_CATALOG.supervisorSession, {
-    description: 'Get or create the deterministic Factory supervisor session',
-    routePlacement: 'origin',
-  });
-  addAction(factorySupervisor, 'health', FACTORY_API_ROUTE_CATALOG.supervisorHealth, {
-    description: 'Run the deterministic Factory supervisor health check',
-    routePlacement: 'origin',
-  });
-
   const learning = api
     .command('learning')
     .description('Query Trace Intelligence themes across agent traces (Mastra platform)');

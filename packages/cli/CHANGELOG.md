@@ -1,5 +1,263 @@
 # mastra
 
+## 1.34.3-alpha.2
+
+### Patch Changes
+
+- Added typed support for the new agent controller thread ownership route (`POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner`). ([#27043](https://github.com/mastra-ai/mastra/pull/27043))
+
+  ```http
+  POST /agent-controller/code/sessions/resource-1/threads/thread-1/owner
+  → { "ok": true, "ownerId": "user-123" }
+  ```
+
+- Platform sign-ins started from the CLI now include which command opened them (`mastra create` or any other `mastra` command), so new Mastra accounts can be attributed to the command that created them. ([#27229](https://github.com/mastra-ai/mastra/pull/27229))
+
+- Added the credential that answered each finished reply next to its model in Factory chats, such as "Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max", "Your Claude Pro/Max", or "Organization Anthropic API key". The label is recorded when the reply is written, so it stays accurate after the thread's credential scope changes. Replies written before this change show only the model. ([#27162](https://github.com/mastra-ai/mastra/pull/27162))
+
+- Fixed Factory project CLI metadata to include the `reviewTestChecksEnabled` and `selfReviewEnabled` settings. ([#27322](https://github.com/mastra-ai/mastra/pull/27322))
+
+- Factory reviews can now report their test results as a `Factory Review / tests` check on the pull request's head commit. On GitHub this is a check run, and on GitLab it is a commit status. The review agent posts an in-progress check when it starts its test plan and a final pass or fail result when the tests finish. ([#27129](https://github.com/mastra-ai/mastra/pull/27129))
+
+  This is off by default. To turn it on for a project, open **Automation settings** on the board and switch on **Publish review test checks**. While it is off, the test report comment is still posted.
+
+  After the tests finish, the review agent also posts a separate **Factory test report** comment on the pull request. The comment recaps what was tested, gives each command's result, and links to the check.
+
+- Work items now get an independent self-review before their pull or merge request opens. After Building, the builder pushes the branch and moves the card to Review without opening a PR. A separate review agent tests and reviews the branch there with the `factory-self-review` skill, using the same bar as PR review. If it requests changes, the card goes back to Building with the findings. If it approves, the card stays in Review and the builder opens the PR from the approved head, with the test report in the body. ([#27129](https://github.com/mastra-ai/mastra/pull/27129))
+
+  Factory enforces this on the server: a Work-bound session cannot open a change request until self-review has approved the exact branch head being proposed. After three request-changes rounds, the card parks in Intake for a person to decide; agents cannot move it until someone does. Cards that already have an open PR keep their current flow.
+
+  Self-review is off by default. Turn it on per project with the "Self-review before pull requests" switch in Automation settings. While it is off, the builder opens the PR directly from Building, as before.
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`18c2137`](https://github.com/mastra-ai/mastra/commit/18c213722066a3bae851a5c807f4db0d11fe56a4), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37)]:
+  - @mastra/core@1.79.0-alpha.2
+  - @mastra/deployer@1.79.0-alpha.2
+
+## 1.34.3-alpha.1
+
+### Patch Changes
+
+- Improved `mastra dev` shutdown: on Ctrl-C the server now gets the same 5 seconds to shut down that it gets on a hot reload, instead of being killed after 2 seconds. ([#26986](https://github.com/mastra-ai/mastra/pull/26986))
+
+- Rows in the Studio experiment comparison view now highlight on hover. Clicking a row (or pressing Enter on it) opens its dataset item in a side panel, the same panel used on the dataset page, so you can inspect, edit or delete the item without leaving the comparison. Buttons, links and text selection inside a row keep working without opening the panel. ([#27285](https://github.com/mastra-ai/mastra/pull/27285))
+
+- Simplified the dataset page in Studio. Empty datasets now only show the dataset menu in the header, and hide the "Add tag" control, so the empty state focuses on adding items. Once a dataset has items, "Experiments" (with the same icon as the sidebar) and "New experiment" appear as compact actions in the top-right header. The breadcrumb now always shows the dataset name, even for datasets beyond the first page of the list, and the dataset version lives in the breadcrumb too (for example `Datasets / My dataset / Latest (v3)`), where you can switch to an older version. Each version in the version picker now shows when it was created. Selecting a dataset item now opens it in a resizable panel next to the item list, like experiment results, instead of a drawer over the page, and the item no longer appears in the breadcrumb. The item panel now matches the experiment result panel: it shows a short item id you can copy, plain-text inputs and ground truths read as text instead of quoted JSON, the redundant dataset id, version and scorers rows are gone, editing an item no longer offers a scorer override, and "Item versions" moved into the actions menu. In the experiment result panel, "Request review" and "Mark as reviewed" now lead the header in place of the "Experiment result" title. ([#27241](https://github.com/mastra-ai/mastra/pull/27241))
+
+- Opening a Factory now lands on its board, and Boards come first in the sidebar. Overview, Attention and Audit log are merged into one **Activity** page, linked at the bottom of the sidebar with a badge for unread items that need you. The Needs attention popover is gone. ([#27152](https://github.com/mastra-ai/mastra/pull/27152))
+
+  - **Needs you**: failures, findings, waiting agents, mentions and proposed runs, with the discussions you follow in their own list underneath. Hovering a row swaps its kind and age for its actions: retry, run, dismiss, mark read, archive. **Mark all read** sits in the section header; archived items are one menu choice away.
+  - **Timeline**: what moved and who moved it, with cards that need you flagged. One properties menu groups similar events or lists every event with its details, filters by kind (work items, runs, git, agent, intake), and switches to a compact view.
+  - **Codebase**: the linked repository's recent commits, grouped by day.
+
+  The page lives at `/factories/:factoryId/activity`, and `?view=codebase` opens the Codebase view. Old Overview and Attention links redirect there; old Audit log links open the timeline with every event listed (`?events=all`).
+
+- Combined the Factory default model and thinking level into one **Model and thinking** setting. The thinking control now shows only the levels that the selected default model supports. ([#27249](https://github.com/mastra-ai/mastra/pull/27249))
+
+- Factory UI now compiles one stylesheet from the design system's source instead of loading its precompiled sheet and then its own. The page's CSS drops from 102 KB to 61 KB gzipped. ([#27254](https://github.com/mastra-ai/mastra/pull/27254))
+
+- The New experiment dialog in Studio now asks for three things: the target (agents, workflows and scorers in one searchable list), the dataset (the newest one by default, with its item count and version) and the scorers (the dataset's defaults, shown as removable chips). The experiment name, description, request context and, for datasets with more than one version, the dataset version now sit under Advanced. The name is optional: leave it empty and the run is named after the target. Each field has an info tooltip explaining what it does. ([#27117](https://github.com/mastra-ai/mastra/pull/27117))
+
+- Added the existing Regenerate title action to Slack sessions owned by the current user in the Factory sidebar. ([#27251](https://github.com/mastra-ai/mastra/pull/27251))
+
+- Studio now loads a single stylesheet. It no longer ships the design system's compiled sheet next to its own copy of the same rules, so every utility is declared once and pages download about 44 KB less compressed CSS. ([#27256](https://github.com/mastra-ai/mastra/pull/27256))
+
+- Updated dependencies [[`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e)]:
+  - @mastra/core@1.79.0-alpha.1
+  - @mastra/deployer@1.79.0-alpha.1
+
+## 1.34.3-alpha.0
+
+### Patch Changes
+
+- Removed the `mastra api factory supervisor session` and `mastra api factory supervisor health` commands because the Factory Supervisor is being retired. Running them now fails with `unknown command 'supervisor'`. ([#27064](https://github.com/mastra-ai/mastra/pull/27064))
+
+- The Factory board's **Intake source** filter now offers only the providers you have connected, plus Manual. Saved views that already filter on a provider you've since disconnected keep showing and editing that source. Slack is no longer offered as an intake source. ([#27071](https://github.com/mastra-ai/mastra/pull/27071))
+
+- Improved Factory board Intake to show issues from connected sources together. Healthy sources continue loading more issues when another source fails, and errors identify the affected integration. ([#27067](https://github.com/mastra-ai/mastra/pull/27067))
+
+- Factory settings now show the thinking level under Factory defaults, editable by organization admins, and chats label the fallback as the Factory default. The deployment-wide "Thinking defaults" and per-chat "Chat defaults" rows are gone. `mastra api` accepts `defaultThinkingLevel` when updating a Factory project: ([#27216](https://github.com/mastra-ai/mastra/pull/27216))
+
+  ```bash
+  mastra api factory project update "$FACTORY_ID" '{"defaultThinkingLevel":"high"}'
+  ```
+
+- Removed the "Suggested" badge from Factory board cards. A run waiting for approval is still surfaced by the highlighted "Start suggested run" button on the card. ([#27212](https://github.com/mastra-ai/mastra/pull/27212))
+
+- Removed the Supervisor page, its navigation link, the findings badge on Overview, and every "Ask supervisor" action from the Factory UI bundled with `mastra`. Attention views now request only the item kinds they display, so retired kinds no longer take up page slots or appear in pagination cursors. ([#27058](https://github.com/mastra-ai/mastra/pull/27058))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`f885386`](https://github.com/mastra-ai/mastra/commit/f885386b79be0e4d784067b0e26608971e0cc788), [`f68ad0f`](https://github.com/mastra-ai/mastra/commit/f68ad0f0d26c403059e4f7b92a300e839d39d5ed), [`f6a9762`](https://github.com/mastra-ai/mastra/commit/f6a9762b12ae9dad6a154f73ed3099a2ee472d0c), [`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/core@1.78.1-alpha.0
+  - @mastra/deployer@1.78.1-alpha.0
+  - @mastra/loggers@1.3.9-alpha.0
+
+## 1.34.2
+
+### Patch Changes
+
+- Added company, personal, and hybrid account choices to Factory onboarding. Onboarding only asks for the connections the chosen setup needs, and checks each model against the account it runs on before creating the Factory. Members who cannot use or add a company connection get the personal setup. ([#27163](https://github.com/mastra-ai/mastra/pull/27163))
+
+- Factory chat now shows a **Login** button when a session fails because a provider sign-in is missing or was rejected (for example "Not logged in to Anthropic."). Factory-scoped sessions go to the Factory models settings page and user-scoped sessions go to Your models. ([#27187](https://github.com/mastra-ai/mastra/pull/27187))
+
+- New Factories now default to the hybrid model scope everywhere. Onboarding preselects "Company work · personal sessions", and Factories with no saved scope, or one that isn't recognized, are treated as hybrid instead of company account. ([#27202](https://github.com/mastra-ai/mastra/pull/27202))
+
+- Fixed the Factory personal default model picker offering models that only an organization credential can run. Personal model settings now warn when your saved default can't run on any of your connected accounts. ([#27080](https://github.com/mastra-ai/mastra/pull/27080))
+
+- While an experiment is queued or running, its page in Studio now shows a single progress state with a spinner and how many items have finished (for example `11 / 24 items finished`), instead of KPIs and a results list that are only partly filled in. The KPIs and results appear once the run completes or fails, and Rerun stays disabled until then. The scattered in-progress hints are gone: `Running…` in the run duration, the "so far" labels and the progress count in the breadcrumb. ([#27053](https://github.com/mastra-ai/mastra/pull/27053))
+
+- You can now attach images when starting a new session in Factory. Paste, drop or pick images on the "What do you want to work on?" screen and they are sent with your first prompt once the session is created. You can also start a session with only an image. Before, the composer showed "Images can be attached once the session is ready." and you had to send a prompt first. If the session can't be created or the first message fails to send, your text and images stay in the composer so you can retry. ([#27101](https://github.com/mastra-ai/mastra/pull/27101))
+
+- Factory now explains why connecting GitHub through Mastra Platform didn't work, instead of returning silently to onboarding or settings. If the GitHub account already had the Mastra GitHub App installed before the link, it says to uninstall the App from that account and choose Connect GitHub again. It also gives plain reasons when you need to sign in to Mastra Platform first, when the link was started for a different account, was opened in another browser, or was already used, when only the GitHub account owner can link the installation, and when your Mastra account is already connected to a different GitHub account that must be disconnected first. ([#26990](https://github.com/mastra-ai/mastra/pull/26990))
+
+- Updated Factory boards to open as an issue list grouped by workflow status, with collapsible groups. Saved Kanban views keep their layout. Creating an issue or following an issue link reveals its group. ([#27068](https://github.com/mastra-ai/mastra/pull/27068))
+
+- Improved the model pickers in Factory settings. Models now show a readable name (for example Claude Haiku 4.5) with their provider's logo, and the full `provider/model` id underneath. Search still matches the id and the provider name. In Observational memory, "Auto" is now the first choice in the observer and reflector pickers and shows the model it currently resolves to, and the token thresholds use a number field with steppers, thousands separators and a "tokens" suffix. ([#27000](https://github.com/mastra-ai/mastra/pull/27000))
+
+- Each session list in the Factory sidebar (Work, Review and User Sessions) now has one Properties menu on its heading, with Sort and the list's filters as submenus. Each row shows its current value. ([#27004](https://github.com/mastra-ai/mastra/pull/27004))
+
+  - Work and Review Sessions sort by Activity (the previous order), Last updated or Last created. The Owner filter moved from the heading icon into the menu.
+  - User Sessions sort by Last updated (the new default) or Last created. Pinned sessions stay first. The viewer's own sessions are no longer moved to the top, because the Owner filter already starts on Mine.
+  - Owner, Status and Updated filters for User Sessions moved from the filter popover into the menu. Session text search was removed; global search (⌘K) already finds sessions by title, branch and id.
+  - The sort is remembered per list across reloads. Filters still reset on reload.
+  - Reset to default restores the sort and the filters together.
+
+- The Sessions list in the Factory sidebar can now be grouped by Board, Status, Owner or None from Properties → Group, and each group can be shown or hidden from the same menu. Both choices are remembered across reloads; hidden groups are remembered per grouping. ([#27026](https://github.com/mastra-ai/mastra/pull/27026))
+
+- Added group ordering to the Factory sidebar's Sessions list. In Properties → Group, drag a group by its handle, or highlight it and press Alt+↑ or Alt+↓. The order is remembered per grouping, and moving the groups back to the default order forgets it. ([#27028](https://github.com/mastra-ai/mastra/pull/27028))
+
+- The Factory sidebar now shows one Sessions list, grouped by board (Work, Review, any custom board, then User), with a single Properties menu on its heading. Sort and filters apply to the whole list. ([#27025](https://github.com/mastra-ai/mastra/pull/27025))
+
+  - User sessions now sort by Activity by default, like Work and Review sessions.
+  - Every group shows 5 sessions, with Show more for the rest.
+  - Sessions on a custom board get their own group instead of appearing under Work.
+  - The Status filter gains Waiting on you and Done.
+
+- Improved Factory sandbox settings: choice settings show readable labels (such as memory sizes in MB and GB), and the default choice is marked "(default)" instead of appearing twice in the dropdown. ([#27098](https://github.com/mastra-ai/mastra/pull/27098))
+
+- The Factory sidebar footer now has one user menu instead of separate account and Settings links. It shows your profile picture, name and email, and opens My account, Preferences, Your models, Your memory, Connections, Settings, a Theme choice and Log out. Without sign-in, it opens the same settings without My account or Log out. ([#27097](https://github.com/mastra-ai/mastra/pull/27097))
+
+  - Theme opens System, Light and Dark as a submenu you can reach with the arrow keys.
+  - Back to app returns to the page where you opened settings, including its filters.
+
+- Added the model name under each finished reply in Factory chats, so you can see which model wrote it, including after the session switches models. The composer's model picker now names models the same way, so dated ids such as `claude-sonnet-4-5-20250929` read as "Claude Sonnet 4.5". ([#27001](https://github.com/mastra-ai/mastra/pull/27001))
+
+- Improved Factory onboarding by placing Continue and Skip for now outside the integrations list, showing connected integrations with muted Connected labels, and keeping the list scrollable on short mobile screens. Simplified mobile workflow previews while preserving their animated transitions. ([#27059](https://github.com/mastra-ai/mastra/pull/27059))
+
+- Fixed `mastra api` trace, log, metric, and score commands for projects in the EU region. They now use the project's region instead of always calling the US observability endpoint, so EU projects return their data instead of empty results or timeouts. The CLI uses `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` (written to `.env` by `mastra init`) when set, and otherwise looks up the project's region. `--url` still overrides both. ([#27035](https://github.com/mastra-ai/mastra/pull/27035))
+
+- When you open a teammate's Factory session, a line under the composer now names whose session your messages steer, with their avatar. When their profile isn't available, it says "a teammate's session" instead. ([#27031](https://github.com/mastra-ai/mastra/pull/27031))
+
+- The buttons that open the experiment dialog in Studio now read "New experiment" with a plus icon instead of "Run Experiment" with a play icon, on the Experiments page, a dataset page, a scorer page and the empty states. The dialog still runs the experiment when you submit it. ([#27115](https://github.com/mastra-ai/mastra/pull/27115))
+
+- Factory settings now let you choose whether a Factory's sessions use the organization's models and credentials or each session owner's own. The setting is also available from the CLI: ([#26934](https://github.com/mastra-ai/mastra/pull/26934))
+
+  ```bash
+  mastra api factory project update <project-id> '{"modelScope":"user"}'
+  ```
+
+- Removed the "Covered by org" label from personal provider access settings. Personal credentials no longer fall back to organization credentials, so the label was misleading. ([#27190](https://github.com/mastra-ai/mastra/pull/27190))
+
+- Fixed the Factory chat model picker staying locked when its model list fails to load. It now shows that the model list is unavailable. ([#27107](https://github.com/mastra-ai/mastra/pull/27107))
+
+- The Factory Slack connection settings page no longer shows the "Create work items for new Slack threads" toggle, and the Factory API commands no longer accept `slackWorkItemsEnabled` on project updates. ([#27063](https://github.com/mastra-ai/mastra/pull/27063))
+
+  Before:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "slackWorkItemsEnabled": true }
+  ```
+
+  After: sent alone, the field is rejected as an empty update. Sent with other fields, it is ignored:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "name": "Platform" }
+  ```
+
+- Fixed new Factory sessions showing "Failed to load messages: Thread not found" while the session's environment is still starting. The session shows an empty history until it is ready, then loads it, including after a page reload. ([#26970](https://github.com/mastra-ai/mastra/pull/26970))
+
+- Improved experiment comparison in Studio. ([#27055](https://github.com/mastra-ai/mastra/pull/27055))
+
+  - The experiments list no longer leaves you guessing which experiments can be compared. Once you select an experiment, every experiment that ran on the same dataset is highlighted, and a note above the list gives that dataset's ID.
+  - The comparison page shows the compared dataset as a badge at the top right, linking to the dataset. Each experiment header shows the dataset version that experiment ran on, linked to the dataset at that version, and flags it when it differs from the baseline.
+
+- The Metrics page in Studio now uses the same filter bar as Traces, Experiments and Datasets, so filtering works the same way on every page. ([#27034](https://github.com/mastra-ai/mastra/pull/27034))
+
+  **Filters**
+
+  The time range is the first chip in the bar, as on Traces. Type to add a filter for a dimension such as environment, tags or thread ID. Remove a chip to clear that filter, or use the clear button to remove them all. Everything sits in one row, instead of an Add Filter button above a second row of pills.
+
+  **Saved filters**
+
+  Metrics now remembers your filters on every change, as Traces does, so the Save and Remove saved menu is gone. Opening Metrics without filters in the link restores the ones you used last. Clearing every filter forgets them.
+
+- Fixed `mastra dev` failing to start in monorepos when a tool file imports something from a workspace package that nothing else imports. The dev server no longer stops with `does not provide an export named ...`. ([#27132](https://github.com/mastra-ai/mastra/pull/27132))
+
+- Added `hybrid` to the Factory project `modelScope` values accepted by `mastra api factory project update`. ([#27095](https://github.com/mastra-ai/mastra/pull/27095))
+
+  Set the update request body to:
+
+  ```json
+  { "modelScope": "hybrid" }
+  ```
+
+  Interactive sessions use their owner's personal model and credentials. Work-item threads use the Factory's default model and organization credentials.
+
+  Factory settings now offer a "Personal for sessions, Factory for work items" model scope. The chat model picker lists the models and default of the thread's billing scope: the session owner's for interactive threads, and the Factory's for work-item threads, including after the work item finishes.
+
+- Added `POST /agents/:agentId/queue-signal`, which queues a typed signal to run after the active thread run completes, or starts a run right away when the thread is idle. The body takes the same `signal` shape as `POST /agents/:agentId/signals`. ([#27081](https://github.com/mastra-ai/mastra/pull/27081))
+
+  ```bash
+  curl -X POST http://localhost:4111/api/agents/support-agent/queue-signal \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "resourceId": "user-123",
+      "threadId": "thread-123",
+      "signal": {
+        "type": "reactive",
+        "tagName": "skill",
+        "attributes": { "name": "triage" },
+        "contents": "Triage the new issue."
+      }
+    }'
+  ```
+
+- Updated dependencies [[`0b1ea6c`](https://github.com/mastra-ai/mastra/commit/0b1ea6ca6266158316defb522feb3d2f9bf33174), [`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25), [`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`ab23e5e`](https://github.com/mastra-ai/mastra/commit/ab23e5ecf6be758d3118802018d2f1136f79a94d), [`d77c0be`](https://github.com/mastra-ai/mastra/commit/d77c0be3dc4a7dbba93b4740c6d8e13d1b32916a), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`33eb344`](https://github.com/mastra-ai/mastra/commit/33eb344ebfe918d032e3ad1e410788d4c8bc6526), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`5d12fbf`](https://github.com/mastra-ai/mastra/commit/5d12fbfcd756e5f5b0cae53e45a486a64ad102f5), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e), [`c09fb4b`](https://github.com/mastra-ai/mastra/commit/c09fb4b5758114c8c57d0af48cbe6dfdfe9dde90), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10), [`632b9c7`](https://github.com/mastra-ai/mastra/commit/632b9c756b79d963c221af836079ec7cde1c0a74)]:
+  - @mastra/core@1.78.0
+  - @mastra/loggers@1.3.8
+  - @mastra/deployer@1.78.0
+
+## 1.34.2-alpha.9
+
+### Patch Changes
+
+- Factory chat now shows a **Login** button when a session fails because a provider sign-in is missing or was rejected (for example "Not logged in to Anthropic."). Factory-scoped sessions go to the Factory models settings page and user-scoped sessions go to Your models. ([#27187](https://github.com/mastra-ai/mastra/pull/27187))
+
+- Updated dependencies [[`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956), [`ab23e5e`](https://github.com/mastra-ai/mastra/commit/ab23e5ecf6be758d3118802018d2f1136f79a94d), [`d77c0be`](https://github.com/mastra-ai/mastra/commit/d77c0be3dc4a7dbba93b4740c6d8e13d1b32916a)]:
+  - @mastra/core@1.78.0-alpha.9
+  - @mastra/loggers@1.3.8-alpha.0
+  - @mastra/deployer@1.78.0-alpha.9
+
+## 1.34.2-alpha.8
+
+### Patch Changes
+
+- Added company, personal, and hybrid account choices to Factory onboarding. Onboarding only asks for the connections the chosen setup needs, and checks each model against the account it runs on before creating the Factory. Members who cannot use or add a company connection get the personal setup. ([#27163](https://github.com/mastra-ai/mastra/pull/27163))
+
+- Updated dependencies [[`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572)]:
+  - @mastra/core@1.78.0-alpha.8
+  - @mastra/deployer@1.78.0-alpha.8
+
+## 1.34.2-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e)]:
+  - @mastra/core@1.78.0-alpha.7
+  - @mastra/deployer@1.78.0-alpha.7
+
 ## 1.34.2-alpha.6
 
 ### Patch Changes

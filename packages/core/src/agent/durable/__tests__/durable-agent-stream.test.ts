@@ -886,6 +886,68 @@ describe('DurableAgent error handling', () => {
     expect(receivedErrors[0].error.message).toBe('Test error message');
   });
 
+  it('should reject fullStream for reject-delivery error events', async () => {
+    const { createDurableAgentStream, emitErrorEvent } = await import('../stream-adapter');
+    const runId = 'reject-error-event';
+    const onError = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'reject-error-message',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onError,
+    });
+    const chunks: unknown[] = [];
+    const consumption = (async () => {
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+    })();
+
+    await ready;
+    const error = new TypeError('stopWhen failed');
+    await emitErrorEvent(pubsub, runId, error, undefined, 'reject');
+
+    await expect(consumption).rejects.toMatchObject({ name: 'TypeError', message: 'stopWhen failed' });
+    expect(chunks).toEqual([]);
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith({
+      error: expect.objectContaining({ name: 'TypeError', message: 'stopWhen failed' }),
+    });
+
+    const lateConsumption = (async () => {
+      for await (const _chunk of output.fullStream) {
+        // A settled rejected stream must reject late subscribers too.
+      }
+    })();
+    await expect(lateConsumption).rejects.toMatchObject({ name: 'TypeError', message: 'stopWhen failed' });
+    cleanup();
+  });
+
+  it('should keep ordinary error events as chunks', async () => {
+    const { createDurableAgentStream, emitErrorEvent } = await import('../stream-adapter');
+    const runId = 'chunk-error-event';
+    const onError = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'chunk-error-message',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onError,
+    });
+    const chunks: any[] = [];
+    const consumption = (async () => {
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+    })();
+
+    await ready;
+    await emitErrorEvent(pubsub, runId, new Error('ordinary failure'));
+    await consumption;
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toMatchObject({ type: 'error', payload: { error: { message: 'ordinary failure' } } });
+    expect(onError).toHaveBeenCalledOnce();
+    cleanup();
+  });
+
   it('should cleanup registry on error', async () => {
     const errorModel = new MockLanguageModelV2({
       doStream: async () => {

@@ -12,18 +12,12 @@ import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, stageTintClass } from './BoardIcons';
 
-const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
+export const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 
-/** Every stage shares one grid, so a column lines up from the first stage to the last. */
+/** Each row lays out its own columns, so one wide action or badge never narrows every other title. */
 export function BoardList({ children }: { children: ReactNode }) {
   return (
-    <DataList
-      columns="var(--board-list-columns)"
-      variant="light"
-      fit="container"
-      aria-label="Board stages"
-      className="p-0 [--board-list-columns:auto_auto_minmax(12rem,1fr)_auto_auto_auto_auto] max-sm:[--board-list-columns:auto_minmax(0,1fr)_auto]"
-    >
+    <DataList columns="minmax(0,1fr)" variant="light" fit="container" aria-label="Board stages" className="p-0">
       {children}
     </DataList>
   );

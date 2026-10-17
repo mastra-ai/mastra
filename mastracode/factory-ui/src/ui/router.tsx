@@ -14,22 +14,19 @@
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
+import { everyEventPath } from './domains/factory/activity';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { RootGuards } from './domains/auth/components/RootGuards';
-import { AuditPage } from './pages/AuditPage';
 import { ActivityPage } from './pages/ActivityPage';
-import { AttentionPage } from './pages/AttentionPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
-import { SupervisorPage } from './pages/SupervisorPage';
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
@@ -70,10 +67,9 @@ function FactoryHomeRedirect() {
   return <FactoryBoardLanding factoryId={factoryId} />;
 }
 
-/** `/metrics` shipped before the page became the Overview — keep old links alive. */
-function MetricsRedirect() {
+function ActivityRedirect({ everyEvent = false }: { everyEvent?: boolean }) {
   const { factoryId } = useParams<{ factoryId: string }>();
-  return <Navigate to={`/factories/${factoryId}/overview`} replace />;
+  return <Navigate to={everyEvent ? everyEventPath(factoryId) : `/factories/${factoryId}/activity`} replace />;
 }
 
 /**
@@ -124,7 +120,7 @@ function KnowledgeRoute() {
   const features = useServerFeatures();
 
   if (features.isPending || !factoryId) return null;
-  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}/overview`} replace />;
+  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
   return <KnowledgePage />;
 }
 
@@ -151,18 +147,17 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
                 { path: 'user/new/:draftSessionId', element: <NewPage /> },
                 { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                { path: 'supervisor', element: <SupervisorPage /> },
                 { path: 'new', element: <NewPage /> },
                 { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'boards/:boardId', element: <CustomBoardPage /> },
-                { path: 'overview', element: <OverviewPage /> },
-                { path: 'attention', element: <AttentionPage /> },
                 { path: 'activity', element: <ActivityPage /> },
-                { path: 'metrics', element: <MetricsRedirect /> },
+                { path: 'overview', element: <ActivityRedirect /> },
+                { path: 'attention', element: <ActivityRedirect /> },
+                { path: 'metrics', element: <ActivityRedirect /> },
+                { path: 'audit', element: <ActivityRedirect everyEvent /> },
                 { path: 'rules', element: <RulesPage /> },
-                { path: 'audit', element: <AuditPage /> },
                 { path: 'knowledge', element: <KnowledgeRoute /> },
                 {
                   path: 'settings',

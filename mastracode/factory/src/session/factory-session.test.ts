@@ -1,7 +1,13 @@
+import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  invalidateTenantCredentialSnapshots,
+  registerTenantCredentialResolver,
+  resetTenantCredentialResolverForTests,
+} from '../routes/tenant-credentials.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   createSourceControlSessionLookup,
@@ -155,6 +161,45 @@ describe('ensureFactorySourceSession', () => {
         visibility: 'org',
       }),
     );
+  });
+
+  it('passes a chosen session id, visibility and origin through to the row', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+    const sessionId = '00000000-0000-4000-8000-0000000000a1';
+
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      sessionId,
+      branch: `user/session-${sessionId}`,
+      attributeToUserId: 'user-2',
+      visibility: 'private',
+      origin: { sessionId: 'parent-session', threadId: 'parent-thread' },
+    });
+
+    expect(result).toMatchObject({ sessionId, userId: 'user-2' });
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      userId: 'user-2',
+      visibility: 'private',
+      originSessionId: 'parent-session',
+      originThreadId: 'parent-thread',
+    });
+  });
+
+  it('leaves the default visibility and no origin when neither is passed', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/issue-50',
+    });
+    await expect(sourceControl.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({
+      visibility: 'org',
+      originSessionId: null,
+      originThreadId: null,
+    });
   });
 
   it('files every session under the position-1 environment link and still rejects a cross-link branch collision', async () => {
@@ -401,7 +446,31 @@ describe('hydrateFactorySession', () => {
     expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
   });
 
-  it('keeps going when the default model is unknown', async () => {
+  it("runs on a connected provider's default model when no default was chosen and the mode default has no credential", async () => {
+    const seeded = await createFactoryStorageForTests();
+    registerTenantCredentialResolver(seeded.credentials);
+    try {
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'anthropic', { type: 'api_key', key: 'org-key' });
+      const { session, double } = createSessionDouble();
+      const args = { orgId: 'org-1', modelScope: 'factory', ownerUserId: 'user-1' } as const;
+
+      await expect(hydrateFactorySession(session, args)).resolves.toBe(PROVIDER_DEFAULT_MODELS.anthropic);
+      expect(double.model.switch).toHaveBeenCalledExactlyOnceWith(PROVIDER_DEFAULT_MODELS.anthropic);
+
+      // Once the mode default's provider is connected too, the mode default stays.
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', {
+        type: 'api_key',
+        key: 'org-openai',
+      });
+      invalidateTenantCredentialSnapshots({ orgId: 'org-1' });
+      const fresh = createSessionDouble();
+      await expect(hydrateFactorySession(fresh.session, args)).resolves.toBe('openai/gpt-5.5');
+    } finally {
+      resetTenantCredentialResolverForTests();
+    }
+  });
+
+  it('keeps going but reports no selected model when the default model is unknown', async () => {
     const { session, double } = createSessionDouble();
     double.model.switch.mockRejectedValueOnce(new Error('unknown model'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
