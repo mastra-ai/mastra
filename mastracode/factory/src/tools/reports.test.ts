@@ -1,6 +1,6 @@
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { WorkItemSubscription } from '../storage/domains/work-items/base.js';
 import type { FactoryDeliveryTarget } from './deliver.js';
@@ -197,21 +197,28 @@ describe('sendRunEndReport', () => {
   });
 
   it('reports a failure that keeps repeating once, until something else is reported', async () => {
+    // Reports are ordered by creation time; keep each one in its own millisecond.
+    vi.useFakeTimers({ toFake: ['Date'], now: 0 });
+    onTestFinished(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
     const env = reporting();
-    const fail = (reason: string) =>
-      sendRunEndReport(env.reporting, {
+    const fail = (reason: string) => {
+      tick();
+      return sendRunEndReport(env.reporting, {
         sender: SENDER,
         recipients: [PARENT],
         since: new Date(),
         outcome: { status: 'failed', reason },
         subject: 'The work session for #7',
       });
+    };
     await fail('no authenticated user');
     await fail('no authenticated user');
     await fail('no authenticated user');
     expect(env.deliveries).toHaveLength(1);
     await fail('provider overloaded');
     expect(env.deliveries).toHaveLength(2);
+    tick();
     await env.agentReport('progress');
     await fail('provider overloaded');
     expect(env.deliveries).toHaveLength(3);
