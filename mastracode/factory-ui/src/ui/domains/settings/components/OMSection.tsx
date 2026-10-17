@@ -107,18 +107,20 @@ export function OMSection({
   resourceId,
   scope,
   factoryId,
+  threadId,
   models,
 }: {
   resourceId?: string;
   scope?: string;
   factoryId?: string;
+  threadId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(resourceId, scope, factoryId);
-  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope, factoryId);
-  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope, factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope, factoryId);
+  const omQuery = useOMQuery(resourceId, scope, factoryId, threadId);
+  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope, factoryId, threadId);
+  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope, factoryId, threadId);
+  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope, factoryId, threadId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope, factoryId, threadId);
 
   const config = omQuery.data?.config;
   const modelsAvailable =

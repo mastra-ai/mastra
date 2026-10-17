@@ -41,7 +41,7 @@ export function SettingsPanel() {
     if (!hash) return;
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
-  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, projectPath, baseUrl, sessionThreadId } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
   const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
@@ -97,6 +97,7 @@ export function SettingsPanel() {
           models={models}
           sessionResourceId={sessionResourceId}
           sessionScope={sessionScope}
+          sessionThreadId={sessionThreadId}
         />
       )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}

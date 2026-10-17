@@ -9,6 +9,7 @@ import { useProviderConnectionState } from '../hooks/useProviderConnectionState'
 import { settingsSectionPath } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
+import { FactoryHybridMemoryScopeNotice } from './FactoryHybridMemoryScopeNotice';
 
 interface MemorySettingsProps {
   scope: 'personal' | 'factory';
@@ -16,9 +17,17 @@ interface MemorySettingsProps {
   models: AvailableModelOption[];
   sessionResourceId: string | undefined;
   sessionScope: string | undefined;
+  sessionThreadId: string | undefined;
 }
 
-export function MemorySettings({ scope, factoryId, models, sessionResourceId, sessionScope }: MemorySettingsProps) {
+export function MemorySettings({
+  scope,
+  factoryId,
+  models,
+  sessionResourceId,
+  sessionScope,
+  sessionThreadId,
+}: MemorySettingsProps) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
   const factoryView = scope === 'factory' && factoryId;
 
@@ -55,9 +64,18 @@ export function MemorySettings({ scope, factoryId, models, sessionResourceId, se
     >
       <SettingsContainer>
         {factoryView ? (
-          <OMSection key="factory" factoryId={factoryId} models={models} />
+          <>
+            <FactoryHybridMemoryScopeNotice factoryId={factoryId} />
+            <OMSection key="factory" factoryId={factoryId} models={models} />
+          </>
         ) : (
-          <OMSection key="personal" resourceId={sessionResourceId} scope={sessionScope} models={models} />
+          <OMSection
+            key="personal"
+            resourceId={sessionResourceId}
+            scope={sessionScope}
+            threadId={sessionThreadId}
+            models={models}
+          />
         )}
       </SettingsContainer>
     </SettingsSubsection>

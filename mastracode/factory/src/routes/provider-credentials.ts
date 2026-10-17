@@ -46,8 +46,7 @@ export const WEB_OAUTH_FLOW_KINDS: Readonly<Record<string, LoginSessionKind>> = 
 };
 
 export type CredentialContext =
-  | { mode: 'local' }
-  | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
+  { mode: 'local' } | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
 
 /**
  * The tenant credentials domain, when registered and ready. `undefined` means
@@ -125,16 +124,22 @@ export async function listTenantCredentialsForRequest({
   c,
   auth,
   credentials,
+  userId,
 }: {
   c: Context;
   auth: RouteAuth;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   credentials?: ModelCredentialsStorage;
+  /**
+   * List another member's rows instead of the caller's — used when a preview
+   * must mirror a run that authenticates as the addressed session's owner.
+   */
+  userId?: string;
 }): Promise<CredentialRecord[] | undefined> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return auth.enabled() ? [] : undefined;
   const storage = await getTenantCredentialsStorage(credentials);
   if (!storage) return [];
-  return storage.listCredentials(tenantOrgId(tenant), tenant.userId);
+  return storage.listCredentials(tenantOrgId(tenant), userId ?? tenant.userId);
 }

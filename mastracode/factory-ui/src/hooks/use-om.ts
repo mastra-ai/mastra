@@ -16,15 +16,16 @@ import type { OMResponse, UpdateOMResponse } from '../api/types';
  * straight into the cache via `setQueryData` instead of triggering a refetch —
  * preserving the single-response UX the section relies on.
  */
-export function useOMQuery(resourceId: string | undefined, scope?: string, factoryId?: string) {
+export function useOMQuery(resourceId: string | undefined, scope?: string, factoryId?: string, threadId?: string) {
   const { client } = useApiConfig();
   return useQuery<OMResponse>({
-    queryKey: queryKeys.om(resourceId, scope, factoryId),
+    queryKey: queryKeys.om(resourceId, scope, factoryId, threadId),
     queryFn: () => {
       const params = new URLSearchParams();
       if (resourceId) params.set('resourceId', resourceId);
       if (scope) params.set('scope', scope);
       if (factoryId) params.set('factoryId', factoryId);
+      if (threadId) params.set('threadId', threadId);
       const query = params.size > 0 ? `?${params.toString()}` : '';
       return client.get<OMResponse>(`/web/config/om${query}`);
     },
@@ -37,14 +38,28 @@ export interface UpdateOMModelArgs {
   modelId: 'auto' | string;
 }
 
-export function useUpdateOMModel(resourceId: string | undefined, role: OMRole, scope?: string, factoryId?: string) {
+export function useUpdateOMModel(
+  resourceId: string | undefined,
+  role: OMRole,
+  scope?: string,
+  factoryId?: string,
+  threadId?: string,
+) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ modelId }: UpdateOMModelArgs) =>
-      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, { resourceId, modelId, scope, factoryId }),
+      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, {
+        resourceId,
+        modelId,
+        scope,
+        factoryId,
+        threadId,
+      }),
     onSuccess: res =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId), { config: res.config }),
+      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId, threadId), {
+        config: res.config,
+      }),
   });
 }
 
@@ -53,14 +68,21 @@ export interface UpdateOMThresholdsArgs {
   reflectionThreshold?: number;
 }
 
-export function useUpdateOMThresholds(resourceId: string | undefined, scope?: string, factoryId?: string) {
+export function useUpdateOMThresholds(
+  resourceId: string | undefined,
+  scope?: string,
+  factoryId?: string,
+  threadId?: string,
+) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (args: UpdateOMThresholdsArgs) =>
-      client.put<UpdateOMResponse>('/web/config/om/thresholds', { resourceId, scope, factoryId, ...args }),
+      client.put<UpdateOMResponse>('/web/config/om/thresholds', { resourceId, scope, factoryId, threadId, ...args }),
     onSuccess: res =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId), { config: res.config }),
+      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId, threadId), {
+        config: res.config,
+      }),
   });
 }
 
@@ -68,13 +90,26 @@ export interface UpdateOMObserveAttachmentsArgs {
   value: 'auto' | boolean;
 }
 
-export function useUpdateOMObserveAttachments(resourceId: string | undefined, scope?: string, factoryId?: string) {
+export function useUpdateOMObserveAttachments(
+  resourceId: string | undefined,
+  scope?: string,
+  factoryId?: string,
+  threadId?: string,
+) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ value }: UpdateOMObserveAttachmentsArgs) =>
-      client.put<UpdateOMResponse>('/web/config/om/observe-attachments', { resourceId, value, scope, factoryId }),
+      client.put<UpdateOMResponse>('/web/config/om/observe-attachments', {
+        resourceId,
+        value,
+        scope,
+        factoryId,
+        threadId,
+      }),
     onSuccess: res =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId), { config: res.config }),
+      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId, threadId), {
+        config: res.config,
+      }),
   });
 }

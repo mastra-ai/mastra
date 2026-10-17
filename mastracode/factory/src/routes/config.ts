@@ -1,5 +1,6 @@
 import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { MIN_OBSERVATION_THRESHOLD, OBSERVATION_ACTIVATION_TOKENS } from '@mastra/code-sdk/constants';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
@@ -28,7 +29,11 @@ import type {
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import {
+  effectiveModelScope,
+  type EffectiveModelScope,
+  type FactoryProjectsStorage,
+} from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
@@ -65,15 +70,7 @@ function loose(c: unknown): Context {
  * the server process's own credentials (e.g. Amazon Bedrock's AWS chain).
  */
 export type ProviderCredentialSource =
-  | 'deployment'
-  | 'oauth'
-  | 'stored'
-  | 'env'
-  | 'none'
-  | 'oauth-user'
-  | 'oauth-org'
-  | 'stored-user'
-  | 'stored-org';
+  'deployment' | 'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'oauth-org' | 'stored-user' | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
@@ -489,7 +486,13 @@ function readStoredOMConfig(
     reflector: roleConfig(record?.reflectorModelId ?? 'auto', reflectorModelId, autoModelSource, availableProviders),
     observerModelId,
     reflectorModelId,
-    observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
+    // A row written before the route enforced the activation floor can still hold a
+    // value the observer cannot run with. Report the threshold actually in force, so
+    // the page neither shows a number that crashes runs nor hides the repair.
+    observationThreshold: Math.max(
+      record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
+      MIN_OBSERVATION_THRESHOLD,
+    ),
     reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
     observeAttachments: record?.observeAttachments ?? 'auto',
   };
@@ -505,6 +508,18 @@ interface MemorySettingsContext {
   storage: MemorySettingsStorage;
   orgId: string;
   userId: string;
+  /**
+   * The one credential scope the addressed request resolves from: the effective
+   * scope of the session (or Factory) it addresses, otherwise the caller's
+   * personal one. Previews use it so they offer the same providers the request
+   * can reach.
+   */
+  credentialScope: EffectiveModelScope;
+  /**
+   * Whose credentials that scope is read from, when it is not the caller's: a
+   * shared session previews its owner's providers, not the viewer's.
+   */
+  credentialUserId?: string;
 }
 
 /**
@@ -513,6 +528,15 @@ interface MemorySettingsContext {
  * factory project's shared settings (a sentinel user id in the caller's org)
  * instead of the caller's personal row — this is what factory board runs and
  * channel sessions hydrate from.
+ *
+ * A chat additionally carries its `resourceId` (and `threadId`): its preview
+ * must mirror what that session's own runs resolve, which is not the same thing
+ * for every chat. A work-item thread bound to a run keeps the Factory's
+ * credentials, an ordinary Factory chat uses its owner's, and a teammate
+ * viewing someone else's shared chat must see the owner's providers, not their
+ * own. `resolveFactoryModelPolicy` is the runtime's answer to that question, so
+ * the settings preview asks it instead of guessing from the shape of the
+ * request.
  */
 async function resolveMemorySettingsContext({
   c,
@@ -520,16 +544,29 @@ async function resolveMemorySettingsContext({
   memorySettings,
   factoryProjectId,
   factoryProjects,
+  sourceControlSessions,
+  workItems,
+  resourceId,
+  threadId,
 }: {
   c: Context;
   auth: RouteAuth;
   memorySettings?: MemorySettingsStorage;
   factoryProjectId?: string;
   factoryProjects?: FactoryProjectsStorage;
+  sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
+  workItems?: WorkItemsStorage;
+  resourceId?: string;
+  threadId?: string;
 }): Promise<MemorySettingsContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+  // Without a Factory the row addresses the caller's own settings, which runs on
+  // their personal scope — the SDK's default when a request carries no Factory.
+  let credentialScope: EffectiveModelScope = 'user';
+  let credentialUserId: string | undefined;
+  let addressedModelScope: Parameters<typeof effectiveModelScope>[0] | undefined;
   // Factory-scoped rows are shared org state: the target project must exist in
   // the caller's org before its settings row can be read or written.
   if (factoryProjectId && tenant) {
@@ -538,17 +575,66 @@ async function resolveMemorySettingsContext({
       await factoryProjects.ensureReady();
       const project = await factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
       if (!project) return { response: c.json({ error: 'factory_project_not_found' }, 404) };
+      addressedModelScope = project.modelScope;
+      // A Factory page without a session previews what its work items get.
+      credentialScope = effectiveModelScope(project.modelScope, 'run');
     } catch {
       return { response: c.json({ error: 'factory_unavailable' }, 503) };
+    }
+  }
+  // A chat session overrides that: ask the same policy an invocation asks, so a
+  // run-bound thread previews the Factory's scope and a shared session previews
+  // its owner's credentials. Sessions that are not Factory sessions (or a harness
+  // without the policy domains) keep the previous, caller-scoped preview.
+  if (resourceId && tenant) {
+    let sourceSession: Awaited<ReturnType<SourceControlStorageHandle['sessions']['getBySessionId']>> | undefined;
+    try {
+      sourceSession = await sourceControlSessions?.getBySessionId(resourceId);
+    } catch {
+      return { response: c.json({ error: 'session_memory_policy_unavailable' }, 503) };
+    }
+    if (sourceSession) {
+      if (!factoryProjects || !sourceControlSessions || !workItems) {
+        return { response: c.json({ error: 'session_memory_policy_unavailable' }, 503) };
+      }
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: tenant.userId, organizationId: tenantOrgId(tenant) });
+      requestContext.set('controller', threadId ? { resourceId, threadId } : { resourceId });
+      let policy;
+      try {
+        policy = await resolveFactoryModelPolicy(requestContext, {
+          projects: factoryProjects,
+          sourceControl: sourceControlSessions,
+          workItems,
+        });
+      } catch {
+        return { response: c.json({ error: 'session_memory_policy_unavailable' }, 403) };
+      }
+      if (!policy) return { response: c.json({ error: 'unauthorized' }, 401) };
+      credentialScope = policy.tenant.credentialScope ?? 'user';
+      credentialUserId = policy.tenant.userId;
+    } else if (addressedModelScope) {
+      // Not a Factory session (a draft chat, say): the page still addresses a
+      // chat, not the Factory's work items, so keep the session's own scope.
+      credentialScope = effectiveModelScope(addressedModelScope, 'session');
     }
   }
   if (memorySettings) {
     try {
       await memorySettings.ensureReady();
       const factoryUserId = factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : undefined;
+      const shared = {
+        storage: memorySettings,
+        ...(credentialUserId ? { credentialUserId } : {}),
+      };
       return tenant
-        ? { storage: memorySettings, orgId: tenantOrgId(tenant), userId: factoryUserId ?? tenant.userId }
-        : { storage: memorySettings, orgId: 'local', userId: factoryUserId ?? 'local' };
+        ? {
+            ...shared,
+            orgId: tenantOrgId(tenant),
+            userId: factoryUserId ?? tenant.userId,
+            credentialScope,
+          }
+        : { ...shared, orgId: 'local', userId: factoryUserId ?? 'local', credentialScope };
     } catch {
       // fall through to the unavailable response
     }
@@ -621,12 +707,21 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
-    const resolveOMResponseContext = async (c: Context) => {
-      const tenantCredentials = await listTenantCredentialsForRequest({
-        c: loose(c),
-        auth,
-        credentials: options.modelCredentials,
-      });
+    const resolveOMResponseContext = async (c: Context, context: MemorySettingsContext) => {
+      // A run reaches providers from exactly one credential scope — the SDK's
+      // `TenantCredentialStore` reads the addressed Factory's scope, or the caller's
+      // personal one without a Factory. Unioning both scopes here previewed providers
+      // the run cannot reach: with a Google key shared at org scope, Auto previewed
+      // Gemini while a personal-scope run used Anthropic.
+      const runScope = context.credentialScope === 'factory' ? 'org' : 'user';
+      const tenantCredentials = (
+        await listTenantCredentialsForRequest({
+          c: loose(c),
+          auth,
+          credentials: options.modelCredentials,
+          ...(context.credentialUserId ? { userId: context.credentialUserId } : {}),
+        })
+      )?.filter(record => record.scope === runScope);
       const access = await buildProviderAccess({
         controller,
         authStorage: tenantCredentials ? undefined : authStorage,
@@ -1090,18 +1185,23 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = c.req.query('resourceId');
           const scope = c.req.query('scope') || undefined;
           const factoryProjectId = c.req.query('factoryId') || undefined;
+          const threadId = c.req.query('threadId') || undefined;
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
             memorySettings: options.memorySettings,
             factoryProjectId,
             factoryProjects: options.factoryProjects,
+            sourceControlSessions: options.sourceControlSessions,
+            workItems: options.workItems,
+            resourceId: resourceId || undefined,
+            threadId,
           });
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const fallback = await factoryOmFallback(factoryProjectId);
-            const availableProviders = await resolveOMResponseContext(loose(c));
+            const availableProviders = await resolveOMResponseContext(loose(c), context);
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
             const sessionModelId = session?.model.get();
             return c.json({
@@ -1126,7 +1226,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (role !== 'observer' && role !== 'reflector') {
             return c.json({ error: `Unknown OM role "${role}"` }, 400);
           }
-          let body: { resourceId?: unknown; modelId?: unknown; scope?: unknown; factoryId?: unknown };
+          let body: {
+            resourceId?: unknown;
+            modelId?: unknown;
+            scope?: unknown;
+            factoryId?: unknown;
+            threadId?: unknown;
+          };
           try {
             body = await c.req.json();
           } catch {
@@ -1135,6 +1241,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
+          const threadId = typeof body.threadId === 'string' && body.threadId ? body.threadId : undefined;
           const model = typeof body.modelId === 'string' ? body.modelId.trim() : '';
           if (!model) {
             return c.json({ error: 'Missing required field: modelId' }, 400);
@@ -1148,11 +1255,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             memorySettings: options.memorySettings,
             factoryProjectId,
             factoryProjects: options.factoryProjects,
+            sourceControlSessions: options.sourceControlSessions,
+            workItems: options.workItems,
+            resourceId: resourceId || undefined,
+            threadId,
           });
           if ('response' in context) return context.response;
           // Resolve the response context before persisting: a provider-enumeration
           // failure must not report 500 for a write that already succeeded.
-          const availableProviders = await resolveOMResponseContext(loose(c));
+          const availableProviders = await resolveOMResponseContext(loose(c), context);
           try {
             await persistMemorySettings(context, {
               [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: wantsAuto ? null : model,
@@ -1183,6 +1294,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             reflectionThreshold?: unknown;
             scope?: unknown;
             factoryId?: unknown;
+            threadId?: unknown;
           };
           try {
             body = await c.req.json();
@@ -1192,6 +1304,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
+          const threadId = typeof body.threadId === 'string' && body.threadId ? body.threadId : undefined;
           const observation =
             typeof body.observationThreshold === 'number' && body.observationThreshold > 0
               ? Math.round(body.observationThreshold)
@@ -1203,15 +1316,34 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (observation === undefined && reflection === undefined) {
             return c.json({ error: 'Provide observationThreshold and/or reflectionThreshold (positive numbers)' }, 400);
           }
+          // The observer keeps an absolute activation buffer, and `@mastra/memory`
+          // rejects a buffer that is not below `observation.messageTokens` — a lower
+          // stored threshold breaks every later memory init in this Factory. The row
+          // does not record the OM scope (it comes from session state or project
+          // config), so the floor applies to every write through this route; a
+          // resource-scope session, which configures no buffer, reads a stored lower
+          // value unchanged.
+          if (observation !== undefined && observation <= OBSERVATION_ACTIVATION_TOKENS) {
+            return c.json(
+              {
+                error: `observationThreshold must be greater than ${OBSERVATION_ACTIVATION_TOKENS} tokens (the observation activation buffer); lower values fail the next observational-memory init`,
+              },
+              400,
+            );
+          }
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
             memorySettings: options.memorySettings,
             factoryProjectId,
             factoryProjects: options.factoryProjects,
+            sourceControlSessions: options.sourceControlSessions,
+            workItems: options.workItems,
+            resourceId: resourceId || undefined,
+            threadId,
           });
           if ('response' in context) return context.response;
-          const availableProviders = await resolveOMResponseContext(loose(c));
+          const availableProviders = await resolveOMResponseContext(loose(c), context);
           try {
             await persistMemorySettings(context, {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
@@ -1237,7 +1369,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          let body: { resourceId?: unknown; value?: unknown; scope?: unknown; factoryId?: unknown };
+          let body: { resourceId?: unknown; value?: unknown; scope?: unknown; factoryId?: unknown; threadId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1246,6 +1378,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
+          const threadId = typeof body.threadId === 'string' && body.threadId ? body.threadId : undefined;
           const raw = body.value;
           const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
           if (raw !== 'auto' && raw !== true && raw !== false) {
@@ -1257,9 +1390,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             memorySettings: options.memorySettings,
             factoryProjectId,
             factoryProjects: options.factoryProjects,
+            sourceControlSessions: options.sourceControlSessions,
+            workItems: options.workItems,
+            resourceId: resourceId || undefined,
+            threadId,
           });
           if ('response' in context) return context.response;
-          const availableProviders = await resolveOMResponseContext(loose(c));
+          const availableProviders = await resolveOMResponseContext(loose(c), context);
           try {
             await persistMemorySettings(context, { observeAttachments: value });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
