@@ -1,0 +1,72 @@
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
+import { RequestContext } from '@mastra/core/request-context';
+import { describe, expect, it, vi } from 'vitest';
+
+import { createShareFileTool, SHARE_FILE_MAX_BYTES } from './share-file-tool.js';
+
+function setup({ size = 12, type = 'file' as 'file' | 'directory', mimeType = 'application/pdf' } = {}) {
+  const post = vi.fn(async () => ({}));
+  const fs = {
+    stat: vi.fn(async (path: string) => ({ name: path.split('/').pop(), path, type, size, mimeType })),
+    readFile: vi.fn(async () => Buffer.from('hello report')),
+  };
+  const requestContext = new RequestContext();
+  requestContext.set('channel', { platform: 'slack', isDM: true });
+  requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
+  requestContext.set('controller', { workspace: { filesystem: fs } });
+  const tool = createShareFileTool(requestContext).share_file as {
+    execute: (input: { path: string; comment?: string }, ctx: Record<string, unknown>) => Promise<unknown>;
+  };
+  return { tool, post, fs };
+}
+
+describe('share_file', () => {
+  it('is not offered without a chat thread to post to', () => {
+    const requestContext = new RequestContext();
+    requestContext.set('channel', { platform: 'slack', isDM: true });
+    expect(createShareFileTool(requestContext)).toEqual({});
+  });
+
+  it('reads the file through the workspace filesystem and posts it as an attachment', async () => {
+    const { tool, post, fs } = setup();
+
+    await expect(tool.execute({ path: '/workspace/report.pdf', comment: 'Here you go' }, {})).resolves.toEqual({
+      shared: true,
+      filename: 'report.pdf',
+      bytes: 12,
+    });
+
+    expect(fs.readFile).toHaveBeenCalledWith('/workspace/report.pdf');
+    expect(post).toHaveBeenCalledWith({
+      markdown: 'Here you go',
+      files: [{ data: Buffer.from('hello report'), filename: 'report.pdf', mimeType: 'application/pdf' }],
+    });
+  });
+
+  it('posts a blank body when there is no comment', async () => {
+    const { tool, post } = setup();
+    await tool.execute({ path: '/workspace/out.csv' }, {});
+    expect(post.mock.calls[0]![0]).toMatchObject({ markdown: ' ' });
+  });
+
+  it('refuses directories and oversized files before reading them', async () => {
+    const dir = setup({ type: 'directory' });
+    await expect(dir.tool.execute({ path: '/workspace' }, {})).rejects.toThrow(/is a directory/);
+    expect(dir.fs.readFile).not.toHaveBeenCalled();
+
+    const big = setup({ size: SHARE_FILE_MAX_BYTES + 1 });
+    await expect(big.tool.execute({ path: '/workspace/huge.bin' }, {})).rejects.toThrow(/limit/);
+    expect(big.fs.readFile).not.toHaveBeenCalled();
+  });
+
+  it('fails clearly when the session has no workspace', async () => {
+    const post = vi.fn();
+    const requestContext = new RequestContext();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
+    const tool = createShareFileTool(requestContext).share_file as {
+      execute: (input: { path: string }, ctx: Record<string, unknown>) => Promise<unknown>;
+    };
+    await expect(tool.execute({ path: '/x' }, {})).rejects.toThrow(/No workspace filesystem/);
+    expect(post).not.toHaveBeenCalled();
+  });
+});

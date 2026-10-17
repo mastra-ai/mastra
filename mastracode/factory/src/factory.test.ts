@@ -1810,7 +1810,7 @@ describe('MastraFactory.prepare integrations', () => {
     });
     const config = await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
     const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
-    const tools = await extraTools({ requestContext: {} });
+    const tools = await extraTools({ requestContext: new RequestContext() });
     expect(tools.customAgentTool).toBe(agentTool);
     expect(tools.customSessionTool).toBe(sessionTool);
   });
@@ -1826,7 +1826,7 @@ describe('MastraFactory.prepare integrations', () => {
     });
     const config = await prepareFactory({ storage: fakeStorage(), integrations: [first, second] });
     const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
-    await expect(extraTools({ requestContext: {} })).rejects.toThrow(
+    await expect(extraTools({ requestContext: new RequestContext() })).rejects.toThrow(
       "integration tool 'sharedTool' from 'second' conflicts with 'first'",
     );
   });
