@@ -71,6 +71,7 @@ import {
   ExtendedRunRegistry,
   getRunRegistryEntry,
   globalRunRegistry,
+  markResumeInFlight,
 } from './run-registry';
 import {
   createDurableAgentStream,
@@ -3048,6 +3049,37 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    // Marked before the first await, so a second resume of the same tool call
+    // fails fast even when both start in the same tick (#27365).
+    const toolCallId = options?.toolCallId;
+    let releaseResumeMarker = () => {};
+    if (toolCallId !== undefined) {
+      const release = markResumeInFlight(runId, toolCallId);
+      if (!release) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_ALREADY_CLAIMED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it is already running.`,
+          details: { agentName: this.name, runId, toolCallId },
+        });
+      }
+      releaseResumeMarker = release;
+    }
+    try {
+      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker);
+    } catch (error) {
+      releaseResumeMarker();
+      throw error;
+    }
+  }
+
+  async #resumeRun(
+    runId: string,
+    resumeData: unknown,
+    options: DurableAgentResumeOptions<TOutput> | undefined,
+    releaseResumeMarker: () => void,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
     let entry = this.#runRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
     // the caller passes its own request context.
@@ -3265,6 +3297,8 @@ export class DurableAgent<
     if (resolvedOptions.untilIdle) {
       const { untilIdle, ...rest } = resolvedOptions;
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      // The idle-loop wrapper re-enters resume() for this same tool call.
+      releaseResumeMarker();
       const resolvedOptionsAgent = {
         id: this.id,
         getDefaultOptions: () => ({}),
@@ -3298,24 +3332,7 @@ export class DurableAgent<
     // and event offset. The suspension chunk can arrive before the suspended
     // snapshot is persisted, and a late suspension event replayed into the new
     // segment would close it early.
-    const priorEntry = getRunRegistryEntry(runId, this.#mastra);
-    // Another resume of the same tool call is already running this run here:
-    // waiting for its whole segment would only end in the same lost race.
-    if (
-      resolvedOptions.toolCallId !== undefined &&
-      priorEntry?.resumeToolCallId === resolvedOptions.toolCallId &&
-      priorEntry.resumeFence !== undefined &&
-      ExecutionFence.getLocalActive(runId) === priorEntry.resumeFence
-    ) {
-      throw new MastraError({
-        id: 'AGENT_RESUME_ALREADY_CLAIMED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it is already running.`,
-        details: { agentName: this.name, runId, toolCallId: resolvedOptions.toolCallId },
-      });
-    }
-    const priorExecution = priorEntry?.workflowExecution;
+    const priorExecution = getRunRegistryEntry(runId, this.#mastra)?.workflowExecution;
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
@@ -3415,7 +3432,6 @@ export class DurableAgent<
     for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
       if (!reg) continue;
       reg.executionFence = executionFence;
-      reg.resumeFence = executionFence;
       reg.resumeToolCallId = resolvedOptions.toolCallId;
     }
 
@@ -3715,6 +3731,7 @@ export class DurableAgent<
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
     }
+    void workflowExecution.then(releaseResumeMarker, releaseResumeMarker);
 
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...resolvedOptions,

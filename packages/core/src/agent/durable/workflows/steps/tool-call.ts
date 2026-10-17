@@ -47,7 +47,7 @@ import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
 import { assertExecutionNotSuperseded, assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -663,7 +663,7 @@ export function createDurableToolCallStep() {
       const publishAfterPersist = async (publish: () => Promise<void>) => {
         const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
         // The run is suspending again, so a later resume of it is no longer a duplicate (#27365).
-        if (entry) delete entry.resumeFence;
+        if (entry?.resumeToolCallId !== undefined) clearResumeInFlight(runId, entry.resumeToolCallId);
         const pending = entry?.pendingSuspensionEvents;
         if (pending) pending.push(publish);
         else await publish();

@@ -195,6 +195,31 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it('fails the second of two simultaneous approvals of a tool call fast', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const execute = vi.fn(async () => {
+      await gate;
+      return { ok: true };
+    });
+    const { durableAgent } = setup(execute);
+    const runId = await suspend(durableAgent);
+
+    const startedAt = Date.now();
+    const first = durableAgent.approveToolCall({ runId, toolCallId: 'call-1' });
+    const second = durableAgent.approveToolCall({ runId, toolCallId: 'call-1' });
+    await expect(second).rejects.toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+
+    release();
+    const chunks = await drain((await first).fullStream);
+    expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
+    expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a lost resume race only on the losing stream', async () => {
     const execute = vi.fn(async () => ({ ok: true }));
     const { durableAgent } = setup(execute);

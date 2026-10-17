@@ -979,13 +979,10 @@ export interface RunRegistryEntry {
    */
   executionFence?: ExecutionFence;
   /**
-   * Execution claimed by the `resume()` currently driving this run in this
-   * process, and the tool call it resumes. A second resume of the same tool
-   * call fails fast while that execution is unsettled.
+   * Tool call resumed by the `resume()` currently driving this run in this
+   * process. Its in-flight marker is cleared when the segment suspends again.
    * @internal
    */
-  resumeFence?: ExecutionFence;
-  /** @internal See {@link RunRegistryEntry.resumeFence}. */
   resumeToolCallId?: string;
   /**
    * Set while an engine that persists the suspended snapshot before returning
