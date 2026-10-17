@@ -1560,6 +1560,8 @@ describe('CachingPubSub', () => {
     class RetainingPubSub extends EventEmitterPubSub {
       readonly retained = new Map<string, Event[]>();
       readonly subscribeOptions: Array<SubscribeOptions | undefined> = [];
+      /** Publishes at the exact moment a subscription goes live, before it resolves. */
+      onLiveAttach?: (topic: string) => void | Promise<void>;
 
       async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
         const retained = this.retained.get(topic) ?? [];
@@ -1576,6 +1578,7 @@ describe('CachingPubSub', () => {
           }
         }
         await super.subscribe(topic, cb, options);
+        await this.onLiveAttach?.(topic);
       }
     }
 
@@ -1635,6 +1638,39 @@ describe('CachingPubSub', () => {
       await flush();
       await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
       await flush();
+
+      expect(received.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('does not drop an event published between the live attach and the cache read', async () => {
+      const inner = new RetainingPubSub();
+      const caching = new CachingPubSub(inner, cache, { source: inner });
+      const keepAlive = () => {};
+
+      // Keep the follower attached, as an ongoing live stream would, so the only
+      // subscription `subscribeFromOffset` opens below is the observer's own.
+      await caching.subscribe(topic, keepAlive);
+      for (let n = 0; n < 4; n++) {
+        await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
+      }
+      await flush();
+
+      // Publish from inside the transport's subscribe: the observer's live
+      // listener exists, but `subscribeFromOffset` has not read the cache
+      // snapshot yet. This is the window `startFrom: 'latest'` could lose an
+      // event in — it cannot, because the live subscribe is awaited before the
+      // history fetch, so the event is buffered and then deduped against history
+      // by index/id.
+      inner.onLiveAttach = async attachedTopic => {
+        await inner.publish(attachedTopic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
+      };
+
+      const received: Event[] = [];
+      await caching.subscribeFromOffset(topic, 0, event => {
+        received.push(event);
+      });
+      await flush();
+      await caching.unsubscribe(topic, keepAlive);
 
       expect(received.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
     });
