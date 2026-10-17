@@ -59,6 +59,8 @@ const TRACE_FIELDS = {
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
+  name: 'r."name"',
+  spanType: 'r."spanType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
   tags: 'r."tags"',
@@ -403,6 +405,8 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'endedAt',
   'entityName',
   'entityType',
+  'name',
+  'spanType',
   'environment',
 ]);
 

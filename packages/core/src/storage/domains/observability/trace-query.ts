@@ -572,6 +572,8 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     durationMs: orderedField('number'),
     entityName: stringField(true),
     entityType: stringField(true),
+    name: stringField(true),
+    spanType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
     tags: arrayField(),
