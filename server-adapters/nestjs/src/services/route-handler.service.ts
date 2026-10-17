@@ -1,9 +1,9 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { checkRouteFGA, isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
@@ -245,6 +245,15 @@ export class RouteHandlerService {
         }
         throw error;
       }
+    }
+
+    const fgaError = await checkRouteFGA(this.mastra, route, params.requestContext, {
+      ...validatedPathParams,
+      ...validatedQueryParams,
+      ...(typeof validatedBody === 'object' && validatedBody !== null ? validatedBody : {}),
+    });
+    if (fgaError) {
+      throw new ForbiddenException(fgaError.message);
     }
 
     const context: ServerContext = {
