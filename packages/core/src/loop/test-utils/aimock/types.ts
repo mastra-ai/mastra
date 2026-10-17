@@ -150,6 +150,11 @@ export interface RunLoopScenarioOptions {
    */
   requestContext?: RequestContext<any>;
   /**
+   * Forwarded to `agent.stream({ requireToolApproval })`. `runApprovalScenario` defaults it to `true`;
+   * pass `false` to test tool-level `requireApproval`, or a function to decide per tool call.
+   */
+  requireToolApproval?: boolean | ((context: { toolName: string; args?: unknown }) => boolean);
+  /**
    * Stop condition for the loop. Forwarded to `agent.stream({ stopWhen })`.
    * Use this to bound long/looping tool scenarios.
    */
@@ -406,10 +411,4 @@ export interface RunApprovalScenarioOptions extends RunLoopScenarioOptions {
    * count of approvals resolved so far.
    */
   decision: (context: { toolCallId: string; approvalIndex: number }) => boolean;
-  /**
-   * Whether to set stream-level `requireToolApproval: true`. Defaults to `true`.
-   * Set to `false` to test tool-level `requireApproval: true` on specific tools.
-   * Can also be a function that decides per-tool-call: `({ toolName }) => boolean`.
-   */
-  requireToolApproval?: boolean | ((context: { toolName: string; args?: unknown }) => boolean);
 }

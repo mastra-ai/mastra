@@ -288,6 +288,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     activeTools,
     outputProcessors,
     maxProcessorRetries,
+    requireToolApproval,
     inputProcessors,
     prepareStep,
     memory,
@@ -421,6 +422,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors ? { outputProcessors } : {}),
     ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
+    ...(requireToolApproval !== undefined ? { requireToolApproval } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     // Pass the scenario's error processors at call time so they form the complete list. Without
     // this, the agent's constructor list is the base and the shared stability defaults are added
@@ -580,29 +582,40 @@ export async function runApprovalScenario({
   stopWhen,
   decision,
   requireToolApproval = true,
+  engine,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
-  const { agent } = await buildScenarioAgent({ llm, tools, instructions });
+  const { agent } = await buildScenarioAgent({ llm, tools, instructions, engine });
+  const isDurable = isDurableEngineVariant(engine);
 
   const chunks: ChunkType[] = [];
   const approvals: string[] = [];
 
-  let output = (await agent.stream(prompt, {
+  // DurableAgent.stream()/approveToolCall() return { output, fullStream, runId };
+  // the plain Agent returns MastraModelOutput, which carries fullStream itself.
+  type RunHandle = { output?: MastraModelOutput<unknown>; fullStream: AsyncIterable<ChunkType>; runId: string };
+  const outputOf = (run: RunHandle) => (run.output ?? run) as MastraModelOutput<unknown>;
+
+  let run = (await agent.stream(prompt, {
     ...(requireToolApproval !== false ? { requireToolApproval } : {}),
     ...(stopWhen ? { stopWhen } : {}),
-  })) as unknown as MastraModelOutput<unknown>;
-  const runId = (output as unknown as { runId: string }).runId;
+    // Durable needs maxSteps as a fallback when stopWhen is the only bound.
+    ...(stopWhen && isDurable ? { maxSteps: 10 } : {}),
+  })) as unknown as RunHandle;
+  const runId = run.runId;
 
   // Resume loop: drain the stream, collect any approval requests, resolve them,
   // and resume. Continue until a run completes without suspending.
   // The bound guards against an accidental infinite approval loop in a test.
   for (let iterations = 0; iterations < 50; iterations++) {
     const pendingApprovals: string[] = [];
-    for await (const chunk of output.fullStream as AsyncIterable<ChunkType>) {
+    for await (const chunk of run.fullStream) {
       chunks.push(chunk);
       if (chunk.type === 'tool-call-approval') {
         pendingApprovals.push((chunk.payload as { toolCallId: string }).toolCallId);
+        // Durable streams stay open while suspended; stop at the approval.
+        if (isDurable) break;
       }
     }
 
@@ -614,13 +627,13 @@ export async function runApprovalScenario({
     const approve = decision({ toolCallId, approvalIndex: approvals.length });
     approvals.push(`${approve ? 'approve' : 'decline'}:${toolCallId}`);
 
-    output = (await (approve
+    run = (await (approve
       ? agent.approveToolCall({ runId, toolCallId })
-      : agent.declineToolCall({ runId, toolCallId }))) as unknown as MastraModelOutput<unknown>;
+      : agent.declineToolCall({ runId, toolCallId }))) as unknown as RunHandle;
   }
 
   return {
-    output,
+    output: outputOf(run),
     chunks,
     approvals,
     llm,
