@@ -1,9 +1,14 @@
+import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
+import { validateCron } from '../../workflows/scheduler/cron';
 import type {
   KnowledgeImporterAccess,
+  KnowledgeImporterBindingInput,
+  KnowledgeImporterCronTrigger,
   KnowledgeImporterDefinition,
   KnowledgeImporterHandle,
   KnowledgeImporterRole,
   KnowledgeImporterTriggers,
+  KnowledgeImporterWebhookTrigger,
 } from './types';
 
 function assertNonEmpty(value: string, label: string): string {
@@ -39,11 +44,80 @@ function normalizeAccess(access: KnowledgeImporterAccess | undefined): Knowledge
   return Object.freeze(Object.fromEntries(entries));
 }
 
-function normalizeCron(cron: KnowledgeImporterTriggers['cron']): KnowledgeImporterTriggers['cron'] {
+function normalizeBinding(binding: KnowledgeImporterBindingInput, label: string): KnowledgeImporterBindingInput {
+  if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+    throw new Error(`Knowledge importer ${label} must be an object`);
+  }
+  const normalized = Object.freeze({
+    source: assertNonEmpty(binding.source, `${label} source`),
+    scope: assertNonEmpty(binding.scope, `${label} scope`),
+  });
+  knowledgeImporterBindingKey(normalized);
+  return normalized;
+}
+
+function normalizeBindings(
+  bindings: readonly KnowledgeImporterBindingInput[] | undefined,
+  label: string,
+): readonly KnowledgeImporterBindingInput[] {
+  if (!Array.isArray(bindings) || bindings.length === 0) {
+    throw new Error(`Knowledge importer ${label} bindings cannot be empty`);
+  }
+  const normalized = bindings.map((binding, index) => normalizeBinding(binding, `${label} binding[${index}]`));
+  const keys = new Set<string>();
+  for (const binding of normalized) {
+    const key = knowledgeImporterBindingKey(binding);
+    if (keys.has(key)) throw new Error(`Knowledge importer ${label} binding is declared more than once: ${key}`);
+    keys.add(key);
+  }
+  return Object.freeze(normalized);
+}
+
+function normalizeSchedule(schedule: KnowledgeImporterCronTrigger['schedule']): string | readonly string[] {
+  if (typeof schedule === 'string') {
+    const expression = assertNonEmpty(schedule, 'cron schedule');
+    validateCron(expression);
+    return expression;
+  }
+  if (!Array.isArray(schedule) || schedule.length === 0) {
+    throw new Error('Knowledge importer cron schedule cannot be empty');
+  }
+  return Object.freeze(
+    schedule.map((entry, index) => {
+      const expression = assertNonEmpty(entry, `cron schedule[${index}]`);
+      validateCron(expression);
+      return expression;
+    }),
+  );
+}
+
+function normalizeCron(cron: KnowledgeImporterTriggers['cron']): KnowledgeImporterCronTrigger | undefined {
   if (cron === undefined) return undefined;
-  if (typeof cron === 'string') return assertNonEmpty(cron, 'cron trigger');
-  if (!Array.isArray(cron) || cron.length === 0) throw new Error('Knowledge importer cron trigger cannot be empty');
-  return Object.freeze(cron.map((entry, index) => assertNonEmpty(entry, `cron trigger[${index}]`)));
+  if (!cron || typeof cron !== 'object' || Array.isArray(cron)) {
+    throw new Error('Knowledge importer cron trigger must be an object');
+  }
+  return Object.freeze({
+    schedule: normalizeSchedule(cron.schedule),
+    bindings: normalizeBindings(cron.bindings, 'cron'),
+  });
+}
+
+function normalizeWebhook(webhook: KnowledgeImporterTriggers['webhook']): KnowledgeImporterWebhookTrigger | undefined {
+  if (webhook === undefined) return undefined;
+  if (!webhook || typeof webhook !== 'object' || Array.isArray(webhook)) {
+    throw new Error('Knowledge importer webhook trigger must be an object');
+  }
+  const bindings = normalizeBindings(webhook.bindings, 'webhook');
+  if (webhook.resolveBinding !== undefined && typeof webhook.resolveBinding !== 'function') {
+    throw new Error('Knowledge importer webhook resolveBinding must be a function');
+  }
+  if (bindings.length > 1 && !webhook.resolveBinding) {
+    throw new Error('Knowledge importer webhook triggers with multiple bindings require resolveBinding');
+  }
+  return Object.freeze({
+    bindings,
+    ...(webhook.resolveBinding ? { resolveBinding: webhook.resolveBinding } : {}),
+  });
 }
 
 function normalizeTriggers(triggers: KnowledgeImporterTriggers | undefined): KnowledgeImporterTriggers {
@@ -53,13 +127,11 @@ function normalizeTriggers(triggers: KnowledgeImporterTriggers | undefined): Kno
   }
   const unknownKeys = Object.keys(triggers).filter(key => key !== 'cron' && key !== 'webhook');
   if (unknownKeys.length) throw new Error(`Unsupported Knowledge importer trigger: ${unknownKeys[0]}`);
-  if (triggers.webhook !== undefined && triggers.webhook !== true) {
-    throw new Error('Knowledge importer webhook trigger must be true when provided');
-  }
   const cron = normalizeCron(triggers.cron);
+  const webhook = normalizeWebhook(triggers.webhook);
   return Object.freeze({
-    ...(cron === undefined ? {} : { cron }),
-    ...(triggers.webhook ? { webhook: true as const } : {}),
+    ...(cron ? { cron } : {}),
+    ...(webhook ? { webhook } : {}),
   });
 }
 
@@ -72,7 +144,12 @@ function webhookPath(id: string, triggers: KnowledgeImporterTriggers): Knowledge
 export class KnowledgeImporterRegistry {
   #byId = new Map<string, KnowledgeImporterHandle>();
 
-  register<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>): KnowledgeImporterHandle<TPayload> {
+  register<TPayload = unknown>(
+    definition: KnowledgeImporterDefinition<TPayload>,
+    run: KnowledgeImporterHandle<TPayload>['run'] = async () => {
+      throw new Error(`Knowledge importer ${definition.id} is not attached to a Knowledge runtime`);
+    },
+  ): KnowledgeImporterHandle<TPayload> {
     if (!definition || typeof definition !== 'object') throw new Error('Knowledge importer definition is required');
     const id = assertNonEmpty(definition.id, 'id');
     if (this.#byId.has(id)) throw new Error(`Knowledge importer ${id} is already registered`);
@@ -99,6 +176,7 @@ export class KnowledgeImporterRegistry {
       handler: definition.handler,
       programmatic: true,
       webhookPath: webhookPath(id, triggers),
+      run,
     });
     this.#byId.set(id, handle as KnowledgeImporterHandle);
     return handle;
