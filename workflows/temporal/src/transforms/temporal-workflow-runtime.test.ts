@@ -53,7 +53,13 @@ describe('temporal workflow runtime helper module', () => {
       result: { city: 'SF', weather: 'sunny' },
       state: { started: true },
       steps: {
-        'fetch-weather': { city: 'SF', weather: 'sunny' },
+        'fetch-weather': {
+          status: 'success',
+          payload: { city: 'SF' },
+          output: { city: 'SF', weather: 'sunny' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       },
     });
   });
@@ -89,7 +95,13 @@ describe('temporal workflow runtime helper module', () => {
       result: { doubled: 42, initialValue: 21 },
       state: undefined,
       steps: {
-        [mappingId]: { doubled: 42, initialValue: 21 },
+        [mappingId]: {
+          status: 'success',
+          payload: { value: 21 },
+          output: { doubled: 42, initialValue: 21 },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       },
     });
   });
@@ -169,7 +181,13 @@ describe('temporal workflow runtime helper module', () => {
       result: { city: 'SF', child: true },
       state: undefined,
       steps: {
-        childWorkflow: { city: 'SF', child: true },
+        childWorkflow: {
+          status: 'success',
+          payload: { city: 'SF' },
+          output: { city: 'SF', child: true },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       },
     });
   });
@@ -220,8 +238,8 @@ describe('temporal workflow runtime helper module', () => {
       },
       state: undefined,
       steps: {
-        first: { first: 2 },
-        second: { second: 3 },
+        first: expect.objectContaining({ status: 'success', payload: { value: 1 }, output: { first: 2 } }),
+        second: expect.objectContaining({ status: 'success', payload: { value: 1 }, output: { second: 3 } }),
       },
     });
   });
@@ -247,7 +265,11 @@ describe('temporal workflow runtime helper module', () => {
       },
       state: undefined,
       steps: {
-        childWorkflow: { value: 'child-output' },
+        childWorkflow: expect.objectContaining({
+          status: 'success',
+          payload: { value: 'parent-input' },
+          output: { value: 'child-output' },
+        }),
       },
     });
   });
@@ -280,8 +302,16 @@ describe('temporal workflow runtime helper module', () => {
         childWorkflow: { value: 'child-output' },
       },
       steps: {
-        activity: { value: 'parent-input-activity' },
-        childWorkflow: { value: 'child-output' },
+        activity: expect.objectContaining({
+          status: 'success',
+          payload: { value: 'parent-input' },
+          output: { value: 'parent-input-activity' },
+        }),
+        childWorkflow: expect.objectContaining({
+          status: 'success',
+          payload: { value: 'parent-input' },
+          output: { value: 'child-output' },
+        }),
       },
     });
   });
@@ -314,7 +344,11 @@ describe('temporal workflow runtime helper module', () => {
     expect(result).toMatchObject({
       result: [{ value: 11 }, { value: 12 }, { value: 13 }],
       steps: {
-        map: [{ value: 11 }, { value: 12 }, { value: 13 }],
+        map: [
+          expect.objectContaining({ status: 'success', payload: { value: 1 }, output: { value: 11 } }),
+          expect.objectContaining({ status: 'success', payload: { value: 2 }, output: { value: 12 } }),
+          expect.objectContaining({ status: 'success', payload: { value: 3 }, output: { value: 13 } }),
+        ],
       },
     });
   });
@@ -393,7 +427,11 @@ describe('temporal workflow runtime helper module', () => {
         smallStep: { path: 'small', value: 3 },
       },
       steps: {
-        smallStep: { path: 'small', value: 3 },
+        smallStep: expect.objectContaining({
+          status: 'success',
+          payload: { value: 3 },
+          output: { path: 'small', value: 3 },
+        }),
       },
     });
   });
@@ -412,13 +450,21 @@ describe('temporal workflow runtime helper module', () => {
     await expect(doWhileWorkflow({ inputData: { value: 0 } })).resolves.toMatchObject({
       result: { value: 2 },
       steps: {
-        incrementWhile: { value: 2 },
+        incrementWhile: expect.objectContaining({
+          status: 'success',
+          payload: { value: 1 },
+          output: { value: 2 },
+        }),
       },
     });
     await expect(doUntilWorkflow({ inputData: { value: 0 } })).resolves.toMatchObject({
       result: { value: 2 },
       steps: {
-        incrementUntil: { value: 2 },
+        incrementUntil: expect.objectContaining({
+          status: 'success',
+          payload: { value: 1 },
+          output: { value: 2 },
+        }),
       },
     });
     expect(incrementWhile).toHaveBeenNthCalledWith(1, {

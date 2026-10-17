@@ -268,11 +268,14 @@ describe('Temporal prebuild integration', () => {
       result: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
       state: undefined,
       steps: {
-        step1: { value: 'test-step1' },
-        innerWorkflow: { value: 'test-step1-inner' },
-        step2: { step2: 'test-step1-inner-step2' },
-        step3: { step3: 'test-step1-inner-step3' },
-        step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        step1: expect.objectContaining({ status: 'success', output: { value: 'test-step1' } }),
+        innerWorkflow: expect.objectContaining({ status: 'success', output: { value: 'test-step1-inner' } }),
+        step2: expect.objectContaining({ status: 'success', output: { step2: 'test-step1-inner-step2' } }),
+        step3: expect.objectContaining({ status: 'success', output: { step3: 'test-step1-inner-step3' } }),
+        step4: expect.objectContaining({
+          status: 'success',
+          output: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        }),
       },
     });
     const mappedWorkflow = workflowModule.mappedWorkflow;
@@ -287,7 +290,11 @@ describe('Temporal prebuild integration', () => {
       result: { doubled: 42 },
       state: undefined,
       steps: {
-        'mapping_mapped-workflow_0': { doubled: 42 },
+        'mapping_mapped-workflow_0': expect.objectContaining({
+          status: 'success',
+          payload: { value: 21 },
+          output: { doubled: 42 },
+        }),
       },
     });
 

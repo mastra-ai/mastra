@@ -1,3 +1,6 @@
+import { Mastra } from '@mastra/core/mastra';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
+import { MockStore } from '@mastra/core/storage';
 import { createStep } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -5,6 +8,150 @@ import { z } from 'zod';
 import { createWorkflow } from './workflow';
 
 describe('TemporalRun', () => {
+  it('persists a pending snapshot when creating a Temporal run', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+      { client: { workflow: {} } as unknown as Client, taskQueue: 'test-queue' },
+    ).commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+
+    await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    const runs = await workflow.listWorkflowRuns();
+    expect(runs.runs).toHaveLength(1);
+    expect(runs.runs[0]).toMatchObject({
+      workflowName: 'test-workflow',
+      runId: 'test-run',
+      resourceId: 'resource-1',
+      snapshot: {
+        runId: 'test-run',
+        status: 'pending',
+        serializedStepGraph: expect.any(Array),
+      },
+    });
+  });
+
+  it('persists running and successful snapshots around Temporal execution', async () => {
+    const storage = new MockStore();
+    const result = {
+      status: 'success',
+      input: { value: 1 },
+      result: { value: 2 },
+      state: { seen: true },
+      steps: {
+        increment: {
+          status: 'success',
+          payload: { value: 1 },
+          output: { value: 2 },
+          startedAt: 1,
+          endedAt: 2,
+        },
+      },
+    };
+    const handle = { result: vi.fn().mockResolvedValue(result) };
+    const start = vi.fn().mockResolvedValue(handle);
+    const schema = z.object({ value: z.number() });
+    const step = createStep({
+      id: 'increment',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async input => input.inputData,
+    });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema, stateSchema: z.object({ seen: z.boolean() }) },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .then(step)
+      .commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    const output = await run.start({ inputData: { value: 1 }, initialState: { seen: true } });
+
+    expect(output).toEqual(result);
+    const persisted = await workflow.getWorkflowRunById('test-run');
+    expect(persisted).toMatchObject({
+      workflowName: 'test-workflow',
+      runId: 'test-run',
+      resourceId: 'resource-1',
+      status: 'success',
+      result: { value: 2 },
+      payload: { value: 1 },
+      steps: {
+        increment: {
+          status: 'success',
+          output: { value: 2 },
+          payload: { value: 1 },
+        },
+      },
+    });
+  });
+
+  it('persists a running snapshot before returning from startAsync', async () => {
+    const storage = new MockStore();
+    const start = vi.fn().mockResolvedValue({ result: vi.fn() });
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    ).commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    await expect(run.startAsync({ inputData: { value: 1 } })).resolves.toEqual({ runId: 'test-run' });
+
+    const persisted = await workflow.getWorkflowRunById('test-run');
+    expect(persisted).toMatchObject({
+      workflowName: 'test-workflow',
+      runId: 'test-run',
+      resourceId: 'resource-1',
+      status: 'running',
+      payload: { value: 1 },
+    });
+  });
+
+  it('does not persist framework auth tokens in Temporal request context snapshots or dispatch args', async () => {
+    const storage = new MockStore();
+    const result = {
+      status: 'success',
+      input: { value: 1 },
+      result: { value: 2 },
+      state: {},
+      steps: {},
+    };
+    const handle = { result: vi.fn().mockResolvedValue(result) };
+    const start = vi.fn().mockResolvedValue(handle);
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    ).commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'acme');
+    requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-bearer-token');
+
+    await run.start({ inputData: { value: 1 }, requestContext });
+
+    expect(start).toHaveBeenCalledWith(
+      'testWorkflow',
+      expect.objectContaining({
+        args: [
+          expect.objectContaining({
+            requestContext: { tenant: 'acme' },
+          }),
+        ],
+      }),
+    );
+    const runs = await workflow.listWorkflowRuns();
+    expect((runs.runs[0]?.snapshot as any).requestContext).toEqual({ tenant: 'acme' });
+    expect(JSON.stringify(runs)).not.toContain('live-bearer-token');
+    const persisted = await workflow.getWorkflowRunById('test-run');
+    expect(JSON.stringify(persisted)).not.toContain('live-bearer-token');
+  });
+
   it('does not execute stream runs with the local workflow engine', async () => {
     const execute = vi.fn().mockResolvedValue({ value: 2 });
     const start = vi.fn();

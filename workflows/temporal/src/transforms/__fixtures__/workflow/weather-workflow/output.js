@@ -46,6 +46,15 @@ class TemporalExecutionEngine {
       ...this.executionContext
     };
   }
+  stepResult(payload, output, startedAt) {
+    return {
+      status: 'success',
+      payload,
+      output,
+      startedAt,
+      endedAt: Date.now()
+    };
+  }
   async executeEntry(entry, inputData, stepResults) {
     switch (entry.type) {
       case 'step':
@@ -53,10 +62,11 @@ class TemporalExecutionEngine {
           log.info('step', {
             stepId: entry.step.id
           });
+          const startedAt = Date.now();
           const out = await this.activityHandle[entry.step.id](this.activityParams(inputData, {
             initData: this.initData
           }));
-          stepResults[entry.step.id] = out;
+          stepResults[entry.step.id] = this.stepResult(inputData, out, startedAt);
           return out;
         }
       case 'childWorkflow':
@@ -64,6 +74,7 @@ class TemporalExecutionEngine {
           log.info('childWorkflow', {
             workflowType: entry.workflowType
           });
+          const startedAt = Date.now();
           const childResult = await executeChild(entry.workflowType, {
             args: [{
               inputData,
@@ -71,7 +82,7 @@ class TemporalExecutionEngine {
             }]
           });
           const out = childResult?.result ?? childResult;
-          stepResults[entry.workflowType] = out;
+          stepResults[entry.workflowType] = this.stepResult(inputData, out, startedAt);
           return out;
         }
       case 'mapping':
@@ -79,10 +90,11 @@ class TemporalExecutionEngine {
           log.info('mapping', {
             mappingId: entry.id
           });
+          const startedAt = Date.now();
           const out = await this.activityHandle[entry.id](this.activityParams(inputData, {
             initData: this.initData
           }));
-          stepResults[entry.id] = out;
+          stepResults[entry.id] = this.stepResult(inputData, out, startedAt);
           return out;
         }
       case 'sleep':
@@ -129,11 +141,12 @@ class TemporalExecutionEngine {
           for (let i = 0; i < entry.steps.length; i++) {
             if (condResults[i]) {
               const stepId = entry.steps[i].step.id;
+              const startedAt = Date.now();
               const res = await this.activityHandle[stepId](this.activityParams(inputData, {
                 initData: this.initData
               }));
               out[stepId] = res;
-              stepResults[stepId] = res;
+              stepResults[stepId] = this.stepResult(inputData, res, startedAt);
             }
           }
           return out;
@@ -146,10 +159,12 @@ class TemporalExecutionEngine {
           });
           let current = inputData;
           while (true) {
-            current = await this.activityHandle[entry.step.id](this.activityParams(current, {
+            const stepInput = current;
+            const startedAt = Date.now();
+            current = await this.activityHandle[entry.step.id](this.activityParams(stepInput, {
               initData: this.initData
             }));
-            stepResults[entry.step.id] = current;
+            stepResults[entry.step.id] = this.stepResult(stepInput, current, startedAt);
             const shouldContinue = Boolean(await this.activityHandle[entry.serializedCondition.id](this.activityParams(current)));
             if (entry.loopType === 'dowhile' ? !shouldContinue : shouldContinue) {
               break;
@@ -171,6 +186,7 @@ class TemporalExecutionEngine {
             concurrency
           });
           const results = new Array(items.length);
+          const startedAt = new Array(items.length);
           let index = 0;
           const workers = Array.from({
             length: Math.min(concurrency, items.length)
@@ -180,13 +196,14 @@ class TemporalExecutionEngine {
               if (i >= items.length) {
                 break;
               }
+              startedAt[i] = Date.now();
               results[i] = await this.activityHandle[entry.step.id](this.activityParams(items[i], {
                 initData: this.initData
               }));
             }
           });
           await Promise.all(workers);
-          stepResults[entry.step.id] = results;
+          stepResults[entry.step.id] = results.map((result, i) => this.stepResult(items[i], result, startedAt[i]));
           return results;
         }
       default:
