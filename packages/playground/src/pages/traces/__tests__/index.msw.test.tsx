@@ -533,12 +533,38 @@ describe('Traces side panel header actions', () => {
     });
 
     expect(await screen.findByRole('button', { name: 'Score trace' })).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
+    expect(screen.getByRole('menuitem', { name: 'Full trace' })).not.toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: 'Open trace actions' }));
 
     expect(screen.queryByRole('menuitem', { name: 'Evaluate trace' })).toBeNull();
-    expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
     // The parent trace panel is no longer collapsible.
     expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
+  });
+
+  it('opens the save panel on the selected span when "This span" is picked', async () => {
+    setTracePageHandlers(metricsCapableCapabilities);
+    const onSpanDetail = vi.fn<(spanId: string) => void>();
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpansWithPayload)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/:spanId`, ({ params }) => {
+        onSpanDetail(String(params.spanId));
+        const span = traceSpansWithPayload.spans.find(s => s.spanId === params.spanId);
+        return HttpResponse.json({ span });
+      }),
+      http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+    );
+
+    const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-tool');
+    expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'This span' }));
+
+    const saveDialog = await screen.findByRole('dialog', { name: 'Save as Dataset Item' });
+    await waitFor(() => expect(within(saveDialog).getByText(/zanzibar-payload-term/)).not.toBeNull());
+    expect(onSpanDetail.mock.calls.every(([spanId]) => spanId === 'span-tool')).toBe(true);
   });
 });
 

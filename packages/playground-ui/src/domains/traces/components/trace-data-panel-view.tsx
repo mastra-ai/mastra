@@ -8,7 +8,6 @@ import {
   MessageSquareReplyIcon,
   MessageSquareTextIcon,
   MoreHorizontalIcon,
-  SaveIcon,
   WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -20,6 +19,7 @@ import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceAddToDatasetMenu } from './trace-add-to-dataset-menu';
 import { TraceIdButton } from './trace-id-button';
 import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
@@ -57,8 +57,11 @@ export interface TraceDataPanelViewProps {
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
   onEvaluateTrace?: () => void;
-  /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
-  onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
+  /**
+   * When set, an "Add to dataset" menu appears with "This span" and "Full trace"; the consumer
+   * owns the dialog. `spanId` is set only when "This span" was picked.
+   */
+  onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined; spanId?: string }) => void;
   /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
   onAddTraceMocksToItem?: (args: { traceId: string }) => void;
   initialSpanId?: string | null;
@@ -314,6 +317,13 @@ export function TraceDataPanelView({
     <TraceSummaryDescription rootSpan={rootSpan} usage={usage} entityHref={entityHref} LinkComponent={LinkComponent} />
   );
 
+  const addToDatasetMenu = traceId && !isOnTracePage && onSaveAsDatasetItem && (
+    <TraceAddToDatasetMenu
+      selectedSpanId={selectedSpanId}
+      onSave={spanId => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId, spanId })}
+    />
+  );
+
   const traceActionsMenu = traceId && (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -324,12 +334,6 @@ export function TraceDataPanelView({
         }
       />
       <DropdownMenu.Content align="end">
-        {!isOnTracePage && onSaveAsDatasetItem && (
-          <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
-            <SaveIcon />
-            Add full trace to dataset
-          </DropdownMenu.Item>
-        )}
         {!isOnTracePage && onAddTraceMocksToItem && (
           <DropdownMenu.Item onSelect={() => onAddTraceMocksToItem({ traceId })}>
             <WrenchIcon />
@@ -427,6 +431,7 @@ export function TraceDataPanelView({
                 </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>
                   {headerActionsSlot}
+                  {addToDatasetMenu}
                   {onEvaluateTrace && (
                     <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
                       <CircleGaugeIcon />

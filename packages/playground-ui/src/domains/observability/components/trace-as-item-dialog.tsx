@@ -16,6 +16,11 @@ type TraceAsItemDialogProps = {
   traceDetails?: SpanRecord;
   /** Root span ID for lazy-loading when traceDetails is not available. */
   rootSpanId?: string | null;
+  /**
+   * Saves this one span instead of the full trace: its input and output are loaded, and the
+   * trace-wide trajectory and tool mocks are left out since they describe the whole trace.
+   */
+  spanId?: string;
   traceId?: string;
   isOpen: boolean;
   onClose: () => void;
@@ -42,6 +47,7 @@ function getInitialInput(traceDetails?: SpanRecord): string {
 export function TraceAsItemDialog({
   traceDetails: externalTraceDetails,
   rootSpanId,
+  spanId,
   traceId,
   isOpen,
   onClose,
@@ -50,23 +56,29 @@ export function TraceAsItemDialog({
 }: TraceAsItemDialogProps) {
   const client = useMastraClient();
 
-  // Lazy-load the root span details when dialog opens and no traceDetails provided
+  const isSingleSpan = !!spanId;
+  const spanIdToLoad = spanId ?? rootSpanId;
+
+  // Lazy-load the span details when dialog opens and no traceDetails provided
   const { data: lazySpanDetail } = useSpanDetail({
     traceId: !externalTraceDetails && isOpen ? traceId : null,
-    spanId: !externalTraceDetails && isOpen ? rootSpanId : null,
+    spanId: !externalTraceDetails && isOpen ? spanIdToLoad : null,
     queryOptions: {
       enabled:
-        !!(!externalTraceDetails && isOpen ? traceId : null) && !!(!externalTraceDetails && isOpen ? rootSpanId : null),
+        !!(!externalTraceDetails && isOpen ? traceId : null) &&
+        !!(!externalTraceDetails && isOpen ? spanIdToLoad : null),
     },
   });
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
 
-  const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
+  const { data: traceTrajectory, isLoading: isTrajectoryLoading } = useQuery({
     queryKey: ['trace-trajectory', traceId],
     queryFn: () => client.getTraceTrajectory(traceId ?? ''),
-    enabled: isOpen && !!traceId,
+    enabled: isOpen && !!traceId && !isSingleSpan,
   });
+  // The disabled query still returns a trajectory cached by an earlier full-trace save.
+  const trajectory = isSingleSpan ? undefined : traceTrajectory;
 
   // Convert trajectory to a TrajectoryExpectation JSON string
   const initialTrajectory =
