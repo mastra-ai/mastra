@@ -313,7 +313,9 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 Reconnects to an existing run. Use this after a network disconnection. For the supported general reconnect flow, omit `offset` to replay all available cached events before receiving live events.
 
-When observing from another process, the observing agent must have the same `id` as the agent that started the run. If the persisted run belongs to an agent with a different ID, `observe()` throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH`, matching the ownership checks in `resume()` and `recover()`.
+The observing agent must have the same effective `id` as the agent that started the run, both for live observations in the same process and for persisted observations from another process. The effective ID is the DurableAgent's `id`, including any ID override, rather than the wrapped agent's original ID. Different DurableAgent instances with the same effective ID can observe the same run.
+
+If the live or persisted run identifies a different owner agent ID, `observe()` throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH`. Legacy live entries without owner metadata retain their existing behavior.
 
 For runs configured with `structuredOutput`, an observer in another process reconstructs `output.object` from the persisted schema and replayed text.
 
