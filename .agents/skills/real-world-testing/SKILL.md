@@ -16,7 +16,7 @@ Tests exist to make Mastra work for the people building on it. A test earns its 
 5. **Prove the fix is real, not just green.** Check that you fixed the cause, not the symptom. Show that legitimate behavior next to the bug still works (e.g. ignoring a stale event must not ignore a real one). Temporary logging to confirm what happens is fine. Remove it before committing.
 6. **Cover every path the bug can take.** Mastra has several ways to run the same thing: Agent vs DurableAgent vs evented vs Inngest, stream vs generate, first run vs resume, in-process vs across a process boundary. Most bugs come from a fix in one path that's missing in the others. Test all of them.
 7. **Assert on what crossed the boundary.** Check what the model actually received, what was persisted, what the next process loaded, not only the final output.
-8. **Keep known bugs visible.** If a case fails on one path because of a real bug, keep it and mark it expected-to-fail (`it.fails`) with a comment. Only write a cause if you've verified it, otherwise say "not yet investigated". Never delete or skip a failing case to get green. File an issue for real bugs you find along the way.
+8. **Keep known bugs visible.** If a case fails on one path because of a real bug, keep it and mark it expected-to-fail (`it.fails`) with a comment. Only write a cause if you've verified it, otherwise say "not yet investigated". Only pin failures that are deterministic: run the case several times first. If it passes some runs and fails others, `it.fails` just moves the failure around, so use `it.skip` with a comment saying the result is nondeterministic. Never delete or skip a deterministically failing case to get green. File an issue for real bugs you find along the way.
 9. **No recordings matched by hash.** They break on any byte change (model-written ids, test order) and bake bugs into fixtures. Script responses by request shape instead.
 10. **Consolidate.** One shared suite beats ten one-off tests for single paths. When your test replaces older ones, delete them in the same PR.
 
@@ -34,8 +34,13 @@ describeForAllEngines('Support agent ...', engine => {
   // Technical: <mechanism>. (#12345)
   it('<what the user sees> (#12345)', async () => {
     const { output, requests } = await runLoopScenario({
-      engine, llm: getMock(), prompt: '...', tools,
-      fixtures: llm => { llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: '...' }); },
+      engine,
+      llm: getMock(),
+      prompt: '...',
+      tools,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: '...' });
+      },
     });
     expect(output.text).toBe('...');
     expect(JSON.stringify(requests[1].body.messages)).toContain('...');
@@ -44,11 +49,13 @@ describeForAllEngines('Support agent ...', engine => {
 ```
 
 Harness notes:
+
 - `createSharedAgent` keeps one agent across calls (suspend/resume, multi-turn). `runApprovalScenario` drives approvals on every engine.
 - Pick fixtures with `sequenceIndex`, `toolName`, `toolCallId`, `hasToolResult`, message regexes, or a `predicate`.
 - The model sees tool names from the `tools` object keys, not the tool `id`. Auto-resume fixtures must include `suspendedToolCallId`.
 
 Running:
+
 ```sh
 # In-process engines, seconds. Use while iterating.
 cd packages/core && npx vitest run src/loop/test-utils/aimock/scenarios/<name>.scenario.test.ts
@@ -56,6 +63,7 @@ cd packages/core && npx vitest run src/loop/test-utils/aimock/scenarios/<name>.s
 # Inngest, real dev servers. Targeted only; a full run is ~90s, don't repeat it casually.
 cd workflows/inngest && AIMOCK_SCENARIOS='{name-a,name-b}' npx vitest run --project e2e:workflows/inngest:aimock
 ```
+
 CI runs the Inngest project, so run a new scenario file there once and pin anything that diverges.
 
 ## Before you finish
@@ -64,5 +72,5 @@ CI runs the Inngest project, so run a new scenario file there once and pin anyth
 - [ ] It fails without the fix, on the intended assertion
 - [ ] Every path the bug can take is covered (engines, stream/generate, resume)
 - [ ] Neighboring legitimate behavior is still verified
-- [ ] Known divergences are pinned with `it.fails` and an honest comment; real bugs found are filed
+- [ ] Deterministic divergences are pinned with `it.fails`, nondeterministic ones skipped, each with an honest comment; real bugs found are filed
 - [ ] Replaced one-off tests and recordings are deleted; debug logging removed
