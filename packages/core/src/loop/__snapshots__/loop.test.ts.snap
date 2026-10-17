@@ -219,7 +219,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -351,7 +351,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -1860,7 +1860,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -1870,7 +1873,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -1883,7 +1889,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -1893,7 +1902,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -1921,7 +1933,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -1933,7 +1945,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "file": {
-                  "base64Data": "Hello World",
+                  "base64Data": "data:text/plain;base64,Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -1946,7 +1958,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "file": {
-                  "base64Data": "QkFVRw==",
+                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -1964,7 +1976,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 {
                   "content": [
                     {
-                      "data": "data:text/plain;base64,Hello World",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "text/plain",
                       "type": "file",
@@ -1974,7 +1989,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                       "type": "text",
                     },
                     {
-                      "data": "data:image/jpeg;base64,QkFVRw==",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "image/jpeg",
                       "type": "file",
@@ -2046,7 +2064,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -2056,7 +2077,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -2069,7 +2093,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -2079,7 +2106,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -2107,7 +2137,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -2119,7 +2149,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "file": {
-                  "base64Data": "Hello World",
+                  "base64Data": "data:text/plain;base64,Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -2132,7 +2162,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "file": {
-                  "base64Data": "QkFVRw==",
+                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -2150,7 +2180,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 {
                   "content": [
                     {
-                      "data": "data:text/plain;base64,Hello World",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "text/plain",
                       "type": "file",
@@ -2160,7 +2193,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                       "type": "text",
                     },
                     {
-                      "data": "data:image/jpeg;base64,QkFVRw==",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "image/jpeg",
                       "type": "file",
@@ -3265,7 +3301,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -3397,7 +3433,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -5844,10 +5880,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "modelProvider": "mock-provider",
-        "modelVersion": "v2",
+        "modelVersion": "v4",
         "providerMetadata": undefined,
         "request": {},
         "timestamp": 1970-01-01T00:00:02.000Z,
@@ -5880,7 +5916,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
               ],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
-              "modelVersion": "v2",
+              "modelVersion": "v4",
               "timestamp": 1970-01-01T00:00:02.000Z,
             },
             "tripwire": undefined,
@@ -5980,10 +6016,10 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v2",
+          "modelVersion": "v4",
         },
         "modelProvider": "mock-provider",
-        "modelVersion": "v2",
+        "modelVersion": "v4",
         "providerMetadata": undefined,
         "request": {},
         "timestamp": 1970-01-01T00:00:02.000Z,
@@ -6016,7 +6052,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
               ],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
-              "modelVersion": "v2",
+              "modelVersion": "v4",
               "timestamp": 1970-01-01T00:00:02.000Z,
             },
             "tripwire": undefined,
@@ -8125,7 +8161,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -8269,7 +8305,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -9868,7 +9904,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -9878,7 +9917,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -9891,7 +9933,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -9901,7 +9946,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -9929,7 +9977,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -9941,7 +9989,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "file": {
-                  "base64Data": "Hello World",
+                  "base64Data": "data:text/plain;base64,Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -9954,7 +10002,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "file": {
-                  "base64Data": "QkFVRw==",
+                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -9972,7 +10020,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 {
                   "content": [
                     {
-                      "data": "data:text/plain;base64,Hello World",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "text/plain",
                       "type": "file",
@@ -9982,7 +10033,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                       "type": "text",
                     },
                     {
-                      "data": "data:image/jpeg;base64,QkFVRw==",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "image/jpeg",
                       "type": "file",
@@ -10066,7 +10120,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -10076,7 +10133,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -10089,7 +10149,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
-                "data": "data:text/plain;base64,Hello World",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "text/plain",
                 "type": "file",
@@ -10099,7 +10162,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "type": "text",
               },
               {
-                "data": "data:image/jpeg;base64,QkFVRw==",
+                "data": {
+                  "type": "url",
+                  "url": {},
+                },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
                 "type": "file",
@@ -10127,7 +10193,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -10139,7 +10205,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "file": {
-                  "base64Data": "Hello World",
+                  "base64Data": "data:text/plain;base64,Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -10152,7 +10218,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "file": {
-                  "base64Data": "QkFVRw==",
+                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -10170,7 +10236,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 {
                   "content": [
                     {
-                      "data": "data:text/plain;base64,Hello World",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "text/plain",
                       "type": "file",
@@ -10180,7 +10249,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                       "type": "text",
                     },
                     {
-                      "data": "data:image/jpeg;base64,QkFVRw==",
+                      "data": {
+                        "type": "url",
+                        "url": {},
+                      },
                       "filename": undefined,
                       "mediaType": "image/jpeg",
                       "type": "file",
@@ -11321,7 +11393,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -11465,7 +11537,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "providerMetadata": undefined,
         "request": {},
@@ -14050,10 +14122,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "modelProvider": "mock-provider",
-        "modelVersion": "v3",
+        "modelVersion": "v4",
         "providerMetadata": undefined,
         "request": {},
         "timestamp": 1970-01-01T00:00:02.000Z,
@@ -14086,7 +14158,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
               ],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
-              "modelVersion": "v3",
+              "modelVersion": "v4",
               "timestamp": 1970-01-01T00:00:02.000Z,
             },
             "tripwire": undefined,
@@ -14198,10 +14270,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
-          "modelVersion": "v3",
+          "modelVersion": "v4",
         },
         "modelProvider": "mock-provider",
-        "modelVersion": "v3",
+        "modelVersion": "v4",
         "providerMetadata": undefined,
         "request": {},
         "timestamp": 1970-01-01T00:00:02.000Z,
@@ -14234,7 +14306,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
               ],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
-              "modelVersion": "v3",
+              "modelVersion": "v4",
               "timestamp": 1970-01-01T00:00:02.000Z,
             },
             "tripwire": undefined,
