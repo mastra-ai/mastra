@@ -10,6 +10,25 @@ import { describe, expect, it, vi } from 'vitest';
 import { event, harness } from '../support/application';
 
 describe('persistent telemetry', () => {
+  it('flushes_pending_telemetry_before_native_shutdown_closes_storage', async () => {
+    const app = await harness();
+    const runId = randomUUID();
+    try {
+      await app.telemetry.diagnostic({ code: 'intake.accepted', runId });
+      // Do not manually flush: native shutdown owns the final persisted batch.
+      await app.close(false);
+      const reopened = new DuckDBStore({ path: join(app.directory, 'observability.duckdb') });
+      try {
+        await reopened.init();
+        expect(JSON.stringify(await reopened.observability.listLogs({}))).toContain(runId);
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   it('filters_private_content_and_keeps_operational_state_separate', async () => {
     const app = await harness();
     const runId = randomUUID();
@@ -27,7 +46,7 @@ describe('persistent telemetry', () => {
       const response = await app.post(event('telemetry-email', { email: 'private-contact@example.com' }));
       expect(response.status).toBe(202);
       const accepted = await response.json();
-      app.dispatcher.start();
+      await app.mastra.startWorkers();
       await vi.waitFor(async () => expect((await app.store.get(accepted.runId))?.status).toBe('intake_received'));
       await app.telemetry.observability.flush();
       const traces = await app.duckdb.observability.listTraces({ pagination: { page: 0, perPage: 100 } });
@@ -77,7 +96,7 @@ describe('persistent telemetry', () => {
       const response = await app.post(event('telemetry-down'));
       expect(response.status).toBe(202);
       const accepted = await response.json();
-      app.dispatcher.start();
+      await app.mastra.startWorkers();
       await vi.waitFor(async () => expect((await app.store.get(accepted.runId))?.status).toBe('intake_received'));
       expect((await (await app.http.request(accepted.statusUrl)).json()).telemetryDegraded).toBe(true);
       expect((await app.store.client.execute('SELECT count(*) AS count FROM lead_runs')).rows[0]!.count).toBe(1);

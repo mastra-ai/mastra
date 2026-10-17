@@ -3,7 +3,7 @@ import { createClient } from '@libsql/client';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { intakeConfig } from '../../src/mastra/config/intake';
+import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
 import { event, harness, productionToken } from '../support/application';
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -64,7 +64,7 @@ describe('durable intake', () => {
     expect(new Set(associations).size).toBe(3);
     expect(modelCalls).not.toHaveBeenCalled();
     expect(Object.keys(app.mastra.listAgents())).toHaveLength(0);
-    app.dispatcher.start();
+    await app.mastra.startWorkers();
     await vi.waitFor(async () => {
       for (const runId of associations) expect((await app.store.get(runId))?.status).toBe('intake_received');
     });

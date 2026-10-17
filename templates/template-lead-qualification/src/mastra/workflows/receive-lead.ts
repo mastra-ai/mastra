@@ -1,10 +1,10 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { RequestContext } from '@mastra/core/request-context';
 import { intakeResultSchema, runReferenceSchema } from '../contracts';
-import type { IntakeConfig } from '../config/intake';
-import type { IntakeStore } from '../persistence/intake';
+import type { IntakeConfig } from '../config/lead-ingestion';
+import type { LeadEventStore } from '../persistence/lead-event-store';
 
-export function createIntakeWorkflow(store: IntakeStore, config: IntakeConfig) {
+export function createReceiveLeadWorkflow(store: LeadEventStore, config: IntakeConfig) {
   // Object identity cannot be supplied through native API request-context JSON.
   const dispatchBinding = Object.freeze({ sourceId: config.source.id });
   const receive = createStep({
@@ -34,12 +34,12 @@ export function createIntakeWorkflow(store: IntakeStore, config: IntakeConfig) {
   })
     .then(receive)
     .commit();
-  function bind(context: RequestContext) {
+  function authorizeDispatchContext(context: RequestContext) {
     context.set('intakeDispatch', dispatchBinding);
     context.set('sourceId', config.source.id);
     context.set('destinationProviderId', config.source.destinationProviderId);
     return context;
   }
-  return { workflow, bind };
+  return { workflow, authorizeDispatchContext };
 }
-export type IntakeWorkflow = ReturnType<typeof createIntakeWorkflow>;
+export type ReceiveLeadWorkflow = ReturnType<typeof createReceiveLeadWorkflow>;

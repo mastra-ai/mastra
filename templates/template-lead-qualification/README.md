@@ -1,16 +1,19 @@
 # Lead Qualification
 
-Accept domain, email, or CRM reference events and inspect their durable run associations. The current workflow records intake, protects production APIs, and recovers acknowledged work after a process restart. Research, scoring, review, and connected CRM updates are not available yet.
+A contact form, signup flow, or CRM can submit a company domain, contact email, or CRM reference. The template turns each submission into a persistent lead event with a workflow run that your team can track and safely retry.
+
+This version provides the receiving stage of qualification: it records the lead and confirms that its intake workflow completed. It does not yet research the company, calculate an ICP score, recommend a sales action, or update the CRM.
 
 ## Why we built this
 
-A lead can arrive more than once or while a server is restarting. Durable intake gives developers a stable run reference before adding company research and sales decisions.
+A sales development representative (SDR) identifies potential customers and qualifies their interest before handing them over to the sales team. They need to know which company expressed interest, where that interest came from, and what happened to the submission before deciding how to follow up. Forms and CRM webhooks can resend events, and a server restart should not turn an acknowledged lead into missing work.
+
+This template establishes that handoff between a lead source and a qualification workflow. Developers can adapt the input provider to their own sales process while keeping a consistent record of each lead, its origin, and its processing status. That record is the foundation for adding company research, qualification rules, and review decisions.
 
 ## Prerequisites
 
-- A writable local disk for the operational and observability databases. Run one application process per data directory.
+- **[OpenAI API key](https://platform.openai.com/api-keys)**: `OPENAI_API_KEY` is reserved for research when that capability is added. The current intake workflow makes no model or CRM calls and requires no external credentials.
 - Local mode uses loopback access without an authentication token. Set `LEAD_QUALIFICATION_MODE=production` and a random `LEAD_QUALIFICATION_TOKEN` of at least 32 characters before exposing the API through HTTPS ingress.
-- Intake makes no model or CRM calls and requires no external credentials. `OPENAI_API_KEY` is reserved for research when that capability is added.
 
 ## Quickstart 🚀
 
@@ -38,7 +41,7 @@ curl -s http://127.0.0.1:4111/lead-qualification/events \
 ## Customization
 
 - Ask your coding agent: “Explore the intake schemas, provider map, and persistence before proposing a new event input adapter. Preserve durable acknowledgement, authentication, conflict handling, and restart recovery. Add functional tests and update the intake guide.” See [extending intake](docs/intake.md).
-- Change source bindings and operational limits in `src/mastra/config/intake.ts`. See [configuration](docs/configuration.md), [observability](docs/observability.md), and [operations](docs/operations.md).
+- Change source bindings and operational limits in `src/mastra/config/lead-ingestion.ts`. See [configuration](docs/configuration.md), [observability](docs/observability.md), and [operations](docs/operations.md).
 
 ## About Mastra templates
 

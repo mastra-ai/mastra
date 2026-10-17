@@ -1,10 +1,10 @@
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRouteHandler } from '@mastra/core/server';
 import { ZodError } from 'zod';
-import type { IntakeConfig } from '../config/intake';
+import type { IntakeConfig } from '../config/lead-ingestion';
 import { runReferenceSchema } from '../contracts';
-import { AdmissionError, DeliveryConflictError } from '../persistence/intake';
-import type { IntakeStore } from '../persistence/intake';
+import { AdmissionError, DeliveryConflictError } from '../persistence/lead-event-store';
+import type { LeadEventStore } from '../persistence/lead-event-store';
 import { inputProviders } from '../providers/input';
 import type { Telemetry } from '../telemetry';
 
@@ -33,12 +33,7 @@ async function readBody(request: Request, maxBytes: number) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
-export function intakeRoutes(
-  store: IntakeStore,
-  config: IntakeConfig,
-  telemetry: Telemetry,
-  onServerReady: () => void,
-) {
+export function createLeadRoutes(store: LeadEventStore, config: IntakeConfig, telemetry: Telemetry) {
   const provider = inputProviders.get(config.source.inputProviderId);
   if (!provider) throw new Error('Configured input provider is unavailable');
   return [
@@ -46,7 +41,6 @@ export function intakeRoutes(
       method: 'POST',
       requiresAuth: true,
       createHandler: async () => {
-        onServerReady();
         const handler: ApiRouteHandler = async c => {
           if (c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
             return c.json({ error: 'unsupported_content_type' }, 415);

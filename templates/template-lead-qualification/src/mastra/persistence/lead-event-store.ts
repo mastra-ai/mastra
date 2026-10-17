@@ -29,7 +29,7 @@ function project(row: Row): RunRecord {
   };
 }
 
-export class IntakeStore {
+export class LeadEventStore {
   readonly client: Client;
   private admission: Promise<unknown> = Promise.resolve();
   constructor(url: string) {

@@ -1,6 +1,6 @@
 import { leadEventSchema, normalizedEventSchema } from '../contracts';
 import type { NormalizedEvent } from '../contracts';
-import type { IntakeConfig } from '../config/intake';
+import type { IntakeConfig } from '../config/lead-ingestion';
 
 export interface EventInputProvider {
   normalize(payload: unknown, source: IntakeConfig['source'], receivedAt: string): NormalizedEvent;

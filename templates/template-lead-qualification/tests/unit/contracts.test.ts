@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { domainSchema, leadEventSchema, normalizedEventSchema } from '../../src/mastra/contracts';
 import { inputProviders } from '../../src/mastra/providers/input';
-import { intakeConfig } from '../../src/mastra/config/intake';
+import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
 import { event } from '../support/application';
 
 describe('lead event contracts', () => {

@@ -5,8 +5,8 @@ import { Mastra } from '@mastra/core/mastra';
 import { MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
 import { createApplicationRuntime } from '../../src/mastra/application';
-import { intakeConfig } from '../../src/mastra/config/intake';
-import type { IntakeConfig } from '../../src/mastra/config/intake';
+import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
+import type { IntakeConfig } from '../../src/mastra/config/lead-ingestion';
 
 export const productionToken = 'example-token-for-functional-tests-1234567890';
 export function event(eventId = 'delivery-1', lead: Record<string, unknown> = { domain: 'example.com' }) {
@@ -31,12 +31,12 @@ export async function harness(
       observabilityPath: join(directory, 'observability.duckdb'),
     },
     config: options.config ?? intakeConfig,
-    startDispatcher: options.dispatch ?? false,
   });
   const mastra = new Mastra(application.mastraConfig);
   const http = new Hono();
   const server = new MastraServer({ app: http, mastra, prefix: '/api' });
   await server.init();
+  if (options.dispatch) await mastra.startWorkers();
   function post(body: unknown, headers: Record<string, string> = {}) {
     return http.request('/lead-qualification/events', {
       method: 'POST',
@@ -44,9 +44,20 @@ export async function harness(
       body: JSON.stringify(body),
     });
   }
+  let closing: Promise<void> | undefined;
   async function close(remove = true) {
-    await application.close(mastra);
+    closing ??= mastra.shutdown();
+    await closing;
     if (remove) await rm(directory, { recursive: true, force: true });
   }
-  return { ...application, mastra, directory, http, post, close };
+  return {
+    ...application,
+    store: application.storage.leadEvents,
+    duckdb: application.storage.telemetryStore,
+    mastra,
+    directory,
+    http,
+    post,
+    close,
+  };
 }

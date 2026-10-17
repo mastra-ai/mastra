@@ -1,6 +1,6 @@
 # Intake configuration
 
-Edit the schema-validated `intakeConfig` in `src/mastra/config/intake.ts`. Restart after changing configuration. Preserve existing source and destination bindings until pending work completes; accepted events retain their original bindings and cannot silently switch destination.
+Edit the schema-validated `intakeConfig` in `src/mastra/config/lead-ingestion.ts`. Restart after changing configuration. Preserve existing source and destination bindings until pending work completes; accepted events retain their original bindings and cannot silently switch destination.
 
 | Setting                        | Default         | Meaning                                                           |
 | ------------------------------ | --------------- | ----------------------------------------------------------------- |
