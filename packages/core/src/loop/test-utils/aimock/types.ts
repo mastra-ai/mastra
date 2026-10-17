@@ -416,12 +416,15 @@ export interface RunLoopScenarioOptions {
 }
 
 /**
- * Options for {@link runApprovalScenario}. Extends {@link RunLoopScenarioOptions}
- * with a per-approval decision callback. The loop runs with
- * `requireToolApproval: true`; each suspended tool call is approved or declined
- * based on `decision`.
+ * Options for {@link runApprovalScenario}: the subset of
+ * {@link RunLoopScenarioOptions} it forwards, plus a per-approval decision
+ * callback. The loop runs with `requireToolApproval: true` unless overridden;
+ * each suspended tool call is approved or declined based on `decision`.
  */
-export interface RunApprovalScenarioOptions extends RunLoopScenarioOptions {
+export interface RunApprovalScenarioOptions extends Pick<
+  RunLoopScenarioOptions,
+  'llm' | 'fixtures' | 'prompt' | 'tools' | 'instructions' | 'stopWhen' | 'requireToolApproval' | 'engine'
+> {
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based
