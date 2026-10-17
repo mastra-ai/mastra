@@ -40,6 +40,7 @@ import {
 import { coreFeatures } from '@mastra/core/features';
 import {
   createKnowledgeUlid,
+  assertKnowledgeSourceProbeLimit,
   isKnowledgeScopeVisible,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,
@@ -51,7 +52,9 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  pageKnowledgeScopeNodes,
   parseKnowledgeNodeCursor,
+  parseListKnowledgeScopeNodesInput,
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_MENTIONS,
@@ -78,12 +81,16 @@ import type {
   KnowledgeNodeAddress,
   KnowledgeRecord,
   KnowledgeScopeAddress,
+  KnowledgeScopeNodeSummary,
+  ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeNodesOutput,
   KnowledgeScopeIds,
   KnowledgeSemanticDocumentType,
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -265,16 +272,25 @@ function assertImportRunTransition(
 }
 
 /** Mirrors `isKnowledgeNodeVisible`: a member of a visible scope, or a visible scope itself. Binds `scopeIds` twice. */
-function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n'): string {
-  const ids = scopeIds.map(() => '?').join(',');
+function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n', extraScopeSql?: string): string {
+  const ids = scopeIdListSql(scopeIds, extraScopeSql);
   return `((${alias}.isScope=TRUE AND ${alias}.id IN (${ids})) OR EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${ids})))`;
 }
 
-/** A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target. */
-function visibleRecordSql(scopeIds: KnowledgeScopeIds): { sql: string; args: string[] } {
-  const visibleNode = (alias: string) => `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias)}`;
+/** `?` placeholders for `scopeIds`, plus an optional SQL expression naming one more scope id per row. */
+function scopeIdListSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): string {
+  return [...scopeIds.map(() => '?'), ...(extraScopeSql ? [extraScopeSql] : [])].join(',');
+}
+
+/**
+ * A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target.
+ * `extraScopeSql` adds one more visible scope per row (e.g. a probed source's own session scope).
+ */
+function visibleRecordSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
+  const visibleNode = (alias: string) =>
+    `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias, extraScopeSql)}`;
   return {
-    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIds.map(() => '?').join(',')})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
+    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
     args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
   };
 }
@@ -1278,6 +1294,21 @@ export class KnowledgePG extends KnowledgeStorage {
     };
   }
 
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    if (input.sources.length === 0) return [];
+    // Each probe row pairs a source with its own extra scope, so one query applies a per-source visibility set.
+    const probes = input.sources
+      .map(() => `SELECT CAST(? AS TEXT) AS source, CAST(? AS TEXT) AS scopeId`)
+      .join(' UNION ALL ');
+    const visibleRecord = visibleRecordSql(canonicalizeKnowledgeScopeIds(input.scopeIds), 'q.scopeId');
+    const result = await this.#readExecutor.execute({
+      sql: `SELECT DISTINCT q.source FROM (${probes}) q JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.source=q.source JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.deletedAt IS NULL AND ${visibleRecord.sql}`,
+      args: [...input.sources.flatMap(probe => [probe.source, probe.scopeId ?? null]), ...visibleRecord.args],
+    });
+    return result.rows.map(row => String(row.source));
+  }
+
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
     return this.#transaction(tx => this.#deleteRecord(tx, input));
   }
@@ -1415,6 +1446,73 @@ export class KnowledgePG extends KnowledgeStorage {
     });
     const row = result.rows[0];
     return row ? { address: String(row.address), scopeNodeId: String(row.scopeNodeId) } : null;
+  }
+
+  async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
+    const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
+    const result = await this.#executor.execute({
+      sql: `SELECT a.address,a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.scopeNodeId WHERE n.isScope=TRUE AND n.deletedAt IS NULL AND (CAST(? AS TEXT) IS NULL OR a.address>?) ORDER BY a.address ASC LIMIT ?`,
+      args: [input.after ?? null, input.after ?? null, limit],
+    });
+    return result.rows.map(row => ({ address: String(row.address), scopeNodeId: String(row.scopeNodeId) }));
+  }
+
+  async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
+    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
+    const args: (string | number | null)[] = [];
+    const filters: string[] = [];
+    let cte = '';
+    if (input.withinAddress !== undefined) {
+      // Follows membership edges downward from the root scope; UNION stops at cycles.
+      cte = `WITH RECURSIVE within_scope(id) AS (SELECT a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=a.scopeNodeId WHERE a.address=? AND r.isScope=TRUE AND r.deletedAt IS NULL UNION SELECT e.nodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" e JOIN within_scope w ON e.scopeNodeId=w.id JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=e.nodeId WHERE c.isScope=TRUE AND c.deletedAt IS NULL) `;
+      args.push(input.withinAddress);
+      filters.push('n.id IN (SELECT id FROM within_scope)');
+    }
+    if (input.addresses) {
+      if (!input.addresses.length) return { scopes: [], nextCursor: null };
+      filters.push(`a.address IN (${input.addresses.map(() => '?').join(',')})`);
+      args.push(...input.addresses);
+    }
+    if (input.ids) {
+      if (!input.ids.length) return { scopes: [], nextCursor: null };
+      filters.push(`n.id IN (${input.ids.map(() => '?').join(',')})`);
+      args.push(...input.ids);
+    }
+    if (after) {
+      filters.push('(n.name COLLATE "C">? COLLATE "C" OR (n.name=? AND n.id>?))');
+      args.push(after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
+    const result = await this.#readExecutor.execute({
+      sql: `${cte}SELECT n.id,a.address,n.name,n.kind,n.metadata,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a.scopeNodeId=n.id WHERE n.isScope=TRUE AND n.deletedAt IS NULL${filters.map(filter => ` AND ${filter}`).join('')} ORDER BY n.name COLLATE "C" ASC,n.id ASC LIMIT ?`,
+      args,
+    });
+    const ids = result.rows.map(row => String(row.id));
+    const parents = new Map<string, string[]>();
+    if (ids.length) {
+      const edges = await this.#readExecutor.execute({
+        sql: `SELECT nodeId,scopeNodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId IN (${ids.map(() => '?').join(',')}) ORDER BY scopeNodeId`,
+        args: ids,
+      });
+      for (const edge of edges.rows) {
+        const nodeId = String(edge.nodeId);
+        parents.set(nodeId, [...(parents.get(nodeId) ?? []), String(edge.scopeNodeId)]);
+      }
+    }
+    const rows: KnowledgeScopeNodeSummary[] = result.rows.map(row => {
+      const metadata =
+        row.metadata == null ? undefined : parseJson<Record<string, unknown>>(row.metadataJson ?? row.metadata);
+      const description = metadata?.description;
+      return {
+        id: String(row.id),
+        address: String(row.address),
+        name: String(row.name),
+        ...(row.kind == null ? {} : { kind: String(row.kind) }),
+        ...(typeof description === 'string' ? { description } : {}),
+        parentIds: parents.get(String(row.id)) ?? [],
+      };
+    });
+    return pageKnowledgeScopeNodes(rows, limit, input);
   }
 
   async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {

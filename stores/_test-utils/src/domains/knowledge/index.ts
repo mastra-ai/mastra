@@ -352,6 +352,69 @@ export function createKnowledgeStorageTests(
       ).toEqual([second.id]);
     });
 
+    it('reports which sources hold at least one visible record, applying the record visibility rule', async () => {
+      const visible = await store.createNode({ name: 'Source probe visible', scopeIds: [PROJECT_SCOPE_ID] });
+      const hidden = await store.createNode({ name: 'Source probe hidden', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({ node: visible, text: 'Live', source: 'probe-live', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.createRecord({ node: hidden, text: 'Foreign', source: 'probe-foreign', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({
+        node: visible,
+        text: 'Mentions [[Source probe hidden]]',
+        source: 'probe-private-mention',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [OTHER_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      const deleted = await store.createRecord({
+        node: visible,
+        text: 'Gone',
+        source: 'probe-deleted',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      await store.deleteRecord({ id: deleted.id, deletedBy: 'test' });
+      await store.createRecord({ node: visible, text: 'Twice a', source: 'probe-twice', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.createRecord({ node: visible, text: 'Twice b', source: 'probe-twice', scopeIds: [PROJECT_SCOPE_ID] });
+
+      const found = await store.listSourcesWithVisibleRecords({
+        sources: [
+          'probe-live',
+          'probe-foreign',
+          'probe-private-mention',
+          'probe-deleted',
+          'probe-twice',
+          'probe-none',
+        ].map(source => ({ source })),
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      expect([...found].sort()).toEqual(['probe-live', 'probe-twice']);
+      expect(await store.listSourcesWithVisibleRecords({ sources: [], scopeIds: [PROJECT_SCOPE_ID] })).toEqual([]);
+      await expect(
+        store.listSourcesWithVisibleRecords({
+          sources: Array.from({ length: 1001 }, (_, i) => ({ source: `s-${i}` })),
+          scopeIds: [PROJECT_SCOPE_ID],
+        }),
+      ).rejects.toThrow('at most 1000');
+    });
+
+    it("applies each source only its own paired scope, never a sibling probe's", async () => {
+      const own = await store.createNode({ name: 'Paired own', scopeIds: [OTHER_SCOPE_ID] });
+      // `paired-b` holds a record, but only under the scope paired with `paired-a`.
+      await store.createRecord({ node: own, text: 'Filed elsewhere', source: 'paired-b', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({ node: own, text: 'Filed home', source: 'paired-a', scopeIds: [OTHER_SCOPE_ID] });
+
+      const found = await store.listSourcesWithVisibleRecords({
+        sources: [{ source: 'paired-a', scopeId: OTHER_SCOPE_ID }, { source: 'paired-b' }],
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      expect(found).toEqual(['paired-a']);
+      expect(
+        await store.listSourcesWithVisibleRecords({
+          sources: [{ source: 'paired-b', scopeId: OTHER_SCOPE_ID }],
+          scopeIds: [PROJECT_SCOPE_ID],
+        }),
+      ).toEqual(['paired-b']);
+    });
+
     it('deduplicates concurrent node creation by canonical name and memberships', async () => {
       const [first, second] = await Promise.all([
         store.createNode({ name: 'Concurrent Topic', scopeIds: [PROJECT_SCOPE_ID] }),
@@ -842,7 +905,105 @@ export function createKnowledgeStorageTests(
         scopeNodeId: first.scopes['repo:mastra'],
       });
       expect(await store.getScopeAddress('repo:missing')).toBeNull();
+      expect(await store.listScopeAddresses({ limit: 1 })).toEqual([
+        { address: 'org:shipyard', scopeNodeId: first.scopes['org:shipyard'] },
+      ]);
+      expect(await store.listScopeAddresses({ after: 'org:shipyard', limit: 1 })).toEqual([
+        { address: 'repo:mastra', scopeNodeId: first.scopes['repo:mastra'] },
+      ]);
       expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
+    });
+
+    it('filters scope nodes to one subtree or exact addresses and pages them by name', async () => {
+      let ids: Record<string, string>;
+      try {
+        ({ scopes: ids } = await store.reconcileStructure({
+          scopes: [
+            { address: 'org:acme', name: 'Acme' },
+            { address: 'team:a', name: 'A', parentAddresses: ['org:acme'] },
+            { address: 'team:b', name: 'B', parentAddresses: ['org:acme'] },
+            { address: 'project:p', name: 'P', parentAddresses: ['team:a', 'team:b'] },
+            { address: 'org:other', name: 'Other' },
+            { address: 'team:o', name: 'O', parentAddresses: ['org:other'] },
+          ],
+        }));
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+
+      const within = await store.listScopeNodes({ withinAddress: 'org:acme' });
+      expect(within.scopes.map(scope => scope.address)).toEqual(['team:a', 'org:acme', 'team:b', 'project:p']);
+      expect(within.nextCursor).toBeNull();
+      // Parent ids come back in a stable order so pages of the same query compare equal.
+      expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds).toEqual(
+        [ids['team:a'], ids['team:b']].sort(),
+      );
+
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', limit: Number.NaN })).toEqual(within);
+      const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
+      expect(first.scopes).toHaveLength(3);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      const second = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3, cursor: first.nextCursor! });
+      expect([...first.scopes, ...second.scopes]).toEqual(within.scopes);
+      expect(second.nextCursor).toBeNull();
+      await expect(store.listScopeNodes({ withinAddress: 'org:other', cursor: first.nextCursor! })).rejects.toThrow(
+        'does not match this query',
+      );
+
+      expect((await store.listScopeNodes({ withinAddress: 'team:b' })).scopes.map(scope => scope.address)).toEqual([
+        'team:b',
+        'project:p',
+      ]);
+      expect((await store.listScopeNodes({ addresses: ['team:o', 'missing'] })).scopes.map(scope => scope.id)).toEqual([
+        ids['team:o'],
+      ]);
+      expect(await store.listScopeNodes({ withinAddress: 'missing' })).toEqual({ scopes: [], nextCursor: null });
+
+      // An id filter inside a subtree answers "is this scope in that subtree?" with one bounded read.
+      expect(
+        (await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['project:p']!], limit: 1 })).scopes.map(
+          scope => scope.address,
+        ),
+      ).toEqual(['project:p']);
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['team:o']!] })).toEqual({
+        scopes: [],
+        nextCursor: null,
+      });
+      expect(await store.listScopeNodes({ ids: [] })).toEqual({ scopes: [], nextCursor: null });
+    });
+
+    it('orders scope nodes by character code, not locale', async () => {
+      try {
+        await store.reconcileStructure({
+          scopes: [
+            { address: 'org:case', name: 'Case' },
+            { address: 'topic:lower', name: 'apple', parentAddresses: ['org:case'] },
+            { address: 'topic:upper', name: 'Banana', parentAddresses: ['org:case'] },
+          ],
+        });
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+      let page;
+      try {
+        page = await store.listScopeNodes({ withinAddress: 'org:case', limit: 2 });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'KnowledgeUnsupportedError') return;
+        throw error;
+      }
+      expect(page.scopes.map(scope => scope.name)).toEqual(['Banana', 'Case']);
+      const rest = await store.listScopeNodes({ withinAddress: 'org:case', limit: 2, cursor: page.nextCursor! });
+      expect(rest.scopes.map(scope => scope.name)).toEqual(['apple']);
     });
 
     it('leaves existing scopes untouched when a plan does not retrofit', async () => {

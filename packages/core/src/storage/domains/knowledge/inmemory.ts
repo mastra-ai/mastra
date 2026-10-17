@@ -5,6 +5,7 @@ import {
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
+  assertKnowledgeSourceProbeLimit,
   isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
@@ -14,7 +15,9 @@ import {
   KnowledgeStorage,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  pageKnowledgeScopeNodes,
   parseKnowledgeNodeCursor,
+  parseListKnowledgeScopeNodesInput,
   parseKnowledgeWikilinks,
   sanitizeKnowledgeImportError,
 } from './base';
@@ -36,11 +39,13 @@ import type {
   KnowledgeRecord,
   KnowledgeScopeAddress,
   KnowledgeScopeIds,
+  KnowledgeScopeNodeSummary,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -48,6 +53,8 @@ import type {
   ListKnowledgeImportRunsInput,
   ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
+  ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeNodesOutput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
   UpdateKnowledgeImportRunInput,
@@ -280,6 +287,69 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (!scopeNodeId) return null;
     const scope = this.#db.knowledgeNodes.get(scopeNodeId);
     return scope && !scope.deletedAt && scope.isScope ? { address, scopeNodeId } : null;
+  }
+
+  async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
+    const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
+    return [...this.#db.knowledgeScopeAddresses]
+      .filter(([address, scopeNodeId]) => {
+        if (input.after && address <= input.after) return false;
+        const scope = this.#db.knowledgeNodes.get(scopeNodeId);
+        return scope?.isScope === true && !scope.deletedAt;
+      })
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(0, limit)
+      .map(([address, scopeNodeId]) => ({ address, scopeNodeId }));
+  }
+
+  async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
+    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
+    const live = (id: string) => {
+      const node = this.#db.knowledgeNodes.get(id);
+      return node?.isScope === true && !node.deletedAt ? node : undefined;
+    };
+    let within: Set<string> | undefined;
+    if (input.withinAddress !== undefined) {
+      within = new Set();
+      const rootId = this.#db.knowledgeScopeAddresses.get(input.withinAddress);
+      if (rootId && live(rootId)) {
+        const children = new Map<string, string[]>();
+        for (const [nodeId, parents] of this.#db.knowledgeNodeScopes) {
+          if (!live(nodeId)) continue;
+          for (const parentId of parents) children.set(parentId, [...(children.get(parentId) ?? []), nodeId]);
+        }
+        const queue = [rootId];
+        while (queue.length) {
+          const id = queue.pop()!;
+          if (within.has(id)) continue;
+          within.add(id);
+          queue.push(...(children.get(id) ?? []));
+        }
+      }
+    }
+    const addresses = input.addresses ? new Set(input.addresses) : undefined;
+    const ids = input.ids ? new Set(input.ids) : undefined;
+    const rows: KnowledgeScopeNodeSummary[] = [];
+    for (const [address, id] of this.#db.knowledgeScopeAddresses) {
+      const node = live(id);
+      if (!node || (within && !within.has(id)) || (addresses && !addresses.has(address)) || (ids && !ids.has(id))) {
+        continue;
+      }
+      if (after && (node.name < after.name || (node.name === after.name && id <= after.id))) continue;
+      const description = node.metadata?.description;
+      rows.push({
+        id,
+        address,
+        name: node.name,
+        ...(node.kind ? { kind: node.kind } : {}),
+        ...(typeof description === 'string' ? { description } : {}),
+        parentIds: this.#nodeScopeIds(id),
+      });
+    }
+    rows.sort((left, right) =>
+      left.name === right.name ? (left.id < right.id ? -1 : 1) : left.name < right.name ? -1 : 1,
+    );
+    return pageKnowledgeScopeNodes(rows.slice(0, limit + 1), limit, input);
   }
 
   async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
@@ -714,6 +784,22 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       records: records.slice(0, limit).map(cloneRecord),
       nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
     };
+  }
+
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    const scopesBySource = new Map<string, KnowledgeScopeIds[]>();
+    for (const probe of input.sources) {
+      const scope = canonicalizeKnowledgeScopeIds(probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds);
+      scopesBySource.set(probe.source, [...(scopesBySource.get(probe.source) ?? []), scope]);
+    }
+    const found = new Set<string>();
+    for (const record of this.#db.knowledgeRecords.values()) {
+      if (record.deletedAt || !record.source || found.has(record.source)) continue;
+      if (scopesBySource.get(record.source)?.some(scope => this.#isRecordVisible(record, scope)))
+        found.add(record.source);
+    }
+    return [...found];
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
