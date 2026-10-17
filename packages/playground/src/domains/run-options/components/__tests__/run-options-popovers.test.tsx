@@ -104,19 +104,19 @@ describe('WorkflowRunActions', () => {
     });
   });
 
-  describe('when the user saves run options with a resource ID', () => {
+  describe('when the user saves tracing options with a resource ID', () => {
     it('commits the draft, toasts, closes and does not submit the workflow form', async () => {
       const onSubmit = vi.fn();
       renderWithProviders(<WorkflowTriggerHarness onSubmit={onSubmit} />, 'workflow', WORKFLOW_ID);
 
-      await open('Run options');
+      await open('Tracing options');
       fireEvent.change(await screen.findByLabelText('Resource ID'), { target: { value: 'tenant-42' } });
       expect(screen.getByTestId('resource-id').textContent).toBe('');
 
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       await waitFor(() => expect(screen.getByTestId('resource-id').textContent).toBe('tenant-42'));
-      expect(toast.success).toHaveBeenCalledWith('Run options saved locally');
+      expect(toast.success).toHaveBeenCalledWith('Tracing options saved locally');
       await waitFor(() => expect(screen.queryByLabelText('Resource ID')).toBeNull());
       expect(onSubmit).not.toHaveBeenCalled();
     });
