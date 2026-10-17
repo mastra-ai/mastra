@@ -1418,6 +1418,12 @@ export interface UpdateBufferedObservationsInput {
   chunk: BufferedObservationChunkInput;
   /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
   lastBufferedAtTime?: Date;
+  /**
+   * The observation cursor the buffer read before choosing its messages. When set, the append is
+   * refused if the live record's cursor has moved since, because a concurrent observation or
+   * activation already covered part of that range. `null` means the cursor was unset.
+   */
+  expectedLastObservedAt?: Date | null;
 }
 
 export type { UpdateBufferedObservationsResult } from '@internal/core/memory';

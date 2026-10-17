@@ -7992,8 +7992,8 @@ describe('Locking Behavior', () => {
 
     // Simulate an IN-FLIGHT reflection in this process: flag set AND op registered.
     await storage.setReflectingFlag(record!.id, true);
-    const operations = new OMOperationTracker(storage);
-    operations.begin(record!.id, 'reflecting');
+    const operations = new OMOperationTracker({ storage: storage });
+    operations.begin({ recordId: record!.id, operation: 'reflecting' });
     try {
       const result = await om.reflect('thread-1', 'resource-1');
 
@@ -8003,9 +8003,9 @@ describe('Locking Behavior', () => {
       // The skip must not clobber the in-flight reflection's lock.
       const after = await storage.getObservationalMemory('thread-1', 'resource-1');
       expect(after!.isReflecting).toBe(true);
-      expect(await operations.isActive(record!.id, 'reflecting')).toBe(true);
+      expect(await operations.isActive({ recordId: record!.id, operation: 'reflecting' })).toBe(true);
     } finally {
-      operations.end(record!.id, 'reflecting');
+      operations.end({ recordId: record!.id, operation: 'reflecting' });
       await storage.setReflectingFlag(record!.id, false);
     }
   });
@@ -11096,7 +11096,13 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000 },
       });
 
-      expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 10000,
+          lockKey: 'thread:test',
+          record: mockRecord,
+        }),
+      ).toBe(false);
     });
 
     it('should return true when crossing a bufferTokens interval boundary', () => {
@@ -11113,10 +11119,18 @@ describe('Async Buffering Processor Logic', () => {
       });
 
       // At 5000 tokens, interval = 0, lastBoundary = 0 → no trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(5000, 'thread:test', mockRecord)).toBe(false);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({ currentTokens: 5000, lockKey: 'thread:test', record: mockRecord }),
+      ).toBe(false);
 
       // At 10000 tokens, interval = 1, lastBoundary = 0 → trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 10000,
+          lockKey: 'thread:test',
+          record: mockRecord,
+        }),
+      ).toBe(true);
     });
 
     it('should treat stale isBufferingObservation flag as cleared (no active op in process)', () => {
@@ -11134,7 +11148,13 @@ describe('Async Buffering Processor Logic', () => {
 
       // isBufferingObservation=true but no op registered in this process → stale, should allow trigger
       const bufferingRecord = { isBufferingObservation: true, lastBufferedAtTokens: 0 } as any;
-      expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(true);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 10000,
+          lockKey: 'thread:test',
+          record: bufferingRecord,
+        }),
+      ).toBe(true);
     });
 
     it('should not re-trigger for the same interval using record.lastBufferedAtTokens', () => {
@@ -11153,16 +11173,22 @@ describe('Async Buffering Processor Logic', () => {
       const lockKey = 'thread:test';
 
       // Simulate first trigger at 10000 — record shows lastBufferedAtTokens=0
-      expect(om.buffering.shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation({ currentTokens: 10000, lockKey, record: mockRecord })).toBe(
+        true,
+      );
 
       // Simulate that buffering completed and persisted lastBufferedAtTokens=10000
       const afterBufferRecord = { isBufferingObservation: false, lastBufferedAtTokens: 10000 } as any;
 
       // Same interval should not re-trigger (using DB state, not in-memory)
-      expect(om.buffering.shouldTriggerAsyncObservation(12000, lockKey, afterBufferRecord)).toBe(false);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({ currentTokens: 12000, lockKey, record: afterBufferRecord }),
+      ).toBe(false);
 
       // Next interval boundary should trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(20000, lockKey, afterBufferRecord)).toBe(true);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({ currentTokens: 20000, lockKey, record: afterBufferRecord }),
+      ).toBe(true);
     });
 
     it('should not re-trigger for the same interval after lastBufferedBoundary is set (in-memory fallback)', () => {
@@ -11182,16 +11208,22 @@ describe('Async Buffering Processor Logic', () => {
       const bufferKey = om.buffering.getObservationBufferKey(lockKey);
 
       // Simulate first trigger at 10000
-      expect(om.buffering.shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation({ currentTokens: 10000, lockKey, record: mockRecord })).toBe(
+        true,
+      );
 
       // Simulate that startAsyncBufferedObservation updated lastBufferedBoundary (in-memory)
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, 10000);
 
       // Same interval should not re-trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(12000, lockKey, mockRecord)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation({ currentTokens: 12000, lockKey, record: mockRecord })).toBe(
+        false,
+      );
 
       // Next interval boundary should trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation({ currentTokens: 20000, lockKey, record: mockRecord })).toBe(
+        true,
+      );
     });
 
     it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
@@ -11212,26 +11244,68 @@ describe('Async Buffering Processor Logic', () => {
 
       // Well below ramp point (35600): normal 4000 interval
       // At 3000 tokens, interval = floor(3000/4000) = 0, last = 0 → no trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(3000, lockKey, mockRecord, undefined, 40000)).toBe(false);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 3000,
+          lockKey,
+          record: mockRecord,
+          messageTokensThreshold: 40000,
+        }),
+      ).toBe(false);
       // At 4000 tokens, interval = floor(4000/4000) = 1, last = 0 → trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(4000, lockKey, mockRecord, undefined, 40000)).toBe(true);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 4000,
+          lockKey,
+          record: mockRecord,
+          messageTokensThreshold: 40000,
+        }),
+      ).toBe(true);
 
       // Still below ramp point: normal 4000 interval
       const recordAt32k = { isBufferingObservation: false, lastBufferedAtTokens: 32000 } as any;
       // At 35000 tokens (below rampPoint 35600), interval = floor(35000/4000) = 8, last = floor(32000/4000) = 8 → no trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, undefined, 40000)).toBe(false);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 35000,
+          lockKey,
+          record: recordAt32k,
+          messageTokensThreshold: 40000,
+        }),
+      ).toBe(false);
 
       // Above ramp point (35600): halved 2000 interval
       // At 36000 tokens, halved interval = 2000
       // interval = floor(36000/2000) = 18, last = floor(32000/2000) = 16 → trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, undefined, 40000)).toBe(true);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 36000,
+          lockKey,
+          record: recordAt32k,
+          messageTokensThreshold: 40000,
+        }),
+      ).toBe(true);
 
       // Simulate buffering at 36000
       const recordAt36k = { isBufferingObservation: false, lastBufferedAtTokens: 36000 } as any;
       // At 37000 tokens, interval = floor(37000/2000) = 18, last = floor(36000/2000) = 18 → no trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, undefined, 40000)).toBe(false);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 37000,
+          lockKey,
+          record: recordAt36k,
+          messageTokensThreshold: 40000,
+        }),
+      ).toBe(false);
       // At 38000 tokens, interval = floor(38000/2000) = 19, last = 18 → trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, undefined, 40000)).toBe(true);
+      expect(
+        om.buffering.shouldTriggerAsyncObservation({
+          currentTokens: 38000,
+          lockKey,
+          record: recordAt36k,
+          messageTokensThreshold: 40000,
+        }),
+      ).toBe(true);
     });
 
     it('should not halve interval when no threshold is provided', () => {
@@ -11252,9 +11326,13 @@ describe('Async Buffering Processor Logic', () => {
 
       // Without threshold, even near messageTokens limit, the normal 4000 interval is used
       // At 31000 tokens, interval = floor(31000/4000) = 7, last = floor(28000/4000) = 7 → no trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation({ currentTokens: 31000, lockKey, record: recordAt28k })).toBe(
+        false,
+      );
       // At 32000 tokens, interval = floor(32000/4000) = 8, last = 7 → trigger
-      expect(om.buffering.shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation({ currentTokens: 32000, lockKey, record: recordAt28k })).toBe(
+        true,
+      );
     });
   });
 
@@ -12531,101 +12609,104 @@ describe('Full Async Buffering Flow', () => {
   // activate(). The core hint-propagation behavior is covered by the direct test below:
   // "should clear stale thread continuation hints after buffered activation when latest
   // activated chunk has no hints"
-  it.todo('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
-    // Use enough messages and a low threshold so that two activation rounds can
-    // succeed sequentially.  The first observer response includes continuation
-    // hints; the second omits them.  After the second activation, the stale
-    // hints from the first round must be cleared (written as undefined).
-    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
-      messageTokens: 1000,
-      bufferTokens: 500,
-      bufferActivation: 0.7,
-      reflectionObservationTokens: 50000,
-      messageCount: 10,
-      observerResponses: [
-        // Call 1 (async buffering from step 0): hints are parsed from the mock
-        // response and stored in the buffered chunk.
-        // Note: closing tags must be on their own line — the parser regex
-        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
-        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
-        // Call 2 (async buffering from step 2): no hints → activation clears them.
-        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
-      ],
-    });
+  it.todo(
+    'should clear stale thread continuation hints on sync observation when latest output omits them',
+    async () => {
+      // Use enough messages and a low threshold so that two activation rounds can
+      // succeed sequentially.  The first observer response includes continuation
+      // hints; the second omits them.  After the second activation, the stale
+      // hints from the first round must be cleared (written as undefined).
+      const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+        messageTokens: 1000,
+        bufferTokens: 500,
+        bufferActivation: 0.7,
+        reflectionObservationTokens: 50000,
+        messageCount: 10,
+        observerResponses: [
+          // Call 1 (async buffering from step 0): hints are parsed from the mock
+          // response and stored in the buffered chunk.
+          // Note: closing tags must be on their own line — the parser regex
+          // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+          '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+          // Call 2 (async buffering from step 2): no hints → activation clears them.
+          '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+        ],
+      });
 
-    // Step 0 triggers async buffering. After waiting, save fresh messages
-    // so the threshold is met, then a fresh step 0 activates the buffered chunk,
-    // propagating continuation hints to thread metadata.
-    await step(0);
-    await waitForAsyncOps();
+      // Step 0 triggers async buffering. After waiting, save fresh messages
+      // so the threshold is met, then a fresh step 0 activates the buffered chunk,
+      // propagating continuation hints to thread metadata.
+      await step(0);
+      await waitForAsyncOps();
 
-    // Add messages so unobserved token count meets the threshold on the next turn
-    const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-    const round1Messages = Array.from({ length: 10 }, (_, i) => ({
-      id: `round1-msg-${i}`,
-      threadId,
-      resourceId,
-      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: {
-        format: 2 as const,
-        parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
-      },
-      type: 'text',
-      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
-    }));
-    await storage.saveMessages({ messages: round1Messages });
+      // Add messages so unobserved token count meets the threshold on the next turn
+      const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+      const round1Messages = Array.from({ length: 10 }, (_, i) => ({
+        id: `round1-msg-${i}`,
+        threadId,
+        resourceId,
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+      }));
+      await storage.saveMessages({ messages: round1Messages });
 
-    await step(0, { freshState: true });
-    await waitForAsyncOps();
-    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
-    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-    expect(firstOM.currentTask).toBe('Implement sync path');
-    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+      await step(0, { freshState: true });
+      await waitForAsyncOps();
+      const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+      const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+      expect(firstOM.currentTask).toBe('Implement sync path');
+      expect(firstOM.suggestedResponse).toBe('Continue with step 2');
 
-    // Save fresh messages so the threshold is exceeded again on the next round.
-    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
-      id: `sync-clear-msg-${i}`,
-      threadId,
-      resourceId,
-      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: {
-        format: 2 as const,
-        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
-      },
-      type: 'text',
-      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
-    }));
-    await storage.saveMessages({ messages: freshMessages });
+      // Save fresh messages so the threshold is exceeded again on the next round.
+      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+      const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+        id: `sync-clear-msg-${i}`,
+        threadId,
+        resourceId,
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+      }));
+      await storage.saveMessages({ messages: freshMessages });
 
-    // New step 0 triggers another async buffering round (observer call 2, no hints).
-    // After waiting, another step 0 with fresh messages activates the new chunk,
-    // clearing the stale hints.
-    await step(0, { freshState: true });
-    await waitForAsyncOps();
+      // New step 0 triggers another async buffering round (observer call 2, no hints).
+      // After waiting, another step 0 with fresh messages activates the new chunk,
+      // clearing the stale hints.
+      await step(0, { freshState: true });
+      await waitForAsyncOps();
 
-    // Add more messages for the final activation round
-    const round3Messages = Array.from({ length: 10 }, (_, i) => ({
-      id: `round3-msg-${i}`,
-      threadId,
-      resourceId,
-      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: {
-        format: 2 as const,
-        parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
-      },
-      type: 'text',
-      createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
-    }));
-    await storage.saveMessages({ messages: round3Messages });
+      // Add more messages for the final activation round
+      const round3Messages = Array.from({ length: 10 }, (_, i) => ({
+        id: `round3-msg-${i}`,
+        threadId,
+        resourceId,
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
+      }));
+      await storage.saveMessages({ messages: round3Messages });
 
-    await step(0, { freshState: true });
-    await waitForAsyncOps();
-    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
-    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-    expect(secondOM.currentTask).toBeUndefined();
-    expect(secondOM.suggestedResponse).toBeUndefined();
-  });
+      await step(0, { freshState: true });
+      await waitForAsyncOps();
+      const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+      const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+      expect(secondOM.currentTask).toBeUndefined();
+      expect(secondOM.suggestedResponse).toBeUndefined();
+    },
+  );
 
   it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
     // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).

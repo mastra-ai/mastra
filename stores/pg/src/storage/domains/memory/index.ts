@@ -1,6 +1,7 @@
 import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
+  conflictsWithBufferedChunks,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,
@@ -3493,10 +3494,19 @@ export class MemoryPG extends MemoryStorage {
         const target = this.parseOMRow(await this.#resolveLiveOMRow(t, tableName, row));
         const existingChunks = Array.isArray(target.bufferedObservationChunks) ? target.bufferedObservationChunks : [];
 
-        // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
+        // Skip a retried append (same cycle), a chunk the cursor already wholly covers, and a
+        // chunk that overlaps what a concurrent buffer or sync observation already stored. The row lock makes the
+        // check and the write one step across processes.
         if (
           existingChunks.some(existing => existing.cycleId === input.chunk.cycleId) ||
-          isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, target.lastObservedAt)
+          isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, target.lastObservedAt) ||
+          conflictsWithBufferedChunks({
+            chunk: input.chunk,
+            existingChunks,
+            observedMessageIds: target.observedMessageIds,
+            expectedCursor: input.expectedLastObservedAt,
+            currentCursor: target.lastObservedAt,
+          })
         ) {
           return { persisted: false, recordId: target.id };
         }

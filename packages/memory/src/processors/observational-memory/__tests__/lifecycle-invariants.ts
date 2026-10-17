@@ -117,7 +117,7 @@ export function instrumentStorage(
       });
       const key = [...added].sort().join(',');
       const read = [...ledger.observerReads].reverse().find(r => [...r.messageIds].sort().join(',') === key);
-      ledger.syncCommits.push({ seq: ledger.nextSeq(), messageIds: added, readSeq: read?.seq ?? null });
+      ledger.syncCommits.push({ seq: ledger.nextSeq(), messageIds: added, readSeq: read?.seq ?? null, ...(process.env.OM_FUZZ_DUP_DEBUG ? { at: time(input.lastObservedAt) } : {}) } as any);
     }
     return result;
   };
@@ -140,7 +140,9 @@ export async function checkInvariants(
   final: false | { actorRawView: ActorRawView },
 ): Promise<{ violations: Violation[]; explainedDuplicates: number; overlappingSyncDuplicates: number }> {
   const violations: Violation[] = [];
-  const head = await storage.getObservationalMemory(ids.threadId, ids.resourceId);
+  // One read: background work may roll the record over between two separate reads.
+  const rows = await storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId, 1_000);
+  const head = rows.find(row => !row.supersededBy);
   if (!head) {
     return {
       violations: [{ invariant: 'head', detail: 'no head record' }],
@@ -148,7 +150,6 @@ export async function checkInvariants(
       overlappingSyncDuplicates: 0,
     };
   }
-  const rows = await storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId, 1_000);
   const cursor = time(head.lastObservedAt);
   const textIds = idsIn(head.activeObservations);
   const textIdSet = new Set(textIds);
@@ -243,7 +244,29 @@ export async function checkInvariants(
         );
         if (explained) explainedDuplicates++;
         else if (overlapping) overlappingSyncDuplicates++;
-        else violations.push({ invariant: 'unexplained-duplicate', detail: `${message.id} appears ${seen} times` });
+        else {
+          if (process.env.OM_FUZZ_DUP_DEBUG) {
+            const t = messageTime.get(message.id);
+            console.log(
+              `DUP ${message.id} thread=${ids.threadId} t=${t} stored=${stored.find(m => m.id === message.id)?.createdAt ? new Date(stored.find(m => m.id === message.id)!.createdAt).getTime() : null} text=${counts.get(message.id) ?? 0} raw=${actorRaw.has(message.id)} headCursor=${head.lastObservedAt ? new Date(head.lastObservedAt).getTime() : null}`,
+              JSON.stringify({
+                appends: ledger.appends
+                  .filter(a => a.messageIds.includes(message.id))
+                  .map(a => ({
+                    seq: a.seq,
+                    p: a.persisted,
+                    ids: a.messageIds,
+                    cur: a.cursorBefore,
+                    max: rangeOf(a).max,
+                  })),
+                sync: ledger.syncCommits
+                  .filter(s => s.messageIds.includes(message.id))
+                  .map(s => ({ seq: s.seq, readSeq: s.readSeq, ids: s.messageIds, at: (s as any).at })),
+              }),
+            );
+          }
+          violations.push({ invariant: 'unexplained-duplicate', detail: `${message.id} appears ${seen} times` });
+        }
       }
     }
   }

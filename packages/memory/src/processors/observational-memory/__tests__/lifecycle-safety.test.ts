@@ -1220,12 +1220,12 @@ describe('concurrent buffer() calls', () => {
       tokenCount: 2,
     });
     expect(head.id).not.toBe(turnRecord.id);
-    const operations = new OMOperationTracker(storage);
+    const operations = new OMOperationTracker({ storage: storage });
     let activeDuringObserver: Record<string, boolean> = {};
     vi.spyOn(om.observer, 'call').mockImplementation(async () => {
       activeDuringObserver = {
-        turn: await operations.isActive(turnRecord.id, 'bufferingObservation'),
-        head: await operations.isActive(head.id, 'bufferingObservation'),
+        turn: await operations.isActive({ recordId: turnRecord.id, operation: 'bufferingObservation' }),
+        head: await operations.isActive({ recordId: head.id, operation: 'bufferingObservation' }),
       };
       return { observations: '- buffered' } as Awaited<ReturnType<typeof om.observer.call>>;
     });
@@ -1233,7 +1233,7 @@ describe('concurrent buffer() calls', () => {
     await om.buffer({ ...ids, record: turnRecord, messages, skipMinimumTokenCheck: true });
 
     expect(activeDuringObserver.turn).toBe(true);
-    expect(await operations.isActive(turnRecord.id, 'bufferingObservation')).toBe(false);
-    expect(await operations.isActive(head.id, 'bufferingObservation')).toBe(false);
+    expect(await operations.isActive({ recordId: turnRecord.id, operation: 'bufferingObservation' })).toBe(false);
+    expect(await operations.isActive({ recordId: head.id, operation: 'bufferingObservation' })).toBe(false);
   });
 });

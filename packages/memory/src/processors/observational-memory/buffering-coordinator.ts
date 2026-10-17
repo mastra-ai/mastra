@@ -150,15 +150,22 @@ export class BufferingCoordinator {
   /**
    * Check if we've crossed a new bufferTokens interval boundary for async observation.
    */
-  shouldTriggerAsyncObservation(
-    currentTokens: number,
-    lockKey: string,
-    record: ObservationalMemoryRecord,
-    storage?: { setBufferingObservationFlag(id: string, flag: boolean): Promise<void> },
-    messageTokensThreshold?: number,
-    /** Whether an owner holds the bufferingObservation operation; callers look it up before calling. */
+  shouldTriggerAsyncObservation({
+    currentTokens,
+    lockKey,
+    record,
+    storage,
+    messageTokensThreshold,
     bufferingObservationActive = false,
-  ): boolean {
+  }: {
+    currentTokens: number;
+    lockKey: string;
+    record: ObservationalMemoryRecord;
+    storage?: { setBufferingObservationFlag(id: string, flag: boolean): Promise<void> };
+    messageTokensThreshold?: number;
+    /** Whether an owner holds the bufferingObservation operation; callers look it up before calling. */
+    bufferingObservationActive?: boolean;
+  }): boolean {
     if (!this.isAsyncObservationEnabled()) return false;
 
     if (record.isBufferingObservation) {

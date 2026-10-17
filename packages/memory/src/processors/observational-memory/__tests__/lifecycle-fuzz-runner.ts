@@ -48,6 +48,8 @@ export interface FuzzEnv {
   /** Class for the second instance; pass one loaded from a separate module copy to model another process. */
   ObservationalMemoryB?: new (config: any) => FuzzOM;
   createStorage(seed: number): Promise<MemoryStorage>;
+  /** Stores each replica sends operation claims to, e.g. two adapter instances on separate pools. */
+  createClaimStores?: (storage: MemoryStorage, seed: number) => Promise<[ClaimSource, ClaimSource]>;
   spyOn: (
     object: any,
     method: string,
@@ -68,22 +70,37 @@ function createRng(seed: number) {
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
+type ClaimSource = Pick<
+  MemoryStorage,
+  | 'claimObservationalMemoryOperation'
+  | 'renewObservationalMemoryOperation'
+  | 'releaseObservationalMemoryOperation'
+  | 'getObservationalMemoryOperationOwner'
+>;
+
+function inProcessClaims(): ClaimSource {
+  const claims = new InProcessObservationalMemoryOperations();
+  return {
+    claimObservationalMemoryOperation: async input => claims.claim(input),
+    renewObservationalMemoryOperation: async input => claims.renew(input),
+    releaseObservationalMemoryOperation: async input => claims.release(input),
+    getObservationalMemoryOperationOwner: async input => claims.getOwner(input),
+  };
+}
+
 /**
  * Counts the storage calls OM makes, without counting the runner's own reads. With `claims`, the
  * adapter's default process-local operation claims are replaced by that instance, so two replicas
  * sharing one store don't share the claims a real second process could not see.
  */
-function countingStorage(
-  storage: MemoryStorage,
-  calls: Map<string, number>,
-  claims?: InProcessObservationalMemoryOperations,
-): MemoryStorage {
+const PROOF_SEEN = new Set<string>();
+function countingStorage(storage: MemoryStorage, calls: Map<string, number>, claims?: ClaimSource): MemoryStorage {
   const claimMethods: Record<string, (input: any) => unknown> = claims
     ? {
-        claimObservationalMemoryOperation: input => claims.claim(input),
-        renewObservationalMemoryOperation: input => claims.renew(input),
-        releaseObservationalMemoryOperation: input => claims.release(input),
-        getObservationalMemoryOperationOwner: input => claims.getOwner(input),
+        claimObservationalMemoryOperation: input => claims.claimObservationalMemoryOperation(input),
+        renewObservationalMemoryOperation: input => claims.renewObservationalMemoryOperation(input),
+        releaseObservationalMemoryOperation: input => claims.releaseObservationalMemoryOperation(input),
+        getObservationalMemoryOperationOwner: input => claims.getObservationalMemoryOperationOwner(input),
       }
     : {};
   return new Proxy(storage, {
@@ -97,6 +114,20 @@ function countingStorage(
       }
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== 'function' || typeof prop !== 'string') return value;
+      if (process.env.OM_PROOF && prop === 'initializeObservationalMemory') PROOF_SEEN.clear();
+      if (process.env.OM_PROOF && prop === 'appendBufferedObservations') {
+        return async (input: any) => {
+          calls.set(prop, (calls.get(prop) ?? 0) + 1);
+          const reobserve = input.chunk.messageIds.some((m: string) => PROOF_SEEN.has(m));
+          if (reobserve && process.env.OM_PROOF === 'guard') return { persisted: false, recordId: input.id };
+          const result = await value.apply(target, [input]);
+          if (result?.persisted) {
+            if (reobserve) calls.set('PROOF:reobserve', (calls.get('PROOF:reobserve') ?? 0) + 1);
+            for (const m of input.chunk.messageIds) PROOF_SEEN.add(m);
+          }
+          return result;
+        };
+      }
       return (...args: unknown[]) => {
         calls.set(prop, (calls.get(prop) ?? 0) + 1);
         return value.apply(target, args);
@@ -179,21 +210,29 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
   instrumentStorage(storage, ledger, ids);
   const storageCalls = new Map<string, number>();
   const separate = !!env.ObservationalMemoryB;
+  const [claimsA, claimsB] = env.createClaimStores
+    ? await env.createClaimStores(storage, seed)
+    : separate
+      ? [inProcessClaims(), inProcessClaims()]
+      : [undefined, undefined];
   const oms = [
-    createOM(
-      env,
-      countingStorage(storage, storageCalls, separate ? new InProcessObservationalMemoryOperations() : undefined),
-      rng,
-      ledger,
-    ),
-    createOM(
-      env,
-      countingStorage(storage, storageCalls, separate ? new InProcessObservationalMemoryOperations() : undefined),
-      rng,
-      ledger,
-      env.ObservationalMemoryB,
-    ),
+    createOM(env, countingStorage(storage, storageCalls, claimsA), rng, ledger),
+    createOM(env, countingStorage(storage, storageCalls, claimsB), rng, ledger, env.ObservationalMemoryB),
   ];
+  if (process.env.OM_FUZZ_RESTAMP) {
+    const save = storage.saveMessages.bind(storage);
+    storage.saveMessages = async input => {
+      for (const m of input.messages) {
+        const original = ledger.messages.find(l => l.id === m.id);
+        if (original && m.createdAt && new Date(m.createdAt).getTime() !== original.createdAt.getTime()) {
+          console.log(
+            `RESTAMP seed=${seed} ${m.id} ${original.createdAt.getTime()} -> ${new Date(m.createdAt).getTime()}\n${new Error().stack?.split('\n').slice(2, 12).join('\n')}`,
+          );
+        }
+      }
+      return save(input);
+    };
+  }
   let activations = 0;
   const swap = storage.swapBufferedToActive.bind(storage);
   storage.swapBufferedToActive = async input => {
@@ -207,6 +246,7 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
   const violations: Violation[] = [];
   const state = { lastCursor: null as number | null };
   const pending: Promise<unknown>[] = [];
+  let saveChain: Promise<void> = Promise.resolve();
 
   const sample = async (label: string) => {
     const result = await checkInvariants(storage, ledger, ids, state, false);
@@ -222,9 +262,15 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
       switch (op) {
         case 'save': {
           const n = ledger.messages.length;
-          const id = `m${String(n).padStart(4, '0')}`;
+          // Seed-scoped ids: stores that keep data across seeds (pg) upsert by id and keep the old createdAt.
+          const id = `s${seed}-m${String(n).padStart(4, '0')}`;
           const createdAt = new Date(t0 + (n + 1) * 1_000);
           ledger.messages.push({ id, createdAt });
+          // One writer per thread: an agent's steps save in createdAt order, each before the next step.
+          const previous = saveChain;
+          let done!: () => void;
+          saveChain = new Promise<void>(resolve => (done = resolve));
+          await previous;
           await storage.saveMessages({
             messages: [
               {
@@ -237,7 +283,7 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
                 content: { format: 2, parts: [{ type: 'text', text: `${id} ${'detail '.repeat(220)}` }] },
               },
             ],
-          });
+          }).finally(done);
           return;
         }
         case 'buffer': {
@@ -339,7 +385,7 @@ export async function runFuzzSeeds(
   const lines = [
     `OM_FUZZ seeds=${opts.count} first=${opts.first} failingSeeds=${failing.length} violations=${JSON.stringify(byInvariant)} explainedDuplicates=${explained} overlappingSyncDuplicates=${overlapping} activity=${JSON.stringify(totals)}`,
     `OM_FUZZ storageCalls total=${totalCalls} ${JSON.stringify(Object.fromEntries(Object.entries(calls).sort((a, b) => b[1] - a[1])))}`,
-    ...failing.slice(0, 3).map(
+    ...failing.slice(0, Number(process.env.OM_FUZZ_SHOW ?? 3)).map(
       result =>
         `OM_FUZZ seed ${result.seed}: ${result.violations
           .slice(0, 5)

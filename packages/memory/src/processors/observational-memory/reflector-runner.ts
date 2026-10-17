@@ -297,7 +297,7 @@ export class ReflectorRunner {
     hooks?: ObserveTransformHooks;
     operations?: OMOperationTracker;
   }) {
-    this.operations = opts.operations ?? new OMOperationTracker(opts.storage);
+    this.operations = opts.operations ?? new OMOperationTracker({ storage: opts.storage });
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
     this.tokenCounter = opts.tokenCounter;
@@ -719,7 +719,7 @@ export class ReflectorRunner {
 
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
-    this.operations.begin(record.id, 'bufferingReflection');
+    this.operations.begin({ recordId: record.id, operation: 'bufferingReflection' });
     this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
@@ -786,7 +786,7 @@ export class ReflectorRunner {
         }
 
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-        this.operations.end(record.id, 'bufferingReflection');
+        this.operations.end({ recordId: record.id, operation: 'bufferingReflection' });
         this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
@@ -1224,7 +1224,8 @@ export class ReflectorRunner {
     // ════════════════════════════════════════════════════════════════════════
     if (this.buffering.isAsyncReflectionEnabled() && observationTokens < reflectThreshold) {
       const bufferingReflectionActive =
-        record.isBufferingReflection && (await this.operations.isActive(record.id, 'bufferingReflection'));
+        record.isBufferingReflection &&
+        (await this.operations.isActive({ recordId: record.id, operation: 'bufferingReflection' }));
       const shouldTrigger = (() => {
         if (!this.buffering.isAsyncReflectionEnabled()) return false;
         if (record.isBufferingReflection) {
@@ -1290,7 +1291,7 @@ export class ReflectorRunner {
     // LOCKING: Check if reflection is already in progress
     // ════════════════════════════════════════════════════════════
     if (record.isReflecting) {
-      if (await this.operations.isActive(record.id, 'reflecting')) {
+      if (await this.operations.isActive({ recordId: record.id, operation: 'reflecting' })) {
         omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
         return;
       }
@@ -1388,7 +1389,7 @@ export class ReflectorRunner {
     }
 
     await this.storage.setReflectingFlag(record.id, true);
-    this.operations.begin(record.id, 'reflecting');
+    this.operations.begin({ recordId: record.id, operation: 'reflecting' });
 
     const cycleId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
@@ -1617,7 +1618,7 @@ export class ReflectorRunner {
       try {
         await this.storage.setReflectingFlag(record.id, false);
       } finally {
-        this.operations.end(record.id, 'reflecting');
+        this.operations.end({ recordId: record.id, operation: 'reflecting' });
       }
 
       let endHookError: unknown;

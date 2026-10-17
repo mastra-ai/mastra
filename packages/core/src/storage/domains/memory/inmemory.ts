@@ -44,6 +44,7 @@ import {
   assertActiveObservationsApplied,
   compareObservationalMemoryHeadOrder,
   isAppendOnlySince,
+  conflictsWithBufferedChunks,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,
@@ -1027,7 +1028,14 @@ export class InMemoryMemory extends MemoryStorage {
     const existingChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
     if (
       existingChunks.some(existing => existing.cycleId === chunk.cycleId) ||
-      isBufferedChunkCoveredByCursor(chunk.lastObservedAt, record.lastObservedAt)
+      isBufferedChunkCoveredByCursor(chunk.lastObservedAt, record.lastObservedAt) ||
+      conflictsWithBufferedChunks({
+        chunk,
+        existingChunks,
+        observedMessageIds: record.observedMessageIds,
+        expectedCursor: input.expectedLastObservedAt,
+        currentCursor: record.lastObservedAt,
+      })
     ) {
       return { persisted: false, recordId: record.id };
     }

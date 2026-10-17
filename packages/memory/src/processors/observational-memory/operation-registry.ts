@@ -12,6 +12,11 @@ import type { MemoryStorage, ObservationalMemoryOperationName } from '@mastra/co
 
 export type OmOperationName = ObservationalMemoryOperationName;
 
+export interface OmOperationRef {
+  recordId: string;
+  operation: OmOperationName;
+}
+
 /** Identifies this process as an operation owner. One per module instance, so one per process. */
 export const processOperationOwner = `${hostname()}:${process.pid}:${Math.random().toString(36).slice(2, 10)}`;
 
@@ -34,15 +39,17 @@ function supportsOperationClaims(storage: MemoryStorage): boolean {
 export class OMOperationTracker {
   private readonly useStorage: boolean;
 
-  constructor(
-    private readonly storage: MemoryStorage,
-    private readonly owner: string = processOperationOwner,
-  ) {
+  private readonly storage: MemoryStorage;
+  private readonly owner: string;
+
+  constructor({ storage, owner = processOperationOwner }: { storage: MemoryStorage; owner?: string }) {
+    this.storage = storage;
+    this.owner = owner;
     this.useStorage = supportsOperationClaims(storage);
   }
 
   /** Registers the claim synchronously (before the caller's next await), so the result is not awaited. */
-  begin(recordId: string, operation: OmOperationName): void {
+  begin({ recordId, operation }: OmOperationRef): void {
     if (!this.useStorage) {
       const key = `${recordId}:${operation}`;
       legacyActiveOps.set(key, (legacyActiveOps.get(key) ?? 0) + 1);
@@ -53,7 +60,7 @@ export class OMOperationTracker {
       .catch(() => {});
   }
 
-  end(recordId: string, operation: OmOperationName): void {
+  end({ recordId, operation }: OmOperationRef): void {
     if (!this.useStorage) {
       const key = `${recordId}:${operation}`;
       const count = legacyActiveOps.get(key) ?? 0;
@@ -64,7 +71,7 @@ export class OMOperationTracker {
     void this.storage.releaseObservationalMemoryOperation({ recordId, operation, owner: this.owner }).catch(() => {});
   }
 
-  async isActive(recordId: string, operation: OmOperationName): Promise<boolean> {
+  async isActive({ recordId, operation }: OmOperationRef): Promise<boolean> {
     if (!this.useStorage) return (legacyActiveOps.get(`${recordId}:${operation}`) ?? 0) > 0;
     return (await this.storage.getObservationalMemoryOperationOwner({ recordId, operation })) !== undefined;
   }
