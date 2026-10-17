@@ -1,9 +1,57 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import type { ComponentProps, ReactNode } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { PageLayout } from './index';
+import { AppShell, AppShellMobileHeader } from '@/ds/new/layout/app-shell';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+/** `useIsMobile` reads `matches` and subscribes to changes; nothing else is needed. */
+function setViewport(mobile: boolean) {
+  vi.stubGlobal('matchMedia', (media: string) => ({
+    matches: mobile,
+    media,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+}
+
+const CrumbLink = ({ to, ...props }: ComponentProps<'a'> & { to?: string }) => <a href={to} {...props} />;
+
+const trail = (
+  <Breadcrumb label="Breadcrumb">
+    <Crumb as={CrumbLink} to="/workflows">
+      Workflows
+    </Crumb>
+    <Crumb as={CrumbLink} to="/workflows/tick">
+      tickWorkflow
+    </Crumb>
+    <Crumb as="span" isCurrent>
+      run-123
+    </Crumb>
+  </Breadcrumb>
+);
+
+function renderInShell(page: ReactNode) {
+  return render(
+    <AppShell
+      mobileHeader={<AppShellMobileHeader fallback={<span>Mastra Studio</span>} end={<button>Search</button>} />}
+    >
+      {page}
+    </AppShell>,
+  );
+}
+
+const mobileHeader = () => {
+  const header = document.querySelector<HTMLElement>('[data-slot="app-shell-mobile-header"]');
+  if (!header) throw new Error('mobile header not rendered');
+  return header;
+};
 
 const viewportOf = (text: string) => screen.getByText(text).closest<HTMLElement>('[style*="overflow"]');
 
@@ -171,6 +219,85 @@ describe('PageLayout', () => {
 
       expect(screen.queryByRole('banner')).toBeNull();
       expect(screen.getByRole('main').textContent).toBe('Body');
+    });
+  });
+
+  describe('inside an AppShell with a mobile header', () => {
+    describe('below lg', () => {
+      it('renders the breadcrumbs and actions in the mobile header instead of its own header row', () => {
+        setViewport(true);
+        renderInShell(
+          <PageLayout breadcrumbs={trail} headerActions={<button>API endpoints</button>}>
+            <p>Body</p>
+          </PageLayout>,
+        );
+
+        const header = mobileHeader();
+        expect(within(header).getByText('run-123')).toBeTruthy();
+        expect(within(header).getByRole('button', { name: 'API endpoints' })).toBeTruthy();
+        expect(screen.getAllByRole('banner')).toEqual([header]);
+      });
+
+      it('lists the whole trail in the menu behind "…"', () => {
+        setViewport(true);
+        renderInShell(
+          <PageLayout breadcrumbs={trail}>
+            <p>Body</p>
+          </PageLayout>,
+        );
+
+        const header = mobileHeader();
+        fireEvent.click(within(header).getByRole('button', { name: 'Show breadcrumb trail' }));
+        const menu = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+        expect(menu).not.toBeNull();
+        if (!menu) return;
+        const crumbs = within(menu).getAllByRole('listitem');
+        expect(crumbs.map(li => li.textContent)).toEqual(['Workflows', 'tickWorkflow', 'run-123']);
+        expect(within(menu).queryByRole('separator')).toBeNull();
+        expect(within(menu).getByRole('link', { name: 'tickWorkflow' }).getAttribute('href')).toBe('/workflows/tick');
+      });
+
+      it('keeps the app fallback for pages without breadcrumbs', () => {
+        setViewport(true);
+        renderInShell(
+          <PageLayout>
+            <p>Body</p>
+          </PageLayout>,
+        );
+
+        const header = mobileHeader();
+        expect(within(header).getByText('Mastra Studio')).toBeTruthy();
+        expect(header.querySelector('[data-slot="page-layout-mobile-crumbs"]')).toBeNull();
+      });
+    });
+
+    describe('at lg and up', () => {
+      it('keeps the breadcrumbs in its own header row', () => {
+        setViewport(false);
+        renderInShell(
+          <PageLayout breadcrumbs={trail}>
+            <p>Body</p>
+          </PageLayout>,
+        );
+
+        expect(within(mobileHeader()).queryByText('run-123')).toBeNull();
+        const pageHeader = screen.getAllByRole('banner').find(el => el !== mobileHeader());
+        expect(pageHeader && within(pageHeader).getByText('Workflows')).toBeTruthy();
+      });
+    });
+  });
+
+  describe('outside an AppShell below lg', () => {
+    it('keeps the breadcrumbs in its own header row', () => {
+      setViewport(true);
+      render(
+        <PageLayout breadcrumbs={trail}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      expect(within(screen.getByRole('banner')).getByText('Workflows')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Show breadcrumb trail' })).toBeNull();
     });
   });
 });

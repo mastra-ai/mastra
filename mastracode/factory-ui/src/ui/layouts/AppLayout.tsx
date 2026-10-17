@@ -1,5 +1,5 @@
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
+import { AppShell, AppShellMobileHeader, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { Outlet } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
@@ -9,7 +9,8 @@ import { OverlaysProvider } from '../lib/overlays';
 import { AppSidebar } from '../AppSidebar';
 
 /**
- * Mobile-only bar above the page frame: the drawer trigger and global search.
+ * Mobile-only bar above the page frame: the drawer trigger, the page's breadcrumbs (rendered
+ * here by `PageLayout`) and global search.
  * Keyed off the sidebar's own media signal so it can never desync from the drawer.
  */
 function MobileHeader() {
@@ -17,12 +18,10 @@ function MobileHeader() {
   if (!isMobile) return null;
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 px-3">
-      <Sidebar.MobileTrigger id="mobile-navigation-trigger" />
-      <div className="ml-auto shrink-0">
-        <GlobalSearchButton id="global-search-mobile-trigger" />
-      </div>
-    </header>
+    <AppShellMobileHeader
+      start={<Sidebar.MobileTrigger id="mobile-navigation-trigger" />}
+      end={<GlobalSearchButton id="global-search-mobile-trigger" />}
+    />
   );
 }
 
