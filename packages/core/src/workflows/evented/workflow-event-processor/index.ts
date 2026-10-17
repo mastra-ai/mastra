@@ -25,6 +25,7 @@ import type { Workflow } from '../../../workflows/workflow';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
 import type { ScheduledWorkflowTrigger } from '../../scheduler/types';
 import {
+  cleanStepResult,
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
   getSingleStepEntryId,
@@ -102,6 +103,39 @@ export type ParentWorkflow = {
     input: any;
   };
 };
+
+type FinishParentWorkflow = Pick<ParentWorkflow, 'workflowId' | 'runId'> & {
+  parentWorkflow?: FinishParentWorkflow;
+};
+
+function finishParentWorkflow(parent: ParentWorkflow | undefined): FinishParentWorkflow | undefined {
+  if (!parent) return undefined;
+  return {
+    workflowId: parent.workflowId,
+    runId: parent.runId,
+    ...(parent.parentWorkflow ? { parentWorkflow: finishParentWorkflow(parent.parentWorkflow) } : {}),
+  };
+}
+
+function finishEventData(args: ProcessorArgs, state: Record<string, any>) {
+  return {
+    workflowId: args.workflowId,
+    runId: args.runId,
+    // Apply the finish waiter's cleanup before serialization, not after it has
+    // received redundant state copies and skipped-branch bookkeeping.
+    stepResults: Object.fromEntries(
+      Object.entries(args.stepResults ?? {})
+        .filter(([stepId, result]) => stepId !== '__state' && result?.status !== 'skipped')
+        .map(([stepId, result]) => [stepId, cleanStepResult(result)]),
+    ),
+    prevResult: cleanStepResult(args.prevResult),
+    requestContext: args.requestContext,
+    state,
+    // The pubsub proxy needs ancestor identities to preserve process-local routing,
+    // but the finish waiter never reads their execution state.
+    parentWorkflow: finishParentWorkflow(args.parentWorkflow),
+  };
+}
 
 /**
  * A foreach step stores its per-iteration state in a shape that layers on top
@@ -1035,7 +1069,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.end',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: finishEventData(args, finalState),
     });
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1132,7 +1166,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.suspend',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: finishEventData(args, finalState),
     });
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1236,7 +1270,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.fail',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: finishEventData(args, finalState),
     });
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
