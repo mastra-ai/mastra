@@ -7741,7 +7741,7 @@ export class Mastra<
 
     // Thread leases of runs this process drove would otherwise block their
     // threads for the lease TTL. Release them while pubsub is still open.
-    await agentThreadStreamRuntime.releaseHeldThreadLeases();
+    await agentThreadStreamRuntime.releaseHeldThreadLeases(this);
 
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still

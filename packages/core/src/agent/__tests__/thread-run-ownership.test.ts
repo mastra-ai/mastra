@@ -99,6 +99,12 @@ function fakeRun(runId: string) {
   });
   return {
     output: { runId, status: 'running', fullStream, _waitUntilFinished: () => finished } as any,
+    park: () =>
+      controller.enqueue({
+        type: 'tool-call-approval',
+        runId,
+        payload: { toolCallId: 'approve-1', toolName: 'dangerous', args: {} },
+      }),
     finish: () => {
       controller.close();
       finish();
@@ -196,10 +202,20 @@ describe('lease loss is judged by stored run status', () => {
 });
 
 describe('replayed run-suspended', () => {
-  async function replaySuspendedRun(prefix: string, status: WorkflowRunState['status']) {
+  async function replaySuspendedRun(
+    prefix: string,
+    status: WorkflowRunState['status'] | 'missing',
+    { leaseHeld = false }: { leaseHeld?: boolean } = {},
+  ) {
     const harness = createHarness(prefix);
-    withStorage(harness, await storeWithRun(harness.runId, status));
+    withStorage(harness, status === 'missing' ? new InMemoryStore() : await storeWithRun(harness.runId, status));
     const { runtime, pubsub, emit } = setupRuntime(harness);
+    if (leaseHeld) {
+      pubsub.owners.set(
+        [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR),
+        `origin/${harness.runId}`,
+      );
+    }
     pubsub.retain = true;
     await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
     await emit({ type: 'run-suspended', runId: harness.runId, streamId: harness.streamId });
@@ -219,6 +235,16 @@ describe('replayed run-suspended', () => {
 
   it('still blocks the thread when storage agrees the run is suspended', async () => {
     expect(await replaySuspendedRun('replay-suspended', 'suspended')).toBe(true);
+  });
+
+  it('does not block the thread when the run has no stored row and no live owner', async () => {
+    // A finished DurableAgent run deletes its rows, so it reads as missing.
+    expect(await replaySuspendedRun('replay-deleted', 'missing')).toBe(false);
+  });
+
+  it('keeps a missing-row run parked while its owner still holds the thread lease', async () => {
+    // The live owner may not have persisted the suspension yet.
+    expect(await replaySuspendedRun('replay-unpersisted', 'missing', { leaseHeld: true })).toBe(true);
   });
 });
 
@@ -277,18 +303,102 @@ describe('thread lease ownership', () => {
     run.finish();
   });
 
+  it('does not re-acquire a lease the run released while a renewal was in flight', async () => {
+    vi.useFakeTimers();
+    const { pubsub, key, run } = await registerLongRun('ownership-release-race');
+    let answerRenewal!: (renewed: boolean) => void;
+    const renew = vi
+      .spyOn(pubsub, 'renewLease')
+      .mockImplementationOnce(() => new Promise<boolean>(resolve => (answerRenewal = resolve)));
+
+    await vi.advanceTimersByTimeAsync(LEASE_RENEW_INTERVAL_MS);
+    expect(renew).toHaveBeenCalledTimes(1);
+    run.finish();
+    await vi.waitFor(() => expect(pubsub.owners.has(key)).toBe(false));
+
+    answerRenewal(false);
+    await flush();
+    await vi.advanceTimersByTimeAsync(LEASE_RENEW_INTERVAL_MS * 4);
+
+    expect(pubsub.owners.has(key)).toBe(false);
+  });
+
   it('releases held thread leases on shutdown', async () => {
     vi.useFakeTimers();
-    const { runtime, pubsub, key, run } = await registerLongRun('ownership-shutdown');
+    const { runtime, pubsub, key, run, harness } = await registerLongRun('ownership-shutdown');
+    const mastra = {};
+    (harness.agent as any).getMastraInstance = () => mastra;
     expect(pubsub.owners.has(key)).toBe(true);
     const renew = vi.spyOn(pubsub, 'renewLease');
 
-    await runtime.releaseHeldThreadLeases();
+    await runtime.releaseHeldThreadLeases(mastra as any);
 
     expect(pubsub.owners.has(key)).toBe(false);
     renew.mockClear();
     await vi.advanceTimersByTimeAsync(LEASE_RENEW_INTERVAL_MS * 4);
     expect(renew).not.toHaveBeenCalled();
     run.finish();
+  });
+
+  it('announces run-suspended for a run parked on approval before releasing its lease', async () => {
+    const harness = createHarness('ownership-shutdown-parked');
+    const mastra = {};
+    (harness.agent as any).getMastraInstance = () => mastra;
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const run = fakeRun(harness.runId);
+    await runtime.registerRun(
+      harness.agent,
+      run.output,
+      { memory: { thread: harness.threadId, resource: harness.resourceId } } as any,
+      pubsub,
+    );
+    const thread = await collectThread(harness, runtime, pubsub);
+    run.park();
+    await vi.waitFor(() => expect(runtime.isRunParked(harness.runId, pubsub)).toBe(true));
+    const publish = vi.spyOn(pubsub, 'publish');
+
+    await runtime.releaseHeldThreadLeases(mastra as any);
+
+    expect(publish.mock.calls.some(([, event]) => event.data?.type === 'run-suspended')).toBe(true);
+    expect(pubsub.owners.has(key)).toBe(false);
+    thread.subscription.unsubscribe();
+    run.finish();
+  });
+
+  it("leaves another Mastra instance's thread leases alone on shutdown", async () => {
+    vi.useFakeTimers();
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const register = async (prefix: string, mastra: object) => {
+      const harness = createHarness(prefix);
+      (harness.agent as any).getMastraInstance = () => mastra;
+      const run = fakeRun(harness.runId);
+      await runtime.registerRun(
+        harness.agent,
+        run.output,
+        { memory: { thread: harness.threadId, resource: harness.resourceId } } as any,
+        pubsub,
+      );
+      return { key: [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR), run };
+    };
+    const shuttingDown = {};
+    const stillRunning = {};
+    const mine = await register('ownership-shutdown-mine', shuttingDown);
+    const theirs = await register('ownership-shutdown-theirs', stillRunning);
+    const theirOwner = pubsub.owners.get(theirs.key)!;
+
+    await runtime.releaseHeldThreadLeases(shuttingDown as any);
+
+    expect(pubsub.owners.has(mine.key)).toBe(false);
+    expect(pubsub.owners.get(theirs.key)).toBe(theirOwner);
+    // Still renewed: the key survives well past its TTL.
+    const renew = vi.spyOn(pubsub, 'renewLease');
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
+    expect(renew).toHaveBeenCalledWith(theirs.key, theirOwner, LEASE_TTL_MS);
+    expect(pubsub.owners.get(theirs.key)).toBe(theirOwner);
+    mine.run.finish();
+    theirs.run.finish();
   });
 });

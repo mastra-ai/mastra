@@ -4,6 +4,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
+import type { Mastra } from '../mastra';
 import { parseMemoryRequestContext } from '../memory/types';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -842,11 +843,19 @@ export class AgentThreadStreamRuntime {
       void leaseProvider
         .renewLease(key, token, AGENT_LEASE_TTL_MS)
         .then(async renewed => {
-          if (renewed) return;
+          // The run released its lease while this renewal was in flight: don't
+          // take back a key it just gave up.
+          if (renewed || state.leaseRenewalTimers.get(runId) !== timer) return;
           const reacquired = await leaseProvider.acquireLease(key, token, AGENT_LEASE_TTL_MS);
           if (!reacquired.acquired) {
             // Another owner holds the thread now; stop renewing. The current stream may still finish.
             this.#stopLeaseRenewal(pubsub, runId, timer);
+            return;
+          }
+          // Released during the re-acquire: give the key back unless a later
+          // registration of the run renews it now.
+          if (!state.leaseRenewalTimers.has(runId)) {
+            await leaseProvider.releaseLease(key, token);
           }
         })
         .catch(() => {});
@@ -861,14 +870,15 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Release every thread lease this process holds, so other processes can
-   * take the threads over without waiting out the lease TTL. Runs parked on a
-   * suspension announce `run-suspended` first, so followers park them instead
-   * of waiting on a dead owner. Best-effort; call while pubsub is still open.
+   * Release every thread lease `mastra`'s agents hold in this process, so
+   * other processes can take the threads over without waiting out the lease
+   * TTL. Runs of other Mastra instances sharing the process keep theirs. Runs
+   * parked on a suspension announce `run-suspended` first, so followers park
+   * them instead of waiting on a dead owner. Best-effort; call while pubsub is
+   * still open.
    */
-  async releaseHeldThreadLeases(): Promise<void> {
+  async releaseHeldThreadLeases(mastra: Mastra): Promise<void> {
     const pubsubs = [...this.#leasedPubSubs];
-    this.#leasedPubSubs.clear();
     await Promise.all(
       pubsubs.map(async pubsub => {
         const state = this.#getState(pubsub);
@@ -876,9 +886,10 @@ export class AgentThreadStreamRuntime {
         const held = [...state.leaseKeysByRunId];
         await Promise.all(
           held.map(async ([runId, key]) => {
-            this.#stopLeaseRenewal(pubsub, runId);
             const record = state.threadRunsById.get(runId);
-            if (record && (record.lifecycle === 'suspended' || this.#isSuspendedRun(state, runId))) {
+            if (record?.agent.getMastraInstance?.() !== mastra) return;
+            this.#stopLeaseRenewal(pubsub, runId);
+            if (record.lifecycle === 'suspended' || this.#isSuspendedRun(state, runId)) {
               await this.#publishRunSuspended(pubsub, key, record).catch(() => {});
             }
             await leaseProvider.releaseLease(key, this.#leaseToken(runId)).catch(() => {});
@@ -896,6 +907,7 @@ export class AgentThreadStreamRuntime {
     clearInterval(timer);
     state.leaseRenewalTimers.delete(runId);
     state.leaseKeysByRunId.delete(runId);
+    if (state.leaseKeysByRunId.size === 0) this.#leasedPubSubs.delete(pubsub);
   }
 
   /**
@@ -4920,11 +4932,19 @@ export class AgentThreadStreamRuntime {
       if (!data) return;
       // A replayed `run-suspended` can be stale: the run may have resumed and
       // finished elsewhere with its owner dying before `run-completed` was
-      // published. Storage decides; only a terminal row overrides the event.
+      // published. Storage decides: a terminal row overrides the event, and so
+      // does a missing one (a finished DurableAgent deletes its rows) unless
+      // the run still holds the thread lease — its owner is alive and may not
+      // have persisted the suspension yet.
       if (data.type === 'run-suspended' && isReplayedEvent(event)) {
-        const stored = await readStoredRunStatus(agent.getMastraInstance?.(), data.runId);
+        const runId = data.runId;
+        const stored = await readStoredRunStatus(agent.getMastraInstance?.(), runId);
         if (done) return;
-        if (stored === 'terminal') {
+        const ended =
+          stored === 'terminal' ||
+          (stored === 'missing' && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId)));
+        if (done) return;
+        if (ended) {
           data = { type: 'run-completed', runId: data.runId, streamId: data.streamId, persisted: true };
         }
       }
