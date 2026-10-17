@@ -75,8 +75,25 @@ export interface LoopScenarioResult {
  *   whose inputs the file-routing path cannot model (dynamic-function
  *   instructions, `sharedAgent`, `workflows`-as-tool, durable resume/suspension)
  *   skip this variant via `{ skip: ['fs'] }`.
+ * - `'inngest'` — durable execution on Inngest via `createInngestAgent`. Core
+ *   cannot depend on `@mastra/inngest`, so this variant only runs when the
+ *   Inngest package registers a {@link ScenarioEngineHost} (see
+ *   `setScenarioEngineHost`); the host then replaces the four in-repo variants.
+ *   Skipping `'durable'` also skips `'inngest'`.
  */
-export type EngineVariant = 'normal' | 'durable' | 'evented' | 'fs';
+export type EngineVariant = 'normal' | 'durable' | 'evented' | 'fs' | 'inngest';
+
+/**
+ * An engine provided from outside core (e.g. `@mastra/inngest`). When set, scenarios run only on
+ * this engine; the host wraps each scenario agent and owns the Mastra instance that serves it.
+ */
+export interface ScenarioEngineHost {
+  engine: EngineVariant;
+  /** Mastra instance the engine's worker resolves agents from. Scenario agents are added to it. */
+  getMastra(): any;
+  /** Wrap a plain scenario `Agent` for this engine. */
+  wrapAgent(agent: any): any;
+}
 
 /** All supported engine variants for parameterised test runs. */
 export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'evented', 'fs'] as const;
@@ -88,7 +105,7 @@ export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable
  * automatically covers the evented variant too.
  */
 export function isDurableEngineVariant(engine: EngineVariant | undefined): boolean {
-  return engine === 'durable' || engine === 'evented';
+  return engine === 'durable' || engine === 'evented' || engine === 'inngest';
 }
 
 export interface RunLoopScenarioOptions {
