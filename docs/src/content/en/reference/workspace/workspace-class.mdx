@@ -94,7 +94,7 @@ const workspace = new Workspace({
     name: 'embedder',
     type: 'Embedder',
     description:
-      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/sandbox/search#batch-embedding).',
+      'Function that turns text into vectors. Required when `vectorStore` is set, unless the store generates embeddings itself (for example `MongoDBVector` with `autoEmbed`). See [Server-side embedding](/docs/sandbox/search#server-side-embedding). Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/sandbox/search#batch-embedding).',
     isOptional: true,
   },
   {
@@ -129,7 +129,7 @@ const workspace = new Workspace({
     name: 'searchIndexName',
     type: 'string',
     description:
-      "Custom index name for the vector store. Must be a valid SQL identifier (start with a letter or underscore, contain only letters, numbers, or underscores, max 63 characters). Defaults to a sanitized version of '{id}_search'.",
+      "Custom index name for the vector store. Must be a valid SQL identifier (start with a letter or underscore, contain only letters, numbers, or underscores, max 63 characters). Defaults to a sanitized version of '{id}_search', or '{id}_search_selfembed' when the vector store generates embeddings itself.",
     isOptional: true,
   },
   {

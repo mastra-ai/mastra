@@ -153,9 +153,32 @@ const workspace = new Workspace({
 })
 ```
 
+### Server-side embedding
+
+Some vector stores generate embeddings themselves. With MongoDB Automated Embedding, set `autoEmbed` on `MongoDBVector` and omit the `embedder`:
+
+```typescript title="src/mastra/workspaces.ts"
+import { MongoDBVector } from '@mastra/mongodb'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  vectorStore: new MongoDBVector({
+    id: 'workspace-vector',
+    uri: process.env.MONGODB_URI!,
+    dbName: process.env.MONGODB_DB_NAME!,
+    autoEmbed: { model: 'voyage-4' },
+  }),
+})
+```
+
+Mastra sends document and query text to the store, and MongoDB embeds them. Vector and hybrid search work the same way as with a client-side embedder. The default index name ends in `_search_selfembed`. Server-embedded documents don't share a default index with client-supplied vectors. A custom `searchIndexName` overrides this separation. If you also pass an `embedder`, Mastra uses it instead.
+
+MongoDB embeds new documents in the background. A file indexed moments ago may not be searchable yet. Stores without self-embedding still require an `embedder`.
+
 ### Custom index name
 
-The vector index name defaults to a sanitized version of the workspace ID followed by `_search`. Set `searchIndexName` when you need a stable or shared name:
+The vector index name defaults to a sanitized version of the workspace ID followed by `_search`. With a store that embeds server-side, the suffix is `_search_selfembed`. Set `searchIndexName` when you need a stable or shared name:
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
