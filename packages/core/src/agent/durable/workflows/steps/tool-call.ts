@@ -1062,6 +1062,39 @@ export function createDurableToolCallStep() {
         );
       }
 
+      // Delegated identity is trusted only after it is tied to framework-persisted
+      // suspension state. The suspend payload remains the primary per-tool-call source.
+      // Resolved before the decline short-circuit so a declined delegated approval
+      // reaches the suspended sub-agent instead of being denied here (#26994).
+      const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
+      const needsRunIdLookup = isResumableTool && resumeData !== undefined;
+      // Nullish model data follows the framework resume path; false, 0, and empty strings remain
+      // valid model payloads. A workflow approval decision always wins over model-supplied data.
+      const hasModelResumeData = resumeDataFromArgs != null && !(approvalGated && approvalDecision);
+      const resolvedSuspensionIdentity: ResolvedSuspendedToolIdentity | undefined = needsRunIdLookup
+        ? resolveFrameworkSuspendedToolIdentity({
+            toolCallId,
+            toolName,
+            resumeSource: hasModelResumeData ? 'model' : 'framework',
+            modelSuppliedSuspendedToolCallId: hasModelResumeData ? args?.suspendedToolCallId : undefined,
+            modelSuppliedSuspendedToolRunId: hasModelResumeData ? args?.suspendedToolRunId : undefined,
+            suspendData,
+            messages: messageList?.get.all.db() ?? [],
+          })
+        : undefined;
+      const suspendedToolRunId = resolvedSuspensionIdentity?.runId;
+      // When the delegation tool is itself approval-gated, an approval decision is
+      // ambiguous: it can answer this step's pre-execution gate or a delegated approval
+      // raised mid-execution by the sub-agent. Only the delegated suspend payload carries
+      // `requireToolApproval`, so require it plus a framework-resolved inner run id —
+      // never a historical delegation found for a local gate.
+      const isDelegatedApprovalResume =
+        approvalGated &&
+        !!approvalDecision &&
+        !!(suspendData as { requireToolApproval?: unknown } | undefined)?.requireToolApproval &&
+        resolvedSuspensionIdentity?.type === 'approval' &&
+        !!suspendedToolRunId;
+
       // Check if resuming from approval. Without the `approvalGated` guard,
       // generic resume data that happens to contain an `approved` field (e.g. from
       // context.agent.suspend()) would be misinterpreted as an approval response.
@@ -1069,7 +1102,9 @@ export function createDurableToolCallStep() {
         // Remove approval metadata since we're resuming (either approved or declined)
         await removeToolMetadata({ toolCallId, toolName }, 'approval');
 
-        if (!approvalDecision.approved) {
+        // A delegated decline is the sub-agent's decision to act on; only a decline of
+        // this step's own gate is denied locally.
+        if (!approvalDecision.approved && !isDelegatedApprovalResume) {
           // Return the approval decision (not a `result` string) so it persists as
           // `state: 'output-denied'` with `approval`. The denial reason carries the
           // existing string so downstream consumers/UI keep the same message.
@@ -1158,34 +1193,9 @@ export function createDurableToolCallStep() {
         cleanedArgs.resourceId = state?.resourceId;
       }
 
-      const modelSuppliedSuspendedToolRunId = cleanedArgs.suspendedToolRunId;
-      const modelSuppliedSuspendedToolCallId = cleanedArgs.suspendedToolCallId;
       delete cleanedArgs.suspendedToolRunId;
       delete cleanedArgs.suspendedToolCallId;
 
-      // Delegated identity is trusted only after it is tied to framework-persisted
-      // suspension state. The suspend payload remains the primary per-tool-call source.
-      const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
-      const needsRunIdLookup = isResumableTool && (resumeData !== undefined || !!approvalGrant);
-      // Nullish model data follows the framework resume path; false, 0, and empty strings remain valid model payloads.
-      const hasModelResumeData = resumeDataFromArgs != null;
-      const resolvedSuspensionIdentity: ResolvedSuspendedToolIdentity | undefined = needsRunIdLookup
-        ? resolveFrameworkSuspendedToolIdentity({
-            toolCallId,
-            toolName,
-            resumeSource: hasModelResumeData ? 'model' : 'framework',
-            modelSuppliedSuspendedToolCallId: hasModelResumeData ? modelSuppliedSuspendedToolCallId : undefined,
-            modelSuppliedSuspendedToolRunId: hasModelResumeData ? modelSuppliedSuspendedToolRunId : undefined,
-            suspendData,
-            messages: messageList?.get.all.db() ?? [],
-          })
-        : undefined;
-      const suspendedToolRunId = resolvedSuspensionIdentity?.runId;
-      // When the delegation tool is itself approval-gated, an `{ approved: true }`
-      // resume is ambiguous: it can answer this step's pre-execution gate (execute
-      // fresh) or a delegated approval raised mid-execution by the sub-agent. A
-      // framework-resolved inner run id disambiguates the delegated approval.
-      const isDelegatedApprovalResume = !!approvalGrant && !!suspendedToolRunId;
       // Mirror the non-durable step: a bare `{ approved }` belongs to the gate and is
       // dropped, but an approval carrying extra keys is caller data for the tool.
       const hasCustomApprovalResumeData =
@@ -1280,10 +1290,13 @@ export function createDurableToolCallStep() {
         // Use the actor supplied for this workflow segment. A resumed segment
         // must never recover the initial actor from serialized agent options.
         actor,
-        // Delegated approval decisions must also flow to the wrapper tool: it only
-        // resumes the inner suspended run when resumeData is present.
-        resumeData:
-          isResumingFromSuspension || isDelegatedApprovalResume || hasCustomApprovalResumeData ? resumeData : undefined,
+        // Delegated approval decisions (approve or decline) must also flow to the wrapper
+        // tool: it only resumes the inner suspended run when resumeData is present.
+        resumeData: isDelegatedApprovalResume
+          ? workflowResumeData
+          : isResumingFromSuspension || hasCustomApprovalResumeData
+            ? resumeData
+            : undefined,
         suspendedToolRunId,
         // The payload this tool call suspended with (see `toolCallSuspended` below), so a
         // resumed tool can continue from its own state — mirrors the non-durable step.
