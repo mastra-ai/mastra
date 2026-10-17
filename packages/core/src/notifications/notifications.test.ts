@@ -414,6 +414,41 @@ describe('notification inbox', () => {
     expect(allSeen.hasMore).toBe(false);
   });
 
+  it('surfaces a notification that ran out of delivery attempts once, then marks it seen', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    await storage.createNotification({ id: 'ok', threadId: 'thread-1', source: 'ci', kind: 'run', summary: 'ok' });
+    await storage.createNotification({ id: 'gave-up', threadId: 'thread-1', source: 'ci', kind: 'run', summary: 'x' });
+    await storage.updateNotification({
+      threadId: 'thread-1',
+      id: 'gave-up',
+      status: 'failed',
+      deliveryAttempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+      lastDeliveryError: 'no model configured',
+    });
+    const tool = createNotificationInboxTool({ storage });
+    const context = { agent: { threadId: 'thread-1' } } as any;
+    type Page = {
+      notifications: { id: string; status: string; lastDeliveryError?: string }[];
+      markedSeen: number;
+    };
+
+    const first = (await tool.execute?.({ action: 'list' }, context)) as Page;
+    const byId = Object.fromEntries(first.notifications.map(notification => [notification.id, notification]));
+    expect(byId['gave-up']).toMatchObject({ status: 'failed', lastDeliveryError: 'no model configured' });
+    expect(byId.ok).toMatchObject({ status: 'seen' });
+    expect(first.markedSeen).toBe(2);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'gave-up' })).resolves.toMatchObject({
+      status: 'seen',
+      deliveryAttempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+      lastDeliveryError: 'no model configured',
+    });
+
+    // Shown once: the next default list does not repeat it.
+    const second = (await tool.execute?.({ action: 'list' }, context)) as Page;
+    expect(second.notifications).toHaveLength(0);
+    expect(second.markedSeen).toBe(0);
+  });
+
   it('marks the viewed page seen with a single bulk status write', async () => {
     const storage = new InMemoryNotificationsStorage();
     await storage.createNotification({ id: 'a', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'a' });
