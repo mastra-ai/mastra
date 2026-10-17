@@ -9,6 +9,7 @@
  * checks the invariants in `lifecycle-invariants.ts`.
  */
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { InProcessObservationalMemoryOperations } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import {
@@ -44,6 +45,8 @@ export interface FuzzOM {
 
 export interface FuzzEnv {
   ObservationalMemory: new (config: any) => FuzzOM;
+  /** Class for the second instance; pass one loaded from a separate module copy to model another process. */
+  ObservationalMemoryB?: new (config: any) => FuzzOM;
   createStorage(seed: number): Promise<MemoryStorage>;
   spyOn: (
     object: any,
@@ -65,8 +68,51 @@ function createRng(seed: number) {
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-function createOM(env: FuzzEnv, storage: MemoryStorage, rng: () => number, ledger: LifecycleLedger): FuzzOM {
-  const om = new env.ObservationalMemory({
+/**
+ * Counts the storage calls OM makes, without counting the runner's own reads. With `claims`, the
+ * adapter's default process-local operation claims are replaced by that instance, so two replicas
+ * sharing one store don't share the claims a real second process could not see.
+ */
+function countingStorage(
+  storage: MemoryStorage,
+  calls: Map<string, number>,
+  claims?: InProcessObservationalMemoryOperations,
+): MemoryStorage {
+  const claimMethods: Record<string, (input: any) => unknown> = claims
+    ? {
+        claimObservationalMemoryOperation: input => claims.claim(input),
+        renewObservationalMemoryOperation: input => claims.renew(input),
+        releaseObservationalMemoryOperation: input => claims.release(input),
+        getObservationalMemoryOperationOwner: input => claims.getOwner(input),
+      }
+    : {};
+  return new Proxy(storage, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && prop in claimMethods) {
+        const method = claimMethods[prop]!;
+        return async (input: unknown) => {
+          calls.set(prop, (calls.get(prop) ?? 0) + 1);
+          return method(input);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function' || typeof prop !== 'string') return value;
+      return (...args: unknown[]) => {
+        calls.set(prop, (calls.get(prop) ?? 0) + 1);
+        return value.apply(target, args);
+      };
+    },
+  });
+}
+
+function createOM(
+  env: FuzzEnv,
+  storage: MemoryStorage,
+  rng: () => number,
+  ledger: LifecycleLedger,
+  OM: new (config: any) => FuzzOM = env.ObservationalMemory,
+): FuzzOM {
+  const om = new OM({
     storage,
     scope: 'thread',
     observation: { model: 'openai/gpt-4o-mini', messageTokens: 1_000, bufferTokens: 200 },
@@ -112,6 +158,7 @@ export interface SeedResult {
   overlappingSyncDuplicates: number;
   trace: string[];
   stats: Record<string, number>;
+  storageCalls: Record<string, number>;
 }
 
 export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promise<SeedResult> {
@@ -130,7 +177,23 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
   });
   const ledger: LifecycleLedger = createLedger();
   instrumentStorage(storage, ledger, ids);
-  const oms = [createOM(env, storage, rng, ledger), createOM(env, storage, rng, ledger)];
+  const storageCalls = new Map<string, number>();
+  const separate = !!env.ObservationalMemoryB;
+  const oms = [
+    createOM(
+      env,
+      countingStorage(storage, storageCalls, separate ? new InProcessObservationalMemoryOperations() : undefined),
+      rng,
+      ledger,
+    ),
+    createOM(
+      env,
+      countingStorage(storage, storageCalls, separate ? new InProcessObservationalMemoryOperations() : undefined),
+      rng,
+      ledger,
+      env.ObservationalMemoryB,
+    ),
+  ];
   let activations = 0;
   const swap = storage.swapBufferedToActive.bind(storage);
   storage.swapBufferedToActive = async input => {
@@ -243,6 +306,7 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
     overlappingSyncDuplicates: final.overlappingSyncDuplicates,
     trace,
     stats,
+    storageCalls: Object.fromEntries(storageCalls),
   };
 }
 
@@ -267,8 +331,14 @@ export async function runFuzzSeeds(
   for (const result of results) {
     for (const [key, value] of Object.entries(result.stats)) totals[key] = (totals[key] ?? 0) + value;
   }
+  const calls: Record<string, number> = {};
+  for (const result of results) {
+    for (const [key, value] of Object.entries(result.storageCalls)) calls[key] = (calls[key] ?? 0) + value;
+  }
+  const totalCalls = Object.values(calls).reduce((sum, n) => sum + n, 0);
   const lines = [
     `OM_FUZZ seeds=${opts.count} first=${opts.first} failingSeeds=${failing.length} violations=${JSON.stringify(byInvariant)} explainedDuplicates=${explained} overlappingSyncDuplicates=${overlapping} activity=${JSON.stringify(totals)}`,
+    `OM_FUZZ storageCalls total=${totalCalls} ${JSON.stringify(Object.fromEntries(Object.entries(calls).sort((a, b) => b[1] - a[1])))}`,
     ...failing.slice(0, 3).map(
       result =>
         `OM_FUZZ seed ${result.seed}: ${result.violations

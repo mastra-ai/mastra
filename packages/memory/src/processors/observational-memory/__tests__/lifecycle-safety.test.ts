@@ -18,7 +18,7 @@ import { BufferingCoordinator } from '../buffering-coordinator';
 import { filterObservedMessages } from '../message-utils';
 import { AsyncBufferObservationStrategy } from '../observation-strategies/async-buffer';
 import { ObservationalMemory } from '../observational-memory';
-import { isOpActiveInProcess } from '../operation-registry';
+import { OMOperationTracker } from '../operation-registry';
 
 const SECRET = 'ACTIVATED_FACT_7c1e';
 
@@ -1220,11 +1220,12 @@ describe('concurrent buffer() calls', () => {
       tokenCount: 2,
     });
     expect(head.id).not.toBe(turnRecord.id);
+    const operations = new OMOperationTracker(storage);
     let activeDuringObserver: Record<string, boolean> = {};
     vi.spyOn(om.observer, 'call').mockImplementation(async () => {
       activeDuringObserver = {
-        turn: isOpActiveInProcess(turnRecord.id, 'bufferingObservation'),
-        head: isOpActiveInProcess(head.id, 'bufferingObservation'),
+        turn: await operations.isActive(turnRecord.id, 'bufferingObservation'),
+        head: await operations.isActive(head.id, 'bufferingObservation'),
       };
       return { observations: '- buffered' } as Awaited<ReturnType<typeof om.observer.call>>;
     });
@@ -1232,7 +1233,7 @@ describe('concurrent buffer() calls', () => {
     await om.buffer({ ...ids, record: turnRecord, messages, skipMinimumTokenCheck: true });
 
     expect(activeDuringObserver.turn).toBe(true);
-    expect(isOpActiveInProcess(turnRecord.id, 'bufferingObservation')).toBe(false);
-    expect(isOpActiveInProcess(head.id, 'bufferingObservation')).toBe(false);
+    expect(await operations.isActive(turnRecord.id, 'bufferingObservation')).toBe(false);
+    expect(await operations.isActive(head.id, 'bufferingObservation')).toBe(false);
   });
 });

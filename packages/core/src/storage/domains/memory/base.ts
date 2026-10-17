@@ -30,6 +30,12 @@ import type {
   UpdateObservationalMemoryConfigInput,
 } from '../../types';
 import { StorageDomain } from '../base';
+import { inProcessObservationalMemoryOperations } from './observational-memory-operations';
+import type {
+  ObservationalMemoryOperationClaimInput,
+  ObservationalMemoryOperationClaimResult,
+  ObservationalMemoryOperationRef,
+} from './observational-memory-operations';
 
 function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -707,6 +713,35 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   async setBufferingReflectionFlag(_id: string, _isBuffering: boolean): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Claim a running OM operation for `owner`. The same owner may claim again (claims are counted);
+   * another owner is refused while the claim is held.
+   *
+   * The default keeps claims in this process, so it is correct for a single process only. Adapters
+   * shared by several processes override these four methods with storage-backed, TTL-expiring claims.
+   * Overrides must not break the default's guarantee that the claim is registered synchronously.
+   */
+  async claimObservationalMemoryOperation(
+    input: ObservationalMemoryOperationClaimInput,
+  ): Promise<ObservationalMemoryOperationClaimResult> {
+    return inProcessObservationalMemoryOperations.claim(input);
+  }
+
+  /** Extend a claim's TTL. Returns false if `owner` no longer holds it. */
+  async renewObservationalMemoryOperation(input: ObservationalMemoryOperationClaimInput): Promise<boolean> {
+    return inProcessObservationalMemoryOperations.renew(input);
+  }
+
+  /** Release one claim held by `owner`. No-op if `owner` does not hold it. */
+  async releaseObservationalMemoryOperation(input: ObservationalMemoryOperationRef & { owner: string }): Promise<void> {
+    inProcessObservationalMemoryOperations.release(input);
+  }
+
+  /** The owner currently holding the operation, or undefined if none does. */
+  async getObservationalMemoryOperationOwner(ref: ObservationalMemoryOperationRef): Promise<string | undefined> {
+    return inProcessObservationalMemoryOperations.getOwner(ref);
   }
 
   /**

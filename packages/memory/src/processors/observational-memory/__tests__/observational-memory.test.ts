@@ -61,7 +61,7 @@ import {
   describeDegenerateOutput,
 } from '../observer-agent';
 import { ObserverRunner } from '../observer-runner';
-import { registerOp, unregisterOp, isOpActiveInProcess } from '../operation-registry';
+import { OMOperationTracker } from '../operation-registry';
 import { ObservationalMemoryProcessor } from '../processor';
 import type { MemoryContextProvider } from '../processor';
 
@@ -7992,7 +7992,8 @@ describe('Locking Behavior', () => {
 
     // Simulate an IN-FLIGHT reflection in this process: flag set AND op registered.
     await storage.setReflectingFlag(record!.id, true);
-    registerOp(record!.id, 'reflecting');
+    const operations = new OMOperationTracker(storage);
+    operations.begin(record!.id, 'reflecting');
     try {
       const result = await om.reflect('thread-1', 'resource-1');
 
@@ -8002,9 +8003,9 @@ describe('Locking Behavior', () => {
       // The skip must not clobber the in-flight reflection's lock.
       const after = await storage.getObservationalMemory('thread-1', 'resource-1');
       expect(after!.isReflecting).toBe(true);
-      expect(isOpActiveInProcess(record!.id, 'reflecting')).toBe(true);
+      expect(await operations.isActive(record!.id, 'reflecting')).toBe(true);
     } finally {
-      unregisterOp(record!.id, 'reflecting');
+      operations.end(record!.id, 'reflecting');
       await storage.setReflectingFlag(record!.id, false);
     }
   });

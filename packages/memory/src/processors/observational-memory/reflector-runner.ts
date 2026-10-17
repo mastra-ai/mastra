@@ -41,7 +41,7 @@ import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
 import { describeDegenerateOutput } from './observer-agent';
-import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
+import { OMOperationTracker } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
@@ -268,6 +268,8 @@ export class ReflectorRunner {
    */
   private readonly syncReflectionSuppression = new Map<string, number>();
 
+  private readonly operations: OMOperationTracker;
+
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
@@ -293,7 +295,9 @@ export class ReflectorRunner {
     memory?: Memory;
     onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
     hooks?: ObserveTransformHooks;
+    operations?: OMOperationTracker;
   }) {
+    this.operations = opts.operations ?? new OMOperationTracker(opts.storage);
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
     this.tokenCounter = opts.tokenCounter;
@@ -715,7 +719,7 @@ export class ReflectorRunner {
 
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
-    registerOp(record.id, 'bufferingReflection');
+    this.operations.begin(record.id, 'bufferingReflection');
     this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
@@ -782,7 +786,7 @@ export class ReflectorRunner {
         }
 
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-        unregisterOp(record.id, 'bufferingReflection');
+        this.operations.end(record.id, 'bufferingReflection');
         this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
@@ -1219,10 +1223,12 @@ export class ReflectorRunner {
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
     // ════════════════════════════════════════════════════════════════════════
     if (this.buffering.isAsyncReflectionEnabled() && observationTokens < reflectThreshold) {
+      const bufferingReflectionActive =
+        record.isBufferingReflection && (await this.operations.isActive(record.id, 'bufferingReflection'));
       const shouldTrigger = (() => {
         if (!this.buffering.isAsyncReflectionEnabled()) return false;
         if (record.isBufferingReflection) {
-          if (isOpActiveInProcess(record.id, 'bufferingReflection')) return false;
+          if (bufferingReflectionActive) return false;
           omDebug(`[OM:shouldTriggerAsyncRefl] isBufferingReflection=true but stale, clearing`);
           this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
         }
@@ -1284,7 +1290,7 @@ export class ReflectorRunner {
     // LOCKING: Check if reflection is already in progress
     // ════════════════════════════════════════════════════════════
     if (record.isReflecting) {
-      if (isOpActiveInProcess(record.id, 'reflecting')) {
+      if (await this.operations.isActive(record.id, 'reflecting')) {
         omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
         return;
       }
@@ -1382,7 +1388,7 @@ export class ReflectorRunner {
     }
 
     await this.storage.setReflectingFlag(record.id, true);
-    registerOp(record.id, 'reflecting');
+    this.operations.begin(record.id, 'reflecting');
 
     const cycleId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
@@ -1611,7 +1617,7 @@ export class ReflectorRunner {
       try {
         await this.storage.setReflectingFlag(record.id, false);
       } finally {
-        unregisterOp(record.id, 'reflecting');
+        this.operations.end(record.id, 'reflecting');
       }
 
       let endHookError: unknown;
