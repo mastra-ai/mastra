@@ -1,0 +1,44 @@
+/* eslint-disable react-refresh/only-export-components -- provider and its hooks intentionally share this module */
+import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
+import { useAgentSettingsState } from '@/domains/agents/session/hooks/use-agent-settings-state';
+import type { AgentSettingsType as AgentSettings } from '@/domains/agents/session/types';
+
+type AgentContextType = {
+  settings?: AgentSettings;
+  setSettings: (settings: AgentSettings) => void;
+  resetAll: () => void;
+};
+
+export const AgentSettingsContext = createContext<AgentContextType | null>(null);
+
+export interface AgentSettingsProviderProps {
+  children: ReactNode;
+  agentId: string;
+  defaultSettings?: AgentSettings;
+}
+
+export function AgentSettingsProvider({ children, agentId, defaultSettings }: AgentSettingsProviderProps) {
+  const { settings, setSettings, resetAll } = useAgentSettingsState({
+    agentId,
+    defaultSettings,
+  });
+
+  return (
+    <AgentSettingsContext.Provider
+      value={{
+        settings,
+        setSettings,
+        resetAll,
+      }}
+    >
+      {children}
+    </AgentSettingsContext.Provider>
+  );
+}
+
+export const useAgentSettings = () => {
+  const ctx = useContext(AgentSettingsContext);
+  if (!ctx) throw new Error('useAgentSettings must be used within an AgentSettingsProvider');
+  return ctx;
+};

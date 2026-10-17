@@ -1,0 +1,648 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { useSpeechRecognition } from '@mastra/react';
+import { useReadAloud } from '@mastra/react/hooks/voice';
+import type { MessageFactoryPart } from '@mastra/react/ui';
+import { ArrowUp, Mic } from 'lucide-react';
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+
+import { toast } from 'sonner';
+import { AttachFilePopover } from './attachments/attach-file-popover';
+import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
+import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
+import { ComposerFileDrop } from './attachments/composer-file-drop';
+import { ChatMessagesLoadingSkeleton } from './components/agent-loading-skeletons';
+import { BracketOverlay } from './components/bracket-overlay';
+import { ComposerModelSettings } from './composer/composer-model-settings';
+import { ComposerModelSwitcher, ComposerModelWarning } from './composer/composer-model-switcher';
+import { useComposerAutofocus } from './hooks/use-composer-autofocus';
+import { startViewTransition } from './lib/view-transition';
+import { SuggestedPromptList } from './suggested-prompt-list';
+import { TaskPanel } from './task-panel';
+import { useThreadInput } from './thread-input';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { SaveFullConversationAction } from '@/domains/chat';
+import { useChatMessages, useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
+import { MessageRow } from '@/domains/chat/messages/message-row';
+import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
+import { ArrivalScope } from '@/ds/components/Arrival';
+import { Avatar } from '@/ds/components/Avatar';
+import { Button } from '@/ds/components/Button';
+import { ChatShell } from '@/ds/components/ChatShell';
+import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from '@/ds/components/Composer';
+import { MessageScrollerItem } from '@/ds/components/MessageScroller';
+import { PendingIndicator } from '@/ds/components/PendingIndicator';
+import type { ThreadRailTurn } from '@/ds/components/ThreadRail';
+import { buildThreadRailTurns, getClientMessageKey, groupTurns, ThreadRail } from '@/ds/components/ThreadRail';
+import { Txt } from '@/ds/components/Txt';
+import { quietTextHover } from '@/ds/primitives/typography';
+
+const SKELETON_DELAY_MS = 300;
+const EMPTY_SUGGESTED_PROMPTS: string[] = [];
+
+/**
+ * Returns true only after `flag` has stayed true for `delayMs` continuously, so
+ * the pending indicator doesn't flash on fast (local) responses.
+ */
+const useDelayedFlag = (flag: boolean, delayMs: number) => {
+  const [delayed, setDelayed] = useState(false);
+  useEffect(() => {
+    if (!flag) {
+      setDelayed(false);
+      return;
+    }
+    const id = setTimeout(() => setDelayed(true), delayMs);
+    return () => clearTimeout(id);
+  }, [flag, delayMs]);
+  return delayed;
+};
+
+/**
+ * Detects whether the last assistant message has a part that is actively
+ * streaming output. Completed tool calls are excluded so the pending indicator
+ * stays visible during quiet moments (e.g. server-side retries).
+ */
+const hasStreamingPart = (message: MastraDBMessage | undefined) => {
+  if (!message) return false;
+  const parts: MessageFactoryPart[] = message.content.parts;
+  return parts.some(part => {
+    if (part.type === 'reasoning' || part.type === 'text') {
+      return 'state' in part && part.state === 'streaming';
+    }
+    if (part.type === 'tool-invocation') {
+      return 'toolInvocation' in part && part.toolInvocation.state !== 'result';
+    }
+    if (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) {
+      const state = 'state' in part ? part.state : undefined;
+      return state !== 'output-available' && state !== 'output-error';
+    }
+    return false;
+  });
+};
+
+const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
+  if (turns.length === 0) return null;
+
+  return (
+    // Shown once the viewport fits the 48rem column plus a rail-safe gutter on each side.
+    <div
+      data-testid="thread-rail-layer"
+      className="pointer-events-none absolute inset-y-0 left-4 z-20 hidden @min-[58rem]:block"
+    >
+      <ThreadRail turns={turns} className="pointer-events-auto sticky top-1/2 -translate-y-1/2" />
+    </div>
+  );
+};
+
+export interface ThreadProps {
+  agentName?: string;
+  agentId?: string;
+  threadId?: string;
+  suggestedPrompts?: string[];
+  hasModelList?: boolean;
+  hideModelSwitcher?: boolean;
+  /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
+  runOptionsSlot?: React.ReactNode;
+  /**
+   * Called when a voice call connects. On a brand-new chat the agent page passes its
+   * thread-list refresh here so the page navigates from /new to the real thread URL.
+   */
+  refreshThreadList?: () => Promise<void> | void;
+  /**
+   * True while the thread history is being fetched for the first time. The skeleton
+   * only replaces the welcome screen; live messages that arrive earlier take precedence.
+   */
+  isHistoryLoading?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
+  isLoadingPrevious?: boolean;
+  /** Host-provided channels card shown on the landing screen (e.g. Studio's AgentChannelsCard). */
+  channelsSlot?: React.ReactNode;
+  /** Host-provided browser-session thumbnail rendered above the composer during a chat. */
+  browserThumbnailSlot?: React.ReactNode;
+  /** Host-provided voice-call panel rendered above the composer (e.g. Studio's VoiceCallPanel). */
+  voicePanelSlot?: React.ReactNode;
+  /** Host-provided voice-call button rendered in the composer action row. */
+  voiceButtonSlot?: React.ReactNode;
+}
+
+export const Thread = ({
+  agentName,
+  agentId,
+  threadId,
+  suggestedPrompts,
+  hasModelList,
+  hideModelSwitcher,
+  runOptionsSlot,
+  refreshThreadList,
+  isHistoryLoading,
+  onLoadPrevious,
+  isLoadingPrevious,
+  channelsSlot,
+  browserThumbnailSlot,
+  voicePanelSlot,
+  voiceButtonSlot,
+}: ThreadProps) => {
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const { draft, updateDraft } = useThreadInput(threadId);
+
+  const messages = useChatMessages();
+  const { isRunning } = useChatRunning();
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
+  const {
+    isSpeaking,
+    readAloud,
+    stop: stopSpeaking,
+  } = useReadAloud(agentId, requestContext, {
+    onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
+  });
+
+  const isEmpty = messages.length === 0;
+  const lastMessage = messages[messages.length - 1];
+  const showPending = isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
+  const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
+  const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
+  const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
+  // Keyed by the opening message's client key: `data-user-message` reconciliation
+  // swaps `message.id` to the server signal id, and a changing key would remount
+  // the whole turn.
+  const turnGroups = groupTurns(messages, {
+    key: getClientMessageKey,
+    opensTurn: message => threadRailAnchorIds.has(message.id),
+  });
+
+  // Before the first message the dock is unpinned and centered so the greeting,
+  // composer and prompts read as one landing. The composer keeps its tree position
+  // in both modes so the first send doesn't remount it (focus and attachments stay).
+  const showLanding = isEmpty && !isHistoryLoading;
+  // The layout follows `showLanding` one commit late so leaving the landing can be
+  // wrapped in a view transition: the named composer then glides to the dock
+  // instead of snapping. Only the exit caused by a send is animated (the chat is
+  // running then); a history load resolving on refresh or thread switch also flips
+  // `showLanding` false and must snap, or the composer visibly slides on every load.
+  const [landingShown, setLandingShown] = useState(showLanding);
+  useEffect(() => {
+    if (landingShown === showLanding) return;
+    if (showLanding || !isRunning) {
+      setLandingShown(showLanding);
+      return;
+    }
+    startViewTransition(() => setLandingShown(false));
+  }, [showLanding, landingShown, isRunning]);
+
+  return (
+    <ComposerAttachmentsProvider
+      controlled={
+        draft && updateDraft
+          ? {
+              value: draft.attachments,
+              onChange: value =>
+                updateDraft(previous => ({
+                  ...previous,
+                  attachments: typeof value === 'function' ? value(previous.attachments) : value,
+                })),
+            }
+          : undefined
+      }
+    >
+      <ChatShell
+        className="h-full"
+        scroller={{
+          autoScroll: true,
+          defaultScrollPosition: 'last-anchor',
+          onReachStart: onLoadPrevious,
+          preserveScrollOnPrepend: Boolean(onLoadPrevious),
+        }}
+        data-testid="thread-wrapper"
+      >
+        <ChatShell.Stage>
+          <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
+            <ThreadRailLayer turns={threadRailTurns} />
+            <ChatShell.Content className={landingShown ? 'flex-none' : undefined}>
+              {isLoadingPrevious && (
+                <ChatShell.Column
+                  data-testid="thread-history-older-skeleton"
+                  aria-busy="true"
+                  aria-label="Loading older messages"
+                  className="py-3"
+                >
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              )}
+              {isEmpty && isHistoryLoading ? (
+                <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              ) : landingShown ? null : (
+                <ChatShell.Column
+                  ref={messagesContainerRef}
+                  data-testid="thread-message-column"
+                  className="relative flex-1 gap-4 py-4"
+                >
+                  <BracketOverlay containerRef={messagesContainerRef} />
+                  {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
+                  <ArrivalScope>
+                    {turnGroups.map((group, index) => {
+                      const isLiveTurn = index === turnGroups.length - 1;
+                      // The first turn opens at the top already; room under it would only add empty scroll.
+                      const holdsRoom = isLiveTurn && isRunning && group.opensTurn && index > 0;
+                      return (
+                        <ChatShell.Turn
+                          key={group.key}
+                          opensTurn={group.opensTurn}
+                          holdsRoom={holdsRoom}
+                          className="gap-4"
+                        >
+                          {group.entries.map(message => (
+                            <MessageScrollerItem
+                              key={getClientMessageKey(message)}
+                              messageId={message.id}
+                              scrollAnchor={threadRailAnchorIds.has(message.id)}
+                            >
+                              <MessageRow
+                                message={message}
+                                hasModelList={hasModelList}
+                                isSpeaking={isSpeaking}
+                                onReadAloud={readAloud}
+                                onStopSpeaking={stopSpeaking}
+                              />
+                            </MessageScrollerItem>
+                          ))}
+                          {isLiveTurn && delayedPending && <PendingIndicator />}
+                        </ChatShell.Turn>
+                      );
+                    })}
+                  </ArrivalScope>
+                  {!isRunning && <SaveFullConversationAction />}
+                </ChatShell.Column>
+              )}
+            </ChatShell.Content>
+            <ChatShell.Dock
+              data-testid={landingShown ? 'thread-landing' : undefined}
+              className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
+            >
+              {landingShown ? null : <ChatShell.ScrollButton />}
+              <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
+                {landingShown ? (
+                  <>
+                    <ThreadWelcome agentName={agentName} />
+                    {channelsSlot}
+                  </>
+                ) : (
+                  <>
+                    {agentId && threadId ? browserThumbnailSlot : null}
+                    <TaskPanel />
+                  </>
+                )}
+                <div className={landingShown ? 'starter-prompt' : undefined}>
+                  <AgentComposer
+                    agentId={agentId}
+                    threadId={threadId}
+                    hasModelList={hasModelList}
+                    hideModelSwitcher={hideModelSwitcher}
+                    runOptionsSlot={runOptionsSlot}
+                    voicePanelSlot={voicePanelSlot}
+                    voiceButtonSlot={voiceButtonSlot}
+                  />
+                </div>
+                {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </ChatShell.Viewport>
+        </ChatShell.Stage>
+      </ChatShell>
+    </ComposerAttachmentsProvider>
+  );
+};
+
+const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
+  return (
+    <div data-testid="thread-welcome" className="flex w-full flex-col items-center gap-4">
+      <div className="starter-heading">
+        <Avatar name={agentName || 'Agent'} size="lg" />
+      </div>
+      <Txt
+        as="h1"
+        variant="display"
+        tone="muted"
+        className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
+      >
+        What can <span className="font-medium text-foreground">{agentName || 'this agent'}</span> do for you today?
+      </Txt>
+    </div>
+  );
+};
+
+interface AgentComposerProps {
+  agentId?: string;
+  threadId?: string;
+  hasModelList?: boolean;
+  hideModelSwitcher?: boolean;
+  runOptionsSlot?: React.ReactNode;
+  voicePanelSlot?: React.ReactNode;
+  voiceButtonSlot?: React.ReactNode;
+}
+
+const AgentComposer = ({
+  agentId,
+  threadId,
+  hasModelList,
+  hideModelSwitcher,
+  runOptionsSlot,
+  voicePanelSlot,
+  voiceButtonSlot,
+}: AgentComposerProps) => {
+  const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const preparing = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(
+    () => () => {
+      lifetime.current++;
+    },
+    [],
+  );
+  const [submitError, setSubmitError] = useState<string>();
+  const send = useChatSend();
+  const { attachments, toCoreUserMessages, clear, restore, isAddingAttachments } = useComposerAttachments();
+  const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
+  const [sendPulseKey, setSendPulseKey] = useState(0);
+  const { canExecute } = usePermissions();
+  const canExecuteAgent = canExecute('agents');
+  const inputDisabled = !canExecuteAgent || Boolean(draftStatus?.restoring);
+  useComposerAutofocus(textareaRef, { threadId, disabled: inputDisabled });
+
+  const isEmpty = text.trim().length === 0 && attachments.length === 0;
+  const sendBlocked = isRunning && !canSendWhileStreaming;
+
+  const submit = async () => {
+    if (
+      isEmpty ||
+      sendBlocked ||
+      !canExecuteAgent ||
+      draftStatus?.restoring ||
+      isAddingAttachments ||
+      preparing.current
+    )
+      return;
+    preparing.current = true;
+    const currentLifetime = lifetime.current;
+    const submittedAttachments = attachments;
+    const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
+    // A message the server can't have stored goes back in the composer, before anything typed since.
+    const withSubmittedText = (typed: string) => (typed ? `${text}\n\n${typed}` : text);
+    const restoreSubmission = () => {
+      if (lifetime.current !== currentLifetime) return;
+      if (updateDraft)
+        updateDraft(previous => ({
+          text: withSubmittedText(previous.text),
+          attachments: [...submittedAttachments, ...previous.attachments],
+        }));
+      else {
+        setThreadInput(withSubmittedText);
+        restore(submittedAttachments);
+      }
+      setSubmitError('Your message could not be sent. Your draft has been restored.');
+    };
+    setSubmitError(undefined);
+    try {
+      const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
+      if (lifetime.current !== currentLifetime) return;
+      // Clear only the submitted snapshot; edits made during file conversion belong to the next draft.
+      if (updateDraft)
+        updateDraft(previous => ({
+          text: previous.text === text ? '' : previous.text,
+          attachments: previous.attachments.filter(attachment => !submittedIds.has(attachment.id)),
+        }));
+      else {
+        setThreadInput('');
+        clear();
+      }
+      setSendPulseKey(k => k + 1);
+      void Promise.resolve(send({ message: text, attachments: coreUserMessages })).then(delivered => {
+        if (delivered === false) restoreSubmission();
+      });
+    } catch {
+      if (lifetime.current === currentLifetime)
+        setSubmitError('Attachments could not be prepared. Your draft has been kept.');
+    } finally {
+      preparing.current = false;
+    }
+  };
+
+  return (
+    // Named so the chat/settings view transition can slide the composer toward
+    // the bottom edge independently of the root crossfade.
+    <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
+      {voicePanelSlot}
+      {(submitError || draftStatus?.error) && (
+        <Txt variant="caption" role="alert">
+          {submitError || draftStatus?.error}
+        </Txt>
+      )}
+      {draftStatus?.restoring && (
+        <Txt variant="caption" role="status" className="sr-only">
+          Restoring draft…
+        </Txt>
+      )}
+      <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
+        <Composer
+          className="relative"
+          onSubmit={event => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <ComposerRing busy={isRunning}>
+            <ComposerBox sendingPulseKey={sendPulseKey}>
+              <ChatComposerAttachments />
+              <ComposerInput
+                ref={textareaRef}
+                value={text}
+                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                onChange={event => {
+                  setThreadInput(event.target.value);
+                }}
+                onKeyDown={event => {
+                  // Ignore Enter while an IME composition is active (e.g. committing a
+                  // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                  // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                  if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    if (sendBlocked) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void submit();
+                  }
+                }}
+                disabled={inputDisabled}
+              />
+              {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+              <ComposerActions>
+                <ComposerActionRow
+                  canExecute={canExecuteAgent}
+                  agentId={agentId}
+                  runOptionsSlot={runOptionsSlot}
+                  showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                  isEmpty={isEmpty}
+                  isRunning={isRunning}
+                  canSendWhileStreaming={canSendWhileStreaming}
+                  onCancel={() => void cancelRun()}
+                  onSetText={value => {
+                    setThreadInput(value);
+                  }}
+                  voiceButtonSlot={voiceButtonSlot}
+                />
+              </ComposerActions>
+            </ComposerBox>
+          </ComposerRing>
+        </Composer>
+      </ComposerFileDrop>
+    </div>
+  );
+};
+
+const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
+  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
+
+  const appliedTranscriptRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!transcript || transcript === appliedTranscriptRef.current) return;
+    appliedTranscriptRef.current = transcript;
+    startTransition(() => onTranscript(transcript));
+  }, [onTranscript, transcript]);
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon-md"
+      type="button"
+      tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
+      onClick={() => (isListening ? stop() : start())}
+    >
+      {isListening ? <CircleStopIcon /> : <Mic />}
+    </Button>
+  );
+};
+
+interface ComposerActionRowProps {
+  canExecute?: boolean;
+  agentId?: string;
+  showModelSwitcher?: boolean;
+  runOptionsSlot?: React.ReactNode;
+  isEmpty: boolean;
+  isRunning: boolean;
+  canSendWhileStreaming: boolean;
+  onCancel: () => void;
+  onSetText: (text: string) => void;
+  voiceButtonSlot?: React.ReactNode;
+}
+
+const ComposerActionRow = ({
+  canExecute = true,
+  agentId,
+  showModelSwitcher,
+  runOptionsSlot,
+  isEmpty,
+  isRunning,
+  canSendWhileStreaming,
+  onCancel,
+  onSetText,
+  voiceButtonSlot,
+}: ComposerActionRowProps) => {
+  return (
+    <>
+      {((showModelSwitcher && agentId) || runOptionsSlot) && (
+        <div className="flex max-w-full shrink-0 items-center gap-1.5">
+          {showModelSwitcher && agentId && (
+            <>
+              <ComposerModelSwitcher />
+              <ComposerModelSettings agentId={agentId} />
+            </>
+          )}
+          {runOptionsSlot}
+        </div>
+      )}
+
+      <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          {canExecute && <AttachFilePopover />}
+          {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+          {canExecute && agentId ? voiceButtonSlot : null}
+        </div>
+        <ComposerSendButton
+          canExecute={canExecute}
+          isEmpty={isEmpty}
+          isRunning={isRunning}
+          canSendWhileStreaming={canSendWhileStreaming}
+          onCancel={onCancel}
+        />
+      </div>
+    </>
+  );
+};
+
+interface ComposerSendButtonProps {
+  canExecute?: boolean;
+  isEmpty: boolean;
+  isRunning: boolean;
+  canSendWhileStreaming: boolean;
+  onCancel: () => void;
+}
+
+const ComposerSendButton = ({
+  canExecute = true,
+  isEmpty,
+  isRunning,
+  canSendWhileStreaming,
+  onCancel,
+}: ComposerSendButtonProps) => {
+  const { isAddingAttachments } = useComposerAttachments();
+  // While streaming and not allowed to send mid-stream, the only action is cancel.
+  if (isRunning && !canSendWhileStreaming) {
+    return (
+      <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
+        <CircleStopIcon />
+      </Button>
+    );
+  }
+
+  return (
+    <>
+      <Button
+        type="submit"
+        variant="default"
+        size="icon-md"
+        tooltip={canExecute ? 'Send' : 'No permission to execute'}
+        disabled={!canExecute || isEmpty || isAddingAttachments}
+      >
+        <ArrowUp />
+      </Button>
+      {isRunning && (
+        <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
+          <CircleStopIcon />
+        </Button>
+      )}
+    </>
+  );
+};
+
+const CircleStopIcon = () => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={quietTextHover}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <rect width="6" height="6" x="9" y="9" rx="1" />
+    </svg>
+  );
+};

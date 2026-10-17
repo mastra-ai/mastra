@@ -1,0 +1,322 @@
+import type { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
+import { ExternalLink } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { SearchInput } from '@/ds/components/SearchInput';
+import { Txt } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/utils/cn';
+import { formatDate } from '@/utils/date-format';
+import { formatRelativeTime } from '@/utils/relative-time';
+
+interface MemorySearchProps {
+  searchMemory: (query: string) => Promise<MemorySearchResponse>;
+  onResultClick?: (messageId: string, threadId?: string) => void;
+  className?: string;
+  currentThreadId?: string;
+  chatInputValue?: string;
+}
+
+export const MemorySearch = ({
+  searchMemory,
+  onResultClick,
+  className,
+  currentThreadId,
+  chatInputValue,
+}: MemorySearchProps) => {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<MemorySearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const prevThreadIdRef = useRef<string | undefined>(currentThreadId);
+  const lastSearchTimeRef = useRef<number>(0);
+  const pendingSearchRef = useRef<string | null>(null);
+  const searchRequestRef = useRef(0);
+  const queryRef = useRef(query);
+  queryRef.current = query;
+
+  const handleSearch = useCallback(
+    async (searchQuery: string) => {
+      if (!searchQuery.trim()) {
+        setError(null);
+        return;
+      }
+
+      const requestId = ++searchRequestRef.current;
+      setIsSearching(true);
+      setError(null);
+
+      try {
+        const response = await searchMemory(searchQuery);
+        if (requestId !== searchRequestRef.current) return;
+        setResults(response.results);
+        setIsOpen(prev => prev || response.results.length > 0);
+      } catch (err) {
+        if (requestId !== searchRequestRef.current) return;
+        setError('Failed to search memory');
+        console.error('Memory search error:', err);
+      } finally {
+        if (requestId === searchRequestRef.current) setIsSearching(false);
+      }
+    },
+    [searchMemory],
+  );
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setQuery(value);
+
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      if (value.trim()) {
+        const now = Date.now();
+        const timeSinceLastSearch = now - lastSearchTimeRef.current;
+
+        if (timeSinceLastSearch >= 500) {
+          setIsSearching(true);
+          void handleSearch(value);
+          lastSearchTimeRef.current = now;
+        } else {
+          setIsSearching(true);
+          pendingSearchRef.current = value;
+          const remainingTime = 500 - timeSinceLastSearch;
+          searchTimeoutRef.current = setTimeout(() => {
+            if (pendingSearchRef.current) {
+              void handleSearch(pendingSearchRef.current);
+              lastSearchTimeRef.current = Date.now();
+              pendingSearchRef.current = null;
+            }
+          }, remainingTime);
+        }
+      } else {
+        setResults([]);
+        setIsOpen(false);
+        setIsSearching(false);
+        setError(null);
+        pendingSearchRef.current = null;
+      }
+    },
+    [handleSearch],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+        void handleSearch(query);
+      }
+    },
+    [query, handleSearch],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (prevThreadIdRef.current !== currentThreadId && query.trim()) {
+      void handleSearch(query);
+    }
+    prevThreadIdRef.current = currentThreadId;
+  }, [currentThreadId, query, handleSearch]);
+
+  // Keyed on chatInputValue only: re-running on local `query` edits would overwrite the user's typing.
+  useEffect(() => {
+    if (chatInputValue !== undefined && chatInputValue !== queryRef.current) {
+      setQuery(chatInputValue);
+
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      if (chatInputValue.trim()) {
+        const now = Date.now();
+        const timeSinceLastSearch = now - lastSearchTimeRef.current;
+
+        if (timeSinceLastSearch >= 500) {
+          setIsSearching(true);
+          void handleSearch(chatInputValue);
+          lastSearchTimeRef.current = now;
+        } else {
+          setIsSearching(true);
+          pendingSearchRef.current = chatInputValue;
+          const remainingTime = 500 - timeSinceLastSearch;
+          searchTimeoutRef.current = setTimeout(() => {
+            if (pendingSearchRef.current) {
+              void handleSearch(pendingSearchRef.current);
+              lastSearchTimeRef.current = Date.now();
+              pendingSearchRef.current = null;
+            }
+          }, remainingTime);
+        }
+      } else {
+        setResults([]);
+        setIsOpen(false);
+        setIsSearching(false);
+        pendingSearchRef.current = null;
+      }
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [chatInputValue, handleSearch]);
+
+  const handleResultClick = (messageId: string, threadId?: string) => {
+    onResultClick?.(messageId, threadId);
+  };
+
+  const truncateContent = (content: string, maxLength: number = 100) => {
+    if (content.length <= maxLength) return content;
+    return content.substring(0, maxLength) + '...';
+  };
+
+  return (
+    <div className={cn('flex h-full flex-col', className)} ref={dropdownRef}>
+      <SearchInput
+        label="Search memory"
+        className="shrink-0"
+        placeholder="Search memory..."
+        value={query}
+        onValueChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+      />
+
+      {(isOpen || (query && (isSearching || results.length === 0))) && (
+        <div className={cn(raisedSurfaceStyle, 'mt-2 flex-1 overflow-y-auto rounded-lg')}>
+          {error ? (
+            <div className="p-4 text-center">
+              <Txt variant="caption" className="text-destructive-foreground">
+                {error}
+              </Txt>
+            </div>
+          ) : isSearching && results.length === 0 ? (
+            <div className="p-4 text-center">
+              <Txt variant="caption" tone="muted">
+                Searching...
+              </Txt>
+            </div>
+          ) : results.length === 0 ? (
+            <div className="p-4 text-center">
+              <Txt variant="caption" tone="muted">
+                No results found for "{query}"
+              </Txt>
+            </div>
+          ) : (
+            <div className="py-2">
+              {results.map(result => (
+                <button
+                  key={result.id}
+                  onClick={() => handleResultClick(result.id, result.threadId)}
+                  className={cn(
+                    'w-full border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-fill-subtle',
+                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-600 dark:border-l-blue-400',
+                  )}
+                >
+                  <div className="flex flex-col gap-2">
+                    {result.context?.before && result.context.before.length > 0 && (
+                      <div className="space-y-1 opacity-50">
+                        {result.context.before.map((msg, idx) => (
+                          <div key={idx} className="flex items-start gap-2">
+                            <Txt as="span" variant="column">
+                              {msg.role}:
+                            </Txt>
+                            <Txt as="span" variant="caption" tone="muted">
+                              {truncateContent(msg.content, 50)}
+                            </Txt>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center gap-2">
+                          <Txt
+                            as="span"
+                            variant="column"
+                            className={cn(
+                              'rounded px-2 py-0.5',
+                              result.role === 'user'
+                                ? 'bg-badge-blue-strong text-badge-blue-foreground'
+                                : 'bg-badge-green-strong text-badge-green-foreground',
+                            )}
+                          >
+                            {result.role}
+                          </Txt>
+                          <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
+                            {formatRelativeTime(result.createdAt)}
+                          </Txt>
+                          {result.threadTitle && (
+                            <div className="flex items-center gap-1">
+                              <Txt
+                                variant="meta"
+                                tone={result.threadId !== currentThreadId ? undefined : 'muted'}
+                                className={cn(
+                                  'max-w-[150px] truncate',
+                                  result.threadId !== currentThreadId && 'text-info-indicator',
+                                )}
+                                title={result.threadTitle}
+                              >
+                                • {result.threadTitle}
+                              </Txt>
+                              {result.threadId !== currentThreadId && (
+                                <ExternalLink className="size-3 text-info-indicator" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <Txt variant="caption" tone="ink" className="wrap-break-word">
+                          {truncateContent(result.content)}
+                        </Txt>
+                      </div>
+                    </div>
+
+                    {result.context?.after && result.context.after.length > 0 && (
+                      <div className="space-y-1 opacity-50">
+                        {result.context.after.map((msg, idx) => (
+                          <div key={idx} className="flex items-start gap-2">
+                            <Txt as="span" variant="column">
+                              {msg.role}:
+                            </Txt>
+                            <Txt as="span" variant="caption" tone="muted">
+                              {truncateContent(msg.content, 50)}
+                            </Txt>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};

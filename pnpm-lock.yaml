@@ -6046,6 +6046,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
       mdast-util-gfm:
         specifier: ^3.1.0
         version: 3.1.0(supports-color@10.2.2)
@@ -6197,6 +6200,9 @@ importers:
       eslint-plugin-tailwindcss:
         specifier: ^4.1.0
         version: 4.1.0(eslint@10.7.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(tailwindcss@4.3.3)
+      fake-indexeddb:
+        specifier: ^6.2.5
+        version: 6.2.5
       jsdom:
         specifier: ^30.1.1
         version: 30.1.1(@noble/hashes@2.4.0)
