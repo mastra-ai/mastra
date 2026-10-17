@@ -1,7 +1,7 @@
 import type { Message } from 'chat';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { getChatModule } from './chat-lazy';
+import { chatModule, getChatModule } from './chat-lazy';
 import { layoutBlockTexts } from './slack-blocks';
 import { messageText } from './thread-history';
 
@@ -147,5 +147,75 @@ describe('messageText with Slack layout blocks', () => {
   it('uses block text alone when the fallback is empty', () => {
     const msg = message({ raw: { blocks: [{ type: 'header', text: { type: 'plain_text', text: 'Alert' } }] } });
     expect(messageText(msg)).toBe('Alert');
+  });
+
+  // Fixtures below mirror @chat-adapter/slack 4.40 output: `raw` is the Slack
+  // event (cards via cardToBlockKit + cardToFallbackText), `text` and
+  // `formatted` are what SlackAdapter.parseMessage derives from it.
+  const parsed = (raw: { text: string; blocks: unknown[] }, text: string, markdown: string): Message =>
+    message({ text, formatted: chatModule().parseMarkdown(markdown), raw });
+
+  it('does not repeat a bot section whose mrkdwn matches the fallback', () => {
+    const mrkdwn = '*Build failed* on <https://ci.example/1|main>';
+    const msg = parsed(
+      { text: mrkdwn, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: mrkdwn } }] },
+      'Build failed on main',
+      '**Build failed** on [main](https://ci.example/1)',
+    );
+    expect(messageText(msg)).toBe('**Build failed** on [main](https://ci.example/1)');
+  });
+
+  it('does not repeat lines of a Mastra tool result card', () => {
+    const msg = parsed(
+      {
+        text: '*search* `q: "hi"` · 1.2s ✓\n```\n{"a":1}\n```',
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text: '*search* `q: "hi"` · 1.2s ✓' } },
+          { type: 'section', text: { type: 'mrkdwn', text: '```\n{"a":1}\n```' } },
+        ],
+      },
+      'search q: "hi" · 1.2s ✓\n\n{"a":1}',
+      '**search** `q: "hi"` · 1.2s ✓\n\n```\n{"a":1}\n```',
+    );
+    expect(messageText(msg)).toBe('**search** `q: "hi"` · 1.2s ✓\n\n```\n{"a":1}\n```');
+  });
+
+  it('does not repeat lines of a Mastra tool error card', () => {
+    const msg = parsed(
+      {
+        text: '*search* `q: "hi"` · 1.2s ✗\nboom <x>',
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text: '*search* `q: "hi"` · 1.2s ✗' } },
+          { type: 'section', text: { type: 'mrkdwn', text: '*boom <x>*' } },
+        ],
+      },
+      'search q: "hi" · 1.2s ✗\nboom <x>',
+      '**search** `q: "hi"` · 1.2s ✗\nboom <x>',
+    );
+    expect(messageText(msg)).toBe('**search** `q: "hi"` · 1.2s ✗\nboom <x>');
+  });
+
+  it('does not repeat lines of a Mastra tool approval card', () => {
+    const msg = parsed(
+      {
+        text: '*search* `q: "hi"`\nRequires approval to run.',
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text: '*search* `q: "hi"`' } },
+          { type: 'section', text: { type: 'mrkdwn', text: 'Requires approval to run.' } },
+          { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Approve' } }] },
+        ],
+      },
+      'search q: "hi"\nRequires approval to run.',
+      '**search** `q: "hi"`\nRequires approval to run.',
+    );
+    expect(messageText(msg)).toBe('**search** `q: "hi"`\nRequires approval to run.');
+  });
+
+  it('still appends a block that only shares a partial word with the text', () => {
+    const msg = message({
+      text: 'maintenance window',
+      raw: { blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '*main*' } }] },
+    });
+    expect(messageText(msg)).toBe('maintenance window\n\n*main*');
   });
 });

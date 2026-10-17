@@ -47,19 +47,32 @@ export function messageText(message: Message): string {
   const blocks = layoutBlockTexts(message.raw);
   if (!blocks.length) return base;
 
-  const seen = [normalize(base ?? ''), normalize(message.text ?? '')].filter(Boolean);
+  const seen = [contentKey(base ?? ''), contentKey(message.text ?? '')];
   const extra: string[] = [];
   for (const block of blocks) {
-    const normalized = normalize(block);
-    if (seen.some(s => s.includes(normalized))) continue;
-    seen.push(normalized);
+    const key = contentKey(block);
+    const duplicate = key ? seen.some(s => s.includes(key)) : !!base?.includes(block);
+    if (duplicate) continue;
+    seen.push(key);
     extra.push(block);
   }
   return [base, ...extra].filter(s => s?.trim()).join('\n\n');
 }
 
-function normalize(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().toLowerCase();
+/**
+ * Words of `text` with markup removed, space-padded so containment matches
+ * whole words. Blocks arrive as Slack mrkdwn while `formatted` is Markdown and
+ * `text` is plain, so comparing raw strings would miss `*bold*` vs `**bold**`
+ * and link syntax.
+ */
+function contentKey(text: string): string {
+  const words = text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<[^|>]*\|([^>]*)>/g, '$1')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .toLowerCase();
+  return words ? ` ${words} ` : '';
 }
 
 /** Gap marker between the thread's first message and the recent window, e.g. `[… 6 earlier Slack messages omitted]`. */
