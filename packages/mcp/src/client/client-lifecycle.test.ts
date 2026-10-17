@@ -537,7 +537,7 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
     await client.disconnect();
     await client.connect();
 
-    expect(errors.map(e => e.message)).not.toContain('Failed to restore subscriptions/listen after connecting');
+    expect(errors.some(e => e.message.includes('Failed to restore subscriptions/listen after connecting'))).toBe(false);
     expect(legacy.methods).not.toContain('subscriptions/listen');
   });
 
