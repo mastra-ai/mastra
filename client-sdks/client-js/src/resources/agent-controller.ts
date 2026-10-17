@@ -307,6 +307,17 @@ export interface SubscribeAgentControllerSessionOptions {
         delayMs?: number;
         maxDelayMs?: number;
       };
+  /**
+   * Treat the stream as dropped after this many milliseconds without
+   * receiving any bytes. Server heartbeats (every 25s) count, so a healthy
+   * idle stream never trips it; a half-open connection (laptop sleep, proxy
+   * or NAT timeout) does. Also bounds opening the stream: the initial
+   * `subscribe()` rejects, and a reconnect attempt counts as failed, when no
+   * response arrives in time. A timeout is handled like any other drop —
+   * `reconnect` / `onReconnect` if enabled, otherwise `onError`.
+   * Default 60000; `0` disables.
+   */
+  idleTimeoutMs?: number;
 }
 
 export interface AgentControllerSubscription {
@@ -395,6 +406,7 @@ export class AgentControllerSession extends BaseResource {
               maxDelayMs: finiteOr(options.reconnect.maxDelayMs, 30_000),
             }
           : null;
+    const idleTimeoutMs = finiteOr(options.idleTimeoutMs, 60_000);
 
     /** Exponential backoff for the Nth (1-based) retry of an outage streak. */
     const backoffDelay = (attempt: number) =>
@@ -402,6 +414,8 @@ export class AgentControllerSession extends BaseResource {
 
     let cancelled = false;
     let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    // Aborts the fetch behind the stream currently being opened or read.
+    let currentAbort: AbortController | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let delayResolve: (() => void) | undefined;
 
@@ -421,8 +435,54 @@ export class AgentControllerSession extends BaseResource {
         reconnectTimer = setTimeout(settleDelay, ms);
       });
 
+    const idleTimeoutError = () => {
+      const error = new Error(`Agent controller session stream received no data for ${idleTimeoutMs}ms`);
+      error.name = 'AgentControllerStreamIdleError';
+      return error;
+    };
+
     const requestStream = async (): Promise<Response> => {
-      const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
+      const abort = new AbortController();
+      currentAbort = abort;
+      let openTimer: ReturnType<typeof setTimeout> | undefined;
+      const request = this.request(this.url(`${this.base()}/stream`), {
+        stream: true,
+        signal: abort.signal,
+      }) as Promise<Response>;
+      // If the timeout wins the race, a late response must be cancelled and a late
+      // rejection must not surface as unhandled.
+      request
+        .then(response => {
+          if (abort.signal.aborted) {
+            void response.body?.cancel().catch(() => {});
+          }
+        })
+        .catch(() => {});
+      let response: Response;
+      try {
+        if (idleTimeoutMs > 0) {
+          // Race rather than rely on abort alone: a custom fetch may ignore the signal.
+          response = await Promise.race([
+            request,
+            new Promise<never>((_resolve, reject) => {
+              openTimer = setTimeout(() => {
+                const error = idleTimeoutError();
+                abort.abort(error);
+                reject(error);
+              }, idleTimeoutMs);
+            }),
+          ]);
+        } else {
+          response = await request;
+        }
+      } finally {
+        clearTimeout(openTimer);
+      }
+      if (abort.signal.aborted) {
+        // Lost the race (timeout or unsubscribe) after the response arrived.
+        void response.body?.cancel().catch(() => {});
+        throw abort.signal.reason;
+      }
       if (!response.body) {
         throw new Error('No response body for agent controller session stream');
       }
@@ -450,13 +510,39 @@ export class AgentControllerSession extends BaseResource {
     const pump = async (response: Response): Promise<PumpResult> => {
       const reader = response.body!.getReader();
       currentReader = reader;
+      const abort = currentAbort;
       const decoder = new TextDecoder();
       let buffer = '';
+      // A half-open connection never errors or closes, so read() would await
+      // forever. Any bytes (including `: heartbeat` comments) re-arm the timer;
+      // on expiry we cancel the reader and report a transport drop.
+      let idleTimer: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
+      const armIdleTimer = () => {
+        if (idleTimeoutMs <= 0) return;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          timedOut = true;
+          void reader.cancel(idleTimeoutError()).catch(() => {});
+          abort?.abort(idleTimeoutError());
+        }, idleTimeoutMs);
+      };
 
       try {
+        armIdleTimer();
         while (!cancelled) {
-          const { done, value } = await reader.read();
+          let chunk: Awaited<ReturnType<typeof reader.read>>;
+          try {
+            chunk = await reader.read();
+          } catch (error) {
+            if (timedOut && !cancelled) return { kind: 'transport_error', error: idleTimeoutError() };
+            throw error;
+          }
+          // A cancel-induced `done` must not be mistaken for a clean close.
+          if (timedOut && !cancelled) return { kind: 'transport_error', error: idleTimeoutError() };
+          const { done, value } = chunk;
           if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
+          armIdleTimer();
           // A read() that resolved just before unsubscribe() must not deliver its
           // frame: cancellation happened while we were awaiting.
           if (cancelled) return { kind: 'cancelled' };
@@ -492,7 +578,9 @@ export class AgentControllerSession extends BaseResource {
       } catch (error) {
         return cancelled ? { kind: 'cancelled' } : { kind: 'transport_error', error };
       } finally {
+        clearTimeout(idleTimer);
         if (currentReader === reader) currentReader = null;
+        if (currentAbort === abort) currentAbort = null;
         void reader.cancel().catch(() => {});
       }
     };
@@ -602,6 +690,7 @@ export class AgentControllerSession extends BaseResource {
         cancelled = true;
         settleDelay();
         void currentReader?.cancel().catch(() => {});
+        currentAbort?.abort();
       },
     };
   }

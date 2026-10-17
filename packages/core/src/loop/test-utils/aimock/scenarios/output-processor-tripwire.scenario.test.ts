@@ -290,33 +290,30 @@ describeForAllEngines('Support agent output guardrails', engine => {
     expect(JSON.stringify(messages)).not.toContain(UNAPPROVED_REFUND);
   });
 
-  // Known divergence (#27170): since #26142 a tripwire ends the stream with a `tripwire` chunk,
-  // no `finish`, and status 'tripwire'. Durable/evented do this. The plain Agent (normal/fs) runs
-  // processOutputResult while handling `finish` in stream/base/output.ts; the TripWire catch sets
-  // output.tripwire but still enqueues the original `finish` (reason 'stop') and leaves status
-  // 'success'. Stream consumers (chat UIs, the HTTP stream route) are told the turn finished
-  // normally. `it.fails` turns red once fixed.
-  const plainAgent = engine === 'normal' || engine === 'fs';
-  (plainAgent ? it.fails : it)(
-    'a chat UI is told the refund promise was blocked (tripwire chunk, #27170)',
-    async () => {
-      const { output, chunks } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'My order is late, I want my money back.',
-        collectChunks: true,
-        outputProcessors: [refundPolicyGate],
-        fixtures: llm => {
-          llm.on({ endpoint: 'chat' }, { content: UNAPPROVED_REFUND });
-        },
-      });
+  // Since #26142 a tripwire ends the stream with exactly one `tripwire` chunk, no `finish`, and
+  // status 'tripwire'. The plain Agent runs processOutputResult while handling `finish` in
+  // stream/base/output.ts and used to enqueue the original `finish` (reason 'stop') anyway, so
+  // chat UIs and the HTTP stream route were told the turn finished normally (#27170, #27377).
+  it('a chat UI is told the refund promise was blocked (tripwire chunk, #27170)', async () => {
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'My order is late, I want my money back.',
+      collectChunks: true,
+      outputProcessors: [refundPolicyGate],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: UNAPPROVED_REFUND });
+      },
+    });
 
-      expect(chunks!.find(c => c.type === 'tripwire')?.payload).toMatchObject({
-        reason: 'Refunds need human approval',
-        processorId: 'refund-policy',
-      });
-      expect(chunks!.map(c => c.type)).not.toContain('finish');
-      expect(output.status).toBe('tripwire');
-    },
-  );
+    const types = chunks!.map(c => c.type);
+    expect(chunks!.find(c => c.type === 'tripwire')?.payload).toMatchObject({
+      reason: 'Refunds need human approval',
+      processorId: 'refund-policy',
+    });
+    expect(types.filter(type => type === 'tripwire')).toHaveLength(1);
+    expect(types).not.toContain('finish');
+    expect(types.at(-1)).toBe('tripwire');
+    expect(output.status).toBe('tripwire');
+  });
 });
