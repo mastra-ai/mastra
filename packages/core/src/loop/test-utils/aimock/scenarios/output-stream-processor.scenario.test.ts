@@ -4,7 +4,12 @@ import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  describeForAllEngines,
+  isDurableEngineVariant,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * Story: a customer-support agent whose replies pass through output processors before the
@@ -139,7 +144,7 @@ describeForAllEngines('Support agent output stream processors', engine => {
 
   // Technical: COR-1414. Durable and evented save the processOutputResult rewrite but their
   // returned text stays the raw model text. Pinned so this flips when the engines agree.
-  const wrapped = engine === 'durable' || engine === 'evented';
+  const wrapped = isDurableEngineVariant(engine);
   (wrapped ? it.fails : it)('the returned answer carries the signature too (COR-1414)', async () => {
     const signReply: Processor = {
       id: 'signature',

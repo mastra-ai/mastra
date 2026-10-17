@@ -10,7 +10,13 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
-import type { EngineVariant, LoopScenarioResult, RunApprovalScenarioOptions, RunLoopScenarioOptions } from './types';
+import type {
+  EngineVariant,
+  LoopScenarioResult,
+  RunApprovalScenarioOptions,
+  RunLoopScenarioOptions,
+  ScenarioEngineHost,
+} from './types';
 import { ALL_ENGINE_VARIANTS, isDurableEngineVariant, SCENARIO_MODEL_ID } from './types';
 
 export { isDurableEngineVariant } from './types';
@@ -56,6 +62,23 @@ export function useLoopScenarioAimock(): () => LLMock {
 }
 
 let scenarioAgentCounter = 0;
+
+let engineHost: ScenarioEngineHost | undefined;
+
+/**
+ * Run every `describeForAllEngines` scenario on an engine that lives outside core (e.g. Inngest).
+ * Call from a vitest setup file in the package that provides the engine.
+ */
+export function setScenarioEngineHost(host: ScenarioEngineHost | undefined): void {
+  engineHost = host;
+}
+
+function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any): any {
+  if (engine === 'durable') return createDurableAgent({ agent });
+  if (engine === 'evented') return createEventedAgent({ agent, pubsub });
+  if (engineHost && engine === engineHost.engine) return engineHost.wrapAgent(agent);
+  return agent;
+}
 
 /**
  * Create a shared agent/mastra pair that persists across multiple
@@ -228,12 +251,14 @@ async function buildScenarioAgent({
   const eventedPubsub = engine === 'evented' ? (pubsub ?? new EventEmitterPubSub()) : undefined;
 
   // Wrap with the durable/evented wrapper for those engine variants
-  const registrableAgent =
-    engine === 'durable'
-      ? createDurableAgent({ agent })
-      : engine === 'evented'
-        ? createEventedAgent({ agent, pubsub: eventedPubsub })
-        : agent;
+  const registrableAgent = wrapForEngine(agent, engine ?? 'normal', eventedPubsub);
+
+  // An external engine's worker resolves agents from the host's Mastra, so register there.
+  if (engineHost && engine === engineHost.engine) {
+    const hostMastra = engineHost.getMastra();
+    hostMastra.addAgent(registrableAgent, agentId);
+    return { agent: hostMastra.getAgent(agentId), mastra: hostMastra };
+  }
 
   // Registering the agent on a Mastra instance with storage is required for the
   // suspended snapshot rows that approveToolCall/declineToolCall resume from.
@@ -349,11 +374,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       // .getAgent() returns the wrapper.  On subsequent calls
       // (e.g. resume), the agent is already wrapped — skip re-wrapping to
       // preserve the run registry across calls.
-      const durableWrapper =
-        engine === 'evented'
-          ? createEventedAgent({ agent: sharedAgent.agent as any })
-          : createDurableAgent({ agent: sharedAgent.agent as any });
+      const durableWrapper = wrapForEngine(sharedAgent.agent, engine);
       const agentId = sharedAgent.agent.name;
+      // An external engine's worker looks the agent up on the host's Mastra, so move it there.
+      if (engineHost && engine === engineHost.engine) sharedAgent.mastra = engineHost.getMastra();
       sharedAgent.mastra.removeAgent(agentId);
       sharedAgent.mastra.addAgent(durableWrapper as any, agentId);
       agent = sharedAgent.mastra.getAgent(agentId);
@@ -554,9 +578,13 @@ export function describeForAllEngines(
   factory: (engine: EngineVariant) => void,
   options?: EngineSkipOptions,
 ): void {
-  const variants = ALL_ENGINE_VARIANTS.filter(v => !options?.skip?.includes(v));
-  for (const engine of variants) {
-    describe(`${name} [${engine}]`, () => {
+  const skip = options?.skip ?? [];
+  const isSkipped = (engine: EngineVariant) =>
+    skip.includes(engine) || (engine === 'inngest' && skip.includes('durable'));
+  // Skipped engines are still registered (as skipped) so the report shows them and a file
+  // skipped on an external host's engine isn't reported as having no tests.
+  for (const engine of engineHost ? [engineHost.engine] : ALL_ENGINE_VARIANTS) {
+    (isSkipped(engine) ? describe.skip : describe)(`${name} [${engine}]`, () => {
       factory(engine);
     });
   }
