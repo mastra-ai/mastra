@@ -436,7 +436,12 @@ export class CachingPubSub extends PubSub {
     };
 
     this.callbackMap.set(cb, wrappedCb);
-    await this.inner.subscribe(topic, wrappedCb);
+    // This subscription only carries events published from here on — replay is
+    // served from the cache below. Retaining transports (Redis Streams, …)
+    // default to `startFrom: 'earliest'`, which would deliver their own copy of
+    // every retained event as well: unnumbered (those events never passed
+    // through this cache) and independent of the requested offset.
+    await this.inner.subscribe(topic, wrappedCb, { startFrom: 'latest' });
 
     try {
       // --- Phase 2: fetch and deliver cached history ---
