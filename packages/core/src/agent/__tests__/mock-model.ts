@@ -26,8 +26,11 @@ export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
     return new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+        },
         content: [
           {
             type: 'text',
@@ -55,8 +58,11 @@ export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
           },
         ]),
       }),
@@ -154,8 +160,11 @@ export function getDummyResponseModel(version: MockModelSpecVersion) {
     return new MockLanguageModelV4({
       doGenerate: async _options => ({
         text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 10, text: 10, reasoning: undefined },
+        },
         content: [
           {
             type: 'text',
@@ -188,8 +197,11 @@ export function getDummyResponseModel(version: MockModelSpecVersion) {
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 10, text: 10, reasoning: undefined },
+            },
           },
         ]),
       }),
@@ -295,8 +307,11 @@ export function getEmptyResponseModel(version: MockModelSpecVersion) {
     return new MockLanguageModelV4({
       doGenerate: async _options => ({
         text: undefined,
-        finishReason: 'stop',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: { total: 0, noCache: 0, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 0, text: 0, reasoning: undefined },
+        },
         content: [],
         warnings: [],
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -317,8 +332,11 @@ export function getEmptyResponseModel(version: MockModelSpecVersion) {
           },
           {
             type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 0, noCache: 0, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 0, text: 0, reasoning: undefined },
+            },
           },
         ]),
       }),
@@ -430,5 +448,5 @@ export function getErrorResponseModel(version: MockModelSpecVersion) {
 }
 
 // Re-export mock classes for direct use in tests
-export { MockLanguageModelV4, MockLanguageModelV4, MockLanguageModelV4 };
+export { MockLanguageModelV4 };
 export { convertArrayToReadableStream, convertArrayToReadableStreamV3, convertArrayToReadableStreamV4 };
