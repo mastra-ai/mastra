@@ -107,7 +107,11 @@ export async function hasFinalReport(
  */
 export async function repeatsLastFailure(
   notifications: FactoryReporting['notifications'],
-  { senderSessionId, recipientThreadId, summary }: { senderSessionId: string; recipientThreadId: string; summary: string },
+  {
+    senderSessionId,
+    recipientThreadId,
+    summary,
+  }: { senderSessionId: string; recipientThreadId: string; summary: string },
 ): Promise<boolean> {
   const records = await notifications.listNotifications({
     threadId: recipientThreadId,

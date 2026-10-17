@@ -104,6 +104,11 @@ function unresolvedTenantError(sourceContext: RequestContext, inherited: boolean
     inheritedPolicy: inherited,
     hasControllerResource: typeof controller?.resourceId === 'string',
     hasControllerThread: typeof controller?.threadId === 'string',
+    // Ids and key names only: the stack loses the caller across async hops, so
+    // these identify which session and which kind of start built the context.
+    resourceId: typeof controller?.resourceId === 'string' ? controller.resourceId : undefined,
+    threadId: typeof controller?.threadId === 'string' ? controller.threadId : undefined,
+    contextKeys: Array.from(sourceContext.keys()).map(String),
     stack: error.stack,
   });
   return error;

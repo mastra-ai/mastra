@@ -252,6 +252,9 @@ describe('credential store provider registry', () => {
           hasUser: false,
           hasControllerResource: true,
           hasControllerThread: true,
+          resourceId: 'session-1',
+          threadId: 'thread-1',
+          contextKeys: expect.arrayContaining(['controller']),
           stack: expect.stringContaining('prepareCredentialTenant'),
         }),
       );
