@@ -23434,6 +23434,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryP
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
+  alwaysAllowCategory?: boolean | undefined;
   requestContext?:
     | {
         [key: string]: unknown;

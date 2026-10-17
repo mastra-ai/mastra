@@ -1,5 +1,100 @@
 # mastra
 
+## 1.34.3-alpha.3
+
+### Patch Changes
+
+- Removed the "External" badge from Factory board cards and list rows. ([#27328](https://github.com/mastra-ai/mastra/pull/27328))
+  Routine card actions (Investigate, Build, Open session…) are now less prominent. Actions waiting on you, such as a suggested run or a retry, stay highlighted.
+
+- Made titles the focus of Factory list rows. Labels and status now sit flush right, and each row's action appears on hover or keyboard focus instead of on every row. Details opened from a list row now use a readable width instead of stretching across the page. ([#27328](https://github.com/mastra-ai/mastra/pull/27328))
+
+- Platform sign-ins started from `mastra create` now report `mastra-cli-create` instead of `mastra-create`, so they can't be confused with sign-ins from `create-mastra`. ([#27342](https://github.com/mastra-ai/mastra/pull/27342))
+
+- Agent browser streaming now requires authentication. The browser WebSocket stream (`/browser/:agentId/stream`), the session probe, and the close endpoint previously accepted unauthenticated requests; they now require the same authentication as the rest of the server. ([#26112](https://github.com/mastra-ai/mastra/pull/26112))
+
+  Requests without a valid credential for the server auth provider configured on `Mastra` are denied with `401`.
+
+  Browser WebSocket upgrades authenticate with the session cookie that same-origin requests already send, so signed-in Studio sessions keep working. A WebSocket handshake cannot set an `Authorization` header, so a client that authenticates with a header first exchanges its credential for a single-use upgrade ticket over an authenticated HTTP request:
+
+  ```ts
+  const response = await fetch(`${apiUrl}/agents/my-agent/browser/stream-ticket`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ threadId }),
+  });
+  const { ticket } = await response.json();
+
+  const ws = new WebSocket(`wss://example.com/browser/my-agent/stream?threadId=${threadId}&ticket=${ticket}`);
+  ```
+
+  The ticket is opaque, expires after 30 seconds, is bound to the agent and thread it was issued for, and is consumed by the first upgrade it authenticates. The credential is only ever presented to the mint endpoint, so it never reaches a proxy or an access log, and each connection attempt mints a fresh ticket.
+
+  Issuance is bounded so the mint endpoint cannot be used to exhaust the server: each agent may request a limited number of tickets per minute and the process holds a capped number of unspent tickets, beyond which the endpoint answers `429` instead of allocating more.
+
+  For clients that cannot call the mint endpoint, `?apiKey=` remains available as a handshake-only fallback:
+
+  ```ts
+  const ws = new WebSocket(`wss://example.com/browser/my-agent/stream?threadId=${threadId}&apiKey=${token}`);
+  ```
+
+  A token in a URL can be retained in proxy and access logs, so prefer the ticket flow, and pass a short-lived token if you use this fallback. The mint endpoint, the session probe, and the close endpoint also accept the token through the `Authorization` header.
+
+  Studio's browser view follows the same rule: when Studio is configured with an `Authorization` header it requests an upgrade ticket for each connection, so a deployment that authenticates with a header keeps its live view instead of losing it to a `401`. Deployments that sign users in with a session cookie are unaffected.
+
+  `setupBrowserStream` also accepts an optional `allowedOrigins` allowlist, in the same shape as Hono's `cors.origin`, and refuses an upgrade from any other origin with `403` before authentication runs. Upgrades from the server's own origin are always allowed, since a CORS allowlist names other origins and Studio is often served by the same server; this check compares the host and not the scheme. The deployer forwards `server.cors.origin` when it is explicitly configured.
+
+  **Direct callers of `setupBrowserStream`:** the config now requires the `mastra` instance so the browser routes can be authenticated.
+
+  Before:
+
+  ```ts
+  await setupBrowserStream(app, { getToolset });
+  ```
+
+  After:
+
+  ```ts
+  await setupBrowserStream(app, { mastra, getToolset });
+  ```
+
+- Updated dependencies [[`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`9cb6843`](https://github.com/mastra-ai/mastra/commit/9cb6843a8a39ab2e12498b0c08c9f4cdcefd9cea), [`9277d8e`](https://github.com/mastra-ai/mastra/commit/9277d8ef26ad2f08bfbae89d78d409fb91c95c8d), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`f035c28`](https://github.com/mastra-ai/mastra/commit/f035c28eac750f0823ca60b12897129ed2765051), [`680d914`](https://github.com/mastra-ai/mastra/commit/680d9141c851e8eb6fcd2d3c3fbadf05a0f1011d), [`cbb7c05`](https://github.com/mastra-ai/mastra/commit/cbb7c05d43718a57a48e600542efdb9db809d458), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b)]:
+  - @mastra/core@1.79.0-alpha.3
+  - @mastra/deployer@1.79.0-alpha.3
+
+## 1.34.3-alpha.2
+
+### Patch Changes
+
+- Added typed support for the new agent controller thread ownership route (`POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner`). ([#27043](https://github.com/mastra-ai/mastra/pull/27043))
+
+  ```http
+  POST /agent-controller/code/sessions/resource-1/threads/thread-1/owner
+  → { "ok": true, "ownerId": "user-123" }
+  ```
+
+- Platform sign-ins started from the CLI now include which command opened them (`mastra create` or any other `mastra` command), so new Mastra accounts can be attributed to the command that created them. ([#27229](https://github.com/mastra-ai/mastra/pull/27229))
+
+- Added the credential that answered each finished reply next to its model in Factory chats, such as "Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max", "Your Claude Pro/Max", or "Organization Anthropic API key". The label is recorded when the reply is written, so it stays accurate after the thread's credential scope changes. Replies written before this change show only the model. ([#27162](https://github.com/mastra-ai/mastra/pull/27162))
+
+- Fixed Factory project CLI metadata to include the `reviewTestChecksEnabled` and `selfReviewEnabled` settings. ([#27322](https://github.com/mastra-ai/mastra/pull/27322))
+
+- Factory reviews can now report their test results as a `Factory Review / tests` check on the pull request's head commit. On GitHub this is a check run, and on GitLab it is a commit status. The review agent posts an in-progress check when it starts its test plan and a final pass or fail result when the tests finish. ([#27129](https://github.com/mastra-ai/mastra/pull/27129))
+
+  This is off by default. To turn it on for a project, open **Automation settings** on the board and switch on **Publish review test checks**. While it is off, the test report comment is still posted.
+
+  After the tests finish, the review agent also posts a separate **Factory test report** comment on the pull request. The comment recaps what was tested, gives each command's result, and links to the check.
+
+- Work items now get an independent self-review before their pull or merge request opens. After Building, the builder pushes the branch and moves the card to Review without opening a PR. A separate review agent tests and reviews the branch there with the `factory-self-review` skill, using the same bar as PR review. If it requests changes, the card goes back to Building with the findings. If it approves, the card stays in Review and the builder opens the PR from the approved head, with the test report in the body. ([#27129](https://github.com/mastra-ai/mastra/pull/27129))
+
+  Factory enforces this on the server: a Work-bound session cannot open a change request until self-review has approved the exact branch head being proposed. After three request-changes rounds, the card parks in Intake for a person to decide; agents cannot move it until someone does. Cards that already have an open PR keep their current flow.
+
+  Self-review is off by default. Turn it on per project with the "Self-review before pull requests" switch in Automation settings. While it is off, the builder opens the PR directly from Building, as before.
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`18c2137`](https://github.com/mastra-ai/mastra/commit/18c213722066a3bae851a5c807f4db0d11fe56a4), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37)]:
+  - @mastra/core@1.79.0-alpha.2
+  - @mastra/deployer@1.79.0-alpha.2
+
 ## 1.34.3-alpha.1
 
 ### Patch Changes

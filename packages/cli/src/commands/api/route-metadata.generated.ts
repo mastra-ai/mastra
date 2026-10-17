@@ -6673,6 +6673,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "alwaysAllowCategory",
       "approved",
       "requestContext",
       "toolCallId"

@@ -1,5 +1,15 @@
 # @mastra/fastembed
 
+## 1.3.4-alpha.1
+
+### Patch Changes
+
+- Fixed model downloads contaminating standard output, including Hugging Face download messages for dense and sparse models. Download notices use standard error, and quiet downloads remain silent. ([#26882](https://github.com/mastra-ai/mastra/pull/26882))
+
+- Added a truncation warning to the FastEmbed AI SDK v3 models. ([#27315](https://github.com/mastra-ai/mastra/pull/27315))
+
+  The models now warn when an input exceeds the 512-token window. Before, FastEmbed dropped the extra text without notice. Split long text into smaller chunks to embed all of it.
+
 ## 1.3.4-alpha.0
 
 ### Patch Changes

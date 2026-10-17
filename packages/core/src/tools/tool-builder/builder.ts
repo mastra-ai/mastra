@@ -323,7 +323,7 @@ export class CoreToolBuilder extends MastraBase {
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
       if (isBackgroundEligible || this.isResumableTool) {
         let schema = this.originalTool.inputSchema;
-        if (typeof schema === 'function') {
+        if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
           schema = schema();
         }
         if (!schema) {
@@ -402,7 +402,7 @@ export class CoreToolBuilder extends MastraBase {
         z.object({});
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -419,7 +419,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     // If schema is a function, call it to get the actual schema
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -436,7 +436,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     let schema = originalSchema;
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -461,7 +461,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -476,7 +476,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.resumeSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -490,7 +490,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.suspendSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 

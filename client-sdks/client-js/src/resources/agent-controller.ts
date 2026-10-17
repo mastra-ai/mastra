@@ -640,7 +640,10 @@ export class AgentControllerSession extends BaseResource {
   async approveTool(
     toolCallId: string,
     approved: boolean,
-    options?: AgentControllerRequestOptions,
+    options?: AgentControllerRequestOptions & {
+      /** Also grant the tool's category to the call's thread ("always allow"). */
+      alwaysAllowCategory?: boolean;
+    },
   ): Promise<AgentControllerCommandAck> {
     const requestContext = parseClientRequestContext(options?.requestContext);
     return this.request<AgentControllerCommandAck>(this.url(`${this.base()}/tool-approval`), {
@@ -648,7 +651,12 @@ export class AgentControllerSession extends BaseResource {
       // Not idempotent: a replay after a lost response would be rejected as not_pending
       // and misreport an applied decision as ignored.
       retries: 0,
-      body: { toolCallId, approved, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        toolCallId,
+        approved,
+        ...(options?.alwaysAllowCategory ? { alwaysAllowCategory: true } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 

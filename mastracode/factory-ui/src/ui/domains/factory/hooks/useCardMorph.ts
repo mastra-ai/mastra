@@ -19,11 +19,15 @@ export interface CardMorph {
   closeDetails: () => void;
 }
 
-/** The size the panel grows out of, read off the live card rather than stored at open time. */
+/**
+ * The size the panel grows out of, read off the live card rather than stored at open time.
+ * A list row spans the page, so the panel starts from a reading width instead: stretched to the row,
+ * its few lines sat at opposite edges of a mostly empty box.
+ */
 export function cardMorphStyle(card: HTMLElement | null): CardMorphStyle {
   const rect = card?.getBoundingClientRect();
   if (!rect) return {};
-  return { '--board-card-w': `${rect.width}px`, '--board-card-h': `${rect.height}px` };
+  return { '--board-card-w': `min(${rect.width}px, 36rem)`, '--board-card-h': `${rect.height}px` };
 }
 
 /**

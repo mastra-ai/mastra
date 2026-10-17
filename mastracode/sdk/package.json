@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.15.0-alpha.1",
+  "version": "1.15.0-alpha.3",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -64,6 +64,7 @@
     "@ast-grep/napi": "^0.42.0",
     "@aws-sdk/credential-providers": "^3.1095.0",
     "@mastra/agent-browser": "workspace:*",
+    "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",

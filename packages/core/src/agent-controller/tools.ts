@@ -5,7 +5,7 @@ import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../channels/output-processor';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
-import { RequestContext } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import { askUserTool } from '../tools/builtin/ask-user';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { summarizeTaskCheck } from '../tools/builtin/task-tools';
@@ -266,6 +266,9 @@ Use this tool when:
               resourceId: forkedThread.resourceId,
             });
           }
+          // Reserved memory keys win over `streamMemory`, so re-point them at the fork too.
+          subagentRequestContext.set(MASTRA_THREAD_ID_KEY, forkedThread.id);
+          subagentRequestContext.set(MASTRA_RESOURCE_ID_KEY, forkedThread.resourceId);
           // The fork runs on the channel-bearing parent agent instance, so the
           // ChatChannelOutputProcessor is attached. Clear the inherited render
           // key so the subagent's stream never renders back to the chat
@@ -330,6 +333,8 @@ Use this tool when:
               resourceId: '',
             });
           }
+          subagentRequestContext.delete(MASTRA_THREAD_ID_KEY);
+          subagentRequestContext.delete(MASTRA_RESOURCE_ID_KEY);
         }
 
         let model: MastraModelConfig;
