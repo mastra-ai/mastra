@@ -171,4 +171,50 @@ describe('DurableAgent beforeApproval hook (#26772)', () => {
     resumed.cleanup();
     initial.cleanup();
   });
+
+  it('rejects schema-invalid input before the approval gate (#26771)', async () => {
+    const execute = vi.fn(async () => 'proposed');
+    const propose = createTool({
+      id: 'propose',
+      description: 'Propose an amount',
+      inputSchema: z.object({ amount: z.number() }),
+      requireApproval: true,
+      execute,
+    });
+    const baseAgent = new Agent({
+      id: 'validate-before-approval-agent',
+      name: 'Validate Before Approval Agent',
+      instructions: 'Propose amounts.',
+      model: createToolCallThenTextModel({ name: 'propose', args: { amount: 'not-a-number' } }) as LanguageModelV2,
+      tools: { propose },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({ logger: false, storage: new MockStore(), agents: { validateAgent: durableAgent } });
+
+    const prep = await durableAgent.prepare('Propose');
+    const events = collectPubsubEvents(pubsub, prep.runId);
+    let finishData: unknown;
+    let suspended = false;
+    const { cleanup } = await durableAgent.stream('Propose', {
+      runId: prep.runId,
+      onSuspended: () => {
+        suspended = true;
+      },
+      onFinish: data => {
+        finishData = data;
+      },
+    });
+    await vi.waitFor(() => expect(finishData).toBeDefined());
+
+    const chunks = events.filter(e => e.type === AgentStreamEventTypes.CHUNK).map(e => (e as any).data);
+    expect(suspended).toBe(false);
+    expect(execute).not.toHaveBeenCalled();
+    expect(chunks.some(c => c?.type === 'tool-call-approval')).toBe(false);
+    expect(chunks.find(c => c?.type === 'tool-result')?.payload?.result).toMatchObject({
+      error: true,
+      message: expect.stringContaining('amount'),
+    });
+
+    cleanup();
+  });
 });
