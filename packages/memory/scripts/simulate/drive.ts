@@ -53,7 +53,7 @@ function requestContextWithOrg(organizationId: string, knowledgeResourceId?: str
  * quality through the real knowledge read/write boundary.
  */
 export async function replayCycles(options: ReplayOptions): Promise<ReplayResult> {
-  const store = await options.memory.storage.getStore('knowledge');
+  const store = await options.memory.getKnowledgeStore();
   if (!store) throw new Error('Replay requires a configured knowledge storage domain.');
   const config = options.subconscious.observation.find(agent => agent.name === CURATION_AGENT);
   if (!config) throw new Error(`Replay requires a Subconscious with a "${CURATION_AGENT}" observation agent.`);
@@ -65,7 +65,7 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
     requestContext,
     mainAgent: options.mainAgent,
   };
-  const scope = resolveCuratorScope(context);
+  const scopeIds = await resolveCuratorScope(options.memory, context);
   const curatorOutcomes: ReplayOutcome[] = [];
   const warnings: string[] = [];
 
@@ -80,7 +80,7 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
         options.memory,
         options.curatorMemory ?? options.memory,
         context,
-        scope,
+        scopeIds,
         config,
         options.subconscious,
       );
@@ -95,10 +95,8 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
       options.onEvent?.(`CURATOR cycle=${cycleIndex} thread=${options.threadId} outcome=failed`);
     }
   }
-  const nodes = await store.listNodes({ scope, limit: 1_000 });
-  const records = await Promise.all(
-    nodes.map(node => store.listKnowledgeAbout({ node: node.id, scope, limit: 1_000 })),
-  );
+  const nodes = (await store.listNodes({ scopeIds, limit: 1_000 })).filter(node => !node.isScope);
+  const records = await Promise.all(nodes.map(node => store.listRecords({ node: node.id, scopeIds, limit: 1_000 })));
   const knowledgeRecords = records.reduce((total, page) => total + page.records.length, 0);
 
   return {

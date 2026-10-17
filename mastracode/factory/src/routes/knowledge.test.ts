@@ -1,10 +1,5 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import {
-  InMemoryDB,
-  InMemoryKnowledgeStorage,
-  InMemoryStore,
-  KnowledgeUnsupportedCapabilityError,
-} from '@mastra/core/storage';
+import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, KnowledgeUnsupportedError } from '@mastra/core/storage';
 import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
@@ -786,7 +781,7 @@ describe('KnowledgeRoutes', () => {
   it('omits the structural tree only for adapters without the capability, never for storage failures', async () => {
     const unsupported = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     unsupported.listScopeNodes = async () => {
-      throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
+      throw new KnowledgeUnsupportedError();
     };
     const h1 = await createHarness({ knowledge: unsupported });
     const ok = await h1.app.request(`/web/factory/projects/${h1.projectId}/knowledge/scopes`);

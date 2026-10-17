@@ -1,3 +1,4 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -5,8 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Subconscious } from '../subconscious';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
-function createSemanticDependencies(ignoreFilters = false) {
+function createSemanticDependencies() {
   const indexes = new Set<string>();
   const documents = new Map<string, { vector: number[]; metadata: Record<string, unknown> }>();
   const vector = {
@@ -24,9 +26,10 @@ function createSemanticDependencies(ignoreFilters = false) {
     deleteVectors: vi.fn(async ({ ids }: { ids?: string[] }) => {
       ids?.forEach(id => documents.delete(id));
     }),
-    query: vi.fn(async ({ topK, filter }: any) =>
+    // The semantic index queries unfiltered and post-filters candidates by
+    // their scope_ids metadata, so the store mock returns every document.
+    query: vi.fn(async ({ topK }: any) =>
       [...documents.entries()]
-        .filter(([, document]) => ignoreFilters || filter.scope_key.$in.includes(document.metadata.scope_key))
         .map(([id, document], index) => ({ id, score: 1 - index / 100, metadata: document.metadata }))
         .slice(0, topK),
     ),
@@ -43,10 +46,12 @@ function toolContext(threadId = 'alpha') {
   return { agent: { threadId, resourceId: 'user-42' }, requestContext } as any;
 }
 
-async function createMemory(tools = true, ignoreFilters = false) {
-  const { vector, embedder } = createSemanticDependencies(ignoreFilters);
+async function createMemory(tools = true) {
+  const { vector, embedder } = createSemanticDependencies();
+  const storage = new InMemoryStore();
   const memory = new Memory({
-    storage: new InMemoryStore(),
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage }),
     vector,
     embedder,
     options: {
@@ -57,6 +62,11 @@ async function createMemory(tools = true, ignoreFilters = false) {
     },
   });
   return memory;
+}
+
+async function scopeIdsFor(memory: Memory, threadId = 'alpha') {
+  const context = toolContext(threadId);
+  return resolveKnowledgeScopeIds(memory, context);
 }
 
 describe('Subconscious knowledge read tools', () => {
@@ -70,36 +80,36 @@ describe('Subconscious knowledge read tools', () => {
   it('reads and browses visible records without exposing a sibling thread', async () => {
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
+    const alphaScopeIds = await scopeIdsFor(memory);
+    const betaScopeIds = await scopeIdsFor(memory, 'beta');
     const shared = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: [alphaScopeIds[1]!],
     });
     await store.createNode({
       name: 'Shared Brief',
       kind: 'note',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: [alphaScopeIds[1]!],
     });
     const secret = await store.createNode({
       name: 'Beta Secret',
       kind: 'secret',
-      scope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      scopeIds: [betaScopeIds[2]!],
     });
-    await store.appendKnowledge({
-      node: shared.id,
+    await store.createRecord({
+      node: shared,
       text: '[[Maya Chen]] owns Atlas.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'alpha',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: [alphaScopeIds[1]!],
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
-    await store.appendKnowledge({
-      node: secret.id,
+    await store.createRecord({
+      node: secret,
       text: 'Sibling-only information.',
-      scope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      scopeIds: [betaScopeIds[2]!],
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
 
     const tools = memory.listTools();
@@ -129,66 +139,67 @@ describe('Subconscious knowledge read tools', () => {
   });
 
   it('combines lexical and semantic results while filtering sibling-private vectors even when the adapter ignores filters', async () => {
-    const memory = await createMemory(true, true);
+    const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
-    await store.createNode({ name: 'Project Atlas', kind: 'project', scope: ['org:acme', 'resource:user-42'] });
+    const alphaScopeIds = await scopeIdsFor(memory);
+    const betaScopeIds = await scopeIdsFor(memory, 'beta');
+    await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [alphaScopeIds[1]!] });
     await store.createNode({
       name: 'Deployment runbook',
       kind: 'document',
-      content: 'The cobalt rollout procedure.',
-      scope: ['org:acme', 'resource:user-42'],
+      metadata: { description: 'The cobalt rollout procedure.' },
+      scopeIds: [alphaScopeIds[1]!],
     });
     const privateParent = await store.createNode({
       name: 'Beta Secret',
       kind: 'secret',
-      scope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      scopeIds: [betaScopeIds[2]!],
     });
-    await store.appendKnowledge({
-      node: privateParent.id,
+    const privateRecord = await store.createRecord({
+      node: privateParent,
       text: 'The cobalt procedure is shared.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      scopeIds: [betaScopeIds[2]!],
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
 
-    await memory.drainKnowledgeSemanticIndex(['org:acme', 'resource:user-42', 'thread:beta']);
+    await memory.drainKnowledgeSemanticIndex(betaScopeIds);
     const tools = memory.listTools();
     const result = await tools.knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
     expect((result as any).results).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'node', name: 'Deployment runbook' })]),
     );
     expect((result as any).results.map((result: any) => result.name)).not.toContain('Beta Secret');
-    expect((result as any).results).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'record', name: '(private node)' })]),
-    );
+    expect((result as any).results.map((result: any) => result.id)).not.toContain(privateRecord.id);
     expect((result as any).results.some((result: any) => result.sources.includes('semantic'))).toBe(true);
   });
 
   it('searches every visible scope with one vector query', async () => {
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
+    const scopeIds = await scopeIdsFor(memory);
     await store.createNode({
       name: 'Deployment runbook',
       kind: 'document',
-      content: 'The cobalt rollout procedure.',
-      scope: ['org:acme', 'resource:user-42'],
+      metadata: { description: 'The cobalt rollout procedure.' },
+      scopeIds: [scopeIds[1]!],
     });
     await store.createNode({
       name: 'Alpha notes',
       kind: 'document',
-      content: 'Cobalt rollout notes for this session.',
-      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      metadata: { description: 'Cobalt rollout notes for this session.' },
+      scopeIds: [scopeIds[2]!],
     });
-    await memory.drainKnowledgeSemanticIndex();
+    await memory.drainKnowledgeSemanticIndex(scopeIds);
     const vector = memory.vector!;
 
     const result = await memory.listTools().knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
 
     expect(vector.query).toHaveBeenCalledTimes(1);
-    expect(vector.query).toHaveBeenCalledWith(
-      expect.objectContaining({ filter: { scope_key: { $in: expect.any(Array) } } }),
-    );
+    // Visibility is enforced by post-filtering scope_ids metadata, not by a
+    // vector-store filter, because subset-containment visibility over scope-id
+    // sets cannot be expressed as an enumerable key filter.
+    expect(vector.query).toHaveBeenCalledWith(expect.not.objectContaining({ filter: expect.anything() }));
     const semanticNames = (result as any).results
       .filter((result: any) => result.sources.includes('semantic'))
       .map((result: any) => result.name);

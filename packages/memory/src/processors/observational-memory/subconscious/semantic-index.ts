@@ -1,15 +1,10 @@
 import type {
-  KnowledgeScope,
+  KnowledgeScopeIds,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import {
-  canonicalizeKnowledgeScope,
-  isKnowledgeScopeVisible,
-  knowledgeScopeKey,
-  knowledgeVisibleScopeKeys,
-} from '@mastra/core/storage';
+import { canonicalizeKnowledgeScopeIds, isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -29,12 +24,14 @@ export interface KnowledgeSemanticIndexCoordinatorConfig {
   embedderOptions?: MastraEmbeddingOptions;
   workerId?: string;
   batchSize?: number;
+  /** How long another worker's claim must sit before this coordinator may reclaim it. Defaults to the storage adapter's timeout. */
+  claimTimeoutMs?: number;
 }
 
 interface KnowledgeSemanticDocument {
   text: string;
   name: string;
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
   recordId: string;
   type: KnowledgeSemanticDocumentType;
 }
@@ -46,6 +43,7 @@ export class KnowledgeSemanticIndexCoordinator {
   readonly #embedderOptions?: MastraEmbeddingOptions;
   readonly #workerId: string;
   readonly #batchSize: number;
+  readonly #claimTimeoutMs: number | undefined;
   readonly #draining = new Map<string, Promise<number>>();
 
   constructor(config: KnowledgeSemanticIndexCoordinatorConfig) {
@@ -55,21 +53,22 @@ export class KnowledgeSemanticIndexCoordinator {
     this.#embedderOptions = config.embedderOptions;
     this.#workerId = config.workerId ?? `knowledge-index-${crypto.randomUUID()}`;
     this.#batchSize = config.batchSize ?? DEFAULT_BATCH_SIZE;
+    this.#claimTimeoutMs = config.claimTimeoutMs;
   }
 
-  async drain(scope?: KnowledgeScope): Promise<number> {
-    const key = scope?.join('\u001f') ?? '*';
+  async drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
+    const key = scopeIds?.join('\u001f') ?? '*';
     const active = this.#draining.get(key);
     if (active) return active;
-    const draining = this.#drain(scope).finally(() => {
+    const draining = this.#drain(scopeIds).finally(() => {
       this.#draining.delete(key);
     });
     this.#draining.set(key, draining);
     return draining;
   }
 
-  async search(query: string, scope: KnowledgeScope, limit = 10) {
-    await this.drain(scope);
+  async search(query: string, scopeIds: KnowledgeScopeIds, limit = 10) {
+    await this.drain(scopeIds);
     const result = await this.#embedder.doEmbed({
       values: [query],
       ...(this.#embedderOptions ?? {}),
@@ -84,19 +83,14 @@ export class KnowledgeSemanticIndexCoordinator {
       );
     }
 
-    const candidates = await this.#vector.query({
-      indexName,
-      queryVector: embedding,
-      topK: limit,
-      filter: { scope_key: { $in: knowledgeVisibleScopeKeys(scope) } },
-    });
-    const deduped = new Map<string, (typeof candidates)[number]>();
-    for (const candidate of candidates) {
-      const candidateScope = candidate.metadata?.scope;
+    const batches = [await this.#vector.query({ indexName, queryVector: embedding, topK: limit * 4 })];
+    const deduped = new Map<string, (typeof batches)[number][number]>();
+    for (const candidate of batches.flat()) {
+      const candidateScope = candidate.metadata?.scope_ids;
       if (!Array.isArray(candidateScope)) continue;
       let visible = false;
       try {
-        visible = isKnowledgeScopeVisible(canonicalizeKnowledgeScope(candidateScope.map(String)), scope);
+        visible = isKnowledgeScopeVisible(canonicalizeKnowledgeScopeIds(candidateScope.map(String)), scopeIds);
       } catch {
         continue;
       }
@@ -109,18 +103,19 @@ export class KnowledgeSemanticIndexCoordinator {
       .slice(0, limit);
   }
 
-  async #drain(scope?: KnowledgeScope): Promise<number> {
+  async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
     let processed = 0;
     for (let batch = 0; batch < MAX_DRAIN_BATCHES; batch++) {
       const entries = await this.#knowledge.claimSemanticOutbox({
         workerId: this.#workerId,
         limit: this.#batchSize,
-        scope,
+        claimTimeoutMs: this.#claimTimeoutMs,
+        scopeIds,
       });
       if (entries.length === 0) {
         const [pending, processing] = await Promise.all([
-          this.#knowledge.listSemanticOutbox({ status: 'pending', scope, limit: 1 }),
-          this.#knowledge.listSemanticOutbox({ status: 'processing', scope, limit: 1 }),
+          this.#knowledge.listSemanticOutbox({ status: 'pending', scopeIds, limit: 1 }),
+          this.#knowledge.listSemanticOutbox({ status: 'processing', scopeIds, limit: 1 }),
         ]);
         if (pending.length > 0 || processing.length > 0) {
           throw new StaleKnowledgeSemanticIndexError(
@@ -134,7 +129,12 @@ export class KnowledgeSemanticIndexCoordinator {
         const entry = entries[index]!;
         try {
           await this.#apply(entry);
-          await this.#knowledge.completeSemanticOutbox({ ids: [entry.id], workerId: this.#workerId });
+          const completed = await this.#knowledge.completeSemanticOutbox({ ids: [entry.id], workerId: this.#workerId });
+          // Our claim expired and another worker finished this entry; the write above may have
+          // overwritten its newer vector, so re-apply from current storage state to converge.
+          // Adapters published before completions were reported return nothing; treat that as held.
+          if (Array.isArray(completed) && !completed.includes(entry.id))
+            await this.#apply({ ...entry, operation: 'upsert' });
           processed++;
         } catch (error) {
           await this.#knowledge.releaseSemanticOutbox({
@@ -191,29 +191,28 @@ export class KnowledgeSemanticIndexCoordinator {
   async #loadDocument(entry: KnowledgeSemanticOutboxEntry): Promise<KnowledgeSemanticDocument | null> {
     if (entry.documentType === 'node') {
       const node = await this.#knowledge.getNode(entry.documentId.slice('knowledge:node:'.length));
-      if (!node || node.mergedInto) return null;
+      if (!node) return null;
+      const description = typeof node.metadata?.description === 'string' ? node.metadata.description : undefined;
       return {
-        text: node.description
-          ? `${node.name}\n${node.description}\n${node.content ?? ''}`
-          : `${node.name}\n${node.content ?? ''}`,
+        text: description ? `${node.name}\n${description}` : node.name,
         name: node.name,
-        scope: node.scope,
+        scopeIds: await this.#knowledge.getNodeScopeIds(node.id),
         recordId: node.id,
         type: 'node',
       };
     }
-    const record = await this.#knowledge.getKnowledge({
+    const record = await this.#knowledge.getRecord({
       id: entry.documentId.slice('knowledge:record:'.length),
       includeDeleted: true,
     });
     if (!record || record.deletedAt) return null;
-    const node = await this.#knowledge.getNode(record.node);
+    const node = await this.#knowledge.getNode(record.nodeId);
     if (!node) return null;
     return {
       text: `${node.name}\n${record.text}`,
       name: node.name,
-      scope: record.scope,
-      recordId: node.id,
+      scopeIds: await this.#knowledge.getRecordScopeIds(record.id),
+      recordId: record.id,
       type: 'record',
     };
   }
@@ -241,14 +240,9 @@ export class KnowledgeSemanticIndexCoordinator {
       document_type: document.type,
       record_id: document.recordId,
       name: document.name,
-      scope: [...document.scope],
-      scope_key: knowledgeScopeKey(document.scope),
+      scope_ids: [...document.scopeIds],
       text: document.text,
     };
-    for (const entry of document.scope) {
-      const separator = entry.indexOf(':');
-      metadata[`scope_${entry.slice(0, separator)}`] = entry.slice(separator + 1);
-    }
     return metadata;
   }
 }

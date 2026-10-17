@@ -24,10 +24,14 @@ describe('Knowledge structure reconciliation', () => {
 
   it('applies the node description bound to scope descriptions', () => {
     expect(() =>
-      validateKnowledgeStructurePlan({ scopes: [{ address: 'scope:a', name: 'A', description: 'x'.repeat(401) }] }),
+      validateKnowledgeStructurePlan({
+        scopes: [{ address: 'scope:a', name: 'A', metadata: { description: 'x'.repeat(401) } }],
+      }),
     ).toThrow('Knowledge node description exceeds the 400 UTF-16 code unit limit');
     expect(() =>
-      validateKnowledgeStructurePlan({ scopes: [{ address: 'scope:a', name: 'A', description: 'x'.repeat(400) }] }),
+      validateKnowledgeStructurePlan({
+        scopes: [{ address: 'scope:a', name: 'A', metadata: { description: 'x'.repeat(400) } }],
+      }),
     ).not.toThrow();
   });
 
@@ -52,11 +56,12 @@ describe('Knowledge structure reconciliation', () => {
         },
       ),
     ).toEqual({
+      retrofit: false,
       scopes: [
         {
           address: 'agent:weather:public',
           name: 'public',
-          description: 'Public agent knowledge',
+          metadata: { description: 'Public agent knowledge' },
           parentAddresses: ['org:acme'],
           grants: [
             { scopeRefAddress: 'resource:weather', role: 'owner', canSuggest: undefined },
@@ -65,7 +70,6 @@ describe('Knowledge structure reconciliation', () => {
           ],
         },
       ],
-      retrofit: false,
     });
   });
 
@@ -88,18 +92,18 @@ describe('Knowledge structure reconciliation', () => {
     for (const orgId of ['a', 'b']) {
       const org = `org:${orgId}`;
       expect(materializeKnowledgeScopePlan(scopeTypes, { address: org, contextualScopeAddress: org }).scopes).toEqual([
-        { address: org, name: orgId, description: undefined, parentAddresses: undefined, grants: [] },
+        { address: org, name: orgId, metadata: undefined, parentAddresses: undefined, grants: [] },
         {
           address: `${org}:shared`,
           name: 'Shared',
-          description: 'Shared org knowledge',
+          metadata: { description: 'Shared org knowledge' },
           parentAddresses: [org],
           grants: [{ scopeRefAddress: org, role: 'owner', canSuggest: undefined }],
         },
         {
           address: `machines:${orgId}`,
           name: 'Machines',
-          description: undefined,
+          metadata: undefined,
           parentAddresses: [org],
           grants: [
             { scopeRefAddress: org, role: 'mirror', canSuggest: undefined },
@@ -148,21 +152,21 @@ describe('Knowledge structure reconciliation', () => {
 
   it('treats provisional companions as optional explicit host configuration', () => {
     const input = {
-      address: 'thread:alpha:uncurated',
-      contextualScopeAddress: 'thread:alpha',
-      parentAddresses: ['thread:alpha'],
-      parameters: { threadId: 'alpha' },
+      address: 'resource:project-1:thread:alpha:uncurated',
+      contextualScopeAddress: 'resource:project-1:thread:alpha',
+      parentAddresses: ['resource:project-1:thread:alpha'],
+      parameters: { resourceId: 'project-1', threadId: 'alpha' },
     };
 
     const unconfigured = materializeKnowledgeScopePlan(undefined, input).scopes[0]!;
-    expect(unconfigured.description).toBeUndefined();
+    expect(unconfigured.metadata).toBeUndefined();
     expect(unconfigured.grants).not.toContainEqual(expect.objectContaining({ role: 'mirror' }));
 
     expect(
       materializeKnowledgeScopePlan(
         {
-          'thread:$threadId:uncurated': {
-            access: [{ principal: 'thread:$threadId', role: 'mirror' }],
+          'resource:$resourceId:thread:$threadId:uncurated': {
+            access: [{ principal: 'resource:$resourceId:thread:$threadId', role: 'mirror' }],
             description: 'Provisional session findings awaiting review.',
           },
         },
@@ -171,10 +175,10 @@ describe('Knowledge structure reconciliation', () => {
     ).toMatchObject({
       scopes: [
         {
-          address: 'thread:alpha:uncurated',
-          description: 'Provisional session findings awaiting review.',
-          parentAddresses: ['thread:alpha'],
-          grants: [{ scopeRefAddress: 'thread:alpha', role: 'mirror' }],
+          address: 'resource:project-1:thread:alpha:uncurated',
+          metadata: { description: 'Provisional session findings awaiting review.' },
+          parentAddresses: ['resource:project-1:thread:alpha'],
+          grants: [{ scopeRefAddress: 'resource:project-1:thread:alpha', role: 'mirror' }],
         },
       ],
     });
@@ -214,6 +218,34 @@ describe('Knowledge structure reconciliation', () => {
           grants: [{ scopeRefAddress: 'org:acme', role: 'owner' }],
         },
       ],
+    });
+  });
+
+  describe('custom scope ownership', () => {
+    const ownerGrants = (plan: ReturnType<typeof materializeKnowledgeScopePlan>, address: string) =>
+      plan.scopes.find(scope => scope.address === address)!.grants?.filter(grant => grant.role === 'owner') ?? [];
+
+    it('grants no owner on a custom scope materialized from its own address', () => {
+      const plan = materializeKnowledgeScopePlan(undefined, {
+        address: 'team:core',
+        contextualScopeAddress: 'team:core',
+      });
+      expect(ownerGrants(plan, 'team:core')).toEqual([]);
+    });
+
+    it('grants no owner to the context that vouched a custom scope', () => {
+      const plan = materializeKnowledgeScopePlan(undefined, {
+        address: 'team:core',
+        contextualScopeAddress: 'resource:alice',
+      });
+      expect(ownerGrants(plan, 'team:core')).toEqual([]);
+    });
+
+    it('keeps the built-in owner grant on identity scope types', () => {
+      for (const address of ['org:acme', 'resource:alice', 'resource:alice:thread:t-1']) {
+        const plan = materializeKnowledgeScopePlan(undefined, { address, contextualScopeAddress: address });
+        expect(ownerGrants(plan, address)).toEqual([expect.objectContaining({ scopeRefAddress: address })]);
+      }
     });
   });
 });
