@@ -661,7 +661,10 @@ export function createDurableToolCallStep() {
       // Hold suspension chunks/events until the engine has saved the suspended
       // snapshot, when the running engine supports that (#26435).
       const publishAfterPersist = async (publish: () => Promise<void>) => {
-        const pending = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.pendingSuspensionEvents;
+        const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+        // The run is suspending again, so a later resume of it is no longer a duplicate (#27365).
+        if (entry) delete entry.resumeFence;
+        const pending = entry?.pendingSuspensionEvents;
         if (pending) pending.push(publish);
         else await publish();
       };

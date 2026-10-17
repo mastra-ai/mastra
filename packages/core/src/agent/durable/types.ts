@@ -979,6 +979,15 @@ export interface RunRegistryEntry {
    */
   executionFence?: ExecutionFence;
   /**
+   * Execution claimed by the `resume()` currently driving this run in this
+   * process, and the tool call it resumes. A second resume of the same tool
+   * call fails fast while that execution is unsettled.
+   * @internal
+   */
+  resumeFence?: ExecutionFence;
+  /** @internal See {@link RunRegistryEntry.resumeFence}. */
+  resumeToolCallId?: string;
+  /**
    * Set while an engine that persists the suspended snapshot before returning
    * is executing. The tool-call step queues suspension chunks/events here so
    * they are published only after the snapshot is saved; otherwise a crash in

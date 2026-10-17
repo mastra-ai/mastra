@@ -73,7 +73,7 @@ The server maps the first five to 409 so clients can tell a run-state conflict f
 
 ## Timing
 
-**After a hard crash** the crashed execution's claim stays live until it expires: 30s after its last renewal, on the store's clock. Renewals happen every 10s, so a run becomes recoverable 20–30s after the crash. Until then a plain `recover()` gets `DURABLE_AGENT_RUN_ACTIVE`; `force` takes it at once. For a run without an ownership record, the wait is the thread lease's TTL (15s by default).
+**After a hard crash** the crashed execution's claim stays live until it expires: one lease TTL after its last renewal, on the store's clock. The TTL follows `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15s by default) and renewals happen every third of it, so with defaults a run becomes recoverable 10–15s after the crash. Until then a plain `recover()` gets `DURABLE_AGENT_RUN_ACTIVE`; `force` takes it at once. For a run without an ownership record, the wait is the thread lease's TTL (15s by default).
 
 **After a graceful shutdown** `Mastra.shutdown()` abandons executions still running when its drain deadline passes and releases their claims, so the next process recovers them immediately.
 

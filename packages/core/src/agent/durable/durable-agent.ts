@@ -3298,7 +3298,24 @@ export class DurableAgent<
     // and event offset. The suspension chunk can arrive before the suspended
     // snapshot is persisted, and a late suspension event replayed into the new
     // segment would close it early.
-    const priorExecution = getRunRegistryEntry(runId, this.#mastra)?.workflowExecution;
+    const priorEntry = getRunRegistryEntry(runId, this.#mastra);
+    // Another resume of the same tool call is already running this run here:
+    // waiting for its whole segment would only end in the same lost race.
+    if (
+      resolvedOptions.toolCallId !== undefined &&
+      priorEntry?.resumeToolCallId === resolvedOptions.toolCallId &&
+      priorEntry.resumeFence !== undefined &&
+      ExecutionFence.getLocalActive(runId) === priorEntry.resumeFence
+    ) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_ALREADY_CLAIMED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it is already running.`,
+        details: { agentName: this.name, runId, toolCallId: resolvedOptions.toolCallId },
+      });
+    }
+    const priorExecution = priorEntry?.workflowExecution;
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
@@ -3345,18 +3362,32 @@ export class DurableAgent<
     }
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
-    const executionFence = await this.#claimExecution(runId, 'acquire', resumeRequestContext);
+    // Memory is covered only once the run is known to be resumable below, so a
+    // resume that lost the race never raises the memory fence past the winner.
+    const executionFence = await this.#claimExecution(runId, 'acquire');
     let initialToolCalls: ToolCallChunk[];
     let resumeOffset: number | 'latest';
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
-      const current = await (
-        await this.#mastra?.getStorage()?.getStore('workflows')
-      )?.loadWorkflowSnapshot({
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const current = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: DurableStepIds.AGENTIC_LOOP,
         runId,
       });
+      // The row is gone once a run finishes (possibly in another process). When
+      // this process already ran a segment of the run (settled above), a missing
+      // row means there is nothing left to resume; resuming anyway would write a
+      // fresh `pending` row. A run that was only prepared has no row yet.
+      if (workflowsStore && !current && priorExecution) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}) could not find a suspended run for this runId. The run has already finished (for example, an earlier approval or resume already handled it), never suspended, or the runId is invalid.`,
+          details: { agentName: this.name, runId },
+        });
+      }
       // Only a settled run counts: a just-suspended run's row can still read `running`
       // briefly, because the suspension chunk is emitted before the row is durable.
       if (current && !['suspended', 'running', 'pending', 'waiting'].includes(current.status)) {
@@ -3368,6 +3399,7 @@ export class DurableAgent<
           details: { agentName: this.name, runId },
         });
       }
+      if (resumeRequestContext) await this.#coverMemory(executionFence, resumeRequestContext);
       await this.#loadRecalledMessages(runId, coldSnapshot, resumeRequestContext);
       initialToolCalls = await this.#loadSuspendedToolCalls(runId);
       // Skip events already broadcast by the original run (e.g. the SUSPENDED
@@ -3381,7 +3413,10 @@ export class DurableAgent<
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
     for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
-      if (reg) reg.executionFence = executionFence;
+      if (!reg) continue;
+      reg.executionFence = executionFence;
+      reg.resumeFence = executionFence;
+      reg.resumeToolCallId = resolvedOptions.toolCallId;
     }
 
     // Install a fresh abort controller for the resumed segment. The original
@@ -3429,6 +3464,8 @@ export class DurableAgent<
     // closure can unsubscribe the pubsub reader (via streamCleanup) from both
     // the auto-cleanup timer and the explicit cleanup() path — mirroring observe().
     let streamCleanup: (() => void) | undefined;
+    // Set when a concurrent resume ran the run first: the topic is that resume's.
+    let lostResumeRace = false;
 
     // Single cleanup path for both the auto-cleanup timer and the explicit
     // cleanup(). Revokes continuation before unsubscribing the pubsub reader,
@@ -3453,7 +3490,9 @@ export class DurableAgent<
         }
         if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
           globalRunRegistry.delete(runId);
-          if (!(globalEntryForAbort?.executionFence ?? executionFence).isLost()) this.#clearPubsubTopic(runId);
+          if (!lostResumeRace && !(globalEntryForAbort?.executionFence ?? executionFence).isLost()) {
+            this.#clearPubsubTopic(runId);
+          }
         }
       }
       cleanedUp = true;
@@ -3473,6 +3512,8 @@ export class DurableAgent<
     // Opened before the stream adapter so per-chunk processor spans parent under it.
     const origTraceId = entry.agentSpan?.traceId;
     const origSpanId = entry.agentSpan?.id;
+    // Spans this resume opened, ended by it alone if it turns out to have lost the run.
+    const ownResumeSpans: Array<{ error: (options: { error: Error; endSpan: boolean }) => void } | undefined> = [];
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.#wrappedAgent as Agent<string, any, any>;
@@ -3507,6 +3548,7 @@ export class DurableAgent<
           metadata: { runId, resumed: true },
           requestContext: resolvedOptions.requestContext,
         });
+        ownResumeSpans.push(resumeModelSpan, resumeAgentSpan);
         for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
@@ -3530,6 +3572,7 @@ export class DurableAgent<
       output,
       cleanup: createdStreamCleanup,
       detach: detachResumeStream,
+      fail: failResumeStream,
       waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
@@ -3622,15 +3665,22 @@ export class DurableAgent<
             );
           } catch (error) {
             // This resume saw the run suspended when it claimed it, so the workflow no longer
-            // being suspended means a concurrent resume ran it first.
+            // being suspended means a concurrent resume ran it first. The run, its topic and
+            // its spans belong to that resume: release the claim without writing run state
+            // and report the lost race to this caller only.
             if (error instanceof MastraError && error.id === 'WORKFLOW_RUN_NOT_SUSPENDED') {
-              throw new MastraError({
+              const lost = new MastraError({
                 id: 'AGENT_RESUME_ALREADY_CLAIMED',
                 domain: ErrorDomain.AGENT,
                 category: ErrorCategory.USER,
                 text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it already ran.`,
                 details: { agentName: this.name, runId },
               });
+              lostResumeRace = true;
+              await executionFence.settle(async () => {});
+              for (const span of ownResumeSpans) span?.error({ error: lost, endSpan: true });
+              await failResumeStream(lost);
+              return;
             }
             throw error;
           } finally {
