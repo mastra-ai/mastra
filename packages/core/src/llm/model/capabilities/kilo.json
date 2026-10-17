@@ -30,6 +30,7 @@
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
     "dots-studio/dots-3-note-preview:free",
+    "elorian/glimpse",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -304,6 +305,7 @@
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
     "dots-studio/dots-3-note-preview:free",
+    "elorian/glimpse",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -624,6 +626,7 @@
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
     "dots-studio/dots-3-note-preview:free",
+    "elorian/glimpse",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -1526,6 +1529,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "elorian/glimpse": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "~anthropic/claude-opus-latest": [

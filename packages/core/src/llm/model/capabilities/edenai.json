@@ -635,6 +635,7 @@
     "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
     "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",

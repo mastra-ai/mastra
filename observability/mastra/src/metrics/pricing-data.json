@@ -17862,8 +17862,8 @@
       },
       "amazon/qwen.qwen3-coder-next": {
         "cost": {
-          "input": 0.6,
-          "output": 1.44
+          "input": 0.5,
+          "output": 1.2
         }
       },
       "amazon/zai.glm-4.7-flash": {
@@ -18472,7 +18472,7 @@
         "cost": {
           "input": 1,
           "output": 2.7,
-          "cache_read": 0.05
+          "cache_read": 0.1
         }
       },
       "deepinfra/tencent/Hy3": {
@@ -28407,9 +28407,9 @@
       },
       "deepseek/deepseek-v3.2": {
         "cost": {
-          "input": 0.259,
-          "output": 0.8,
-          "cache_read": 0.14
+          "input": 0.28,
+          "output": 0.42,
+          "cache_read": 0.028
         }
       },
       "deepseek/deepseek-v3.2-exp": {
@@ -28464,6 +28464,13 @@
         "cost": {
           "input": 0,
           "output": 0
+        }
+      },
+      "elorian/glimpse": {
+        "cost": {
+          "input": 0.6,
+          "output": 3,
+          "cache_read": 0.06
         }
       },
       "fireworks/ember-1": {
@@ -30362,9 +30369,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.0825,
-          "output": 0.33,
-          "cache_read": 0.020625
+          "input": 0.132,
+          "output": 0.528,
+          "cache_read": 0.033
         }
       },
       "tencent/hy3-preview": {
@@ -30376,9 +30383,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -30620,9 +30627,9 @@
       },
       "z-ai/glm-4.7": {
         "cost": {
-          "input": 0.6,
-          "output": 2.2,
-          "cache_read": 0.11
+          "input": 0.54,
+          "output": 1.98,
+          "cache_read": 0.099
         }
       },
       "z-ai/glm-4.7-flash": {
@@ -30728,9 +30735,9 @@
       },
       "~deepseek/deepseek-flash-latest": {
         "cost": {
-          "input": 0.036,
-          "output": 0.45,
-          "cache_read": 0.0054
+          "input": 0.04,
+          "output": 0.55,
+          "cache_read": 0.009
         }
       },
       "~deepseek/deepseek-pro-latest": {
@@ -30742,9 +30749,9 @@
       },
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
-          "input": 0.01179,
-          "output": 0.45,
-          "cache_read": 0.01179
+          "input": 0.021,
+          "output": 0.528,
+          "cache_read": 0.0056
         }
       },
       "~google/gemini-flash-latest": {
@@ -30827,16 +30834,16 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.01782,
-          "output": 0.45,
-          "cache_read": 0.01125
+          "input": 0.06,
+          "output": 1.6,
+          "cache_read": 0.04
         }
       },
       "~z-ai/glm-latest": {
         "cost": {
-          "input": 0.0608,
-          "output": 4.4,
-          "cache_read": 0.0565
+          "input": 0.079,
+          "output": 4.8,
+          "cache_read": 0.078
         }
       }
     }
@@ -34164,14 +34171,6 @@
           }
         }
       },
-      "google-ai-studio/gemini-3.5-flash": {
-        "cost": {
-          "input": 1.5,
-          "output": 9,
-          "cache_read": 0.15,
-          "cache_write": 0.08333
-        }
-      },
       "google-ai-studio/gemini-3.5-flash-lite": {
         "cost": {
           "input": 0.3,
@@ -34181,14 +34180,6 @@
         }
       },
       "google-ai-studio/gemini-3.6-flash": {
-        "cost": {
-          "input": 0.75,
-          "output": 3.75,
-          "cache_read": 0.075,
-          "cache_write": 0.08333
-        }
-      },
-      "google-ai-studio/gemini-3.7-flash": {
         "cost": {
           "input": 0.75,
           "output": 3.75,
@@ -50653,9 +50644,9 @@
       },
       "deepseek/deepseek-v3.2": {
         "cost": {
-          "input": 0.259,
-          "output": 0.8,
-          "cache_read": 0.14
+          "input": 0.28,
+          "output": 0.42,
+          "cache_read": 0.028
         }
       },
       "deepseek/deepseek-v3.2-exp": {
@@ -50673,9 +50664,9 @@
       },
       "deepseek/deepseek-v4-flash-0731": {
         "cost": {
-          "input": 0.0131,
-          "output": 1.28,
-          "cache_read": 0.0131
+          "input": 0.07,
+          "output": 0.14,
+          "cache_read": 0.014
         }
       },
       "deepseek/deepseek-v4-flash-vision-exp": {
@@ -50687,9 +50678,9 @@
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
-          "input": 0.276834,
-          "output": 0.553668,
-          "cache_read": 0.02307
+          "input": 0.2088,
+          "output": 0.4176,
+          "cache_read": 0.0174
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
@@ -50701,15 +50692,22 @@
       },
       "deepseek/deepseek-v4.1-flash": {
         "cost": {
-          "input": 0.036,
-          "output": 0.45,
-          "cache_read": 0.0054
+          "input": 0.04,
+          "output": 0.55,
+          "cache_read": 0.009
         }
       },
       "dots-studio/dots-3-note-preview:free": {
         "cost": {
           "input": 0,
           "output": 0
+        }
+      },
+      "elorian/glimpse": {
+        "cost": {
+          "input": 0.6,
+          "output": 3,
+          "cache_read": 0.06
         }
       },
       "fireworks/ember-1": {
@@ -53045,9 +53043,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.0825,
-          "output": 0.33,
-          "cache_read": 0.020625
+          "input": 0.132,
+          "output": 0.528,
+          "cache_read": 0.033
         }
       },
       "tencent/hy3-preview": {
@@ -53059,9 +53057,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -53389,9 +53387,9 @@
       },
       "z-ai/glm-4.7": {
         "cost": {
-          "input": 0.6,
-          "output": 2.2,
-          "cache_read": 0.11
+          "input": 0.54,
+          "output": 1.98,
+          "cache_read": 0.099
         }
       },
       "z-ai/glm-4.7-flash": {
@@ -53437,9 +53435,9 @@
       },
       "z-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.01782,
-          "output": 0.45,
-          "cache_read": 0.01125
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03
         }
       },
       "z-ai/glm-5.3-flashx": {
@@ -53509,9 +53507,9 @@
       },
       "~deepseek/deepseek-flash-latest": {
         "cost": {
-          "input": 0.036,
-          "output": 0.45,
-          "cache_read": 0.0054
+          "input": 0.04,
+          "output": 0.55,
+          "cache_read": 0.009
         }
       },
       "~deepseek/deepseek-pro-latest": {
@@ -53523,9 +53521,9 @@
       },
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
-          "input": 0.01179,
-          "output": 0.45,
-          "cache_read": 0.01179
+          "input": 0.021,
+          "output": 0.528,
+          "cache_read": 0.0056
         }
       },
       "~google/gemini-flash-latest": {
@@ -53712,16 +53710,16 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.01782,
-          "output": 0.45,
-          "cache_read": 0.01125
+          "input": 0.06,
+          "output": 1.6,
+          "cache_read": 0.04
         }
       },
       "~z-ai/glm-latest": {
         "cost": {
-          "input": 0.0608,
-          "output": 4.4,
-          "cache_read": 0.0565
+          "input": 0.079,
+          "output": 4.8,
+          "cache_read": 0.078
         }
       }
     }
@@ -65448,6 +65446,13 @@
           "input": 0.6,
           "output": 2.4,
           "cache_read": 0.014
+        }
+      },
+      "elorian/glimpse": {
+        "cost": {
+          "input": 0.6,
+          "output": 3,
+          "cache_read": 0.06
         }
       },
       "fireworks/ember-1": {
