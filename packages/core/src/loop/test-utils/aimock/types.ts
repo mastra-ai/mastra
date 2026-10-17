@@ -322,6 +322,8 @@ export interface RunLoopScenarioOptions {
    * assert transform/redact behavior over the loop output.
    */
   outputProcessors?: any;
+  /** Forwarded to `agent.stream({ maxProcessorRetries })`. */
+  maxProcessorRetries?: number;
   /**
    * Input processors forwarded to `agent.stream({ inputProcessors })`. Run before
    * the user message reaches the model request — assert on `requests[0]`.

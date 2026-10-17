@@ -91,7 +91,9 @@ export async function createSharedAgent(
     | 'inputProcessors'
   > = {},
 ): Promise<{ agent: Agent; mastra: any }> {
-  return buildScenarioAgent({ llm, ...opts });
+  // Shared agents are resumed across calls, and a resumed run only sees
+  // processors registered on the agent, so always put inputProcessors there.
+  return buildScenarioAgent({ llm, ...opts, inputProcessorsOnAgent: true });
 }
 
 /**
@@ -123,7 +125,8 @@ async function buildScenarioAgent({
   inputProcessors,
   fsRouted,
   maxRetries,
-}: Pick<
+  inputProcessorsOnAgent,
+}: { inputProcessorsOnAgent?: boolean } & Pick<
   RunLoopScenarioOptions,
   | 'llm'
   | 'tools'
@@ -190,6 +193,7 @@ async function buildScenarioAgent({
         ...(errorProcessors ? { errorProcessors } : {}),
         ...(defaultOptions ? { defaultOptions } : {}),
         ...(maxRetries === undefined ? {} : { maxRetries }),
+        ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -214,7 +218,7 @@ async function buildScenarioAgent({
       // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
-      ...(isDurableEngineVariant(engine) && inputProcessors ? { inputProcessors } : {}),
+      ...((isDurableEngineVariant(engine) || inputProcessorsOnAgent) && inputProcessors ? { inputProcessors } : {}),
     });
   }
 
@@ -283,6 +287,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     structuredOutput,
     activeTools,
     outputProcessors,
+    maxProcessorRetries,
     inputProcessors,
     prepareStep,
     memory,
@@ -415,6 +420,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(structuredOutput ? { structuredOutput } : {}),
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors ? { outputProcessors } : {}),
+    ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     // Pass the scenario's error processors at call time so they form the complete list. Without
     // this, the agent's constructor list is the base and the shared stability defaults are added
