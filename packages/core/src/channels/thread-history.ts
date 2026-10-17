@@ -2,6 +2,7 @@ import type { Message, Thread } from 'chat';
 
 import type { ChannelLogContext } from './agent-channels';
 import { chatModule } from './chat-lazy';
+import { layoutBlockTexts } from './slack-blocks';
 
 /**
  * How far past the history window the first-mention walk counts omitted
@@ -35,10 +36,30 @@ export interface ThreadHistoryWindow {
   recent: Message[];
 }
 
-/** Rich text when the platform provided it, else the plain text. */
+/**
+ * Rich text when the platform provided it, else the plain text, followed by
+ * any Slack layout-block text (header, section, context, markdown) the
+ * message text doesn't already contain.
+ */
 export function messageText(message: Message): string {
   const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
-  return richText || message.text;
+  const base = richText || message.text;
+  const blocks = layoutBlockTexts(message.raw);
+  if (!blocks.length) return base;
+
+  const seen = [normalize(base ?? ''), normalize(message.text ?? '')].filter(Boolean);
+  const extra: string[] = [];
+  for (const block of blocks) {
+    const normalized = normalize(block);
+    if (seen.some(s => s.includes(normalized))) continue;
+    seen.push(normalized);
+    extra.push(block);
+  }
+  return [base, ...extra].filter(s => s?.trim()).join('\n\n');
+}
+
+function normalize(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 /** Gap marker between the thread's first message and the recent window, e.g. `[… 6 earlier Slack messages omitted]`. */
