@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { AgentSignalInput, MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { createSignal, MessageList } from '@mastra/core/agent';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/di';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
@@ -197,7 +197,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       },
     });
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -341,7 +341,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       },
     });
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -428,7 +428,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       },
     });
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,

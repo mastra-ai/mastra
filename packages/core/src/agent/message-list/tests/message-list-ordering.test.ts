@@ -80,7 +80,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
     }
   });
 
-  it('should preserve order when using toAISdkV5Messages-style conversion', () => {
+  it('should preserve order when using toAISdkMessages-style conversion', () => {
     const timestamp = new Date('2024-01-01T12:00:00.000Z');
 
     const messages: MastraDBMessage[] = [
@@ -110,7 +110,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       },
     ];
 
-    // This mimics what toAISdkV5Messages does
+    // This mimics what toAISdkMessages does
     const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     // Verify exact order preservation
@@ -215,7 +215,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       },
     ];
 
-    // This is what toAISdkV5Messages does
+    // This is what toAISdkMessages does
     const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     // Expected order:

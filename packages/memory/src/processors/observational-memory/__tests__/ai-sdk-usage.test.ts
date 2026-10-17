@@ -8,9 +8,9 @@
 
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { generateText, stepCountIs, tool } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { generateText, stepCountIs, tool } from '@mastra/core/ai';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -38,7 +38,7 @@ function createMockObserverModel() {
 Continue helping the user
 </suggested-response>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -62,7 +62,7 @@ Continue helping the user
 }
 
 function createMockActorModel(response: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -92,7 +92,7 @@ function createMockActorModel(response: string) {
  */
 function createMultiStepActorModel(finalResponse: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       if (callCount === 1) {

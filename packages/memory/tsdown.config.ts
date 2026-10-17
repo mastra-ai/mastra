@@ -11,9 +11,9 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@internal/ai-sdk-v5', '@internal/ai-v6', 'tokenx'],
+    alwaysBundle: ['tokenx'],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v5', 'tokenx']));
+    await generateTypes(process.cwd(), new Set(['tokenx']));
   },
 });

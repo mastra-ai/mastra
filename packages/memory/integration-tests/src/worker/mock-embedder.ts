@@ -1,4 +1,4 @@
-import type { EmbeddingModel } from 'ai';
+import type { EmbeddingModel } from '@mastra/core/ai';
 
 /**
  * A mock embedder for worker threads that satisfies the Memory constructor's embedder requirement

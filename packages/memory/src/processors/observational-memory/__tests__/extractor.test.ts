@@ -1,5 +1,5 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { coreFeatures } from '@mastra/core/features';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -835,7 +835,7 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
   }
 
   function createJsonModel(json: string) {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },

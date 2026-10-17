@@ -76,6 +76,7 @@ export default defineConfig({
     'src/network/index.ts',
     'src/network/vNext/index.ts',
     'src/vector/filter/index.ts',
+    'src/ai/test.ts',
     'src/test-utils/llm-mock.ts',
     'src/a2a/client.ts',
     'src/a2a/v1.ts',

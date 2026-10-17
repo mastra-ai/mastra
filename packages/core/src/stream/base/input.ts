@@ -1,4 +1,4 @@
-import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import type { LanguageModelV4StreamPart, SharedV4Warning } from '@ai-sdk/provider';
 import { MastraBase } from '../../base';
 import { attachModelStreamTransport, readModelStreamTransport } from '../types';
 import type { ChunkType, CreateStream, OnResult } from '../types';
@@ -74,7 +74,7 @@ export abstract class MastraModelInput extends MastraBase {
           const firstPart = first.done ? undefined : first.value;
           const streamStartWarnings =
             firstPart && (firstPart as { type?: unknown }).type === 'stream-start'
-              ? ((firstPart as { warnings?: unknown[] }).warnings ?? [])
+              ? ((firstPart as { warnings?: SharedV4Warning[] }).warnings ?? [])
               : [];
           const modelStream = new ReadableStream<LanguageModelV4StreamPart | Record<string, unknown>>({
             start(c) {

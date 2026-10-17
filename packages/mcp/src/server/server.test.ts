@@ -1,6 +1,6 @@
 import http from 'node:http';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -25,7 +25,7 @@ const createMockAgent = (name: string, description?: string) =>
     name,
     description,
     instructions: 'Mock agent',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doGenerate: async () => ({
         finishReason: 'stop',
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },

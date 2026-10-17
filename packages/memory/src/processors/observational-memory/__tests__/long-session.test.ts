@@ -5,8 +5,8 @@
  * (processInputStep / processOutputResult), exercising the full lifecycle:
  * buffering → activation → observation → reflection.
  */
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
@@ -100,7 +100,7 @@ function generateFiller(targetTokens: number, seed: string = ''): string {
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
     const originalDoGenerate = config.doGenerate;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       ...config,
       doGenerate: async () => {
         throw new Error('Unexpected doGenerate call — OM should use the stream path');
@@ -136,7 +136,7 @@ function createStreamCapableMockModel(config: Record<string, any>) {
     });
   }
 
-  return new MockLanguageModelV2(config);
+  return new MockLanguageModelV4(config);
 }
 
 /**

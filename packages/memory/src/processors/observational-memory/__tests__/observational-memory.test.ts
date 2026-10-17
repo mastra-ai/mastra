@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
@@ -235,7 +235,7 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
       ],
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -343,7 +343,7 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     const storage = createInMemoryStorage();
     const threadId = 'read-only-working-memory-thread';
     const resourceId = 'read-only-working-memory-resource';
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -412,7 +412,7 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
     const originalDoGenerate = config.doGenerate;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       ...config,
       // Replace doGenerate so any accidental generate-path call fails fast
       doGenerate: async () => {
@@ -449,7 +449,7 @@ function createStreamCapableMockModel(config: Record<string, any>) {
     });
   }
 
-  return new MockLanguageModelV2(config);
+  return new MockLanguageModelV4(config);
 }
 
 // =============================================================================
@@ -2348,7 +2348,7 @@ describe('Observer Agent Helpers', () => {
     const actorToolSets: unknown[] = [];
     let actorCallCount = 0;
 
-    const observerModel = new MockLanguageModelV2({
+    const observerModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         observerPrompts.push(prompt);
         return {
@@ -2370,7 +2370,7 @@ describe('Observer Agent Helpers', () => {
         };
       },
     });
-    const actorModel = new MockLanguageModelV2({
+    const actorModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt, tools }) => {
         actorToolSets.push(tools);
         actorCallCount += 1;
@@ -3717,7 +3717,7 @@ describe('Observer Agent Helpers', () => {
 
     it('preserves the exact actor model for unknown and custom providers', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const actorModel = new MockLanguageModelV4({ provider: 'custom-gateway', modelId: 'custom-model' });
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
 
       const resolved = await (om as any).resolveObservationModel(1, {
@@ -3729,7 +3729,7 @@ describe('Observer Agent Helpers', () => {
 
     it('falls back to the main agent model when no invocation model was captured', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const fallbackModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'manual-fallback' });
+      const fallbackModel = new MockLanguageModelV4({ provider: 'custom-gateway', modelId: 'manual-fallback' });
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
       const mainAgent = { getModel: vi.fn(async () => fallbackModel) };
 
@@ -3741,7 +3741,7 @@ describe('Observer Agent Helpers', () => {
 
     it('preserves a built-in actor model instance whose sibling route is not known to be usable', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const actorModel = new MockLanguageModelV4({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
 
       const resolved = await (om as any).resolveObservationModel(1, {
@@ -3849,7 +3849,7 @@ describe('Observer Agent Helpers', () => {
 
     it('preserves configured model instances captured by the processor path across actor changes', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const actorModel = new MockLanguageModelV4({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
       const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
       const requestContext = new RequestContext();
@@ -3874,7 +3874,7 @@ describe('Observer Agent Helpers', () => {
       ).resolves.toMatchObject({ model: actorModel });
 
       const nextState: Record<string, unknown> = {};
-      const nextActorModel = new MockLanguageModelV2({ provider: 'openai', modelId: 'gpt-5.5' });
+      const nextActorModel = new MockLanguageModelV4({ provider: 'openai', modelId: 'gpt-5.5' });
       await processor.processInputStep({
         messageList: new MessageList({ threadId: 'thread-auto-model', resourceId: 'resource-auto-model' }),
         messages: [],
@@ -3934,7 +3934,7 @@ describe('Observer Agent Helpers', () => {
     it('keeps the gateway route of a labeled main model', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
       const actorModel = Object.assign(
-        new MockLanguageModelV2({ provider: 'openrouter.chat', modelId: 'openai/gpt-5.5' }),
+        new MockLanguageModelV4({ provider: 'openrouter.chat', modelId: 'openai/gpt-5.5' }),
         {
           id: 'mastra/openai/gpt-5.5',
         },
@@ -3969,7 +3969,7 @@ describe('Observer Agent Helpers', () => {
 
     it('routes the pick through resolveModel with the request context', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const routedModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
+      const routedModel = new MockLanguageModelV4({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
       const resolveModel = vi.fn(async () => routedModel);
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
       const requestContext = new RequestContext();
@@ -3985,7 +3985,7 @@ describe('Observer Agent Helpers', () => {
 
     it('does not call resolveModel when the main model is reused', async () => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const actorModel = new MockLanguageModelV4({ provider: 'custom-gateway', modelId: 'custom-model' });
       const resolveModel = vi.fn();
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
 
@@ -7717,7 +7717,7 @@ describe('Resource Scope Observation Flow', () => {
 
   it('isolates structured extraction source output per thread in multi-thread observation', async () => {
     const structuredPrompts: string[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
         const isStructuredExtraction = promptText.includes('thread-1-secret') || promptText.includes('thread-2-secret');
@@ -15422,7 +15422,7 @@ describe('Observer Context Optimization', () => {
     return new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' } as any),
+      model: new MockLanguageModelV4({ defaultObjectGenerationMode: 'json' } as any),
       activateAfterIdle,
       observation: {
         messageTokens: 50000,
@@ -16187,7 +16187,7 @@ describe('Single-thread replay red tests', () => {
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',
-      model: new MockLanguageModelV2({}) as any,
+      model: new MockLanguageModelV4({}) as any,
       observation: { messageTokens: 5_000 },
       reflection: { observationTokens: 200_000 },
     });
@@ -16729,7 +16729,7 @@ describe('Single-thread replay red tests', () => {
       state: {},
       steps: [],
       systemMessages: [],
-      model: new MockLanguageModelV2({}) as any,
+      model: new MockLanguageModelV4({}) as any,
       retryCount: 0,
       abort: (() => {
         throw new Error('aborted');
@@ -16822,7 +16822,7 @@ describe('Single-thread replay red tests', () => {
       state: {},
       steps: [],
       systemMessages: [],
-      model: new MockLanguageModelV2({}) as any,
+      model: new MockLanguageModelV4({}) as any,
       retryCount: 0,
       abort: (() => {
         throw new Error('aborted');
@@ -16917,7 +16917,7 @@ describe('Single-thread replay red tests', () => {
       state: {},
       steps: [],
       systemMessages: [],
-      model: new MockLanguageModelV2({}) as any,
+      model: new MockLanguageModelV4({}) as any,
       retryCount: 0,
       abort: (() => {
         throw new Error('aborted');
@@ -17139,7 +17139,7 @@ describe('Processor behavioral regressions', () => {
     const threadId = 'observed-filter-thread';
     const resourceId = 'observed-filter-resource';
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -17250,7 +17250,7 @@ describe('Processor behavioral regressions', () => {
     const threadId = 'sanitize-test-thread';
     const resourceId = 'sanitize-test-resource';
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -17442,7 +17442,7 @@ describe('Processor behavioral regressions', () => {
     const threadId = 'step0-boundary-thread';
     const resourceId = 'step0-boundary-resource';
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -17579,7 +17579,7 @@ describe('Processor behavioral regressions', () => {
       ],
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -17699,7 +17699,7 @@ describe('Processor behavioral regressions', () => {
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -18190,7 +18190,7 @@ describe('OM context loading with no prior observations', () => {
     const threadId = 'two-instance-thread';
     const resourceId = 'two-instance-resource';
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -18312,7 +18312,7 @@ describe('OM context loading with no prior observations', () => {
     const storage = createInMemoryStorage();
     const threadId = 'durable-message-list-thread';
     const resourceId = 'durable-message-list-resource';
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,

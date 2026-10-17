@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, expect, it } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createSummarizationScorer } from './index';
@@ -66,7 +66,7 @@ function mockJudge(responses: {
     };
   }
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async options => makeGenerateResult(responseFor(options)),
     doStream: async options => makeStreamResult(responseFor(options)),
   });
@@ -102,7 +102,7 @@ function answered(questions: string[], flags: boolean[]) {
 }
 
 /** Collects every prompt the scorer sent to the judge. */
-function promptsSentTo(model: MockLanguageModelV2) {
+function promptsSentTo(model: MockLanguageModelV4) {
   return JSON.stringify([...model.doStreamCalls, ...model.doGenerateCalls]);
 }
 

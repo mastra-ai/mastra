@@ -227,7 +227,7 @@ export class MCPServer extends MCPServerBase {
         tracingContext: {},
         mastra: this.mastra,
         logger: this.logger,
-        description: 'description' in tool ? tool.description : undefined,
+        description: 'description' in tool && typeof tool.description === 'string' ? tool.description : undefined,
       }) as InternalCoreTool;
       converted[name] = { ...coreTool, id: name } as InternalCoreTool;
     };
@@ -822,6 +822,7 @@ export class MCPServer extends MCPServerBase {
       // The 1.x idiom: an empty toolCallId keeps CoreToolBuilder on the MCP path.
       toolCallId: '',
       messages: [],
+      context: undefined,
       // The request span already records this call; a builder tool span would double it.
       skipToolSpan: true,
       requestContext: options.requestContext,

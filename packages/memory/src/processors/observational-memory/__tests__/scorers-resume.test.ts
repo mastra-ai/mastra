@@ -5,8 +5,8 @@
  * including tool calls made before suspend(), even when thread-scoped
  * Observational Memory observes (and prunes) those messages between segments.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { createScorer } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -58,7 +58,7 @@ function createActorModel() {
     (n: number) => textStep(n, 'All done.'),
   ];
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const n = call++;
       return {
@@ -71,7 +71,7 @@ function createActorModel() {
 }
 
 function createTextModel(id: string, text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

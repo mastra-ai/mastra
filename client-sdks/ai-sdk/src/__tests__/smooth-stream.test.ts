@@ -1,6 +1,6 @@
-import type { UIMessage } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessage } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it } from 'vitest';
 
@@ -9,7 +9,7 @@ import { handleChatStream, smoothStream } from '../index';
 const messages: UIMessage[] = [{ id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] }];
 
 function createMastra() {
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

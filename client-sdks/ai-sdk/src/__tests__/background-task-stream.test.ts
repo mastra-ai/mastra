@@ -3,8 +3,8 @@ import { ChunkFrom } from '@mastra/core/stream';
 import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
-import { toAISdkStream, toAISdkV5Stream } from '../convert-streams';
-import { convertFullStreamChunkToUIMessageStream, convertMastraChunkToAISDKv6 } from '../helpers';
+import { toAISdkStream } from '../convert-streams';
+import { convertFullStreamChunkToUIMessageStream, convertMastraChunkToAISDK } from '../helpers';
 import { WorkflowStreamToAISDKTransformer } from '../transformers';
 
 async function collectChunks(stream: ReadableStream) {
@@ -87,7 +87,7 @@ describe('background task chunk conversion', () => {
       },
     });
 
-    const chunks = await collectChunks(toAISdkV5Stream(stream as unknown as MastraModelOutput, { from: 'agent' }));
+    const chunks = await collectChunks(toAISdkStream(stream as unknown as MastraModelOutput, { from: 'agent' }));
 
     expect(chunks.map(chunk => chunk.type)).toEqual([
       'data-background-task-started',
@@ -128,7 +128,7 @@ describe('background task chunk conversion', () => {
       },
     };
 
-    const part = convertMastraChunkToAISDKv6({
+    const part = convertMastraChunkToAISDK({
       chunk,
     }) as any;
 
@@ -253,9 +253,7 @@ describe('background task chunk conversion', () => {
       },
     });
 
-    const chunks = await collectChunks(
-      toAISdkStream(stream as unknown as MastraModelOutput, { from: 'agent', version: 'v6' }),
-    );
+    const chunks = await collectChunks(toAISdkStream(stream as unknown as MastraModelOutput, { from: 'agent' }));
 
     expect(chunks).toEqual([
       {

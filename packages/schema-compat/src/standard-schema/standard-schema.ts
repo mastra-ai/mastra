@@ -1,4 +1,4 @@
-import type { Schema } from '@internal/ai-v6';
+import type { Schema } from '@internal/ai-v7';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
 import type { JSONSchema7 } from 'json-schema';
 import z3 from 'zod/v3';

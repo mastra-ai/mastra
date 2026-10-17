@@ -1,7 +1,4 @@
-import { customProvider as customProviderV2 } from '@internal/ai-sdk-v5';
-import type { EmbeddingModelV3 } from '@internal/ai-v6';
-import type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
-import { customProvider as customProviderV3 } from '@internal/ai-v6';
+import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 import { getCachedModel, warmupFastEmbedModels, type FastEmbedModelType } from './model-cache.js';
 
 export {
@@ -13,8 +10,7 @@ export {
 } from './fastembed.js';
 export type { SparseVector, InitOptions, InitSparseOptions } from './fastembed.js';
 
-export type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
-export type { EmbeddingModel as EmbeddingModelV3 } from '@internal/ai-v6';
+export type { EmbeddingModelV4 } from '@ai-sdk/provider';
 
 /**
  * Pre-download fastembed models without creating ONNX sessions.
@@ -57,94 +53,40 @@ async function generatePrefixedEmbeddings(
   );
 }
 
-// V2 provider for AI SDK v5 compatibility
-const fastEmbedProviderV2 = customProviderV2({
-  textEmbeddingModels: {
-    'bge-small-en-v1.5': {
-      specificationVersion: 'v2',
-      provider: 'fastembed',
-      modelId: 'bge-small-en-v1.5',
-      maxEmbeddingsPerCall: 256,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        return generateEmbeddings(values, 'BGESmallENV15');
-      },
+function createModel(
+  modelId: string,
+  embed: (values: string[]) => Promise<{ embeddings: number[][] }>,
+): EmbeddingModelV4 {
+  return {
+    specificationVersion: 'v4',
+    provider: 'fastembed',
+    modelId,
+    maxEmbeddingsPerCall: 256,
+    supportsParallelCalls: true,
+    async doEmbed({ values }) {
+      const result = await embed(values);
+      return { ...result, warnings: [] };
     },
-    'bge-base-en-v1.5': {
-      specificationVersion: 'v2',
-      provider: 'fastembed',
-      modelId: 'bge-base-en-v1.5',
-      maxEmbeddingsPerCall: 256,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        return generateEmbeddings(values, 'BGEBaseENV15');
-      },
-    },
-  },
-});
+  };
+}
 
-// V3 provider for AI SDK v6 compatibility
-const fastEmbedProviderV3 = customProviderV3({
-  embeddingModels: {
-    'bge-small-en-v1.5': {
-      specificationVersion: 'v3',
-      provider: 'fastembed',
-      modelId: 'bge-small-en-v1.5',
-      maxEmbeddingsPerCall: 256,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        const result = await generateEmbeddings(values, 'BGESmallENV15');
-        return { ...result, warnings: [] };
-      },
-    },
-    'bge-base-en-v1.5': {
-      specificationVersion: 'v3',
-      provider: 'fastembed',
-      modelId: 'bge-base-en-v1.5',
-      maxEmbeddingsPerCall: 256,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        const result = await generateEmbeddings(values, 'BGEBaseENV15');
-        return { ...result, warnings: [] };
-      },
-    },
-    'multilingual-e5-large-query': {
-      specificationVersion: 'v3',
-      provider: 'fastembed',
-      modelId: 'multilingual-e5-large-query',
-      maxEmbeddingsPerCall: 256,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        const result = await generatePrefixedEmbeddings(values, 'MLE5Large', 'query');
-        return { ...result, warnings: [] };
-      },
-    },
-    'multilingual-e5-large-passage': {
-      specificationVersion: 'v3',
-      provider: 'fastembed',
-      modelId: 'multilingual-e5-large-passage',
-      maxEmbeddingsPerCall: 256,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        const result = await generatePrefixedEmbeddings(values, 'MLE5Large', 'passage');
-        return { ...result, warnings: [] };
-      },
-    },
-  },
-});
+const small = createModel('bge-small-en-v1.5', values => generateEmbeddings(values, 'BGESmallENV15'));
 
-export const fastembed: EmbeddingModelV3 & {
-  small: EmbeddingModelV3;
-  base: EmbeddingModelV3;
-  multilingualE5LargeQuery: EmbeddingModelV3;
-  multilingualE5LargePassage: EmbeddingModelV3;
-  smallV2: EmbeddingModelV2<string>;
-  baseV2: EmbeddingModelV2<string>;
-} = Object.assign(fastEmbedProviderV3.embeddingModel(`bge-small-en-v1.5`), {
-  small: fastEmbedProviderV3.embeddingModel(`bge-small-en-v1.5`),
-  base: fastEmbedProviderV3.embeddingModel(`bge-base-en-v1.5`),
-  multilingualE5LargeQuery: fastEmbedProviderV3.embeddingModel(`multilingual-e5-large-query`),
-  multilingualE5LargePassage: fastEmbedProviderV3.embeddingModel(`multilingual-e5-large-passage`),
-  smallV2: fastEmbedProviderV2.textEmbeddingModel(`bge-small-en-v1.5`),
-  baseV2: fastEmbedProviderV2.textEmbeddingModel(`bge-base-en-v1.5`),
-});
+export const fastembed: EmbeddingModelV4 & {
+  small: EmbeddingModelV4;
+  base: EmbeddingModelV4;
+  multilingualE5LargeQuery: EmbeddingModelV4;
+  multilingualE5LargePassage: EmbeddingModelV4;
+} = Object.assign(
+  createModel('bge-small-en-v1.5', values => generateEmbeddings(values, 'BGESmallENV15')),
+  {
+    small,
+    base: createModel('bge-base-en-v1.5', values => generateEmbeddings(values, 'BGEBaseENV15')),
+    multilingualE5LargeQuery: createModel('multilingual-e5-large-query', values =>
+      generatePrefixedEmbeddings(values, 'MLE5Large', 'query'),
+    ),
+    multilingualE5LargePassage: createModel('multilingual-e5-large-passage', values =>
+      generatePrefixedEmbeddings(values, 'MLE5Large', 'passage'),
+    ),
+  },
+);

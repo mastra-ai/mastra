@@ -16,12 +16,12 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Agent } from '@mastra/core/agent';
+import { simulateReadableStream } from '@mastra/core/ai';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { DefaultStorage } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { Observability, MastraStorageExporter } from '@mastra/observability';
-import { simulateReadableStream } from 'ai';
 import { Inngest } from 'inngest';
 import { z } from 'zod';
 

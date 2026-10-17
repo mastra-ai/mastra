@@ -1,15 +1,14 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type {
-  LanguageModelV2,
-  LanguageModelV2Middleware,
-  LanguageModelV2Prompt,
-  LanguageModelV2StreamPart,
+  LanguageModelV4,
+  LanguageModelV4FinishReason,
+  LanguageModelV4Middleware,
+  LanguageModelV4Prompt,
+  LanguageModelV4StreamPart,
 } from '@ai-sdk/provider';
-import { wrapLanguageModel as wrapLanguageModelV5 } from '@internal/ai-sdk-v5';
-import type { LanguageModelV3, LanguageModelMiddleware as LanguageModelV3Middleware } from '@internal/ai-v6';
-import { wrapLanguageModel as wrapLanguageModelV6 } from '@internal/ai-v6';
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
+import { wrapLanguageModel } from '@mastra/core/ai';
 import { RequestContext } from '@mastra/core/di';
 import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/processors';
@@ -160,12 +159,7 @@ export interface WithMastraOptions {
  * });
  * ```
  */
-export function withMastra(model: LanguageModelV2, options?: WithMastraOptions): LanguageModelV2;
-export function withMastra(model: LanguageModelV3, options?: WithMastraOptions): LanguageModelV3;
-export function withMastra(
-  model: LanguageModelV2 | LanguageModelV3,
-  options: WithMastraOptions = {},
-): LanguageModelV2 | LanguageModelV3 {
+export function withMastra(model: LanguageModelV4, options: WithMastraOptions = {}): LanguageModelV4 {
   const { memory, inputProcessors = [], outputProcessors = [] } = options;
 
   // Build the list of processors
@@ -239,16 +233,7 @@ export function withMastra(
       : undefined,
   });
 
-  if (model.specificationVersion === 'v3') {
-    return wrapLanguageModelV6({
-      model,
-      // withMastra supports v3 models at the wrapper level, while the
-      // lower-level processor middleware remains v2-oriented for now.
-      middleware: middleware as unknown as LanguageModelV3Middleware,
-    });
-  }
-
-  return wrapLanguageModelV5({
+  return wrapLanguageModel({
     model,
     middleware,
   });
@@ -439,7 +424,7 @@ class StreamOutputAccumulator {
  *
  * @example
  * ```typescript
- * import { wrapLanguageModel, generateText } from '@internal/ai-sdk-v5';
+ * import { wrapLanguageModel, generateText } from '@mastra/core/ai';
  * import { openai } from '@ai-sdk/openai';
  * import { createProcessorMiddleware } from '@mastra/ai-sdk';
  *
@@ -454,7 +439,7 @@ class StreamOutputAccumulator {
  * const { text } = await generateText({ model, prompt: 'Hello' });
  * ```
  */
-export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): LanguageModelV2Middleware {
+export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): LanguageModelV4Middleware {
   const { inputProcessors = [], outputProcessors = [], memory } = options;
 
   // Create RequestContext with memory info if provided
@@ -468,7 +453,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
   }
 
   return {
-    middlewareVersion: 'v2',
+    specificationVersion: 'v4',
 
     async transformParams({ params }) {
       // Create a real MessageList with memory context
@@ -525,8 +510,10 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       }
 
       // Convert back to AI SDK prompt format using built-in MessageList methods
-      // get.all.aiV5.prompt() returns ModelMessage[], then convert to LanguageModelV2Prompt
-      const newPrompt: LanguageModelV2Prompt = messageList.get.all.aiV5.prompt().map(aiV5ModelMessageToV2PromptMessage);
+      // get.all.aiSdk.prompt() returns ModelMessage[], then convert to LanguageModelV4Prompt
+      const newPrompt: LanguageModelV4Prompt = messageList.get.all.aiSdk
+        .prompt()
+        .map(aiV5ModelMessageToV2PromptMessage);
 
       return {
         ...params,
@@ -547,8 +534,8 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         const reason = processorState.reason || 'Blocked by processor';
         return {
           content: [{ type: 'text' as const, text: reason }],
-          finishReason: 'stop' as const,
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage: toV4Usage(0, 0),
           warnings: [{ type: 'other' as const, message: `Tripwire: ${reason}` }],
         };
       }
@@ -611,7 +598,14 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               state: {},
               result: {
                 text: '',
-                usage: result.usage,
+                usage: {
+                  inputTokens: result.usage.inputTokens.total,
+                  outputTokens: result.usage.outputTokens.total,
+                  totalTokens:
+                    result.usage.inputTokens.total === undefined && result.usage.outputTokens.total === undefined
+                      ? undefined
+                      : (result.usage.inputTokens.total ?? 0) + (result.usage.outputTokens.total ?? 0),
+                },
                 finishReason: 'unknown',
                 steps: [],
               },
@@ -625,7 +619,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
             if (error instanceof TripWire) {
               return {
                 content: [{ type: 'text' as const, text: error.message }],
-                finishReason: 'stop' as const,
+                finishReason: { unified: 'stop', raw: 'stop' },
                 usage: result.usage,
                 warnings: [{ type: 'other' as const, message: `Output blocked: ${error.message}` }],
               };
@@ -669,7 +663,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       let sawFinish = false;
 
       const transformedStream = stream.pipeThrough(
-        new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
+        new TransformStream<LanguageModelV4StreamPart, LanguageModelV4StreamPart>({
           async transform(chunk, controller) {
             // Convert to Mastra chunk format
             let mastraChunk: ChunkType | undefined = convertFullStreamChunkToMastra(
@@ -825,7 +819,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
 /**
  * Creates a blocked stream that returns a message and closes
  */
-function createBlockedStream(reason: string): ReadableStream<LanguageModelV2StreamPart> {
+function createBlockedStream(reason: string): ReadableStream<LanguageModelV4StreamPart> {
   return new ReadableStream({
     start(controller) {
       const id = crypto.randomUUID();
@@ -844,8 +838,8 @@ function createBlockedStream(reason: string): ReadableStream<LanguageModelV2Stre
       });
       controller.enqueue({
         type: 'finish',
-        finishReason: 'stop',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: toV4Usage(0, 0),
       });
       controller.close();
     },
@@ -872,10 +866,21 @@ function extractTextFromMastraMessage(msg: MastraDBMessage): string {
   return '';
 }
 
+function toV4Usage(inputTokens: number | undefined, outputTokens: number | undefined) {
+  return {
+    inputTokens: { total: inputTokens, noCache: inputTokens, cacheRead: undefined, cacheWrite: undefined },
+    outputTokens: { total: outputTokens, text: outputTokens, reasoning: undefined },
+  };
+}
+
+function toV4FinishReason(reason: Parameters<typeof toAISDKFinishReason>[0]): LanguageModelV4FinishReason {
+  return { unified: toAISDKFinishReason(reason), raw: reason };
+}
+
 /**
- * Convert Mastra chunk back to AI SDK LanguageModelV2StreamPart (provider-level stream format)
+ * Convert Mastra chunk back to AI SDK LanguageModelV4StreamPart (provider-level stream format)
  */
-function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV2StreamPart | null {
+function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV4StreamPart | null {
   switch (chunk.type) {
     // Text streaming
     case 'text-start':
@@ -969,7 +974,7 @@ function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV2S
         isError: chunk.payload.isError,
         providerExecuted: chunk.payload.providerExecuted,
         providerMetadata: chunk.payload.providerMetadata,
-      } as LanguageModelV2StreamPart;
+      } as LanguageModelV4StreamPart;
 
     // Source (citations)
     case 'source':
@@ -981,7 +986,7 @@ function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV2S
           url: chunk.payload.url!,
           title: chunk.payload.title,
           providerMetadata: chunk.payload.providerMetadata,
-        } as LanguageModelV2StreamPart;
+        } as LanguageModelV4StreamPart;
       } else {
         return {
           type: 'source',
@@ -991,42 +996,38 @@ function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV2S
           title: chunk.payload.title,
           filename: chunk.payload.filename,
           providerMetadata: chunk.payload.providerMetadata,
-        } as LanguageModelV2StreamPart;
+        } as LanguageModelV4StreamPart;
       }
 
     // File output
     case 'file':
       return {
         type: 'file',
-        data: chunk.payload.data || chunk.payload.base64,
+        data: { type: 'data', data: chunk.payload.data || chunk.payload.base64 },
         mediaType: chunk.payload.mimeType,
-      } as LanguageModelV2StreamPart;
+      } as LanguageModelV4StreamPart;
 
     // Response metadata
     case 'response-metadata':
       return {
         type: 'response-metadata',
         ...chunk.payload,
-      } as LanguageModelV2StreamPart;
+      } as LanguageModelV4StreamPart;
 
     // Raw provider data
     case 'raw':
       return {
         type: 'raw',
         rawValue: chunk.payload,
-      } as LanguageModelV2StreamPart;
+      } as LanguageModelV4StreamPart;
 
     // Finish
     case 'finish': {
       const usage = chunk.payload.output?.usage;
       return {
         type: 'finish',
-        finishReason: toAISDKFinishReason(chunk.payload.stepResult?.reason || 'stop'),
-        usage: {
-          inputTokens: usage?.inputTokens,
-          outputTokens: usage?.outputTokens,
-          totalTokens: usage?.totalTokens,
-        },
+        finishReason: toV4FinishReason(chunk.payload.stepResult?.reason || 'stop'),
+        usage: toV4Usage(usage?.inputTokens, usage?.outputTokens),
         providerMetadata: chunk.payload.metadata?.providerMetadata,
       };
     }

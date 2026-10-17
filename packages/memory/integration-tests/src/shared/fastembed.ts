@@ -1,27 +1,19 @@
-import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+import { embed } from '@mastra/core/ai';
 import { fastembed } from '@mastra/fastembed';
-import { embed as embedV2 } from 'ai-v5';
-import { embed as embedV3 } from 'ai-v6';
 
 import { describe, it, expect } from 'vitest';
 
-interface FastembedTestConfig {
-  version: 'v2' | 'v3';
-}
+export function getFastembedTests() {
+  describe('FastEmbed AI SDK v7 Compatibility', () => {
+    // V4 specification tests (AI SDK v7)
 
-export function getFastembedTests(config: FastembedTestConfig) {
-  const { version } = config;
-
-  describe(`FastEmbed AI SDK ${version} Compatibility`, () => {
-    // V3 specification tests (AI SDK v6)
-
-    describe('v3 specification', () => {
-      it('should use v3 specification version', () => {
-        expect(fastembed.specificationVersion).toBe('v3');
+    describe('v4 specification', () => {
+      it('should use v4 specification version', () => {
+        expect(fastembed.specificationVersion).toBe('v4');
       });
 
-      it('should work with embed function from AI SDK v6', async () => {
-        const result = await embedV3({
+      it('should work with embed function from AI SDK v7', async () => {
+        const result = await embed({
           model: fastembed,
           value: 'test embedding',
         });
@@ -32,15 +24,15 @@ export function getFastembedTests(config: FastembedTestConfig) {
         expect(result.embedding.length).toBeGreaterThan(0);
       }, 30000);
 
-      it('should have required v3 model properties', () => {
-        expect(fastembed.specificationVersion).toBe('v3');
+      it('should have required v4 model properties', () => {
+        expect(fastembed.specificationVersion).toBe('v4');
         expect(fastembed.provider).toBe('fastembed');
         expect(fastembed.modelId).toBeDefined();
         expect(fastembed.maxEmbeddingsPerCall).toBeDefined();
         expect(fastembed.supportsParallelCalls).toBeDefined();
       });
 
-      it('should support doEmbed with v3 signature', async () => {
+      it('should support doEmbed with v4 signature', async () => {
         const result = await fastembed.doEmbed({
           values: ['hello world', 'test text'],
           abortSignal: undefined,
@@ -55,74 +47,15 @@ export function getFastembedTests(config: FastembedTestConfig) {
       }, 30000);
     });
 
-    // V2 specification tests (AI SDK v5)
-
-    describe('v2 specification', () => {
-      it('should use v2 specification version', () => {
-        expect(fastembed.smallV2.specificationVersion).toBe('v2');
-      });
-
-      it('should be assignable to EmbeddingModelV2 type', () => {
-        const model: EmbeddingModelV2<string> = fastembed.smallV2;
-        expect(model.specificationVersion).toBe('v2');
-        expect(model.provider).toBe('fastembed');
-        expect(model.modelId).toBe('bge-small-en-v1.5');
-      });
-
-      it('should work with embed function from AI SDK v5', async () => {
-        const result = await embedV2({
-          model: fastembed.smallV2,
-          value: 'test embedding',
-        });
-
-        expect(result).toBeDefined();
-        expect(result.embedding).toBeDefined();
-        expect(Array.isArray(result.embedding)).toBe(true);
-        expect(result.embedding.length).toBeGreaterThan(0);
-      }, 30000);
-
-      it('should have required v2 model properties', () => {
-        expect(fastembed.smallV2.specificationVersion).toBe('v2');
-        expect(fastembed.smallV2.provider).toBe('fastembed');
-        expect(fastembed.smallV2.modelId).toBeDefined();
-        expect(fastembed.smallV2.maxEmbeddingsPerCall).toBeDefined();
-        expect(fastembed.smallV2.supportsParallelCalls).toBeDefined();
-      });
-
-      it('should support doEmbed with v2 signature', async () => {
-        const result = await fastembed.smallV2.doEmbed({
-          values: ['hello world', 'test text'],
-          abortSignal: undefined,
-        });
-
-        expect(result).toBeDefined();
-        expect(result.embeddings).toBeDefined();
-        expect(Array.isArray(result.embeddings)).toBe(true);
-        expect(result.embeddings.length).toBe(2);
-        expect(result.embeddings[0]).toBeDefined();
-        expect(result.embeddings[0]!.length).toBeGreaterThan(0);
-      }, 30000);
-    });
-
     describe('Named exports', () => {
-      it('should export small model with v3 specification', () => {
-        expect(fastembed.small.specificationVersion).toBe('v3');
+      it('should export small model with v4 specification', () => {
+        expect(fastembed.small.specificationVersion).toBe('v4');
         expect(fastembed.small.modelId).toBe('bge-small-en-v1.5');
       });
 
-      it('should export base model with v3 specification', () => {
-        expect(fastembed.base.specificationVersion).toBe('v3');
+      it('should export base model with v4 specification', () => {
+        expect(fastembed.base.specificationVersion).toBe('v4');
         expect(fastembed.base.modelId).toBe('bge-base-en-v1.5');
-      });
-
-      it('should export small model with v2 specification', () => {
-        expect(fastembed.smallV2.specificationVersion).toBe('v2');
-        expect(fastembed.smallV2.modelId).toBe('bge-small-en-v1.5');
-      });
-
-      it('should export base model with v2 specification', () => {
-        expect(fastembed.baseV2.specificationVersion).toBe('v2');
-        expect(fastembed.baseV2.modelId).toBe('bge-base-en-v1.5');
       });
     });
 
@@ -164,10 +97,10 @@ export function getFastembedTests(config: FastembedTestConfig) {
     });
 
     describe('Integration with @mastra/core patterns', () => {
-      it('should work with embedV3 API from ai-v6 (core pattern)', async () => {
+      it('should work with embed API from ai v7 (core pattern)', async () => {
         const queryText = 'search query for RAG';
 
-        const result = await embedV3({
+        const result = await embed({
           model: fastembed,
           value: queryText,
         });
@@ -177,21 +110,8 @@ export function getFastembedTests(config: FastembedTestConfig) {
         expect(result.embedding.length).toBeGreaterThan(0);
       }, 30000);
 
-      it('should work with embedV2 API from ai-v5 (core pattern)', async () => {
-        const queryText = 'search query for RAG';
-
-        const result = await embedV2({
-          model: fastembed.baseV2,
-          value: queryText,
-        });
-
-        expect(result.embedding).toBeDefined();
-        expect(Array.isArray(result.embedding)).toBe(true);
-        expect(result.embedding.length).toBeGreaterThan(0);
-      }, 30000);
-
       it('should be compatible with ModelRouterEmbeddingModel pattern', () => {
-        expect(fastembed).toHaveProperty('specificationVersion', 'v3');
+        expect(fastembed).toHaveProperty('specificationVersion', 'v4');
         expect(fastembed).toHaveProperty('provider', 'fastembed');
         expect(fastembed).toHaveProperty('modelId');
         expect(fastembed).toHaveProperty('maxEmbeddingsPerCall');

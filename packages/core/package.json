@@ -51,6 +51,26 @@
         "default": "./dist/a2a/v1.cjs"
       }
     },
+    "./ai": {
+      "import": {
+        "types": "./dist/ai/index.d.ts",
+        "default": "./dist/ai/index.js"
+      },
+      "require": {
+        "types": "./dist/ai/index.d.ts",
+        "default": "./dist/ai/index.cjs"
+      }
+    },
+    "./ai/test": {
+      "import": {
+        "types": "./dist/ai/test.d.ts",
+        "default": "./dist/ai/test.js"
+      },
+      "require": {
+        "types": "./dist/ai/test.d.ts",
+        "default": "./dist/ai/test.cjs"
+      }
+    },
     "./agent": {
       "import": {
         "types": "./dist/agent/index.d.ts",

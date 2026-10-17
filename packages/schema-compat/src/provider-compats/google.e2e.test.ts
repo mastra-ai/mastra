@@ -1,5 +1,5 @@
 import { google } from '@ai-sdk/google';
-import { generateText, Output, jsonSchema, stepCountIs } from '@internal/ai-v6';
+import { generateText, Output, jsonSchema, stepCountIs } from '@internal/ai-v7';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

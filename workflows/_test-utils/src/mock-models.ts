@@ -1,18 +1,18 @@
 /**
  * Mock model factories for DurableAgent tests
  *
- * These factories create MockLanguageModelV2 instances with various
+ * These factories create MockLanguageModelV4 instances with various
  * streaming behaviors for testing different scenarios.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 
 /**
  * Create a mock model that streams a simple text response
  */
 export function createTextStreamModel(text: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -35,7 +35,7 @@ export function createTextStreamModel(text: string): LanguageModelV2 {
  * Create a mock model that streams multiple text chunks
  */
 export function createMultiChunkStreamModel(chunks: string[]): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -58,7 +58,7 @@ export function createMultiChunkStreamModel(chunks: string[]): LanguageModelV2 {
  * Create a mock model that returns a single tool call
  */
 export function createToolCallModel(toolName: string, args: Record<string, unknown>): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -87,7 +87,7 @@ export function createToolCallModel(toolName: string, args: Record<string, unkno
 export function createMultiToolCallModel(
   toolCalls: Array<{ toolName: string; args: Record<string, unknown> }>,
 ): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -120,7 +120,7 @@ export function createToolCallThenTextModel(
   finalText: string,
 ): LanguageModelV2 {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -174,7 +174,7 @@ export function createMultiToolCallThenTextModel(
   finalText: string,
 ): LanguageModelV2 {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -226,7 +226,7 @@ export function createMultiToolCallThenTextModel(
  * Create a mock model that throws an error
  */
 export function createErrorModel(errorMessage: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       throw new Error(errorMessage);
     },
@@ -246,7 +246,7 @@ export function createSimpleMockModel(): LanguageModelV2 {
  * Unlike createErrorModel which throws, this returns a stream with an error chunk.
  */
 export function createFailingChunkModel(errorMessage: string = 'Model execution failed'): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -262,7 +262,7 @@ export function createFailingChunkModel(errorMessage: string = 'Model execution 
  * Simulates a reasoning-capable model (e.g., o1, deepseek-r1)
  */
 export function createReasoningStreamModel(reasoningText: string, responseText: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -290,7 +290,7 @@ export function createReasoningStreamModel(reasoningText: string, responseText: 
  */
 export function createFlakyModel(failCount: number, successText: string = 'Success after retries'): LanguageModelV2 {
   let attempts = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       attempts++;
       if (attempts <= failCount) {

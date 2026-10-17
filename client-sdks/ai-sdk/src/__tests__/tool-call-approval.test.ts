@@ -1,11 +1,11 @@
 import { ReadableStream } from 'node:stream/web';
-import { readUIMessageStream } from '@internal/ai-v6';
+import { readUIMessageStream } from '@mastra/core/ai';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it, vi } from 'vitest';
-import { handleChatStream, extractV6NativeApprovals } from '../chat-route';
-import { toAISdkStream, toAISdkV5Stream } from '../convert-streams';
-import { convertMastraChunkToAISDKv5, convertMastraChunkToAISDKv6, APPROVAL_ID_SEPARATOR } from '../helpers';
+import { handleChatStream, extractNativeApprovals } from '../chat-route';
+import { toAISdkStream } from '../convert-streams';
+import { convertMastraChunkToAISDK, APPROVAL_ID_SEPARATOR } from '../helpers';
 
 async function collectChunks(stream: ReadableStream) {
   const chunks: any[] = [];
@@ -63,7 +63,7 @@ function createApprovalStream() {
 }
 
 describe('tool-call-approval chunk conversion (issue #12878)', () => {
-  describe('convertMastraChunkToAISDKv5', () => {
+  describe('convertMastraChunkToAISDK', () => {
     it('should include a state field in the data-tool-call-approval chunk', () => {
       const chunk = {
         type: 'tool-call-approval' as const,
@@ -77,7 +77,7 @@ describe('tool-call-approval chunk conversion (issue #12878)', () => {
         },
       };
 
-      const result = convertMastraChunkToAISDKv5({ chunk, mode: 'stream' }) as any;
+      const [, result] = convertMastraChunkToAISDK({ chunk, mode: 'stream' }) as any[];
 
       expect(result).toBeDefined();
       expect(result.type).toBe('data-tool-call-approval');
@@ -103,7 +103,7 @@ describe('tool-call-approval chunk conversion (issue #12878)', () => {
         },
       };
 
-      const result = convertMastraChunkToAISDKv5({ chunk, mode: 'stream' }) as any;
+      const result = convertMastraChunkToAISDK({ chunk, mode: 'stream' }) as any;
 
       expect(result).toBeDefined();
       expect(result.type).toBe('data-tool-call-suspended');
@@ -117,7 +117,7 @@ describe('tool-call-approval chunk conversion (issue #12878)', () => {
 
   describe('end-to-end: tool-call-approval through agent stream', () => {
     it('should emit data-tool-call-approval with state field when tool requires approval', async () => {
-      const aiSdkStream = toAISdkV5Stream(createApprovalStream() as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(createApprovalStream() as unknown as MastraModelOutput, { from: 'agent' });
       const chunks = await collectChunks(aiSdkStream);
 
       // Should have the tool-input-available chunk for the tool call
@@ -144,7 +144,7 @@ describe('tool-call-approval chunk conversion (issue #12878)', () => {
   });
 });
 
-describe('extractV6NativeApproval', () => {
+describe('extractNativeApprovals', () => {
   it('returns runId and approved:true from an approval-responded part', () => {
     const approvalId = `run-123${APPROVAL_ID_SEPARATOR}tooluse_abc123`;
     const messages = [
@@ -163,7 +163,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    const result = extractV6NativeApprovals(messages as any);
+    const result = extractNativeApprovals(messages as any);
 
     expect(result).toEqual([
       {
@@ -192,7 +192,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    const result = extractV6NativeApprovals(messages as any);
+    const result = extractNativeApprovals(messages as any);
 
     expect(result).toEqual([
       {
@@ -221,7 +221,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    const result = extractV6NativeApprovals(messages as any);
+    const result = extractNativeApprovals(messages as any);
 
     expect(result[0]?.resumeData).not.toHaveProperty('reason');
   });
@@ -244,7 +244,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    expect(extractV6NativeApprovals(messages as any)).toEqual([]);
+    expect(extractNativeApprovals(messages as any)).toEqual([]);
   });
 
   it('skips a part whose composite approval id embeds a different toolCallId', () => {
@@ -265,7 +265,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    expect(extractV6NativeApprovals(messages as any)).toEqual([]);
+    expect(extractNativeApprovals(messages as any)).toEqual([]);
   });
 
   it('returns null when the approval id has no separator', () => {
@@ -285,7 +285,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    expect(extractV6NativeApprovals(messages as any)).toEqual([]);
+    expect(extractNativeApprovals(messages as any)).toEqual([]);
   });
 
   it('collects every approval response when one assistant message has several (issue #17899)', () => {
@@ -312,7 +312,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    const result = extractV6NativeApprovals(messages as any);
+    const result = extractNativeApprovals(messages as any);
 
     expect(result).toEqual([
       { resumeData: { approved: true }, runId: 'old-run', toolCallId: 'old-call' },
@@ -350,7 +350,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    const result = extractV6NativeApprovals(messages as any);
+    const result = extractNativeApprovals(messages as any);
 
     expect(result).toEqual([
       { resumeData: { approved: true }, runId: 'old-run', toolCallId: 'old-call' },
@@ -380,7 +380,7 @@ describe('extractV6NativeApproval', () => {
       },
     ];
 
-    expect(extractV6NativeApprovals(messages as any)).toEqual([
+    expect(extractNativeApprovals(messages as any)).toEqual([
       { resumeData: { approved: true }, runId: 'old-run', toolCallId: 'old-call' },
     ]);
   });
@@ -398,7 +398,7 @@ describe('extractV6NativeApproval', () => {
       { role: 'assistant', id: 'msg-2', parts: [part('run-2', false)] },
     ];
 
-    expect(extractV6NativeApprovals(messages as any)).toEqual([
+    expect(extractNativeApprovals(messages as any)).toEqual([
       { resumeData: { approved: true }, runId: 'run-1', toolCallId: 'shared-call' },
       { resumeData: { approved: false }, runId: 'run-2', toolCallId: 'shared-call' },
     ]);
@@ -445,7 +445,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages } as any,
     });
 
@@ -465,7 +465,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages } as any,
     });
 
@@ -495,7 +495,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages, resumeData: { approved: true }, runId: 'explicit-run' } as any,
     });
 
@@ -539,7 +539,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     const stream = await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages } as any,
     });
     await collectChunks(stream);
@@ -573,7 +573,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     const stream = await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages } as any,
     });
     await collectChunks(stream);
@@ -604,7 +604,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     const stream = await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages: [response('old-run', 'old-call'), response('new-run', 'new-call')] } as any,
     });
     await collectChunks(stream);
@@ -638,7 +638,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     const stream = await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages: [response('busy-run', 'busy-call'), response('new-run', 'new-call')] } as any,
     });
     await collectChunks(stream);
@@ -674,7 +674,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     const stream = await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages } as any,
     });
     const chunks = await collectChunks(stream);
@@ -718,7 +718,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     const stream = await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages: [response('run-1', 'call-A'), response('run-2', 'call-B')] } as any,
       messageMetadata: ({ part }: any) =>
         part?.type === 'finish' ? { finishReason: part.rawFinishReason } : undefined,
@@ -745,7 +745,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
 });
 
 describe('tool-call-approval conversion', () => {
-  it('keeps the v5 data-tool-call-approval shape', () => {
+  it('maps approvals to both tool-approval-request and data-tool-call-approval', () => {
     const chunk = {
       type: 'tool-call-approval' as const,
       runId: 'run-123',
@@ -758,26 +758,7 @@ describe('tool-call-approval conversion', () => {
       },
     };
 
-    const result = convertMastraChunkToAISDKv5({ chunk, mode: 'stream' }) as any;
-
-    expect(result.type).toBe('data-tool-call-approval');
-    expect(result.data.runId).toBe('run-123');
-  });
-
-  it('maps v6 approvals to both tool-approval-request and data-tool-call-approval', () => {
-    const chunk = {
-      type: 'tool-call-approval' as const,
-      runId: 'run-123',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'tooluse_abc123',
-        toolName: 'myTool',
-        args: { param: 'value' },
-        resumeSchema: '{"type":"object","properties":{"approved":{"type":"boolean"}}}',
-      },
-    };
-
-    const result = convertMastraChunkToAISDKv6({ chunk, mode: 'stream' }) as any[];
+    const result = convertMastraChunkToAISDK({ chunk, mode: 'stream' }) as any[];
 
     expect(Array.isArray(result)).toBe(true);
     expect(result[0]).toEqual({
@@ -796,18 +777,9 @@ describe('tool-call-approval conversion', () => {
     });
   });
 
-  it('keeps v5 streaming behavior unchanged', async () => {
-    const aiSdkStream = toAISdkV5Stream(createApprovalStream() as unknown as MastraModelOutput, { from: 'agent' });
-    const chunks = await collectChunks(aiSdkStream);
-
-    expect(chunks.find(chunk => chunk.type === 'data-tool-call-approval')).toBeDefined();
-    expect(chunks.find(chunk => chunk.type === 'tool-approval-request')).toBeUndefined();
-  });
-
-  it('emits both tool-approval-request and data-tool-call-approval on the v6 stream', async () => {
+  it('emits both tool-approval-request and data-tool-call-approval on the stream', async () => {
     const aiSdkStream = toAISdkStream(createApprovalStream() as unknown as MastraModelOutput, {
       from: 'agent',
-      version: 'v6',
     });
     const chunks = await collectChunks(aiSdkStream);
 
@@ -816,10 +788,9 @@ describe('tool-call-approval conversion', () => {
     expect(chunks.find(chunk => chunk.type === 'data-tool-call-approval')).toBeDefined();
   });
 
-  it('is interpreted by the v6 UI message reader as approval-requested', async () => {
+  it('is interpreted by the UI message reader as approval-requested', async () => {
     const aiSdkStream = toAISdkStream(createApprovalStream() as unknown as MastraModelOutput, {
       from: 'agent',
-      version: 'v6',
     });
 
     const messages = [] as any[];

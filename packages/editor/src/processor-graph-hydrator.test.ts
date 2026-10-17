@@ -12,7 +12,7 @@ import type {
 } from '@mastra/core/storage';
 import { hydrateProcessorGraph, selectFirstMatchingGraph } from './processor-graph-hydrator';
 import { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import { TextPart } from '@internal/ai-sdk-v5';
+import { TextPart } from '@mastra/core/ai';
 import { Mastra } from '@mastra/core';
 import { IMastraLogger } from '@mastra/core/logger';
 

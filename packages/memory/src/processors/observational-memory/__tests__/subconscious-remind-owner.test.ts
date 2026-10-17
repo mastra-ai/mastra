@@ -1,5 +1,5 @@
-import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV2StreamPart } from '@mastra/core/ai';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -68,7 +68,7 @@ function createHarness(options: { knowledgeResourceId?: string }) {
 
   const emitted = { reminder: 0, reply: 0 };
   let sourceRecordId = '';
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',

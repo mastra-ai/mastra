@@ -54,13 +54,14 @@ export interface OpenRouterCostResult {
 export function extractOpenRouterCost(providerMetadata?: ProviderMetadata): OpenRouterCostResult | undefined {
   const usage = providerMetadata?.openrouter?.usage;
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
+  const usageObj = usage as Readonly<Record<string, unknown>>;
 
-  const cost = usage.cost;
-  const isByok = usage.isByok;
-  const costDetails = usage.costDetails;
+  const cost = usageObj.cost;
+  const isByok = usageObj.isByok;
+  const costDetails = usageObj.costDetails;
   const upstreamCost =
     costDetails && typeof costDetails === 'object' && !Array.isArray(costDetails)
-      ? costDetails.upstreamInferenceCost
+      ? (costDetails as Record<string, unknown>).upstreamInferenceCost
       : undefined;
 
   const isValid = (value: unknown): value is number =>

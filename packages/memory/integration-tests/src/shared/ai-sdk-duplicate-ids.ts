@@ -8,8 +8,8 @@
  * so when an agent does TEXT -> TOOL -> TEXT, both text blocks get id="0".
  */
 
+import { stepCountIs } from '@mastra/core/ai';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { stepCountIs } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 

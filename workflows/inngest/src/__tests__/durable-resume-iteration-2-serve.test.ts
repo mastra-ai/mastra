@@ -9,10 +9,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Agent } from '@mastra/core/agent';
+import { simulateReadableStream } from '@mastra/core/ai';
 import { createTool } from '@mastra/core/tools';
 import { DefaultStorage } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { simulateReadableStream } from 'ai';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { google } from '@ai-sdk/google-v5';
+import { google } from '@ai-sdk/google';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { setupDummyApiKeys, createGatewayMock } from '@internal/test-utils';
 import type { MastraDBMessage } from '@mastra/core/agent';

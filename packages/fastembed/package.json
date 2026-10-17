@@ -38,13 +38,12 @@
     "test:models": "vitest run --project 'models:packages/fastembed'"
   },
   "dependencies": {
+    "@ai-sdk/provider": "4.0.28",
     "@anush008/tokenizers": "^0.6.0",
     "@huggingface/hub": "^2.12.0",
     "onnxruntime-node": "1.26.0"
   },
   "devDependencies": {
-    "@internal/ai-sdk-v5": "workspace:*",
-    "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/node": "22.20.1",

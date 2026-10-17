@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/ai';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { CoreMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
 
 import { createMockModel } from './mock-models';

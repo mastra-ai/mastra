@@ -7,8 +7,8 @@
  * repeat either side effect — each should run exactly once per evaluated iteration.
  */
 import { Agent } from '@mastra/core/agent';
+import { simulateReadableStream } from '@mastra/core/ai';
 import { createTool } from '@mastra/core/tools';
-import { simulateReadableStream } from 'ai';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

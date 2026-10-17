@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent, createSignal } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { EmbeddingModel } from '@mastra/core/ai';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
-import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RemindContinuationProcessor } from '../../src/processors/observational-memory/subconscious/remind-continuation';
@@ -56,7 +56,7 @@ describe('Subconscious LibSQL integration', () => {
     const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
     await storage.init();
 
-    const observerModel = new MockLanguageModelV2({
+    const observerModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -136,7 +136,7 @@ describe('Subconscious LibSQL integration', () => {
         warnings: [],
       };
     });
-    const curatorModel = new MockLanguageModelV2({ doStream: curatorStream });
+    const curatorModel = new MockLanguageModelV4({ doStream: curatorStream });
     const memory = new Memory({
       storage,
       vector,
@@ -207,7 +207,7 @@ describe('Subconscious LibSQL integration', () => {
     let streamCall = 0;
     let sentReminder = false;
     const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-launch.';
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async options => {
         streamCall += 1;
         const prompt = JSON.stringify(options.prompt);
@@ -371,7 +371,7 @@ describe('Subconscious LibSQL integration', () => {
       .map(threadId => `<thread id="${threadId}">\n- Project Atlas planning is active.\n</thread>`)
       .join('\n');
     let sentReminder = false;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async options => {
         const prompt = JSON.stringify(options.prompt);
         const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
@@ -517,7 +517,7 @@ describe('Subconscious LibSQL integration', () => {
     await memory.createThread({ threadId: parentThreadId, resourceId, title: 'Parent' });
 
     let streamCall = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',

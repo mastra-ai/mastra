@@ -33,7 +33,7 @@ import type {
 // The React SDK targets AI SDK v5 only, so the accumulator stores a V5-flavored
 // superset of `MastraMessagePart`. Every `as unknown as MastraMessagePart` site
 // in this file is a deliberate storage-boundary cast for one of the above
-// extensions, not an accident. Downstream consumers (`toAISdkV5Messages`,
+// extensions, not an accident. Downstream consumers (`toAISdkMessages`,
 // playground `to-assistant-ui-message`) read the V5 fields directly.
 
 type StreamChunk = {
@@ -548,7 +548,7 @@ export interface AccumulateChunkArgs {
 /**
  * Reduce a single stream chunk into the running `MastraDBMessage[]`
  * conversation. The accumulator owns the entire chunk→DB mapping for the
- * React SDK; consumers downstream (e.g. `toAISdkV5Messages` in the playground)
+ * React SDK; consumers downstream (e.g. `toAISdkMessages` in the playground)
  * translate the result into AI SDK / assistant-ui shapes as needed.
  */
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {

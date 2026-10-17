@@ -1,4 +1,4 @@
-export { jsonSchema } from '@internal/ai-sdk-v5';
-export type { Schema } from '@internal/ai-sdk-v5';
+export { jsonSchema } from '@internal/ai-v7';
+export type { Schema } from '@internal/ai-v7';
 
 export type { JSONSchema7 } from 'json-schema';

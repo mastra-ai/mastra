@@ -7,10 +7,10 @@
  *   the observed messages from the prompt.
  */
 
-import { APICallError } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { APICallError } from '@mastra/core/ai';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -25,7 +25,7 @@ const observationText = '<observations>\n* Observed older conversation\n</observ
 const baseTime = Date.now() - 10 * 60_000;
 
 function createObserverModel(text = observationText) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -169,7 +169,7 @@ describe('automatic context-overflow recovery in the OM processor (#21657)', () 
       if (error) throw error;
     };
     const usage = { inputTokens: 10, outputTokens: 10, totalTokens: 20 };
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         call(prompt);
         return {

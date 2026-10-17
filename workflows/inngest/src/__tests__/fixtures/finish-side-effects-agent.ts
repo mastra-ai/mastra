@@ -1,9 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { simulateReadableStream } from '@mastra/core/ai';
 import { Mastra } from '@mastra/core/mastra';
 import { DefaultStorage } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { simulateReadableStream } from 'ai';
 import { Inngest } from 'inngest';
 
 import { createInngestAgent } from '../../durable-agent';

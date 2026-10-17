@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
@@ -10,7 +10,7 @@ function createInMemoryStorage(): InMemoryMemory {
 }
 
 function createNoopModel(modelId: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     modelId,
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },

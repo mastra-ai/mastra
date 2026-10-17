@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Observability } from '@mastra/observability';
@@ -92,7 +92,7 @@ describe('MCP isError - agent integration (four surfaces)', () => {
     // Model calls the failing tool on step 1, then (after seeing the error fed
     // back) returns text on step 2 so the loop terminates cleanly.
     let step = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         step++;
         if (step === 1) {

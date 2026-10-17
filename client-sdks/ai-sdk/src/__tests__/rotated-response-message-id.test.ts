@@ -6,18 +6,18 @@
  * transformer must announce the id of the first model step, which is the id
  * the assistant response is actually persisted under.
  */
-import type { UIMessage } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessage } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
 import { handleChatStream } from '../chat-route';
-import { AgentStreamToAISDKV6Transformer } from '../transformers';
+import { AgentStreamToAISDKTransformer } from '../transformers';
 
 function createTextModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -78,7 +78,6 @@ describe('rotated response message id announcement', () => {
       mastra,
       agentId: 'test-agent',
       params: { messages: [userMessage] },
-      version: 'v6',
     } as any);
 
     const chunks = await collect(stream);
@@ -91,7 +90,7 @@ describe('rotated response message id announcement', () => {
 
   it('keeps the first step id when rotation happens between later steps', async () => {
     let callCount = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -153,7 +152,6 @@ describe('rotated response message id announcement', () => {
       mastra,
       agentId: 'test-agent',
       params: { messages: [userMessage] },
-      version: 'v6',
     } as any);
 
     const chunks = await collect(stream);
@@ -176,7 +174,7 @@ describe('rotated response message id announcement', () => {
       rawChunk({ type: 'text-start', payload: { id: 'text-1' } }),
       rawChunk({ type: 'text-delta', payload: { id: 'text-1', text: 'hello' } }),
       rawChunk({ type: 'text-end', payload: { id: 'text-1' } }),
-    ]).pipeThrough(AgentStreamToAISDKV6Transformer({}));
+    ]).pipeThrough(AgentStreamToAISDKTransformer({}));
 
     const chunks = await collect(stream);
     const types = chunks.map(c => c.type);
@@ -192,7 +190,7 @@ describe('rotated response message id announcement', () => {
       rawChunk({ type: 'text-start', payload: { id: 'text-1' } }),
       rawChunk({ type: 'text-delta', payload: { id: 'text-1', text: 'hello' } }),
       rawChunk({ type: 'text-end', payload: { id: 'text-1' } }),
-    ]).pipeThrough(AgentStreamToAISDKV6Transformer({}));
+    ]).pipeThrough(AgentStreamToAISDKTransformer({}));
 
     const chunks = await collect(stream);
     const startChunk = chunks.find(c => c.type === 'start');
@@ -205,7 +203,7 @@ describe('rotated response message id announcement', () => {
     const stream = convertArrayToReadableStream([
       rawChunk({ type: 'start', payload: { id: 'agent-1', messageId: 'only-id' } }),
       rawChunk({ type: 'data-om-status', data: { status: 'buffering' } }),
-    ]).pipeThrough(AgentStreamToAISDKV6Transformer({}));
+    ]).pipeThrough(AgentStreamToAISDKTransformer({}));
 
     const chunks = await collect(stream);
     const startChunk = chunks.find(c => c.type === 'start');

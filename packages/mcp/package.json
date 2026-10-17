@@ -51,7 +51,6 @@
     "@mastra/core": ">=2.0.0-0 <3.0.0-0"
   },
   "devDependencies": {
-    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
     "@internal/test-utils": "workspace:*",

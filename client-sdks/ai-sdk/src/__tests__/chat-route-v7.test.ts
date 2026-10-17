@@ -1,6 +1,6 @@
-import type { UIMessage as UIMessageV5 } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessage as UIMessageV5 } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it } from 'vitest';
 
@@ -9,7 +9,7 @@ import { handleChatStream, toAISdkStream } from '../index';
 const messages: UIMessageV5[] = [{ id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] }];
 
 function createMastra() {
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -61,7 +61,6 @@ describe('AI SDK v7 support', () => {
         mastra: createMastra(),
         agentId: 'test-agent',
         params: { messages } as any,
-        version: 'v7',
       }),
     );
 
@@ -83,7 +82,6 @@ describe('AI SDK v7 support', () => {
           mastra: createMastra(),
           agentId: 'test-agent',
           params: { messages } as any,
-          version: 'v6',
         }),
       ),
     );
@@ -93,7 +91,6 @@ describe('AI SDK v7 support', () => {
           mastra: createMastra(),
           agentId: 'test-agent',
           params: { messages } as any,
-          version: 'v7',
         }),
       ),
     );
@@ -106,7 +103,7 @@ describe('AI SDK v7 support', () => {
     const result = await agent.stream(messages as any);
 
     const chunks: any[] = [];
-    for await (const part of toAISdkStream(result, { from: 'agent', version: 'v7' })) {
+    for await (const part of toAISdkStream(result, { from: 'agent' })) {
       chunks.push(part);
     }
 

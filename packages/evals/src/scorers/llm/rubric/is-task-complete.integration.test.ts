@@ -1,5 +1,5 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, it, expect } from 'vitest';
 import type { RubricAnalysisResult } from './prompts';
 import { createRubricScorer } from '.';
@@ -13,7 +13,7 @@ function sequencedJudge(analyses: RubricAnalysisResult[]) {
     return JSON.stringify(analysis);
   };
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
@@ -42,7 +42,7 @@ function sequencedJudge(analyses: RubricAnalysisResult[]) {
 /** A supervisor model that produces a text response per iteration. */
 function supervisorModel(onCall: () => void) {
   const make = (n: number) => `Iteration ${n} response.`;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       onCall();
       return {

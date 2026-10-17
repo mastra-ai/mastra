@@ -1,5 +1,5 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
@@ -43,7 +43,7 @@ describe('agent terminal tracing', () => {
     memory,
     outputProcessors,
   }: {
-    model: MockLanguageModelV2;
+    model: MockLanguageModelV4;
     memory?: MockMemory;
     outputProcessors?: Processor[];
   }) {
@@ -72,7 +72,7 @@ describe('agent terminal tracing', () => {
 
   it('ends open descendant spans when an agent stream terminates with an error', async () => {
     const streamError = new Error('LLM mid-stream error');
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw streamError;
       },
@@ -107,7 +107,7 @@ describe('agent terminal tracing', () => {
     // The stream never closes on its own, so model spans are still open when
     // the abort terminal runs — including cases where the model span ends
     // first and abandons its children.
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('should not be called');
       },
@@ -157,7 +157,7 @@ describe('agent terminal tracing', () => {
   });
 
   it('ends the agent span when a prepare step fails before streaming starts', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('should not be called');
       },

@@ -12,8 +12,8 @@
  * run. No timers, no polling, no reliance on scheduling luck.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -65,7 +65,7 @@ function createObserverModel(onCall?: () => Promise<void>) {
     if (onCall) await onCall();
   };
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       await runHook();
       return {

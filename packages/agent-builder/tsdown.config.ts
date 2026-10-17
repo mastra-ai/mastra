@@ -11,7 +11,6 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@internal/ai-sdk-v5'],
     neverBundle: ['typescript'],
   },
   onSuccess: async () => {

@@ -4,8 +4,8 @@
  * would add a buffering-failed marker for a cycle whose chunk is stored and still activates.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -21,7 +21,7 @@ const threadId = 'post-persist-thread';
 const resourceId = 'post-persist-resource';
 
 function createObserverModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

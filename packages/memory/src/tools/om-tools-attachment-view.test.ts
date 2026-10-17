@@ -5,8 +5,8 @@
  * the tool-result mapping (and the fact that it survives the memory-tool path) is exercised too.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
@@ -23,7 +23,7 @@ function createV5RecallThenAnswerModel(supportedUrls: Record<string, RegExp[]> =
   let streamCall = 0;
   const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     supportedUrls,
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },

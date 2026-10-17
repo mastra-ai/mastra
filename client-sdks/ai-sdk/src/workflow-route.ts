@@ -1,30 +1,11 @@
-import {
-  createUIMessageStream as createUIMessageStreamV5,
-  createUIMessageStreamResponse as createUIMessageStreamResponseV5,
-} from '@internal/ai-sdk-v5';
-import {
-  createUIMessageStream as createUIMessageStreamV6,
-  createUIMessageStreamResponse as createUIMessageStreamResponseV6,
-} from '@internal/ai-v6';
-import {
-  createUIMessageStream as createUIMessageStreamV7,
-  createUIMessageStreamResponse as createUIMessageStreamResponseV7,
-} from '@internal/ai-v7';
+import { createUIMessageStream, createUIMessageStreamResponse } from '@mastra/core/ai';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { toAISdkStream } from './convert-streams';
-import type {
-  SupportedUIMessageStream,
-  V5UIMessage,
-  V5UIMessageStream,
-  V6UIMessage,
-  V6UIMessageStream,
-  V7UIMessage,
-  V7UIMessageStream,
-} from './public-types';
+import type { UIMessage, UIMessageStream } from './public-types';
 
 export type WorkflowStreamHandlerParams = {
   runId?: string;
@@ -41,22 +22,9 @@ export type WorkflowStreamHandlerOptions = {
   mastra: Mastra;
   workflowId: string;
   params: WorkflowStreamHandlerParams;
-  version?: 'v5' | 'v6' | 'v7';
   includeTextStreamParts?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-};
-
-type WorkflowStreamHandlerOptionsV5 = Omit<WorkflowStreamHandlerOptions, 'version'> & {
-  version?: 'v5';
-};
-
-type WorkflowStreamHandlerOptionsV6 = Omit<WorkflowStreamHandlerOptions, 'version'> & {
-  version: 'v6';
-};
-
-type WorkflowStreamHandlerOptionsV7 = Omit<WorkflowStreamHandlerOptions, 'version'> & {
-  version: 'v7';
 };
 
 /**
@@ -67,7 +35,7 @@ type WorkflowStreamHandlerOptionsV7 = Omit<WorkflowStreamHandlerOptions, 'versio
  * ```ts
  * // Next.js App Router
  * import { handleWorkflowStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from 'ai';
+ * import { createUIMessageStreamResponse } from '@mastra/core/ai';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {
@@ -81,24 +49,17 @@ type WorkflowStreamHandlerOptionsV7 = Omit<WorkflowStreamHandlerOptions, 'versio
  * }
  * ```
  */
-export function handleWorkflowStream<UI_MESSAGE extends V5UIMessage = V5UIMessage>(
-  options: WorkflowStreamHandlerOptionsV5,
-): Promise<V5UIMessageStream<UI_MESSAGE>>;
-export function handleWorkflowStream<UI_MESSAGE extends V6UIMessage = V6UIMessage>(
-  options: WorkflowStreamHandlerOptionsV6,
-): Promise<V6UIMessageStream<UI_MESSAGE>>;
-export function handleWorkflowStream<UI_MESSAGE extends V7UIMessage = V7UIMessage>(
-  options: WorkflowStreamHandlerOptionsV7,
-): Promise<V7UIMessageStream<UI_MESSAGE>>;
+export function handleWorkflowStream<UI_MESSAGE extends UIMessage = UIMessage>(
+  options: WorkflowStreamHandlerOptions,
+): Promise<UIMessageStream<UI_MESSAGE>>;
 export async function handleWorkflowStream({
   mastra,
   workflowId,
   params,
-  version = 'v5',
   includeTextStreamParts = true,
   sendReasoning = false,
   sendSources = false,
-}: WorkflowStreamHandlerOptions): Promise<SupportedUIMessageStream> {
+}: WorkflowStreamHandlerOptions): Promise<UIMessageStream> {
   const {
     runId,
     resourceId: resourceIdFromParams,
@@ -122,39 +83,7 @@ export async function handleWorkflowStream({
     ? run.resumeStream({ resumeData, ...rest, requestContext })
     : run.stream({ inputData, initialState, ...rest, requestContext });
 
-  if (version === 'v7') {
-    return createUIMessageStreamV7<V7UIMessage>({
-      execute: async ({ writer }) => {
-        for await (const part of toAISdkStream(stream, {
-          from: 'workflow',
-          version: 'v7',
-          includeTextStreamParts,
-          sendReasoning,
-          sendSources,
-        })) {
-          writer.write(part);
-        }
-      },
-    }) as SupportedUIMessageStream;
-  }
-
-  if (version === 'v6') {
-    return createUIMessageStreamV6<V6UIMessage>({
-      execute: async ({ writer }) => {
-        for await (const part of toAISdkStream(stream, {
-          from: 'workflow',
-          version: 'v6',
-          includeTextStreamParts,
-          sendReasoning,
-          sendSources,
-        })) {
-          writer.write(part);
-        }
-      },
-    }) as SupportedUIMessageStream;
-  }
-
-  return createUIMessageStreamV5<V5UIMessage>({
+  return createUIMessageStream<UIMessage>({
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
         from: 'workflow',
@@ -165,11 +94,10 @@ export async function handleWorkflowStream({
         writer.write(part);
       }
     },
-  }) as SupportedUIMessageStream;
+  });
 }
 
 export type WorkflowRouteOptions = {
-  version?: 'v5' | 'v6' | 'v7';
   sendReasoning?: boolean;
   sendSources?: boolean;
 } & (
@@ -203,7 +131,6 @@ export type WorkflowRouteOptions = {
 export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
-  version = 'v5',
   includeTextStreamParts = true,
   sendReasoning = false,
   sendSources = false,
@@ -291,26 +218,8 @@ export function workflowRoute({
         sendSources,
       };
 
-      if (version === 'v7') {
-        const uiMessageStream = await handleWorkflowStream({
-          ...handlerOptions,
-          version: 'v7',
-        });
-
-        return createUIMessageStreamResponseV7({ stream: uiMessageStream });
-      }
-
-      if (version === 'v6') {
-        const uiMessageStream = await handleWorkflowStream({
-          ...handlerOptions,
-          version: 'v6',
-        });
-
-        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
-      }
-
       const uiMessageStream = await handleWorkflowStream(handlerOptions);
-      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
+      return createUIMessageStreamResponse({ stream: uiMessageStream });
     },
   });
 }

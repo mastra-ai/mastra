@@ -1,8 +1,6 @@
-import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
-import type { TextPart } from '@internal/ai-sdk-v5';
-import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { TextPart } from '@mastra/core/ai';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 import { coreFeatures } from '@mastra/core/features';
@@ -55,6 +53,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { embedMany } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
@@ -1612,7 +1611,7 @@ ${workingMemory}`;
     bigint,
     {
       chunks: string[];
-      embeddings: Awaited<ReturnType<typeof embedManyV5>>['embeddings'];
+      embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
       usage?: { tokens: number };
       dimension: number | undefined;
     }
@@ -1640,13 +1639,9 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    const embedFn: typeof embedManyV5 | typeof embedManyV6 =
-      this.embedder.specificationVersion === 'v3' ? embedManyV6 : embedManyV5;
-
-    const promise = embedFn({
+    const promise = embedMany({
       values: chunks,
       maxRetries: 3,
-      // @ts-expect-error - embedder type mismatch
       model: this.embedder,
       ...(this.embedderOptions || {}),
     });

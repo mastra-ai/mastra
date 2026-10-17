@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai-v6';
+import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
 import { ToolCallFilter } from '@mastra/core/processors';

@@ -1,4 +1,4 @@
-import { MockLanguageModelV3 } from '@internal/ai-v6/test';
+import { MockLanguageModelV3 } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';

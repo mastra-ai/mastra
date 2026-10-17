@@ -21,8 +21,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Agent } from '@mastra/core/agent';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel, createToolCallThenTextModel } from '../mock-models';
@@ -45,7 +45,7 @@ function makeSubAgent(id: string, text: string): Agent {
  */
 function createAlwaysDelegateModel(toolName: string, args: Record<string, unknown>): LanguageModelV2 {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       return {
@@ -312,7 +312,7 @@ export function createDelegationTests(context: DurableAgentTestContext) {
     });
 
     it('surfaces a sub-agent failure to the supervisor without killing the run', async () => {
-      const failingModel = new MockLanguageModelV2({
+      const failingModel = new MockLanguageModelV4({
         doStream: async () => {
           throw new Error('sub-agent exploded');
         },

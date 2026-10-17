@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { anthropic as anthropicV6 } from '@ai-sdk/anthropic-v6';
+import { anthropic as anthropicV6 } from '@ai-sdk/anthropic';
 import { createGatewayMock } from '@internal/test-utils';
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { toAISdkMessages } from '@mastra/ai-sdk/ui';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
@@ -123,7 +123,7 @@ function analyzeDbMessages(messages: any[]) {
 }
 
 /**
- * Analyze UI messages from toAISdkV5Messages() for display integrity.
+ * Analyze UI messages from toAISdkMessages() for display integrity.
  *
  * In the UI pipeline, tool invocations appear as tool-<toolName> parts with
  * a toolInvocation object. Each tool should have both a call and result state
@@ -1177,7 +1177,7 @@ CRITICAL RULES:
         const rawMessages = rawDb.messages as MastraDBMessage[];
         const recalled = await memory.recall({ threadId, resourceId: testResourceId, perPage: 500 });
         const filtered = recalled.messages.filter(message => !isPureOmMessage(message));
-        const uiMessages = toAISdkV5Messages(filtered);
+        const uiMessages = toAISdkMessages(filtered);
 
         const dbAnalysis = analyzeDbMessages(rawMessages);
         const recallAnalysis = analyzeDbMessages(filtered);

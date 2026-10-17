@@ -27,8 +27,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { __resetExecutionFencesForTests, globalRunRegistry } from '@mastra/core/agent/durable';
 import { MockMemory } from '@mastra/core/memory';
 import { MockStore } from '@mastra/core/storage';
@@ -102,7 +102,7 @@ async function lapseClaim(storage: InstanceType<typeof MockStore>, runId: string
 
 /** Model that signals once its stream is entered, then hangs forever. */
 function createHangingModel(onReached: () => void): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       onReached();
       // Never resolves — the "process" dies mid-LLM call.
@@ -118,7 +118,7 @@ function createToolThenHangModel(
   onReached: () => void,
 ): LanguageModelV2 {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -151,7 +151,7 @@ function createToolThenHangModel(
 /** Text model that counts invocations, so tests can prove recovery re-drove the LLM. */
 function createCountingTextModel(text: string): { model: LanguageModelV2; calls: { count: number } } {
   const calls = { count: 0 };
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       calls.count++;
       return {

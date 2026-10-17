@@ -18,8 +18,8 @@
  * (processInputStep / processAPIError) and leaves the in-flight message
  * mergeable everywhere else.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
@@ -72,7 +72,7 @@ function createCapturingActorModel(captured: CapturedCall[]) {
     ]),
   });
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       captured.push({ prompt });
       const n = nextCall();
@@ -120,7 +120,7 @@ function createMockObserverModel() {
 ## Observed
 - 🔴 User asked supervisor to delegate; sub-agent handled task.
 </observations>`;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start' as const, warnings: [] },
@@ -145,7 +145,7 @@ function createMockReflectorModel() {
 ## Condensed
 - 🔴 Delegation flow observed.
 </observations>`;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start' as const, warnings: [] },

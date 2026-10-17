@@ -62,7 +62,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/ai-v7": "workspace:*",
     "@internal/core": "workspace:*"
   },
   "devDependencies": {

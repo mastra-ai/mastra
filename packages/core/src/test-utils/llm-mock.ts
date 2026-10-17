@@ -6,6 +6,11 @@ import { MastraLanguageModelV4Mock } from '../loop/test-utils/MastraLanguageMode
 // Re-export for external use
 export { simulateReadableStream, MastraLanguageModelV4Mock };
 
+const V4_USAGE = {
+  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: 20, text: 20, reasoning: undefined },
+};
+
 export function createMockModel({
   objectGenerationMode,
   mockText,
@@ -31,8 +36,8 @@ export function createMockModel({
 
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: V4_USAGE,
         content: [
           {
             type: 'text',
@@ -58,8 +63,8 @@ export function createMockModel({
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: V4_USAGE,
           },
         ]),
       };
@@ -80,14 +85,14 @@ export function mockTextModel(
   { provider, modelId }: { provider?: string; modelId?: string } = {},
 ) {
   const textFor = async (options: any) => (await respond?.(options))?.text ?? '';
-  const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
+  const usage = V4_USAGE;
 
   return new MockLanguageModelV4({
     ...(provider ? { provider } : {}),
     ...(modelId ? { modelId } : {}),
     doGenerate: async options => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop',
+      finishReason: { unified: 'stop', raw: 'stop' },
       usage,
       content: [{ type: 'text', text: await textFor(options) }],
       warnings: [],
@@ -103,7 +108,7 @@ export function mockTextModel(
           { type: 'text-start', id: 'text-1' },
           { type: 'text-delta', id: 'text-1', delta: text },
           { type: 'text-end', id: 'text-1' },
-          { type: 'finish', finishReason: 'stop', usage },
+          { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
         ]),
       };
     },

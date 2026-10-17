@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { LibSQLStore } from '@mastra/libsql';
 import { Extractor, Memory, WorkingMemoryExtractor } from '@mastra/memory';
@@ -120,7 +120,7 @@ describe('Observational Memory extracted metadata persistence', () => {
 - Name: Tyler
 - Location: Seattle
 </working-memory>`;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -183,7 +183,7 @@ describe('Observational Memory extracted metadata persistence', () => {
     const observerOutput = `<observations>
 - User shared durable schema-backed profile details.
 </observations>`;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         const isExtraction = JSON.stringify(prompt).includes('Extract structured data from the observations you made.');
         const text = isExtraction
@@ -267,7 +267,7 @@ describe('Observational Memory extracted metadata persistence', () => {
 </observations>
 <priority>high</priority>
 <status>documented</status>`;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },

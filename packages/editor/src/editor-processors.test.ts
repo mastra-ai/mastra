@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
@@ -870,10 +870,10 @@ describe('Stored Agents with Processor Providers', () => {
   });
 
   describe('Processor execution through hydrated graph', () => {
-    let mockModel: MockLanguageModelV2;
+    let mockModel: MockLanguageModelV4;
 
     beforeEach(() => {
-      mockModel = new MockLanguageModelV2({
+      mockModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           const messages = Array.isArray(prompt) ? prompt : [];
           const textContent = messages

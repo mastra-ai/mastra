@@ -11,7 +11,7 @@ import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem, resolveToolConfig, Workspace } from '@mastra/core/workspace';
 import type { FilesystemProvider, SandboxProvider, WorkspaceProvider } from '@mastra/core/editor';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
-import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { MastraEditor } from './index';
 
 // =============================================================================
@@ -45,10 +45,10 @@ const createSetup = async (editorConfig?: ConstructorParameters<typeof MastraEdi
 
 const createMockLLM = (
   responses: Array<{ text?: string; toolCall?: { name: string; args: Record<string, unknown> } }>,
-): MockLanguageModelV2 => {
+): MockLanguageModelV4 => {
   let responseIndex = 0;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       const response = responses[responseIndex] || { text: 'Default response' };
       if (responseIndex < responses.length - 1) responseIndex++;
@@ -116,9 +116,9 @@ class MockGateway extends MastraModelGateway {
   readonly id = 'models.dev';
   readonly name = 'Mock Gateway';
 
-  private llmOverrides: Record<string, MockLanguageModelV2> = {};
+  private llmOverrides: Record<string, MockLanguageModelV4> = {};
 
-  setLLM(modelId: string, llm: MockLanguageModelV2) {
+  setLLM(modelId: string, llm: MockLanguageModelV4) {
     this.llmOverrides[modelId] = llm;
   }
 

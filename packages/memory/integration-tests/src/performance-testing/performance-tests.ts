@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { faker } from '@faker-js/faker';
+import type { TextPart, ImagePart, FilePart, ToolCallPart } from '@mastra/core/ai';
 import type { Memory } from '@mastra/memory';
-import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const resourceId = 'resource';

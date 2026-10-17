@@ -19,8 +19,8 @@
  * representation via `toJSON()`, so any `JSON.stringify` of a snapshot that happens to carry a
  * turn produces a correct, lossless value instead of crashing.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import type { InputProcessorOrWorkflow } from '@mastra/core/processors';
 import { ProcessorStepSchema } from '@mastra/core/processors';
@@ -33,7 +33,7 @@ import { ObservationStep } from '../observation-turn/step';
 import { ObservationTurn } from '../observation-turn/turn';
 
 function createMockAgentModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
@@ -68,7 +68,7 @@ function createMockObserverModel() {
 - 🔴 User asked for help
 </observations>
 <current-task>Help</current-task>`;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected doGenerate call — OM should use the stream path');
     },

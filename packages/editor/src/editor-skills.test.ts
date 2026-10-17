@@ -11,7 +11,7 @@ import { createTool } from '@mastra/core/tools';
 import { Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceStat, SkillSourceEntry } from '@mastra/core/workspace';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
-import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { MastraEditor } from './index';
 
 // =============================================================================
@@ -125,9 +125,9 @@ function buildSkillMd(meta: { name: string; description: string; license?: strin
 
 const createMockLLM = (
   responses: Array<{ text?: string; toolCall?: { name: string; args: Record<string, unknown> } }>,
-): MockLanguageModelV2 => {
+): MockLanguageModelV4 => {
   let responseIndex = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       const response = responses[responseIndex] || { text: 'Default response' };
       if (responseIndex < responses.length - 1) responseIndex++;
@@ -191,8 +191,8 @@ const createMockLLM = (
 class MockGateway extends MastraModelGateway {
   readonly id = 'models.dev';
   readonly name = 'Mock Gateway';
-  private llmOverrides: Record<string, MockLanguageModelV2> = {};
-  setLLM(modelId: string, llm: MockLanguageModelV2) {
+  private llmOverrides: Record<string, MockLanguageModelV4> = {};
+  setLLM(modelId: string, llm: MockLanguageModelV4) {
     this.llmOverrides[modelId] = llm;
   }
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
@@ -1137,7 +1137,7 @@ describe('editor.skill — agent execution integration', () => {
 
   // Helper: create a mock LLM that captures the full prompt sent to it
   const createCapturingLLM = (capturedPrompts: Array<any[]>) => {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async (params: any) => {
         capturedPrompts.push(params.prompt);
         return {
@@ -1572,7 +1572,7 @@ describe('editor.skill — agent execution integration', () => {
     // Use a custom mock that captures tools
     gateway.setLLM(
       'skill-tool-mock',
-      new MockLanguageModelV2({
+      new MockLanguageModelV4({
         doGenerate: async ({ tools }) => {
           capturedTools = tools;
           return {
@@ -1735,7 +1735,7 @@ describe('editor.skill — live strategy execution', () => {
 
     // 2. Set up agent with live strategy
     const capturedPrompts: Array<any[]> = [];
-    const capturingLLM = new MockLanguageModelV2({
+    const capturingLLM = new MockLanguageModelV4({
       doGenerate: async (params: any) => {
         capturedPrompts.push(params.prompt);
         return {
@@ -1816,7 +1816,7 @@ describe('editor.skill — live strategy execution', () => {
     );
 
     const capturedPrompts: Array<any[]> = [];
-    const capturingLLM = new MockLanguageModelV2({
+    const capturingLLM = new MockLanguageModelV4({
       doGenerate: async (params: any) => {
         capturedPrompts.push(params.prompt);
         return {
@@ -1921,7 +1921,7 @@ describe('editor.skill — live strategy execution', () => {
 
     // 2. Set up agent and capture tools + prompts
     let capturedTools: Record<string, any> = {};
-    const capturingLLM = new MockLanguageModelV2({
+    const capturingLLM = new MockLanguageModelV4({
       doGenerate: async (params: any) => {
         capturedTools = params.tools ?? {};
         return {

@@ -388,9 +388,6 @@ importers:
         specifier: ^0.21.0
         version: 0.21.0(zod@4.6.5)
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -1270,21 +1267,12 @@ importers:
 
   client-sdks/ai-sdk:
     devDependencies:
-      '@ai-sdk/openai-v7':
-        specifier: npm:@ai-sdk/openai@4.0.21
-        version: '@ai-sdk/openai@4.0.21(zod@4.6.5)'
+      '@ai-sdk/openai':
+        specifier: 4.0.95
+        version: 4.0.95(zod@4.6.5)
       '@ai-sdk/provider':
-        specifier: ^2.0.3
-        version: 2.0.3
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v5
-      '@internal/ai-v6':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v6
-      '@internal/ai-v7':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v7
+        specifier: 4.0.28
+        version: 4.0.28
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -1358,9 +1346,6 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3399,9 +3384,6 @@ importers:
 
   observability/mastra:
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3460,9 +3442,6 @@ importers:
         specifier: 0.221.0
         version: 0.221.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3909,9 +3888,9 @@ importers:
 
   packages/_internals/voice:
     dependencies:
-      '@internal/ai-sdk-v5':
+      '@internal/ai-v7':
         specifier: workspace:*
-        version: link:../../_vendored/ai_v5
+        version: link:../../_vendored/ai_v7
       '@internal/core':
         specifier: workspace:*
         version: link:../../_internal-core
@@ -4212,11 +4191,11 @@ importers:
         specifier: ^4.0.89
         version: 4.0.90(zod@4.6.5)
       '@ai-sdk/provider':
-        specifier: ^4.0.17
-        version: 4.0.18
+        specifier: 4.0.28
+        version: 4.0.28
       '@ai-sdk/provider-utils':
-        specifier: 5.0.52
-        version: 5.0.52(zod@4.6.5)
+        specifier: 5.0.61
+        version: 5.0.61(zod@4.6.5)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -4275,9 +4254,6 @@ importers:
         specifier: ^7.0.5
         version: 7.0.5
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -4296,9 +4272,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
-      ai-v5:
-        specifier: npm:ai@5.0.221
-        version: ai@5.0.221(zod@4.6.5)
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
@@ -5047,12 +5020,6 @@ importers:
       '@hono/node-server':
         specifier: 2.1.3
         version: 2.1.3(hono@4.13.13)
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
-      '@internal/ai-v6':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v6
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
@@ -5100,17 +5067,14 @@ importers:
         version: 4.0.4
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.24
-        version: 1.3.24(zod@4.6.5)
+        specifier: 4.0.95
+        version: 4.0.95(zod@4.6.5)
       '@ai-sdk/openai-v6':
         specifier: npm:@ai-sdk/openai@3.0.88
         version: '@ai-sdk/openai@3.0.88(zod@4.6.5)'
       '@copilotkit/aimock':
         specifier: ^1.29.0
         version: 1.29.0(vitest@4.1.11)
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5162,6 +5126,9 @@ importers:
 
   packages/fastembed:
     dependencies:
+      '@ai-sdk/provider':
+        specifier: 4.0.28
+        version: 4.0.28
       '@anush008/tokenizers':
         specifier: ^0.6.0
         version: 0.6.0
@@ -5172,12 +5139,6 @@ importers:
         specifier: 1.26.0
         version: 1.26.0
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
-      '@internal/ai-v6':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v6
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5273,9 +5234,6 @@ importers:
         specifier: ^3.1.3
         version: 3.1.3
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5490,17 +5448,11 @@ importers:
         version: 4.6.5
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.24
-        version: 1.3.24(zod@4.6.5)
+        specifier: 4.0.95
+        version: 4.0.95(zod@4.6.5)
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.115
         version: '@ai-sdk/openai@2.0.115(zod@4.6.5)'
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
-      '@internal/ai-v6':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v6
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6077,9 +6029,6 @@ importers:
         specifier: 0.1.0-alpha.7
         version: 0.1.0-alpha.7(encoding@0.1.13)
     devDependencies:
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6136,20 +6085,17 @@ importers:
         version: 0.5.2
     devDependencies:
       '@ai-sdk/anthropic':
-        specifier: ^3.0.103
-        version: 3.0.105(zod@4.6.5)
+        specifier: 4.0.81
+        version: 4.0.81(zod@4.6.5)
       '@ai-sdk/google':
-        specifier: ^3.0.101
-        version: 3.0.103(zod@4.6.5)
+        specifier: 4.0.97
+        version: 4.0.97(zod@4.6.5)
       '@ai-sdk/openai':
-        specifier: ^3.0.88
-        version: 3.0.90(zod@4.6.5)
-      '@internal/ai-sdk-v5':
+        specifier: 4.0.95
+        version: 4.0.95(zod@4.6.5)
+      '@internal/ai-v7':
         specifier: workspace:*
-        version: link:../_vendored/ai_v5
-      '@internal/ai-v6':
-        specifier: workspace:*
-        version: link:../_vendored/ai_v6
+        version: link:../_vendored/ai_v7
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6218,8 +6164,8 @@ importers:
         version: 4.13.13
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.24
-        version: 1.3.24(zod@4.6.5)
+        specifier: 4.0.95
+        version: 4.0.95(zod@4.6.5)
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.115
         version: '@ai-sdk/openai@2.0.115(zod@4.6.5)'
@@ -9343,9 +9289,6 @@ importers:
       '@ai-sdk/provider-v5':
         specifier: npm:@ai-sdk/provider@2.0.3
         version: '@ai-sdk/provider@2.0.3'
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v5
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -9422,9 +9365,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
-      ai:
-        specifier: ^5.0.221
-        version: 5.0.226(zod@4.6.5)
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
@@ -10647,12 +10587,6 @@ packages:
     peerDependencies:
       zod: 4.6.5
 
-  '@ai-sdk/google@3.0.103':
-    resolution: {integrity: sha512-i/I92bfAeRPBvAwrW052NmPTkc+ZgVYs3vZjGhHgReE04cV37xJtbhZgr6U3CZKDArIAN0NhL0GoLpZ7FYV+dA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: 4.6.5
-
   '@ai-sdk/google@4.0.97':
     resolution: {integrity: sha512-MWg8/1RKqQwfJTmQJiSHG2enFPsINXyGDyYZkTzbrHMyRcDPkKHwNdxghHpXWyxT7NtWER5l/0Hus0cn1w6Bnw==}
     engines: {node: '>=22'}
@@ -10749,12 +10683,6 @@ packages:
     peerDependencies:
       zod: 4.6.5
 
-  '@ai-sdk/openai@4.0.21':
-    resolution: {integrity: sha512-2z+Hf+VXfevQWiiCUgUGi2m/rH1Tew5sL2knuUWUbY/qsrdmhgpCAghDdkcMY/bj6EgCvVVzqxHN4NyrTh2FdQ==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      zod: 4.6.5
-
   '@ai-sdk/openai@4.0.95':
     resolution: {integrity: sha512-rx8agb3u+pvDDqvrDYrXfMJVlnlwigNcdgqbwH4oGVi/UZRMNVY+SYhGNI9ynwjmiGcl6QG/QJz73e6qaGL7jg==}
     engines: {node: '>=22'}
@@ -10833,10 +10761,6 @@ packages:
 
   '@ai-sdk/provider@4.0.28':
     resolution: {integrity: sha512-6ThcmkJQXSMlBrf6mirIjUUS04Q5/kApbYTOzd5lZfYXLa1XPpnDLxP/G96/DKc00fDIUOW9S2ls0mSzb0+l9w==}
-    engines: {node: '>=22'}
-
-  '@ai-sdk/provider@4.0.4':
-    resolution: {integrity: sha512-tbHKNLirllUNF3ZlkCsXnwab2ZV1Sl4b1H/Cp9ruCce15IBmskE8Gwkk0yo9xDWY+jho2of7lVXtwSsyrq7cwQ==}
     engines: {node: '>=22'}
 
   '@ai-sdk/togetherai@1.0.45':
@@ -22929,12 +22853,6 @@ packages:
     peerDependencies:
       zod: 4.6.5
 
-  ai@5.0.221:
-    resolution: {integrity: sha512-bO3rwC/y0tyYxs4E2fA8t2jDHdy5L7JPKznCFuCtq8Hnh/66GcrsSvGjEXX+V6dnl2cmxhsQrZ3JDsiCig1n1w==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: 4.6.5
-
   ai@5.0.226:
     resolution: {integrity: sha512-I5Qv6I0kNyHkdTaJCAdeMGSn07U1D2kjJE8iDmCYMu5VeY6HmBnJ6azvvEgxKDY01nkCv38YR3f6/vAaAlf13Q==}
     engines: {node: '>=18'}
@@ -33386,12 +33304,6 @@ snapshots:
       zod: 4.6.5
     optional: true
 
-  '@ai-sdk/google@3.0.103(zod@4.6.5)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.56(zod@4.6.5)
-      zod: 4.6.5
-
   '@ai-sdk/google@4.0.97(zod@4.6.5)':
     dependencies:
       '@ai-sdk/provider': 4.0.28
@@ -33506,12 +33418,6 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.56(zod@4.6.5)
       zod: 4.6.5
 
-  '@ai-sdk/openai@4.0.21(zod@4.6.5)':
-    dependencies:
-      '@ai-sdk/provider': 4.0.4
-      '@ai-sdk/provider-utils': 5.0.52(zod@4.6.5)
-      zod: 4.6.5
-
   '@ai-sdk/openai@4.0.95(zod@4.6.5)':
     dependencies:
       '@ai-sdk/provider': 4.0.28
@@ -33609,10 +33515,6 @@ snapshots:
       json-schema: 0.4.0
 
   '@ai-sdk/provider@4.0.28':
-    dependencies:
-      json-schema: 0.4.0
-
-  '@ai-sdk/provider@4.0.4':
     dependencies:
       json-schema: 0.4.0
 
@@ -36680,7 +36582,7 @@ snapshots:
 
   '@copilotkit/aimock@1.29.0(vitest@4.1.11)':
     optionalDependencies:
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
 
   '@copilotkit/aimock@1.45.1(vitest@4.1.11)':
     optionalDependencies:
@@ -45409,7 +45311,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.5
       tslib: 2.8.1
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
 
   '@supabase/auth-js@2.111.0':
     dependencies:
@@ -47870,14 +47772,6 @@ snapshots:
   ai@5.0.216(zod@4.6.5):
     dependencies:
       '@ai-sdk/gateway': 2.0.115(zod@4.6.5)
-      '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.40(zod@4.6.5)
-      '@opentelemetry/api': 1.9.0
-      zod: 4.6.5
-
-  ai@5.0.221(zod@4.6.5):
-    dependencies:
-      '@ai-sdk/gateway': 2.0.120(zod@4.6.5)
       '@ai-sdk/provider': 2.0.3
       '@ai-sdk/provider-utils': 3.0.40(zod@4.6.5)
       '@opentelemetry/api': 1.9.0

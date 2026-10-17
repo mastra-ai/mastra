@@ -1,11 +1,9 @@
 import {
-  MockLanguageModelV2 as MockLanguageModelV5,
+  MockLanguageModelV4 as MockLanguageModelV5,
   convertArrayToReadableStream as convertArrayToReadableStreamV5,
-} from '@internal/ai-sdk-v5/test';
-import {
-  MockLanguageModelV3 as MockLanguageModelV6,
+  MockLanguageModelV4 as MockLanguageModelV6,
   convertArrayToReadableStream as convertArrayToReadableStreamV6,
-} from '@internal/ai-v6/test';
+} from '@mastra/core/ai/test';
 import { describe } from 'vitest';
 
 import { getInputProcessorsTests } from './shared/input-processors';

@@ -1,4 +1,4 @@
-import { openai as openaiV5 } from '@ai-sdk/openai-v5';
+import { openai as openaiV5 } from '@ai-sdk/openai';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';

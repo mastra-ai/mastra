@@ -17,7 +17,7 @@ import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility';
 import type { ModelInformation } from './types';
-import { convertZodSchemaToAISDKSchema } from './utils';
+import { convertZodSchemaToAISDKSchema, getSyncJSONSchema } from './utils';
 
 /**
  * All supported string validation check types that can be processed or converted to descriptions.
@@ -761,6 +761,6 @@ export class SchemaCompatLayer {
    * @returns A JSONSchema7 object with provider-specific compatibility applied
    */
   public processToJSONSchema(zodSchema: ZodType): JSONSchema7 {
-    return this.processToAISDKSchema(zodSchema).jsonSchema;
+    return getSyncJSONSchema(this.processToAISDKSchema(zodSchema));
   }
 }

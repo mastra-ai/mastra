@@ -1,5 +1,5 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent, MessageList } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { MemoryRunState } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -15,7 +15,7 @@ const longResponseText =
 function createMockOmModel(responseText: string) {
   let streamCallCount = 0;
   let generateCallCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       generateCallCount++;
       if (generateCallCount % 2 === 1) {
@@ -85,7 +85,7 @@ function createMockOmModel(responseText: string) {
 }
 
 function createSimpleModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start' as const, warnings: [] },

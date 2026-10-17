@@ -9,9 +9,9 @@
  * usage on the generation, and zero open spans — for both DurableAgent and
  * EventedAgent.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
@@ -24,7 +24,7 @@ import { Observability } from './default';
 import { TestExporter } from './exporters';
 
 function textModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -43,7 +43,7 @@ function textModel(text: string) {
 /** The first `toolTurns` calls request a tool, the next returns final text — an agentic loop. */
 function toolThenTextModel(toolName: string, toolArgs: object, finalText: string, toolTurns = 1) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const turn = call++;
       return {
@@ -84,7 +84,7 @@ function toolThenTextModel(toolName: string, toolArgs: object, finalText: string
 
 /** Emits an error chunk so the run fails mid-stream (exercises the error path). */
 function errorModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

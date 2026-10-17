@@ -1,4 +1,4 @@
-import type { Schema } from '@internal/ai-v6';
+import type { Schema } from '@internal/ai-v7';
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import type { JSONSchema7 } from 'json-schema';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
@@ -19,7 +19,7 @@ const VENDOR = 'ai-sdk';
  *
  * @example
  * ```typescript
- * import { jsonSchema } from '@internal/ai-v6';
+ * import { jsonSchema } from '@internal/ai-v7';
  * import { toStandardSchema } from '@mastra/schema-compat/adapters/ai-sdk';
  *
  * // Create an AI SDK schema
@@ -189,7 +189,7 @@ export class AiSdkSchemaWrapper<Input = unknown, Output = Input> implements Stan
  *
  * @example
  * ```typescript
- * import { jsonSchema } from '@internal/ai-v6';
+ * import { jsonSchema } from '@internal/ai-v7';
  * import { toStandardSchema } from '@mastra/schema-compat/adapters/ai-sdk';
  *
  * const aiSdkSchema = jsonSchema<{ name: string; age: number }>({

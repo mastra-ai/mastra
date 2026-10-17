@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
 import { z } from 'zod';
@@ -17,7 +17,7 @@ export async function clientToolLifecycle(
   const actorPrompts: unknown[] = [];
   const beforeHistory: unknown[] = [];
   const afterHistory: unknown[] = [];
-  const observer = new MockLanguageModelV2({
+  const observer = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       observerPrompts.push(prompt);
       return {
@@ -48,7 +48,7 @@ export async function clientToolLifecycle(
         },
       },
     });
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
       actorPrompts.push(prompt);
       hooks.beforeActorResponse?.();

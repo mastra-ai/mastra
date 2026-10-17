@@ -673,6 +673,8 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** Forward provider raw chunks to the stream */
+  includeRawChunks?: boolean;
   /** Callback when a step finishes */
   onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
   /** Callback when the recovered run finishes */

@@ -1,5 +1,5 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -42,7 +42,7 @@ describe('resumeStream + toAISdkStream', () => {
     });
 
     let subAgentCallCount = 0;
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doStream: async () => {
         subAgentCallCount++;
 
@@ -98,7 +98,7 @@ describe('resumeStream + toAISdkStream', () => {
     });
 
     let supervisorCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doStream: async () => {
         supervisorCallCount++;
 

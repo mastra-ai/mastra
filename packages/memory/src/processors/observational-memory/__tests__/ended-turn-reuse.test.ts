@@ -12,9 +12,9 @@
  * begun, exactly like the existing message-list-identity cleanup.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/di';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -56,7 +56,7 @@ function createMockObserverModel() {
 * Assistant explained Y
 </observations>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected doGenerate call — OM should use the stream path');
     },

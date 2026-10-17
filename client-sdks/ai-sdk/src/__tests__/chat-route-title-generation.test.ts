@@ -14,8 +14,8 @@
  * conversation instead of producing a title. This test captures the exact input
  * the title model receives and asserts each message appears exactly once.
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { describe, expect, it } from 'vitest';
@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
 import { handleChatStream } from '../chat-route';
 
 function createMainModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -47,7 +47,7 @@ describe('chatRoute title generation (v6)', () => {
   it('sends each conversation message to the title model exactly once (no content/parts duplication)', async () => {
     let capturedTitlePrompt: any[] | undefined;
 
-    const titleModel = new MockLanguageModelV2({
+    const titleModel = new MockLanguageModelV4({
       doGenerate: async options => {
         capturedTitlePrompt = options.prompt as any[];
         return {
@@ -83,7 +83,7 @@ describe('chatRoute title generation (v6)', () => {
     const stream = await handleChatStream({
       mastra,
       agentId: 'title-agent',
-      version: 'v6',
+
       params: {
         messages: [{ id: 'msg-1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
         memory: { thread: 'chat-route-title-thread', resource: 'chat-route-title-user' },

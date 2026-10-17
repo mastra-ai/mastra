@@ -12,8 +12,8 @@
  * 4. OM processor sees stepNumber=1, checks threshold, triggers observation
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -33,7 +33,7 @@ function createMockOmModel(
   let generateCallCount = 0;
   let streamCallCount = 0;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       generateCallCount++;
 
@@ -138,7 +138,7 @@ function createMockObserverModel() {
 <current-task>Help the user with their request</current-task>
 <suggested-response>I can help you with that.</suggested-response>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected doGenerate call — OM should use the stream path');
     },
@@ -174,7 +174,7 @@ function createMockReflectorModel() {
 - 🔴 User needs help with tasks
 </observations>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected doGenerate call — OM should use the stream path');
     },
@@ -493,7 +493,7 @@ describe('Mock OM Agent Integration', () => {
     // The shared createMockOmModel only fires a tool call on the very first call,
     // so a second agent.generate() would stay on step 0 and never trigger observation.
     let genCount = 0;
-    const multiCallModel = new MockLanguageModelV2({
+    const multiCallModel = new MockLanguageModelV4({
       doGenerate: async () => {
         genCount++;
         // Odd calls → tool call, even calls → text response
@@ -721,7 +721,7 @@ describe('Mock OM Agent Integration', () => {
       });
 
       let genCount = 0;
-      const multiCallModel = new MockLanguageModelV2({
+      const multiCallModel = new MockLanguageModelV4({
         doGenerate: async () => {
           genCount++;
           if (genCount % 2 === 1) {

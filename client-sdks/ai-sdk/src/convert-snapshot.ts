@@ -12,7 +12,7 @@ import { createWorkflowDataPart, createWorkflowStepDataPart } from './transforme
  * @example
  * ```ts
  * import { workflowSnapshotToStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from 'ai';
+ * import { createUIMessageStreamResponse } from '@mastra/core/ai';
  *
  * const workflowRun = await mastra.getWorkflow('myWorkflow').getWorkflowRunById(runId);
  * const stream = workflowSnapshotToStream(workflowRun);

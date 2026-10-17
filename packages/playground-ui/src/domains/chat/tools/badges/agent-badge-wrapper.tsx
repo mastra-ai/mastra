@@ -1,4 +1,4 @@
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { toAISdkMessages } from '@mastra/ai-sdk/ui';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
@@ -58,7 +58,7 @@ export const AgentBadgeWrapper = ({
     return <LoadingBadge />;
   }
 
-  const convertedMessages = data?.messages ? toAISdkV5Messages(data.messages) : [];
+  const convertedMessages = data?.messages ? toAISdkMessages(data.messages) : [];
 
   let childMessages = result?.childMessages?.length ? result.childMessages : undefined;
 

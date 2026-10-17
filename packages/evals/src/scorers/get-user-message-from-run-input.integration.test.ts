@@ -1,6 +1,6 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { createScorer } from '@mastra/core/evals';
 import type { ScorerRunInputForAgent } from '@mastra/core/evals';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -21,7 +21,7 @@ import { getUserMessageFromRunInput } from './utils';
  */
 
 function createTextStreamModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,

@@ -1,4 +1,3 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import {
   Agent,
   createSignal,
@@ -6,6 +5,7 @@ import {
   MessageList,
 } from '@mastra/core/agent';
 import type { AgentSignalType, MastraDBMessage } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { filterSystemReminderMessages } from '@mastra/core/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
@@ -2727,7 +2727,7 @@ describe('Memory', () => {
         id: 'history-order',
         name: 'History order',
         instructions: 'test',
-        model: new MockLanguageModelV2(),
+        model: new MockLanguageModelV4(),
         memory,
       });
       const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: { perPage: 3 } });
@@ -2866,7 +2866,7 @@ describe('Memory', () => {
     });
 
     it('keeps subsequent model memory identical after caller-only recall exclusions', async () => {
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: 'text' },

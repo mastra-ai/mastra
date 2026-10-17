@@ -105,11 +105,10 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "^3.0.103",
-    "@ai-sdk/google": "^3.0.101",
-    "@ai-sdk/openai": "^3.0.88",
-    "@internal/ai-sdk-v5": "workspace:*",
-    "@internal/ai-v6": "workspace:*",
+    "@ai-sdk/anthropic": "4.0.81",
+    "@ai-sdk/google": "4.0.97",
+    "@ai-sdk/openai": "4.0.95",
+    "@internal/ai-v7": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
     "@internal/test-utils": "workspace:*",
@@ -127,9 +126,9 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",
-    "zod-v3": "npm:zod@^3.25.76",
+    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
     "zod-to-json-schema": "^3.25.2",
-    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5"
+    "zod-v3": "npm:zod@^3.25.76"
   },
   "homepage": "https://mastra.ai",
   "repository": {

@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ReflectorRunner } from '../reflector-runner';
@@ -9,7 +9,7 @@ import { ReflectorRunner } from '../reflector-runner';
  */
 function createScriptedModel(outputs: string[]) {
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     modelId: 'mock-reflector',
     doStream: async () => {
       const text = outputs[Math.min(calls, outputs.length - 1)]!;
@@ -49,7 +49,7 @@ function observationsPayload(body: string) {
  * Reflector wired so that compression "fails" for any output longer than the
  * threshold — countObservations is character length, threshold is 100.
  */
-function createReflectorRunner(model: MockLanguageModelV2) {
+function createReflectorRunner(model: MockLanguageModelV4) {
   return new ReflectorRunner({
     reflectionConfig: {
       model: 'mock/model',

@@ -1,5 +1,4 @@
-import { openai } from '@ai-sdk/openai';
-import { openai as openaiV6 } from '@ai-sdk/openai-v6';
+import { openai, openai as openaiV6 } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { setupDummyApiKeys, createGatewayMock } from '@internal/test-utils';
 import { describe, beforeAll, afterAll } from 'vitest';

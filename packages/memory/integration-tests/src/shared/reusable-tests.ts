@@ -3,13 +3,13 @@ import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { ToolResultPart, TextPart, ToolCallPart } from '@mastra/core/ai';
 import type { SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresStoreConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
-import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const resourceId = 'resource';

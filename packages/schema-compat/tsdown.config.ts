@@ -27,8 +27,8 @@ export default defineConfig({
     await generateTypes(
       process.cwd(),
       new Set([
-        '@internal/ai-sdk-v5',
-        '@internal/ai-v6',
+        '@internal/ai-v7',
+        '@internal/ai-v7',
         '@standard-schema/spec',
         '@types/json-schema',
         'ajv',

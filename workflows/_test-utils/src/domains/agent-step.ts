@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 // @ts-ignore
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { createTextStreamModel } from '../mock-models';
@@ -610,7 +610,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
@@ -625,7 +625,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
@@ -747,7 +747,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
@@ -762,7 +762,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',
