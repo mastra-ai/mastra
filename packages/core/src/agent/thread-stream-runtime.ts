@@ -492,6 +492,12 @@ type AgentThreadRuntimeState = {
    */
   lostRunsByThread: Map<string, AgentThreadRunRecord<any>>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
+  /**
+   * Runs the suspended-run TTL sweep evicted, mapped to when their lease was last
+   * known to be extended. The sweep keeps their lease, so until it lapses an idle
+   * send loses the lease to a run that no longer exists here.
+   */
+  sweptLeasedRunIds: Map<string, number>;
   /** A dequeued idle message retains its cancellation identity until execution begins. */
   drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
   drainingPendingSignalsByThread: Map<string, { signal: CreatedAgentSignal; cancelled: boolean; handedOff: boolean }>;
@@ -700,6 +706,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     preRunSignalsByThread: new Map(),
     lostRunsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
+    sweptLeasedRunIds: new Map(),
     drainingIdleSignalsByThread: new Map(),
     drainingPendingSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
@@ -841,6 +848,9 @@ export class AgentThreadStreamRuntime {
             // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
             // but another process can now claim the thread until this run completes or errors.
             this.#stopLeaseRenewal(pubsub, runId, timer);
+          } else if (state.sweptLeasedRunIds.has(runId)) {
+            // A renewal in flight when the sweep stopped this timer still extended the lease.
+            state.sweptLeasedRunIds.set(runId, Date.now());
           }
         })
         .catch(() => {});
@@ -2882,6 +2892,7 @@ export class AgentThreadStreamRuntime {
     state.preRunSignalsByThread.clear();
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
+    state.sweptLeasedRunIds.clear();
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
@@ -3087,6 +3098,9 @@ export class AgentThreadStreamRuntime {
    */
   #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
     const now = Date.now();
+    for (const [runId, sweptAt] of state.sweptLeasedRunIds) {
+      if (now - sweptAt > AGENT_THREAD_LEASE_TTL_MS) state.sweptLeasedRunIds.delete(runId);
+    }
     for (const [streamId, record] of state.threadRunsByStreamId) {
       if (record.lifecycle !== 'suspended' || record.suspendedAt === undefined) continue;
       if (now - record.suspendedAt <= AGENT_SUSPENDED_RUN_TTL_MS) continue;
@@ -3102,6 +3116,7 @@ export class AgentThreadStreamRuntime {
       state.threadKeysByRunId.delete(record.runId);
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+      state.sweptLeasedRunIds.set(record.runId, now);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -5986,11 +6001,24 @@ export class AgentThreadStreamRuntime {
         state.threadKeysByRunId.delete(reservedRunId);
         state.preRunSignalsByThread.delete(reservedKey);
 
+        const winnerRunId = lease.owner;
+        const sweptAt = winnerRunId ? state.sweptLeasedRunIds.get(winnerRunId) : undefined;
+        if (
+          winnerRunId &&
+          sweptAt !== undefined &&
+          !state.threadRunsById.has(winnerRunId) &&
+          Date.now() - sweptAt <= AGENT_THREAD_LEASE_TTL_MS
+        ) {
+          // The lease still belongs to a suspended run the TTL sweep evicted. Nothing
+          // consumes a signal forwarded to it, so report the thread blocked (as while
+          // the run was parked) rather than acknowledge a delivery that never happens.
+          return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: winnerRunId };
+        }
+
         // Forward the user signal to the winning runId so the message is not dropped.
         // Await the publish so that callers using `accepted` resolution as their
         // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
         // via waitUntil) don't tear down before the enqueue lands on the broker.
-        const winnerRunId = lease.owner;
         if (winnerRunId) {
           await this.#publishAndWait(pubsub, reservedKey, {
             type: 'signal-enqueued',

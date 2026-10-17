@@ -245,6 +245,121 @@ describe('suspended run in-memory TTL', () => {
     expect(renewLease).not.toHaveBeenCalled();
   });
 
+  describe('sending to the thread while the evicted run still holds its lease', () => {
+    const sendToThread = (agent: Agent<any, any, any, any>, threadId = 'thread-1') =>
+      runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'hello again' },
+        { resourceId: RESOURCE_ID, threadId, ifIdle: { behavior: 'wake' } },
+        pubsub,
+      ).accepted;
+
+    function createWakeableAgent(runId: string) {
+      const run = createFakeRun(runId);
+      const stream = vi.fn(async () => run.output);
+      return { agent: { id: 'ttl-test-agent', stream } as unknown as Agent<any, any, any, any>, stream, run };
+    }
+
+    it('reports the thread blocked instead of acknowledging a delivery nothing consumes', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const { agent, stream } = createWakeableAgent('run-2');
+
+      // The sweep kept run-1's lease (see above), so this send loses it to run-1. No
+      // run here or elsewhere consumes a signal forwarded to it, so `deliver` would
+      // silently drop the message.
+      await expect(sendToThread(agent)).resolves.toEqual({
+        action: 'blocked',
+        reason: 'thread-blocked',
+        runId: 'run-1',
+      });
+      await flushPublishes();
+      expect(watcher.has('signal-enqueued', 'run-1')).toBe(false);
+      expect(stream).not.toHaveBeenCalled();
+    });
+
+    it('wakes a new run once the abandoned lease is gone', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const { agent, stream, run } = createWakeableAgent('run-2');
+
+      // Stand-in for the abandoned lease expiring on its own.
+      await pubsub.releaseLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+
+      const accepted = await sendToThread(agent);
+      expect(accepted).toMatchObject({ action: 'wake' });
+      expect(stream).toHaveBeenCalledTimes(1);
+      run.settle('success');
+    });
+
+    it('still forwards to a lease owner the sweep did not evict', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      // Another instance owns the thread under a run this one never swept.
+      await pubsub.releaseLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+      await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'remote-run', 15_000);
+      const { agent, stream } = createWakeableAgent('run-2');
+
+      await expect(sendToThread(agent)).resolves.toEqual({ action: 'deliver', runId: 'remote-run' });
+      await watcher.waitFor('signal-enqueued', 'remote-run');
+      expect(stream).not.toHaveBeenCalled();
+    });
+
+    it('forwards to the swept run again once its lease TTL has passed since the sweep', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const sweptAt = Date.now() + SUSPENDED_RUN_TTL_MS + 1;
+      const { agent, stream } = createWakeableAgent('run-2');
+
+      // Still owned by run-1 a full lease TTL after the sweep: some instance (not this
+      // one) resumed it and keeps renewing, so it is live and forwarding is right.
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: sweptAt + 15_001 });
+      await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+
+      await expect(sendToThread(agent)).resolves.toEqual({ action: 'deliver', runId: 'run-1' });
+      expect(stream).not.toHaveBeenCalled();
+    });
+
+    it('keeps reporting blocked while a renewal that was in flight at sweep time holds the lease', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+
+      // Hold the next renewal open across the sweep, as a slow lease backend would.
+      let landRenewal!: (renewed: boolean) => void;
+      renewLease.mockImplementationOnce(
+        () =>
+          new Promise<boolean>(resolve => {
+            landRenewal = resolve;
+          }),
+      );
+      await vi.waitFor(() => expect(landRenewal).toBeTypeOf('function'));
+
+      const sweptAt = Date.now() + SUSPENDED_RUN_TTL_MS + 1;
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const { agent, stream } = createWakeableAgent('run-2');
+
+      // The renewal lands 10s after the sweep and extends the lease from then.
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: sweptAt + 10_000 });
+      await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+      landRenewal(true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Past one lease TTL from the sweep, but the abandoned lease is still held.
+      vi.setSystemTime(sweptAt + 20_000);
+      await expect(sendToThread(agent)).resolves.toEqual({
+        action: 'blocked',
+        reason: 'thread-blocked',
+        runId: 'run-1',
+      });
+      expect(stream).not.toHaveBeenCalled();
+    });
+  });
+
   it('does not evict anything until a registration triggers the sweep', async () => {
     const watcher = await watchThread(pubsub, 'thread-1');
     await registerSuspendedRun('run-1', 'thread-1', watcher);
