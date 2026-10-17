@@ -547,10 +547,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const projectId = c.req.param('id');
     if (!projectId || !UUID_RE.test(projectId)) return { response: c.json({ error: 'Project not found' }, 404) };
     await this.deps.projects.ensureReady();
-    if (!(await this.deps.projects.get({ orgId: tenant.orgId, id: projectId }))) {
-      return { response: c.json({ error: 'Project not found' }, 404) };
-    }
-    if (this.deps.auth.enabled() && !(await this.deps.auth.isOrganizationAdmin(c, tenant.orgId))) {
+    const project = await this.deps.projects.get({ orgId: tenant.orgId, id: projectId });
+    if (!project) return { response: c.json({ error: 'Project not found' }, 404) };
+    // The Factory's creator operates its importers; other members need organization-admin trust.
+    if (
+      this.deps.auth.enabled() &&
+      project.createdBy !== tenant.userId &&
+      !(await this.deps.auth.isOrganizationAdmin(c, tenant.orgId))
+    ) {
       return { response: c.json({ error: 'forbidden' }, 403) };
     }
 

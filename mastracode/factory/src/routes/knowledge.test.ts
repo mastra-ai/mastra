@@ -2166,22 +2166,69 @@ describe('KnowledgeRoutes', () => {
     await expect(cronless.json()).resolves.toMatchObject({ error: 'importer_not_triggerable' });
   });
 
-  it('gates importer run metadata at organization-admin trust', async () => {
-    const runtime = new Knowledge({
-      id: 'mastra',
-      storage: new InMemoryStore(),
-      importers: [{ id: 'calendar', handler: async () => {} }],
-    });
-    const h = await createHarness({ knowledgeRuntime: runtime, isOrganizationAdmin: async () => false });
+  it('lets the Factory creator or an organization admin operate importers, and denies other members', async () => {
+    const harness = async (options: Parameters<typeof createHarness>[0]) => {
+      let projectId = '';
+      const h = await createHarness({
+        ...options,
+        knowledgeRuntime: new Knowledge({
+          id: 'mastra',
+          storage: new InMemoryStore(),
+          importers: [
+            {
+              id: 'calendar',
+              access: { 'project:$projectId': 'owner' },
+              triggers: {
+                cron: {
+                  schedule: '0 * * * *',
+                  resolveBindings: async () => [{ source: 'calendar', scope: `project:${projectId}` }],
+                },
+              },
+              handler: async () => {},
+            },
+          ],
+        }),
+      });
+      projectId = h.projectId;
+      return h;
+    };
+    const list = (h: Harness) => h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    const trigger = (h: Harness) =>
+      h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/calendar/run`, { method: 'POST' });
+    const runs = (h: Harness) =>
+      h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs`);
 
-    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
+    // Non-admin creator (harness projects are created by user-1).
+    const creator = await harness({ isOrganizationAdmin: async () => false });
+    expect((await list(creator)).status).toBe(200);
+    expect((await trigger(creator)).status).toBe(202);
+    expect((await runs(creator)).status).toBe(200);
 
-    // Sync now starts imports, so it sits behind the same trust as the importer list.
-    const trigger = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/calendar/run`, {
-      method: 'POST',
+    // Organization admin who did not create the Factory.
+    const admin = await harness({
+      user: { workosId: 'user-2', organizationId: ORG },
+      isOrganizationAdmin: async () => true,
     });
-    expect(trigger.status).toBe(403);
+    expect((await list(admin)).status).toBe(200);
+    expect((await trigger(admin)).status).toBe(202);
+
+    // Same-org non-admin who did not create the Factory.
+    const member = await harness({
+      user: { workosId: 'user-2', organizationId: ORG },
+      isOrganizationAdmin: async () => false,
+    });
+    const denied = await list(member);
+    expect(denied.status).toBe(403);
+    await expect(denied.json()).resolves.toEqual({ error: 'forbidden' });
+    expect((await trigger(member)).status).toBe(403);
+    expect((await runs(member)).status).toBe(403);
+
+    // Cross-org caller, even with the creator's user ID and admin trust in its own org.
+    const foreign = await harness({
+      user: { workosId: 'user-1', organizationId: 'org-other' },
+      isOrganizationAdmin: async () => true,
+    });
+    expect((await list(foreign)).status).toBe(404);
+    expect((await trigger(foreign)).status).toBe(404);
   });
 });
