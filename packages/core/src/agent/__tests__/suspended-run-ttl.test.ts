@@ -109,6 +109,7 @@ async function watchThread(pubsub: EventEmitterPubSub, threadId: string) {
   });
   return {
     has: (type: string, runId: string) => events.some(event => event.type === type && event.runId === runId),
+    find: (type: string, runId: string) => events.find(event => event.type === type && event.runId === runId),
     waitFor: (type: string, runId: string) =>
       vi.waitFor(() => expect(events.some(event => event.type === type && event.runId === runId)).toBe(true)),
   };
@@ -292,6 +293,74 @@ describe('suspended run in-memory TTL', () => {
       expect(accepted).toMatchObject({ action: 'wake' });
       expect(stream).toHaveBeenCalledTimes(1);
       run.settle('success');
+    });
+
+    it('reports blocked when the swept run’s registration is redelivered to a thread subscriber', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const { agent, stream } = createWakeableAgent('run-2');
+      const registration = watcher.find('run-registered', 'run-1')!;
+
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      try {
+        // A broker that redelivers backlog to a new subscriber hands it run-1's
+        // registration while run-1 still holds the lease. That must not restore the
+        // evicted run as active, or the send takes the active-run path and
+        // acknowledges a delivery nothing consumes.
+        await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: registration.type,
+          runId: registration.runId,
+          data: registration.data,
+        });
+        await flushPublishes();
+        await flushPublishes();
+        expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBeUndefined();
+        await expect(sendToThread(agent)).resolves.toEqual({
+          action: 'blocked',
+          reason: 'thread-blocked',
+          runId: 'run-1',
+        });
+        await flushPublishes();
+        expect(watcher.has('signal-enqueued', 'run-1')).toBe(false);
+        expect(stream).not.toHaveBeenCalled();
+      } finally {
+        subscription.unsubscribe();
+      }
+    });
+
+    it('forwards to the swept run once another instance registers its resume', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const { agent, stream } = createWakeableAgent('run-2');
+      const registration = watcher.find('run-registered', 'run-1')!;
+
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      try {
+        // Another instance resumed run-1 under the kept lease and announced it.
+        await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: registration.type,
+          runId: registration.runId,
+          data: { ...registration.data, sourceId: 'other-instance', streamId: 'run-1-resumed' },
+        });
+        await vi.waitFor(() =>
+          expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('run-1'),
+        );
+        await expect(sendToThread(agent)).resolves.toEqual({ action: 'deliver', runId: 'run-1' });
+        await watcher.waitFor('signal-enqueued', 'run-1');
+        expect(stream).not.toHaveBeenCalled();
+      } finally {
+        subscription.unsubscribe();
+      }
     });
 
     it('still forwards to a lease owner the sweep did not evict', async () => {

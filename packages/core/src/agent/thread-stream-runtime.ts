@@ -812,6 +812,17 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * Whether `runId` is a suspended run this instance's TTL sweep evicted whose kept
+   * lease may still be held. Nothing here consumes signals for it any more.
+   */
+  #isSweptLeaseOwner(state: AgentThreadRuntimeState, runId: string): boolean {
+    const sweptAt = state.sweptLeasedRunIds.get(runId);
+    return (
+      sweptAt !== undefined && !state.threadRunsById.has(runId) && Date.now() - sweptAt <= AGENT_THREAD_LEASE_TTL_MS
+    );
+  }
+
+  /**
    * Fire-and-forget release of the cross-process thread lease held by
    * this owner. Safe to call when no lease was ever acquired — the
    * pubsub's `releaseLease` is a no-op for non-owners (Lua-guarded
@@ -4869,6 +4880,18 @@ export class AgentThreadStreamRuntime {
           replayedStreamIds.add(data.streamId);
         }
         const local = Boolean(localRecord);
+        // This instance's own registration of a run its TTL sweep evicted is a
+        // redelivery of the dead execution, however held its kept lease looks.
+        // Restoring it as active would route sends to a run nothing consumes.
+        // Another instance resuming the run registers under its own source id.
+        if (!localRecord && this.#isSweptLeaseOwner(state, data.runId)) {
+          if (data.sourceId === this.#getSourceId()) {
+            discardDeferredRun(data.streamId);
+            wake();
+            return;
+          }
+          state.sweptLeasedRunIds.delete(data.runId);
+        }
         const registeredAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
         // A history subscriber reads registrations published before its
         // history load as backlog: only a held lease makes those runs live.
@@ -5673,8 +5696,10 @@ export class AgentThreadStreamRuntime {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
         if (
-          state.threadKeysByRunId.get(activeRunId) === key ||
-          (state.remoteThreadKeysByRunId.get(activeRunId) === key && !state.unobservedRemoteRunIds.has(activeRunId))
+          // A run the TTL sweep evicted consumes nothing, whatever restored it as active.
+          !this.#isSweptLeaseOwner(state, activeRunId) &&
+          (state.threadKeysByRunId.get(activeRunId) === key ||
+            (state.remoteThreadKeysByRunId.get(activeRunId) === key && !state.unobservedRemoteRunIds.has(activeRunId)))
         ) {
           // A remote run whose owner agent is unknown (e.g. seen via a stream part
           // before its registration) is not a safe target for this agent.
@@ -6002,16 +6027,10 @@ export class AgentThreadStreamRuntime {
         state.preRunSignalsByThread.delete(reservedKey);
 
         const winnerRunId = lease.owner;
-        const sweptAt = winnerRunId ? state.sweptLeasedRunIds.get(winnerRunId) : undefined;
-        if (
-          winnerRunId &&
-          sweptAt !== undefined &&
-          !state.threadRunsById.has(winnerRunId) &&
-          Date.now() - sweptAt <= AGENT_THREAD_LEASE_TTL_MS
-        ) {
+        if (winnerRunId && this.#isSweptLeaseOwner(state, winnerRunId)) {
           // The lease still belongs to a suspended run the TTL sweep evicted. Nothing
-          // consumes a signal forwarded to it, so report the thread blocked (as while
-          // the run was parked) rather than acknowledge a delivery that never happens.
+          // consumes a signal forwarded to it, so report the thread blocked rather
+          // than acknowledge a delivery that never happens.
           return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: winnerRunId };
         }
 
