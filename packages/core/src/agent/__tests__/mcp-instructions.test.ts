@@ -81,7 +81,7 @@ function mcpToolWithoutForwarding({
 }
 
 describe('Agent MCP server instructions', () => {
-  it('adds MCP instructions as a separate system message', async () => {
+  it('adds MCP instructions after the base instructions', async () => {
     const captured: { systemMessages: string[] } = { systemMessages: [] };
     const agent = new Agent({
       id: 'mcp-agent',
@@ -99,9 +99,9 @@ describe('Agent MCP server instructions', () => {
 
     await agent.generate('Run the migration');
 
-    // Base instructions remain in their own system message
-    expect(captured.systemMessages[0]).toBe('You are helpful.');
-    // MCP guidance is a separate system message
+    // Base instructions come first (system buckets are merged into one message for OpenAI-compatible providers)
+    expect(captured.systemMessages[0]?.startsWith('You are helpful.')).toBe(true);
+    // MCP guidance follows the base instructions
     const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
     expect(mcpMessage).toBeDefined();
     expect(mcpMessage).toContain('## Guidance from MCP server "db-tools"');
@@ -136,8 +136,8 @@ describe('Agent MCP server instructions', () => {
       },
     });
 
-    // Base instructions stay separate
-    expect(captured.systemMessages[0]).toBe('Use tools carefully.');
+    // Base instructions come first
+    expect(captured.systemMessages[0]?.startsWith('Use tools carefully.')).toBe(true);
 
     const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
     expect(mcpMessage).toBeDefined();

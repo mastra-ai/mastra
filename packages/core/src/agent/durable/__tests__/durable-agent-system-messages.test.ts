@@ -47,17 +47,17 @@ const CONTRACT: Record<Variant, { systemLines: string[]; roles: string[]; persis
   string: { systemLines: [INSTR], roles: ['system', 'user'], persistedRoles: ['user', 'assistant'] },
   array: {
     systemLines: [INSTR, SECOND_INSTR],
-    roles: ['system', 'system', 'user'],
+    roles: ['system', 'user'],
     persistedRoles: ['user', 'assistant'],
   },
   'per-call': {
     systemLines: [OVERRIDDEN, EXTRA],
-    roles: ['system', 'system', 'user'],
+    roles: ['system', 'user'],
     persistedRoles: ['user', 'assistant'],
   },
   'in-messages': {
     systemLines: [INSTR, EXTRA],
-    roles: ['system', 'system', 'user'],
+    roles: ['system', 'user'],
     persistedRoles: ['user', 'assistant'],
   },
 };
