@@ -203,3 +203,36 @@ export async function resolveEmittedToolCallConcurrency({
 
   return verdicts.some(Boolean) ? 1 : args.configuredConcurrency;
 }
+
+/**
+ * Whether a queued tool call may still start after a sibling suspended in the
+ * same step. Approval-gated and suspend-capable calls wait for the resume so
+ * approvals stay one at a time; everything else runs (#26514).
+ */
+export function canToolCallRunAfterSuspend({
+  requireToolApproval,
+  tools,
+  toolCall,
+  approvalVerdicts,
+}: {
+  requireToolApproval?: RequireToolApproval;
+  tools?: ToolSet;
+  toolCall?: { toolCallId?: string; toolName: string };
+  approvalVerdicts?: Map<string, boolean>;
+}): boolean {
+  if (!toolCall) {
+    return false;
+  }
+  const tool =
+    tools?.[toolCall.toolName] ||
+    findProviderToolByName(tools, toolCall.toolName) ||
+    Object.values(tools || {}).find(t => 'id' in t && t.id === toolCall.toolName);
+  if (!tool || (tool as { hasSuspendSchema?: unknown }).hasSuspendSchema) {
+    return false;
+  }
+  const verdict = toolCall.toolCallId ? approvalVerdicts?.get(toolCall.toolCallId) : undefined;
+  if (verdict !== undefined) {
+    return !verdict;
+  }
+  return !requireToolApproval && !getNeedsApprovalFn(tool) && !(tool as { requireApproval?: unknown }).requireApproval;
+}
