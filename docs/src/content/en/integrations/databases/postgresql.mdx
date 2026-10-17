@@ -269,6 +269,10 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
+### Production sizing
+
+For connection budgets across replicas, autovacuum settings, and sizing for durable and evented agents, see [Postgres in production](/docs/deployment/postgres-production).
+
 ### Using an Existing Pool
 
 If you already have a `pg.Pool` in your application (e.g., shared with an ORM or for Row Level Security), you can pass it directly to `PostgresStore`:

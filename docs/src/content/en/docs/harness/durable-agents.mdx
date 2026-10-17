@@ -402,6 +402,8 @@ A lease only coordinates the processes that share it. `EventEmitterPubSub`, the 
 
 Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boot together race to recover the same orphaned runs, but only one claim succeeds per run and the other replicas skip it. This requires a claim that every replica shares: a workflows store that supports run fencing, or a PubSub backend whose lease every replica shares. Without either, gate recovery behind your own leader election or run it from a single replica.
 
+For write volume per mode, connection budgets, and Postgres tuning, see [Postgres in production](/docs/deployment/postgres-production).
+
 ## Related
 
 - [DurableAgent reference](/reference/agents/durable-agent)
@@ -410,3 +412,4 @@ Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boo
 - [Inngest deployment guide](/integrations/deploy/inngest)
 - [Agent overview](/docs/agents/overview)
 - [Worker overview](/docs/deployment/workers)
+- [Postgres in production](/docs/deployment/postgres-production)

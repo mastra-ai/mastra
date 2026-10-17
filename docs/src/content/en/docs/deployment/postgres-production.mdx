@@ -1,0 +1,162 @@
+---
+title: 'Postgres in production | Deploy'
+description: 'Size and tune PostgreSQL for durable and evented agents: write volume per step, checkpoint policy, connection budgets, capacity, autovacuum, retention, and metrics.'
+packages:
+  - '@mastra/core'
+  - '@mastra/pg'
+---
+
+# Postgres in production
+
+[Durable and evented agents](/docs/harness/durable-agents) store their workflow snapshots, run ownership, and memory in the storage you configure. On [`PostgresStore`](/integrations/databases/postgresql), the main load driver is how often a run rewrites its snapshot. This page shows what each mode writes, how to budget connections, where to start with server sizing, and which settings and metrics to watch.
+
+:::note[Where the numbers come from]
+
+Query counts and bytes on this page come from the [durable agent Postgres benchmark](https://github.com/mastra-ai/mastra/tree/main/scripts/bench/durable-postgres) in the Mastra repository, run against [PGlite](https://pglite.dev) with a mock model. PGlite is a single-connection, in-memory Postgres. The query and byte counts are measured at the driver and carry over to a real server. Throughput, CPU, IOPS, and the capacity tiers below are derived from those counts and haven't been benchmarked on a real Postgres server yet. Rerun the benchmark against your own database and workload before you commit to a size.
+
+:::
+
+## Writes per step by mode
+
+Each agent step is one model call plus its tool calls. The benchmark ran one agent with a 2 KB result per tool call, at 5, 20, and 50 steps per run.
+
+| Mode | Snapshot writes per step | Queries per step | Bytes sent per step | One 50-step run |
+| - | - | - | - | - |
+| `createDurableAgent()`, `recovery.durableAgents: 'off'` (default) | About 0 (2 per run) | About 20 | 4 to 10 KB | About 0.2 MB |
+| `createDurableAgent()`, `recovery.durableAgents: 'auto'` | About 23 | About 120 | 0.9 MB at 5 steps, 1.9 MB at 20, 3.8 MB at 50 | About 190 MB |
+| `createEventedAgent()` | About 38 | About 270 | 1.8 MB at 5 steps, 4.3 MB at 20, 9.4 MB at 50 | About 470 MB |
+
+What drives these numbers:
+
+- **Checkpoint policy.** With recovery off, durable agents skip `running` checkpoints, so a run writes only its first and last snapshot. Most of the remaining queries are reads of run ownership rows, which are small. Recovery `'auto'` and evented agents write a `running` checkpoint at every step boundary inside the agent loop.
+- **Full-row rewrites.** Every checkpoint upserts the whole snapshot as one JSONB value. A snapshot holds the conversation so far, so bytes per step grow linearly with run length and total bytes per run grow with the square of the step count. The conversation is also copied into several fields of each snapshot. [#26684](https://github.com/mastra-ai/mastra/issues/26684) tracks reducing this write amplification.
+- **Tool output size.** Tool results are part of the conversation, so large results are rewritten at every later checkpoint.
+- **Concurrency.** Writes scale linearly with the number of concurrent runs. Eight concurrent 20-step `'auto'` runs sent eight times the bytes of one run.
+- **Memory.** Attaching `Memory` adds a few queries per run for threads and messages. It isn't a significant load driver.
+
+Each rewrite also leaves a dead row version and dead TOAST chunks behind, which autovacuum has to clean up. See [autovacuum](#autovacuum).
+
+## Reduce checkpoint writes
+
+Choose the lowest checkpoint level that meets your recovery needs:
+
+- **Keep `recovery.durableAgents: 'off'`** if you don't need in-flight runs to survive a crash. Human-in-the-loop flows still work, because `pending`, `paused`, and `suspended` snapshots are always written. A `running` checkpoint is also written at step boundaries after `mastra.shutdown()` starts, so graceful shutdowns stay recoverable.
+- **Use `'auto'` only on agents that need crash recovery.** A custom [`shouldPersistSnapshot`](/docs/harness/durable-agents#snapshot-persistence) predicate is set per agent, so you can keep `running` checkpoints on long, expensive agents and drop them on short ones. Excluding `running` makes that agent invisible to automatic recovery.
+- **Prefer `createDurableAgent()` over `createEventedAgent()`** unless you need the evented engine's worker coordination. Evented agents always write the full snapshot set and ignore `shouldPersistSnapshot`.
+- **Keep runs and tool results short.** Because bytes per step grow with run length, splitting work into shorter runs and returning compact tool results reduces total writes more than linearly.
+
+With a fixed `Memory` instance and `savePerStep: true`, checkpoints store references to saved messages instead of their full contents. In the benchmark this reduced snapshot bytes by about 17% for `'auto'` and had no measurable effect on evented agents, because most of the snapshot is iteration state rather than saved messages.
+
+[#20255](https://github.com/mastra-ai/mastra/issues/20255) tracks an opt-out for agent loop snapshot persistence.
+
+## Connections
+
+`PostgresStore` creates a `pg.Pool` with `max: 20` and `idleTimeoutMillis: 30000` unless you set them or pass your own `pool`. Each replica holds its own pool, and each `PostgresStore` instance in a process holds a separate pool. A `readPool` adds connections on the read replica.
+
+Budget connections across every replica:
+
+```text
+replicas × PostgresStore instances per replica × max  +  admin and migration headroom  <  max_connections
+```
+
+For example, 6 replicas with one store each at `max: 20` need 120 connections plus headroom.
+
+- **Size `max` to the concurrency of one replica.** A starting point is the number of concurrent runs you expect per replica plus 5. Queries are short, so a run doesn't hold a connection for its whole duration.
+- **Share one pool.** If your application already has a `pg.Pool`, pass it as `pool` so Mastra and your own queries share a budget. See [using an existing pool](/integrations/databases/postgresql#using-an-existing-pool).
+- **Put PgBouncer in front at higher replica counts.** Use transaction pooling. `PostgresStore` doesn't use `LISTEN`/`NOTIFY`, advisory locks, named prepared statements, or session-level `SET`, which are the features transaction pooling breaks. `PgVector` sets `search_path` per session when pgvector is installed outside the `public` schema, so give it a direct or session-pooled connection in that case.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL!,
+    max: 12,
+    idleTimeoutMillis: 30_000,
+  }),
+})
+```
+
+## Capacity
+
+Estimate snapshot write throughput from the per-step numbers:
+
+```text
+write bytes per second ≈ concurrent runs × bytes per step ÷ seconds per step
+```
+
+For example, 8 concurrent `'auto'` runs of about 20 steps, with a model call every 3 seconds, upsert about 8 × 1.9 MB ÷ 3 s ≈ 5 MB/s of snapshot data. WAL volume is at least that much, and usually more once full-page writes and TOAST are counted.
+
+These starting tiers are derived from the PGlite measurements, not from a real Postgres benchmark:
+
+| Workload | Starting point |
+| - | - |
+| Recovery `'off'`, up to about 10 concurrent short runs | 2 vCPU, 4 to 8 GB RAM, general-purpose SSD |
+| Recovery `'auto'` or evented, 10 to 50 concurrent runs | 4 to 8 vCPU, 16 to 32 GB RAM, storage sustaining 3,000 or more write IOPS |
+| Recovery `'auto'` or evented, more than 50 concurrent runs | Reduce per-step writes first (see [reduce checkpoint writes](#reduce-checkpoint-writes)), then scale up from the previous tier while watching the metrics below |
+
+Write volume and vacuum keep-up usually limit capacity before CPU does. If WAL throughput or dead tuples grow faster than the server clears them, reduce checkpoint writes before adding hardware.
+
+## Autovacuum
+
+Every checkpoint updates a row in `mastra_workflow_snapshot`, so the table and its TOAST table accumulate dead tuples quickly. The default autovacuum settings wait until 20% of a table is dead, which lets a small, hot table bloat. Lower the thresholds on that table:
+
+```sql
+ALTER TABLE mastra_workflow_snapshot SET (
+  autovacuum_vacuum_scale_factor = 0.01,
+  autovacuum_vacuum_threshold = 1000,
+  autovacuum_vacuum_cost_limit = 2000,
+  toast.autovacuum_vacuum_scale_factor = 0.01
+);
+```
+
+If you set a `schemaName` on `PostgresStore`, qualify the table name with it. Treat these values as a starting point and adjust them using `n_dead_tup` and `last_autovacuum` from the metrics below.
+
+## Retention and cleanup
+
+Snapshots, run ownership rows, and memory grow until you remove them. Configure age-based [storage retention](/reference/storage/retention) on `PostgresStore` and run `storage.prune()` from a scheduler:
+
+```typescript title="src/mastra/storage.ts"
+import { PostgresStore } from '@mastra/pg'
+
+export const storage = new PostgresStore({
+  id: 'mastra-storage',
+  connectionString: process.env.DATABASE_URL!,
+  retention: {
+    workflows: {
+      workflowSnapshot: { maxAge: '14d' },
+      runOwnership: { maxAge: '1d' },
+    },
+    memory: {
+      runFences: { maxAge: '1d' },
+    },
+  },
+})
+```
+
+`workflowSnapshot` ages rows by last update, so suspended and long-running workflows survive. Keep `runOwnership` well above its 30-second lease.
+
+Pruning and autovacuum make space reusable but don't return it to the operating system. If the table is already bloated, reclaim the space with `VACUUM FULL` during a maintenance window, which locks the table, or with [`pg_repack`](https://reorg.github.io/pg_repack/) online.
+
+## Metrics to watch
+
+| Metric | Source | What it tells you |
+| - | - | - |
+| Time and calls for snapshot upserts | `pg_stat_statements` (`total_exec_time`, `calls`, `rows`) | How much of the database's time checkpoints use |
+| Dead tuples and last vacuum on `mastra_workflow_snapshot` | `pg_stat_user_tables` (`n_dead_tup`, `n_tup_upd`, `last_autovacuum`) | Whether autovacuum keeps up |
+| Table size including TOAST | `pg_total_relation_size('mastra_workflow_snapshot')` | Bloat over time |
+| WAL volume | `pg_stat_wal` (`wal_bytes`) | Write throughput and replica and backup load |
+| Connections | `pg_stat_activity` compared with `max_connections` and your pool `max` | Whether the connection budget holds |
+| Lock waits | `pg_stat_activity` where `wait_event_type = 'Lock'` | Contention on snapshot rows |
+| Disk IOPS and latency | Your provider's monitoring | Whether storage is the bottleneck |
+
+Use the metrics to choose between tuning and scaling. If dead tuples and WAL volume grow while CPU stays low, reduce checkpoint writes or tune autovacuum. If CPU or IOPS stay saturated after that, move up a tier.
+
+## Related
+
+- [Durable agents](/docs/harness/durable-agents)
+- [PostgreSQL storage](/integrations/databases/postgresql)
+- [Storage retention reference](/reference/storage/retention)
+- [Durable agent Postgres benchmark](https://github.com/mastra-ai/mastra/tree/main/scripts/bench/durable-postgres)

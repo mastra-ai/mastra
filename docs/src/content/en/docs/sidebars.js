@@ -514,6 +514,11 @@ const sidebars = {
               id: 'deployment/workers',
               label: 'Workers',
             },
+            {
+              type: 'doc',
+              id: 'deployment/postgres-production',
+              label: 'Postgres in Production',
+            },
           ],
         },
       ],
