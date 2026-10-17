@@ -32,14 +32,6 @@ interface EditPageProviderProps {
   children: ReactNode;
 }
 
-/**
- * Owns the edit-page shared state and the chat conversation provider.
- *
- * Pulls fetched data from `<AgentPrimitivesProvider>` and only takes the
- * form-derived inputs (`availableAgentTools`) plus the navigation callback
- * as props. Wraps `<ConversationPanelProvider>` internally so the page tree
- * has a single place where edit-page state and chat state are introduced.
- */
 export const EditPageProvider = ({
   storedAgent,
   availableAgentTools,
@@ -49,11 +41,10 @@ export const EditPageProvider = ({
   const { agentId, availableSkills, availableWorkspaces, initialUserMessage, isOwner } = useAgentPrimitives();
   const features = useFeatures();
 
-  // Gate publishing on the *saved* visibility — unsaved form edits should not unlock publishing.
   const canPublishToChannel = isOwner && storedAgent.visibility === 'public';
   const isFreshThread = initialUserMessage !== undefined;
 
-  const autosave = useAutosaveAgent({ agentId: agentId!, availableAgentTools, availableSkills });
+  const autosave = useAutosaveAgent({ storedAgent, availableAgentTools, availableSkills });
 
   const value = useMemo<EditPageContextValue>(
     () => ({

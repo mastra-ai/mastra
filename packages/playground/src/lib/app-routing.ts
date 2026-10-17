@@ -22,7 +22,6 @@ export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArg
 
 export const REVIEW_QUEUE_PATH = '/experiments/review-queue';
 
-/** Deep link into the review queue, optionally preselecting an experiment and featuring one of its results. */
 export const experimentReviewQueueLink = (experimentId?: string, resultId?: string) => {
   const search = new URLSearchParams();
   if (experimentId) search.set('experiment', experimentId);
@@ -31,11 +30,9 @@ export const experimentReviewQueueLink = (experimentId?: string, resultId?: stri
   return query ? `${REVIEW_QUEUE_PATH}?${query}` : REVIEW_QUEUE_PATH;
 };
 
-/** Traces page with a trace open on one of its scores. */
 export const traceScoreLink = (traceId: string, scoreId: string) =>
   `/traces?traceId=${encodeURIComponent(traceId)}&scoreId=${encodeURIComponent(scoreId)}`;
 
-/** Skills are browsed as files: open the skill's SKILL.md in the workspace view. */
 export function workspaceSkillFileLink(workspaceId?: string, skillPath?: string | null): string {
   if (!workspaceId) return '/workspaces';
   const base = `/workspaces/${encodeURIComponent(workspaceId)}`;
@@ -44,7 +41,12 @@ export function workspaceSkillFileLink(workspaceId?: string, skillPath?: string 
   return `${base}?${new URLSearchParams({ file })}`;
 }
 
-export const paths: LinkComponentProviderProps['paths'] = {
+const agentEditorPaths = {
+  agentCreateLink: () => '/agent-builder/agents/create',
+  agentEditLink: (agentId: string) => `/agent-builder/agents/${agentId}/edit`,
+};
+
+export const paths = {
   agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   agentToolLink: (agentId: string, toolId: string, threadId?: string) =>
     `/agents/${agentId}/threads/${threadId ?? 'new'}${toolSearch(toolId)}`,
@@ -72,8 +74,9 @@ export const paths: LinkComponentProviderProps['paths'] = {
   },
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
-  cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
+  ...agentEditorPaths,
+  cmsAgentCreateLink: agentEditorPaths.agentCreateLink,
+  cmsAgentEditLink: agentEditorPaths.agentEditLink,
   promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
@@ -97,4 +100,4 @@ export const paths: LinkComponentProviderProps['paths'] = {
     `/experiments/${experimentId}/items/${encodeURIComponent(itemId)}`,
   traceLink: (traceId: string, spanId?: string) =>
     `/traces?traceId=${encodeURIComponent(traceId)}${spanId ? `&spanId=${encodeURIComponent(spanId)}` : ''}`,
-};
+} satisfies LinkComponentProviderProps['paths'];

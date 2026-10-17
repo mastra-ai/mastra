@@ -1,3 +1,4 @@
+import type { StoredAgentResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { useSaveAgent } from '../use-save-agent';
 import { authDisabledCapabilities, authEnabledCapabilities } from './fixtures/auth';
+import { emptyStoredAgent } from './fixtures/stored-agent-edit';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -19,13 +21,15 @@ const renderSave = ({
   availableAgentTools,
   defaultValues,
   capabilities = authEnabledCapabilities,
+  storedAgent = { ...emptyStoredAgent, id: agentId },
 }: {
   agentId: string;
   availableAgentTools: AgentTool[];
   defaultValues: AgentBuilderEditFormValues;
   capabilities?: AuthCapabilities;
+  storedAgent?: StoredAgentResponse;
 }) => {
-  const captured: { body: Record<string, unknown> | null; capabilitiesLoaded: boolean } = {
+  const captured: { body: unknown; capabilitiesLoaded: boolean } = {
     body: null,
     capabilitiesLoaded: false,
   };
@@ -36,8 +40,8 @@ const renderSave = ({
       return HttpResponse.json(capabilities);
     }),
     http.patch(`${BASE_URL}/api/stored/agents/${agentId}`, async ({ request }) => {
-      captured.body = (await request.json()) as Record<string, unknown>;
-      return HttpResponse.json({ id: agentId });
+      captured.body = await request.json();
+      return HttpResponse.json(storedAgent);
     }),
   );
 
@@ -56,7 +60,7 @@ const renderSave = ({
     );
   };
 
-  const { result } = renderHook(() => useSaveAgent({ agentId, availableAgentTools }), { wrapper: Wrapper });
+  const { result } = renderHook(() => useSaveAgent({ storedAgent, availableAgentTools }), { wrapper: Wrapper });
 
   return { hook: result, captured };
 };
@@ -90,7 +94,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.autoPublish).toBe(true);
+      expect(captured.body).toMatchObject({ autoPublish: true });
     });
   });
 
@@ -123,7 +127,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.tools).toEqual({ 'tool-a': {} });
+      expect(captured.body).toMatchObject({ tools: { 'tool-a': {} } });
     });
 
     it('persists the selected agents as a record', async () => {
@@ -154,7 +158,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.agents).toEqual({ 'agent-x': {} });
+      expect(captured.body).toMatchObject({ agents: { 'agent-x': {} } });
     });
   });
 
@@ -186,7 +190,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.workflows).toEqual({ 'wf-1': {} });
+      expect(captured.body).toMatchObject({ workflows: { 'wf-1': {} } });
     });
   });
 
@@ -220,7 +224,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.model).toEqual({ provider: 'openai', name: 'gpt-4o' });
+      expect(captured.body).toMatchObject({ model: { provider: 'openai', name: 'gpt-4o' } });
     });
   });
 
@@ -228,6 +232,7 @@ describe('useSaveAgent', () => {
     it('persists an empty tools record', async () => {
       const { hook, captured } = renderSave({
         agentId: 'existing-id',
+        storedAgent: { ...emptyStoredAgent, id: 'existing-id', tools: { 'tool-a': {} } },
         availableAgentTools: [
           { id: 'tool-a', name: 'tool-a', description: 'Tool A desc', isChecked: false, type: 'tool' },
         ],
@@ -254,7 +259,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.tools).toEqual({});
+      expect(captured.body).toMatchObject({ tools: {} });
     });
   });
 
@@ -289,7 +294,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.visibility).toBe('private');
+      expect(captured.body).toMatchObject({ visibility: 'private' });
     });
   });
 
@@ -324,7 +329,7 @@ describe('useSaveAgent', () => {
         });
       });
 
-      expect(captured.body?.visibility).toBe('public');
+      expect(captured.body).toMatchObject({ visibility: 'public' });
     });
   });
 });

@@ -1,16 +1,8 @@
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { forwardRef } from 'react';
-// Imported through the package's public exports on purpose: CI's Changed Test
-// Gate typechecks this file against the base branch (see `paths` below), and
-// `@/exports` keeps exposing the provider wherever its implementation lives.
 import { LinkComponentProvider } from '@/exports';
 import type { LinkComponentProviderProps } from '@/exports';
 
-/**
- * Anchor stub for tests that render components which route through the framework
- * `Link`. Mirrors the real `Link` contract (accepts both `to` and `href`) so
- * assertions can read the resolved `href`.
- */
 export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
   function StubLink({ children, to, href, ...props }, ref) {
     return (
@@ -21,13 +13,7 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
   },
 );
 
-// Every path resolves to the id-bearing route so tests can assert real hrefs
-// where they matter and simply render everywhere else.
-//
-// Typed via assertion (not annotation) on purpose: CI's Changed Test Gate
-// typechecks this file against the base branch, whose `LinkComponentPaths`
-// may not match the head branch's exactly. The assertion tolerates extra
-// keys so the stub can carry entries for both versions.
+// Changed Test Gate also checks these paths against the base branch.
 const paths: Record<string, (...args: any[]) => string> = {
   agentLink: id => `/agents/${id}`,
   agentsLink: () => '/agents',
@@ -51,8 +37,8 @@ const paths: Record<string, (...args: any[]) => string> = {
   },
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: id => `/cms/scorers/${id}`,
-  cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: id => `/cms/agents/${id}`,
+  cmsAgentCreateLink: () => '/agent-builder/agents/create',
+  cmsAgentEditLink: id => `/agent-builder/agents/${id}/edit`,
   promptBlockLink: id => `/prompt-blocks/${id}`,
   promptBlocksLink: () => '/prompt-blocks',
   cmsPromptBlockCreateLink: () => '/cms/prompt-blocks/create',
@@ -69,7 +55,6 @@ const paths: Record<string, (...args: any[]) => string> = {
   workflowRunLink: (workflowId, runId) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: id => `/datasets/${id}`,
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
-  // Only used by the base branch's `LinkComponentPaths` (see comment above).
   datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
   experimentItemLink: (id, itemId) => `/experiments/${id}/items/${itemId}`,
@@ -79,7 +64,6 @@ const paths: Record<string, (...args: any[]) => string> = {
 // eslint-disable-next-line react-refresh/only-export-components -- test helper co-located with the provider.
 export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 
-/** Wraps children in a `LinkComponentProvider` backed by {@link StubLink}. */
 export function TestLinkProvider({ children }: { children: ReactNode }) {
   return (
     <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={stubLinkPaths}>
