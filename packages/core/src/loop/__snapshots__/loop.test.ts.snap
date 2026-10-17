@@ -66,8 +66,6 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
 ]
 `;
 
-exports[`Loop Tests > AISDK v5 > generateText > result.text > should generate text 1`] = `[]`;
-
 exports[`Loop Tests > AISDK v5 > result.files > should contain files 1`] = `
 [
   {
