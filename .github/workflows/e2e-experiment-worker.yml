@@ -64,7 +64,7 @@ jobs:
           printf '%s\n' "$digest" > "${{ runner.temp }}/experiment-worker-registry/handoff-digest.txt"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Upload registry artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -86,7 +86,7 @@ jobs:
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -112,7 +112,7 @@ jobs:
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-pr-reports
           path: ${{ runner.temp }}/experiment-worker-reports
@@ -135,7 +135,7 @@ jobs:
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -166,7 +166,7 @@ jobs:
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-full-reports
           path: ${{ runner.temp }}/experiment-worker-reports
@@ -189,7 +189,7 @@ jobs:
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -215,7 +215,7 @@ jobs:
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-browser-reports
           path: ${{ runner.temp }}/experiment-worker-reports
@@ -243,7 +243,7 @@ jobs:
           MASTRA_E2E_REMOTE_SANDBOX_URL: ${{ secrets.EXPERIMENT_WORKER_REMOTE_SANDBOX_URL }}
           MASTRA_E2E_REMOTE_SANDBOX_API_KEY: ${{ secrets.EXPERIMENT_WORKER_REMOTE_SANDBOX_API_KEY }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-remote-sandbox-reports,
@@ -274,7 +274,7 @@ jobs:
           MASTRA_E2E_OBJECT_STORE_ACCESS_KEY: ${{ secrets.EXPERIMENT_WORKER_OBJECT_STORE_ACCESS_KEY }}
           MASTRA_E2E_OBJECT_STORE_SECRET_KEY: ${{ secrets.EXPERIMENT_WORKER_OBJECT_STORE_SECRET_KEY }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-object-store-reports,
@@ -304,7 +304,7 @@ jobs:
           MASTRA_E2E_MODEL_PROVIDER: ${{ vars.EXPERIMENT_WORKER_MODEL_PROVIDER }}
           MASTRA_E2E_MODEL_API_KEY: ${{ secrets.EXPERIMENT_WORKER_MODEL_API_KEY }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-real-model-reports,
@@ -334,7 +334,7 @@ jobs:
           MASTRA_E2E_HOSTED_PROXY_URL: ${{ secrets.EXPERIMENT_WORKER_HOSTED_PROXY_URL }}
           MASTRA_E2E_HOSTED_PROXY_TOKEN: ${{ secrets.EXPERIMENT_WORKER_HOSTED_PROXY_TOKEN }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-hosted-proxy-reports,
