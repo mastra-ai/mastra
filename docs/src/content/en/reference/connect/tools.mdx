@@ -75,6 +75,13 @@ See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools]
             isOptional: true,
           },
           {
+            name: 'resourceId',
+            type: 'string | ((ctx?) => string | undefined | Promise<string | undefined>)',
+            description:
+              "End-user resource ID to resolve for: the agent gets global connections plus that user's own end-user connections, and every platform call asserts the ID. Pass a string (the per-request pattern tools: ctx => tools({ resourceId: ... }) stays cheap because identical options share one internal state) or a callback derived per resolution from the invocation context. A callback returning undefined resolves global-only. See End-user connections.",
+            isOptional: true,
+          },
+          {
             name: 'client',
             type: 'ConnectClientOptions',
             description: 'Platform client overrides. See ConnectClientOptions below.',
