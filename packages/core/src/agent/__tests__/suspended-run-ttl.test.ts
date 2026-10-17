@@ -280,6 +280,35 @@ describe('suspended run in-memory TTL', () => {
       expect(stream).not.toHaveBeenCalled();
     });
 
+    it('reports blocked when this instance claimed the thread and the claimed owner loses the lease', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const owner = createWakeableAgent('run-2');
+      const claim = await runtime.claimThreadOwnership(
+        owner.agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      expect(claim.claimed).toBe(true);
+
+      // The claimed owner runs the wake itself, then loses the thread lease to the
+      // swept run-1. Forwarding to run-1 would drop the message just like the
+      // unclaimed path.
+      try {
+        await expect(sendToThread(createWakeableAgent('run-3').agent)).resolves.toEqual({
+          action: 'blocked',
+          reason: 'thread-blocked',
+          runId: 'run-1',
+        });
+        await flushPublishes();
+        expect(watcher.has('signal-enqueued', 'run-1')).toBe(false);
+        expect(owner.stream).not.toHaveBeenCalled();
+      } finally {
+        claim.unsubscribe();
+      }
+    });
+
     it('wakes a new run once the abandoned lease is gone', async () => {
       const watcher = await watchThread(pubsub, 'thread-1');
       await registerSuspendedRun('run-1', 'thread-1', watcher);

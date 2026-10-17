@@ -1783,7 +1783,7 @@ export class AgentThreadStreamRuntime {
     expiresAt: number,
     isOwnerActive: () => boolean,
     incomingStreamOptions?: AgentExecutionOptions<any>,
-  ): Promise<{ runId: string; error?: string; output?: MastraModelOutput<OUTPUT> } | undefined> {
+  ): Promise<{ runId: string; error?: string; blocked?: boolean; output?: MastraModelOutput<OUTPUT> } | undefined> {
     const messageIdentity = this.#idleMessageIdentity(owner.agent.id, key, signal);
     let admissionSettled = false;
     // Records this attempt's real admission outcome for the logical message and
@@ -1962,6 +1962,13 @@ export class AgentThreadStreamRuntime {
           const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
           return { runId, error };
+        }
+        if (lease.owner && this.#isSweptLeaseOwner(state, lease.owner)) {
+          // The lease still belongs to a suspended run the TTL sweep evicted, so a
+          // signal forwarded to it is never consumed. Fail the admission instead.
+          const error = `Thread ${describeThreadKey(key)} is still leased to a suspended run that was released from memory; retry once its lease expires`;
+          releaseMessageIdentity(error);
+          return { runId: lease.owner, error, blocked: true };
         }
         if (lease.owner) {
           this.#publish(pubsub, key, {
@@ -5965,6 +5972,9 @@ export class AgentThreadStreamRuntime {
           throw new Error(
             `Claimed thread owner could not acquire the execution lease for ${describeThreadKey(reservedKey)}`,
           );
+        }
+        if (localAcceptance.blocked) {
+          return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: localAcceptance.runId };
         }
         if (localAcceptance.error) throw new Error(localAcceptance.error);
         if (!localAcceptance.output) {
