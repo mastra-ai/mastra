@@ -29,6 +29,7 @@
     "cohere/command-a-plus",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "dots-studio/dots-3-note-preview:free",
     "elorian/glimpse",
     "fireworks/ember-1",
@@ -293,6 +294,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "dots-studio/dots-3-note-preview:free",
     "elorian/glimpse",
     "fireworks/ember-1",
@@ -605,6 +607,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "dots-studio/dots-3-note-preview:free",
     "elorian/glimpse",
     "fireworks/ember-1",
@@ -1100,6 +1103,12 @@
     "deepseek/deepseek-v3.2": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v4-flash": [

@@ -10,7 +10,6 @@
     "claude-opus4-6",
     "claude-opus4-7",
     "claude-opus4-8",
-    "claude-sonnet-4",
     "claude-sonnet-5",
     "claude-sonnet-5.5",
     "deepseek-v4.1-flash",
@@ -81,7 +80,6 @@
     "claude-haiku-4-5",
     "claude-opus4-5",
     "claude-opus4-6",
-    "claude-sonnet-4",
     "codestral-2508",
     "deepseek-v3.2",
     "deepseek-v4-flash-0731",
@@ -148,7 +146,6 @@
     "claude-opus4-6",
     "claude-opus4-7",
     "claude-opus4-8",
-    "claude-sonnet-4",
     "claude-sonnet-5",
     "claude-sonnet-5.5",
     "codestral-2508",
@@ -196,7 +193,6 @@
     "ministral-14b-2512",
     "ministral-3b-2512",
     "ministral-8b-2512",
-    "mistral-7b-instruct-v0.3",
     "mistral-large-2402",
     "mistral-large-2512",
     "mistral-large-4-0",
@@ -390,16 +386,6 @@
       }
     ],
     "claude-opus4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "claude-sonnet-4": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
