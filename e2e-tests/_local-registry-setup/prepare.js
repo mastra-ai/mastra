@@ -1,5 +1,5 @@
 import { exec, execSync, spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -237,14 +237,17 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     changeset += `---`;
     writeFileSync(join(monorepoDir, `.changeset/test-${new Date().toISOString()}.md`), changeset);
     // process.exit(0); // Remove this - it prevents changeset commands from running
-    console.log('Running pnpm changeset-cli pre exit');
-    await retryWithTimeout(
-      async () => {
-        await execWithTimeout('pnpm changeset-cli pre exit', { cwd: monorepoDir }, defaultTimeout);
-      },
-      defaultTimeout,
-      'pnpm changeset-cli pre exit',
-    );
+    // Only exit pre mode when the checked-out branch is actually in it; otherwise changeset errors out.
+    if (existsSync(join(monorepoDir, '.changeset/pre.json'))) {
+      console.log('Running pnpm changeset-cli pre exit');
+      await retryWithTimeout(
+        async () => {
+          await execWithTimeout('pnpm changeset-cli pre exit', { cwd: monorepoDir }, defaultTimeout);
+        },
+        defaultTimeout,
+        'pnpm changeset-cli pre exit',
+      );
+    }
 
     console.log(`Running pnpm changeset-cli version --snapshot ${tag}`);
     await retryWithTimeout(
