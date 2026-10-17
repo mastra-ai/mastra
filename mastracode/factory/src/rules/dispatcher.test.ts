@@ -1,3 +1,4 @@
+import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
@@ -1274,9 +1275,11 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledWith(
       {
         id: expect.any(String),
-        type: 'user',
-        tagName: 'user',
-        contents: expect.stringMatching(/<skill name="understand-issue">[\s\S]*ARGUMENTS: Issue 42[\s\S]*<\/skill>/),
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'understand-issue' },
+        escapeContents: false,
+        contents: expect.stringMatching(/^Follow the skill\.[\s\S]*ARGUMENTS: Issue 42$/),
       },
       { requestContext: expect.anything(), requireDelivery: true },
     );
@@ -1333,8 +1336,10 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    const contents = session.sendSignal.mock.calls[0]?.[0]?.contents as string;
-    expect(contents).toContain('<skill name="understand-issue">');
+    const signal = session.sendSignal.mock.calls[0]?.[0];
+    expect(signal).toMatchObject({ type: 'reactive', tagName: 'skill', attributes: { name: 'understand-issue' } });
+    const contents = signal?.contents as string;
+    expect(contents).not.toContain('<skill');
     expect(contents).toContain('Resume the active understand-issue session');
     expect(contents).toContain('ARGUMENTS: Issue 42');
     // The whole fix: the full skill body ('Follow the skill.') is not re-pasted.
@@ -1748,7 +1753,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       author: { kind: 'user', id: 'user-2', displayName: 'Bob' },
-      body: 'ship it behind the flag',
+      body: 'ship it behind the flag && run `pnpm test 2>&1`',
     });
     await bindWorkRun(storage, item.id);
     const { controller, session } = createSession();
@@ -1765,12 +1770,20 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
+        tagName: 'skill',
         contents: expect.stringMatching(
-          /<\/skill>\n\n<work-item-feed>\n[\s\S]*\[Bob · [\s\S]*ship it behind the flag[\s\S]*<\/work-item-feed>$/,
+          /^Follow the skill\.[\s\S]*\n\n<work-item-feed>\n[\s\S]*\[Bob · [\s\S]*ship it behind the flag[\s\S]*<\/work-item-feed>$/,
         ),
       }),
       expect.anything(),
     );
+    // The model sees the skill and feed as written, the same as TUI `/skill`.
+    const kickoff = session.sendSignal.mock.calls[0]![0];
+    const modelText = createSignal(kickoff).toLLMMessage().content;
+    expect(modelText).toMatch(/^<skill name="understand-issue">Follow the skill\./);
+    expect(modelText).toContain('\n\n<work-item-feed>\n');
+    expect(modelText).toContain('ship it behind the flag && run `pnpm test 2>&1`');
+    expect(modelText).toMatch(/<\/work-item-feed><\/skill>$/);
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
@@ -4640,7 +4653,7 @@ describe('FactoryDecisionDispatcher', () => {
       expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'triage' }),
     );
     expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
+      expect.objectContaining({ tagName: 'skill', attributes: { name: 'understand-issue' } }),
       { requestContext: expect.anything(), requireDelivery: true },
     );
   });
@@ -4713,7 +4726,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-2' });
     expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
+      expect.objectContaining({ tagName: 'skill', attributes: { name: 'understand-issue' } }),
       { requestContext: expect.anything(), requireDelivery: true },
     );
   });
