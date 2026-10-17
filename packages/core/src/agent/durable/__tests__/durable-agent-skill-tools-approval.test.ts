@@ -11,7 +11,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { delay } from '../../../utils';
 import type { Workspace } from '../../../workspace';
 import type { Skill, WorkspaceSkills } from '../../../workspace/skills';
 import { Agent } from '../../agent';
@@ -130,7 +129,14 @@ describe('DurableAgent skill tools under global requireToolApproval', () => {
       runId: prep.runId,
       requireToolApproval: policy,
     });
-    await delay(600);
+    await vi.waitFor(
+      () => {
+        const data = events.filter(e => e.type === AgentStreamEventTypes.CHUNK).map(e => (e as any).data);
+        expect(data.some(c => c?.type === 'tool-call-approval')).toBe(true);
+        expect(data.some(c => c?.type === 'tool-result' && c.payload.toolName === 'skill')).toBe(true);
+      },
+      { timeout: 5000 },
+    );
 
     const chunks = events.filter(e => e.type === AgentStreamEventTypes.CHUNK).map(e => (e as any).data);
     const approvals = chunks.filter(c => c?.type === 'tool-call-approval');
