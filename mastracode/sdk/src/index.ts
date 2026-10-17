@@ -57,7 +57,11 @@ import { AgentConnectionsSignalProvider } from './agent-connections/signal-provi
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
 import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
-import { hasCredentialStoreProvider, withCredentialTenantPreparation } from './agents/credential-resolver.js';
+import {
+  hasCredentialStoreProvider,
+  setCredentialLogger,
+  withCredentialTenantPreparation,
+} from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -2161,6 +2165,7 @@ export async function prepareAgentControllerMount(
   const finalize = async () => {
     await controller.init();
     validateExperimentalAgent(codeAgent, controller.getMastra());
+    setCredentialLogger(controller.getMastra()?.getLogger());
     if (weOwnTheMastra) {
       const mastra = controller.getMastra();
       if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
