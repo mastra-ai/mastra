@@ -40,17 +40,12 @@ import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
-import { DuckDBStore } from '@mastra/duckdb';
-
-import { GithubSignals } from '@mastra/github-signals';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
-} from '@mastra/observability';
-import { PostgresStore } from '@mastra/pg';
+// Storage backends, observability, and github-signals are imported lazily at
+// their construction sites: their static imports (native DB drivers among
+// them) dominated CLI cold start even for sessions that never used them.
+import type { DuckDBStore } from '@mastra/duckdb';
+import type { GithubSignals } from '@mastra/github-signals';
+import type { LibSQLVector } from '@mastra/libsql';
 
 import { createSessionThreadAdvertisement } from './agent-connections/session-advertisement.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
@@ -519,8 +514,11 @@ function resolveInjectedStorageBackend(
   configuredBackend?: 'libsql' | 'pg',
 ): 'libsql' | 'pg' {
   if (configuredBackend) return configuredBackend;
-  if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
-  if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
+  // Class-name checks instead of instanceof so the storage packages are never
+  // loaded just to classify an injected instance. hasAncestorClassNamed covers
+  // direct instances too: a direct instance's first prototype is the class.
+  if (hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
+  if (hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
 }
 
@@ -711,6 +709,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   let observabilityWarning: string | undefined;
   if (globalSettings.observability.localTracing) {
     try {
+      const { DuckDBStore } = await import('@mastra/duckdb');
       const observabilityDuckDB = new DuckDBStore({
         id: 'mastra-code-observability',
         path: getObservabilityDatabasePath(),
@@ -747,6 +746,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
 
   // Observability (tracing, scoring, feedback)
+  const { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } =
+    await import('@mastra/observability');
   const observability = new Observability({
     configs: {
       default: {
@@ -822,7 +823,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     backend: storageResult.backend,
     retention: DEFAULT_RETENTION,
     localDbFiles: storageConfig ? resolveLocalDbFiles(storageConfig, storageResult.backend) : [],
-    closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
+    // Name-based check instead of instanceof: an injected vector must not force
+    // @mastra/libsql to load, and cross-package copies fail instanceof anyway.
+    closeVector:
+      vector && hasAncestorClassNamed(vector, 'LibSQLVector')
+        ? async () => (vector as LibSQLVector).close()
+        : undefined,
   });
 
   const configuredKnowledgeKey = config?.knowledge?.key.trim();
@@ -1106,7 +1112,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const githubSignals: GithubSignals | undefined =
     globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
-      ? new GithubSignals({
+      ? new (await import('@mastra/github-signals')).GithubSignals({
           cwd: project.rootPath,
           pollIntervalMs: globalSettings.signals.githubPollIntervalMs,
           gitcrawlCommand:
