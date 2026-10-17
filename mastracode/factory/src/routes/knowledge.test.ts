@@ -1793,6 +1793,135 @@ describe('KnowledgeRoutes', () => {
     expect(foreignDetail.status).toBe(404);
   });
 
+  it('preserves removed and renamed importer history across reconstruction without leaking foreign runs', async () => {
+    const storage = new InMemoryStore({ id: 'factory-importer-snapshot' });
+    let activeRuntime!: Knowledge;
+    const h = await createHarness({ knowledgeResolver: async () => activeRuntime });
+    const oldImporterId = 'calendar-v1';
+    const projectScope = `resource:${h.projectId}`;
+    const projectBinding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: projectScope });
+    const foreignBinding = knowledgeImporterBindingKey({
+      source: 'calendar:foreign',
+      scope: 'resource:00000000-0000-4000-8000-000000000099',
+    });
+    activeRuntime = new Knowledge({
+      id: 'mastra',
+      storage,
+      structure: { scopes: [{ address: projectScope, name: 'Project' }] },
+      importers: [{ id: oldImporterId, handler: async () => {} }],
+    });
+    await activeRuntime.reconcile();
+    const projectRun = await activeRuntime.createImportRun({
+      id: 'calendar-v1-project-run',
+      importerId: oldImporterId,
+      binding: projectBinding,
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+    await activeRuntime.updateImportRun({ id: projectRun.id, status: 'running' });
+    await activeRuntime.updateImportRun({ id: projectRun.id, status: 'failed', error: 'upgrade failure' });
+    const foreignRun = await activeRuntime.createImportRun({
+      id: 'calendar-v1-foreign-run',
+      importerId: oldImporterId,
+      binding: foreignBinding,
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+
+    const domain = await activeRuntime.getStorage();
+    await domain.enqueueImportRun({
+      id: 'calendar-v1-transcript-run',
+      importerId: oldImporterId,
+      binding: projectBinding,
+      importKind: 'agentic',
+      triggerKind: 'programmatic',
+      payloadKey: 'payload/calendar-v1-transcript-run',
+      payload: '{}',
+    });
+    const claimed = await domain.claimImportRun({
+      importerId: oldImporterId,
+      binding: projectBinding,
+      workerId: 'worker-1',
+      leaseKey: 'lease/',
+    });
+    expect(claimed?.id).toBe('calendar-v1-transcript-run');
+    await domain.heartbeatImportRun({
+      id: claimed!.id,
+      importerId: oldImporterId,
+      binding: projectBinding,
+      workerId: 'worker-1',
+      leaseKey: 'lease/calendar-v1-transcript-run',
+      transcriptThreadId: 'knowledge-import-run:calendar-v1-transcript-run',
+    });
+    await domain.finalizeImportRun({
+      id: claimed!.id,
+      importerId: oldImporterId,
+      binding: projectBinding,
+      workerId: 'worker-1',
+      leaseKey: 'lease/calendar-v1-transcript-run',
+      payloadKey: 'payload/calendar-v1-transcript-run',
+      status: 'failed',
+      error: 'agent stopped',
+      transcriptThreadId: 'knowledge-import-run:calendar-v1-transcript-run',
+      state: [],
+    });
+    await expect(domain.getImportRun(claimed!.id)).resolves.toMatchObject({
+      transcriptThreadId: 'knowledge-import-run:calendar-v1-transcript-run',
+    });
+
+    activeRuntime = new Knowledge({ id: 'mastra', storage });
+    const removedList = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/${oldImporterId}/runs`,
+    );
+    expect(removedList.status).toBe(200);
+    const removedListBody = await removedList.json();
+    expect(removedListBody.runs.map((run: { id: string }) => run.id)).toEqual([
+      'calendar-v1-transcript-run',
+      projectRun.id,
+    ]);
+    expect(JSON.stringify(removedListBody)).not.toContain(foreignRun.id);
+    const foreignList = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/${oldImporterId}/runs?binding=${encodeURIComponent(foreignBinding)}`,
+    );
+    await expect(foreignList.json()).resolves.toEqual({ runs: [] });
+    const removedDetail = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/${oldImporterId}/runs/calendar-v1-transcript-run`,
+    );
+    expect(removedDetail.status).toBe(200);
+    await expect(removedDetail.json()).resolves.toMatchObject({
+      run: { id: 'calendar-v1-transcript-run', importerId: oldImporterId },
+      transcript: {
+        threadId: 'knowledge-import-run:calendar-v1-transcript-run',
+        available: false,
+        messages: [],
+      },
+    });
+    const foreignDetail = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/${oldImporterId}/runs/${foreignRun.id}`,
+    );
+    expect(foreignDetail.status).toBe(404);
+
+    activeRuntime = new Knowledge({
+      id: 'mastra',
+      storage,
+      importers: [{ id: 'calendar-v2', handler: async () => {} }],
+    });
+    const renamedHistory = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/${oldImporterId}/runs`,
+    );
+    expect(renamedHistory.status).toBe(200);
+    await expect(renamedHistory.json()).resolves.toMatchObject({
+      runs: [
+        expect.objectContaining({ id: 'calendar-v1-transcript-run', importerId: oldImporterId }),
+        expect.objectContaining({ id: projectRun.id, importerId: oldImporterId }),
+      ],
+    });
+    const replacementHistory = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar-v2/runs`,
+    );
+    await expect(replacementHistory.json()).resolves.toEqual({ runs: [] });
+  });
+
   it('applies trigger filters before run pagination', async () => {
     const runtime = new Knowledge({
       id: 'mastra',

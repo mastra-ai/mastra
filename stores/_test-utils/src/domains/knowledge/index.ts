@@ -3,7 +3,9 @@ import {
   knowledgeImporterBindingKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
+  assertKnowledgeRecordScopesVisible,
   KnowledgeConflictError,
+  KnowledgeInvisibleRecordError,
 } from '@mastra/core/storage';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -415,6 +417,45 @@ export function createKnowledgeStorageTests(
       ).toEqual(['paired-b']);
     });
 
+    it('reports which node and record ids are visible, using the shared node and record visibility rules', async () => {
+      const visible = await store.createNode({ name: 'Visibility probe visible', scopeIds: [PROJECT_SCOPE_ID] });
+      const hidden = await store.createNode({ name: 'Visibility probe hidden', scopeIds: [OTHER_SCOPE_ID] });
+      const plain = await store.createRecord({ node: visible, text: 'Plain', scopeIds: [PROJECT_SCOPE_ID] });
+      const foreign = await store.createRecord({ node: hidden, text: 'Foreign', scopeIds: [OTHER_SCOPE_ID] });
+      // Parent visible, but it mentions a node the caller cannot see: the record must stay hidden.
+      const mentioning = await store.createRecord({
+        node: visible,
+        text: 'Mentions [[Visibility probe hidden]]',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [OTHER_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      const deleted = await store.createRecord({ node: visible, text: 'Gone', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.deleteRecord({ id: deleted.id, deletedBy: 'test' });
+
+      const found = await store.listVisibleKnowledgeIds({
+        // The project scope node is visible through its own id even though its membership is the org scope.
+        nodeIds: [visible.id, hidden.id, PROJECT_SCOPE_ID, 'missing-node'],
+        recordIds: [plain.id, foreign.id, mentioning.id, deleted.id, 'missing-record'],
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      expect([...found.nodeIds].sort()).toEqual([visible.id, PROJECT_SCOPE_ID].sort());
+      expect(found.recordIds).toEqual([plain.id]);
+      expect(await store.listVisibleKnowledgeIds({ nodeIds: [], recordIds: [], scopeIds: [PROJECT_SCOPE_ID] })).toEqual(
+        {
+          nodeIds: [],
+          recordIds: [],
+        },
+      );
+      await expect(
+        store.listVisibleKnowledgeIds({
+          nodeIds: Array.from({ length: 1001 }, (_, i) => `n-${i}`),
+          recordIds: [],
+          scopeIds: [PROJECT_SCOPE_ID],
+        }),
+      ).rejects.toThrow('at most 1000');
+    });
+
     it('deduplicates concurrent node creation by canonical name and memberships', async () => {
       const [first, second] = await Promise.all([
         store.createNode({ name: 'Concurrent Topic', scopeIds: [PROJECT_SCOPE_ID] }),
@@ -518,6 +559,66 @@ export function createKnowledgeStorageTests(
         activity: await store.listActivity({ scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID] }),
         outbox: await store.listSemanticOutbox({}),
       }).toEqual(before);
+    });
+
+    describe('record placement visibility', () => {
+      it('rejects creating a record whose scopes hide it from every viewer of its subject', async () => {
+        const node = await store.createNode({ name: 'Project subject', scopeIds: [PROJECT_SCOPE_ID] });
+        await expect(
+          assertKnowledgeRecordScopesVisible(store, { node, scopeIds: [OTHER_SCOPE_ID] }),
+        ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      });
+
+      it('rejects a rescope that leaves the record invisible, even when it widens', async () => {
+        const node = await store.createNode({ name: 'Rescoped subject', scopeIds: [PROJECT_SCOPE_ID] });
+        const record = await store.createRecord({ node, text: 'Project evidence', scopeIds: [PROJECT_SCOPE_ID] });
+        await expect(
+          assertKnowledgeRecordScopesVisible(store, { node: record.nodeId, scopeIds: [OTHER_SCOPE_ID] }),
+        ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      });
+
+      it('rejects a rescope that hides a node the record mentions from every reader', async () => {
+        const subject = await store.createNode({ name: 'Shared subject', scopeIds: [ORG_SCOPE_ID, OTHER_SCOPE_ID] });
+        await store.createNode({ name: 'Other only', scopeIds: [OTHER_SCOPE_ID] });
+        const record = await store.createRecord({
+          node: subject,
+          text: 'Links [[Other only]]',
+          scopeIds: [OTHER_SCOPE_ID],
+        });
+        // Org and project readers cannot see the mentioned node; other readers would lose the record scope.
+        await expect(
+          assertKnowledgeRecordScopesVisible(store, { node: subject, scopeIds: [ORG_SCOPE_ID], recordId: record.id }),
+        ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      });
+
+      it('accepts a rescope a reader of the mentioned node can still see', async () => {
+        const subject = await store.createNode({ name: 'Org subject', scopeIds: [ORG_SCOPE_ID] });
+        await store.createNode({ name: 'Project only', scopeIds: [PROJECT_SCOPE_ID] });
+        const record = await store.createRecord({
+          node: subject,
+          text: 'Links [[Project only]]',
+          scopeIds: [PROJECT_SCOPE_ID],
+        });
+        // A project reader also holds the org scope, so it still sees the record and the node it mentions.
+        await assertKnowledgeRecordScopesVisible(store, {
+          node: subject,
+          scopeIds: [ORG_SCOPE_ID],
+          recordId: record.id,
+        });
+      });
+
+      it('accepts placements a viewer of the record scope or its ancestors can see', async () => {
+        const project = await store.createNode({ name: 'Project node', scopeIds: [PROJECT_SCOPE_ID] });
+        const org = await store.createNode({ name: 'Org node', scopeIds: [ORG_SCOPE_ID] });
+        // A project viewer also holds its org ancestor, so an org-wide record about a project node stays visible.
+        await assertKnowledgeRecordScopesVisible(store, { node: project, scopeIds: [ORG_SCOPE_ID] });
+        await assertKnowledgeRecordScopesVisible(store, { node: org, scopeIds: [PROJECT_SCOPE_ID] });
+        await assertKnowledgeRecordScopesVisible(store, {
+          node: project,
+          scopeIds: [OTHER_SCOPE_ID, PROJECT_SCOPE_ID],
+        });
+        await assertKnowledgeRecordScopesVisible(store, { node: PROJECT_SCOPE_ID, scopeIds: [PROJECT_SCOPE_ID] });
+      });
     });
 
     it('accepts memberships only to live scope nodes', async () => {
@@ -674,6 +775,77 @@ export function createKnowledgeStorageTests(
       const unresolved = await store.getNodeByName({ name: 'Local contact', scopeIds: [PROJECT_SCOPE_ID] });
       expect(unresolved).not.toBeNull();
       expect(await store.getNodeScopeIds(unresolved!.id)).toEqual([PROJECT_SCOPE_ID]);
+    });
+
+    it('resolves a unique visible external address across importer sources', async () => {
+      const target = await store.createNode({ name: 'Descriptive pull request title', scopeIds: [ORG_SCOPE_ID] });
+      await store.setNodeAddress({ source: 'github:mastra-ai/mastra', address: 'pr:42', nodeId: target.id });
+      const source = await store.createNode({ name: 'Decision', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node: source,
+        text: 'Supported by [[pr:42]].',
+        source: 'github:mastra-ai/mastra:distiller',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [ORG_SCOPE_ID],
+      });
+
+      expect(
+        (await store.listMentioningRecords({ node: target, scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID] })).records,
+      ).toEqual([record]);
+      expect(await store.getNodeByName({ name: 'pr:42', scopeIds: [PROJECT_SCOPE_ID] })).toBeNull();
+    });
+
+    it('prefers an exact-source address when another visible source uses the same address', async () => {
+      const target = await store.createNode({ name: 'Expected pull request', scopeIds: [ORG_SCOPE_ID] });
+      const competing = await store.createNode({ name: 'Unrelated pull request', scopeIds: [OTHER_SCOPE_ID] });
+      await store.setNodeAddress({ source: 'github:mastra-ai/mastra', address: 'pr:99', nodeId: target.id });
+      await store.setNodeAddress({ source: 'github:other/repo', address: 'pr:99', nodeId: competing.id });
+      const source = await store.createNode({ name: 'Source-aware decision', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node: source,
+        text: 'Supported by [[pr:99]].',
+        source: 'github:mastra-ai/mastra',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [ORG_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+
+      expect(
+        (
+          await store.listMentioningRecords({
+            node: target,
+            scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+          })
+        ).records,
+      ).toEqual([record]);
+      expect(
+        (
+          await store.listMentioningRecords({
+            node: competing,
+            scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+          })
+        ).records,
+      ).toEqual([]);
+    });
+
+    it('falls back to node names when visible cross-source addresses are ambiguous', async () => {
+      const first = await store.createNode({ name: 'First addressed node', scopeIds: [ORG_SCOPE_ID] });
+      const second = await store.createNode({ name: 'Second addressed node', scopeIds: [OTHER_SCOPE_ID] });
+      const named = await store.createNode({ name: 'pr:100', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.setNodeAddress({ source: 'github:first/repo', address: 'pr:100', nodeId: first.id });
+      await store.setNodeAddress({ source: 'github:second/repo', address: 'pr:100', nodeId: second.id });
+      const source = await store.createNode({ name: 'Ambiguous source decision', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node: source,
+        text: 'Supported by [[pr:100]].',
+        source: 'github:distiller',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      const visibleScopeIds = [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID];
+
+      expect((await store.listMentioningRecords({ node: named, scopeIds: visibleScopeIds })).records).toEqual([record]);
+      expect((await store.listMentioningRecords({ node: first, scopeIds: visibleScopeIds })).records).toEqual([]);
+      expect((await store.listMentioningRecords({ node: second, scopeIds: visibleScopeIds })).records).toEqual([]);
     });
 
     it('soft-deletes and restores records without changing membership', async () => {

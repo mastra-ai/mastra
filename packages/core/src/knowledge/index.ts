@@ -2,13 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
-import { sanitizeKnowledgeImportError, KnowledgeUnsupportedError } from '../storage/domains/knowledge';
+import {
+  assertKnowledgeRecordScopesVisible,
+  sanitizeKnowledgeImportError,
+  KnowledgeUnsupportedError,
+} from '../storage/domains/knowledge';
 import type {
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   CreateKnowledgeImportRunInput,
-  KnowledgeImportRunStatus,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -363,14 +366,11 @@ export class Knowledge extends MastraBase {
   }
 
   async getImportRun(id: string) {
-    const run = await (await this.getStorage()).getImportRun(id);
-    if (run) this.#assertImporter(run.importerId);
-    return run;
+    return (await this.getStorage()).getImportRun(id);
   }
 
   async listImportRuns(input: ListKnowledgeImportRunsInput = {}) {
     if (input.importerId) {
-      this.#assertImporter(input.importerId);
       return (await this.getStorage()).listImportRuns(input);
     }
 
@@ -448,6 +448,7 @@ export class Knowledge extends MastraBase {
   async createRecord(input: CreateKnowledgeRecordInput) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
+    await assertKnowledgeRecordScopesVisible(storage, input);
     return storage.createRecord(input);
   }
 
@@ -492,6 +493,14 @@ export class Knowledge extends MastraBase {
   }) {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
+    const record = await storage.getRecord({ id: input.id, includeDeleted: true });
+    if (record) {
+      await assertKnowledgeRecordScopesVisible(storage, {
+        node: record.nodeId,
+        scopeIds: input.scopeIds,
+        ...(record.deletedAt ? {} : { recordId: record.id }),
+      });
+    }
     return storage.setRecordScopes(input);
   }
 
@@ -501,11 +510,7 @@ export class Knowledge extends MastraBase {
 
   async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
     const storage = await this.getStorage();
-    if (input.importRunId) {
-      const run = await storage.getImportRun(input.importRunId);
-      if (!run) return [];
-      this.#assertImporter(run.importerId);
-    }
+    if (input.importRunId && !(await storage.getImportRun(input.importRunId))) return [];
     return storage.listActivity(input);
   }
 

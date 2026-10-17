@@ -520,6 +520,27 @@ export function assertKnowledgeSourceProbeLimit(sources: unknown[]): void {
   if (sources.length > KNOWLEDGE_SOURCE_PROBE_LIMIT)
     throw new Error(`listSourcesWithVisibleRecords accepts at most ${KNOWLEDGE_SOURCE_PROBE_LIMIT} sources`);
 }
+/** Most node plus record ids one {@link KnowledgeStorage.listVisibleKnowledgeIds} call may ask about. */
+export const KNOWLEDGE_VISIBILITY_PROBE_LIMIT = 1000;
+export interface ListVisibleKnowledgeIdsInput {
+  nodeIds: string[];
+  recordIds: string[];
+  scopeIds: KnowledgeScopeIds;
+  /** Judge `recordIds` as if they were scoped to these ids instead of their stored scopes; node and mention rules are unchanged. */
+  recordScopeIds?: KnowledgeScopeIds;
+}
+export interface ListVisibleKnowledgeIdsOutput {
+  nodeIds: string[];
+  recordIds: string[];
+  /** Set by adapters that honour `recordScopeIds`. */
+  recordScopeIdsApplied?: true;
+}
+export function assertKnowledgeVisibilityProbeLimit(
+  input: Pick<ListVisibleKnowledgeIdsInput, 'nodeIds' | 'recordIds'>,
+): void {
+  if (input.nodeIds.length + input.recordIds.length > KNOWLEDGE_VISIBILITY_PROBE_LIMIT)
+    throw new Error(`listVisibleKnowledgeIds accepts at most ${KNOWLEDGE_VISIBILITY_PROBE_LIMIT} ids`);
+}
 export interface SearchKnowledgeInput {
   query: string;
   scopeIds: KnowledgeScopeIds;
@@ -551,6 +572,12 @@ export class KnowledgeNotFoundError extends Error {
   constructor(type: string, id: string) {
     super(`Knowledge ${type} not found: ${id}`);
     this.name = 'KnowledgeNotFoundError';
+  }
+}
+export class KnowledgeInvisibleRecordError extends Error {
+  constructor(nodeId: string, scopeIds: KnowledgeScopeIds) {
+    super(`Knowledge record scopes ${scopeIds.join(', ')} would hide the record from every viewer of node ${nodeId}`);
+    this.name = 'KnowledgeInvisibleRecordError';
   }
 }
 export class KnowledgeUnsupportedError extends Error {
@@ -624,6 +651,55 @@ export function isKnowledgeNodeVisible(
   visibleScopeIds: KnowledgeScopeIds,
 ): boolean {
   return (node.isScope && visibleScopeIds.includes(node.id)) || isKnowledgeScopeVisible(nodeScopeIds, visibleScopeIds);
+}
+
+/**
+ * Rejects a record placement no reader could see. A reader holds a scope plus its parent chain. Storage decides
+ * whether the record (its subject node and, for an existing record, every node it mentions) is visible under a
+ * chain, judging the record as if it already had the requested scopes. The chains tried are those of the
+ * requested scopes, the subject's scopes and, for an existing record, its current scopes, where its mentions
+ * were resolved. A missing subject is left to the write, which reports it.
+ */
+export async function assertKnowledgeRecordScopesVisible(
+  storage: KnowledgeStorage,
+  input: { node: KnowledgeNodeReference; scopeIds: KnowledgeScopeIds; recordId?: string },
+): Promise<void> {
+  const nodeId = typeof input.node === 'string' ? input.node : input.node.id;
+  const recordScopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+  const node = await storage.getNode(nodeId);
+  if (!node || node.deletedAt || recordScopeIds.length === 0) return;
+  const record = input.recordId ? await storage.getRecord({ id: input.recordId }) : null;
+  const readers = new Set([
+    ...recordScopeIds,
+    ...(await storage.getNodeScopeIds(nodeId)),
+    ...(node.isScope ? [node.id] : []),
+    ...(record ? await storage.getRecordScopeIds(record.id) : []),
+  ]);
+  for (const reader of readers) {
+    const chain = await knowledgeScopeChain(storage, reader);
+    if (!isKnowledgeScopeVisible(recordScopeIds, chain)) continue;
+    const visible = await storage.listVisibleKnowledgeIds({
+      nodeIds: [nodeId],
+      recordIds: record ? [record.id] : [],
+      scopeIds: chain,
+      recordScopeIds,
+    });
+    const sees = record && visible.recordScopeIdsApplied ? visible.recordIds.length > 0 : visible.nodeIds.length > 0;
+    if (sees) return;
+  }
+  throw new KnowledgeInvisibleRecordError(nodeId, recordScopeIds);
+}
+
+async function knowledgeScopeChain(storage: KnowledgeStorage, scopeId: string): Promise<KnowledgeScopeIds> {
+  const chain = new Set<string>();
+  const stack = [scopeId];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (chain.has(current)) continue;
+    chain.add(current);
+    stack.push(...(await storage.getNodeScopeIds(current)));
+  }
+  return canonicalizeKnowledgeScopeIds([...chain]);
 }
 
 export function parseKnowledgeWikilinks(text: string): string[] {
@@ -877,6 +953,13 @@ export abstract class KnowledgeStorage extends StorageDomain {
    * using the same record visibility rule as every other record read. One bounded query regardless of how many records each source holds.
    */
   async listSourcesWithVisibleRecords(_input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /**
+   * Returns which of the given live nodes and records are visible in `scopeIds`, using the same node and record
+   * visibility rules as every other read. One bounded query; ids that are missing, deleted or invisible are omitted.
+   */
+  async listVisibleKnowledgeIds(_input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
     throw new KnowledgeUnsupportedError();
   }
   async deleteRecord(_input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {

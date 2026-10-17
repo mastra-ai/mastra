@@ -42,6 +42,7 @@ import { coreFeatures } from '@mastra/core/features';
 import {
   createKnowledgeUlid,
   assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,
@@ -92,6 +93,8 @@ import type {
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
   ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -197,11 +200,20 @@ function scopeIdListSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): st
  * `extraScopeSql` adds one more visible scope per row (e.g. a probed source's own session scope).
  */
 function visibleRecordSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
+  const scoped = visibleRecordContentSql(scopeIds, extraScopeSql);
+  return {
+    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)})) AND ${scoped.sql}`,
+    args: [...scopeIds, ...scoped.args],
+  };
+}
+
+/** The scope-independent half of {@link visibleRecordSql}: a live, visible parent and visible mention targets. */
+function visibleRecordContentSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
   const visibleNode = (alias: string) =>
     `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias, extraScopeSql)}`;
   return {
-    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
-    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
+    sql: `${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
+    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
   };
 }
 
@@ -987,7 +999,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
     await this.#replaceRecordScopes(tx, record.id, scopeIds, now);
     const resolutionScopeIds = await this.#assertScopeNodes(tx, input.resolutionScopeIds ?? scopeIds);
-    await this.#replaceMentions(tx, record.id, record.text, resolutionScopeIds, scopeIds, input.importRunId);
+    await this.#replaceMentions(
+      tx,
+      record.id,
+      record.text,
+      record.source,
+      resolutionScopeIds,
+      scopeIds,
+      input.importRunId,
+    );
     await this.#activity(tx, 'create', 'record', record.id, input.contextScopeId, input.importRunId);
     await this.#outbox(tx, 'record', record.id, 'upsert', record.version, scopeIds);
     return record;
@@ -1051,6 +1071,37 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args: [...input.sources.flatMap(probe => [probe.source, probe.scopeId ?? null]), ...visibleRecord.args],
     });
     return result.rows.map(row => String(row.source));
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    assertKnowledgeVisibilityProbeLimit(input);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const nodeIds = [...new Set(input.nodeIds)];
+    const recordIds = [...new Set(input.recordIds)];
+    if (scopeIds.length === 0) return { nodeIds: [], recordIds: [] };
+    const marks = (ids: string[]) => ids.map(() => '?').join(',');
+    const visibleNodes = nodeIds.length
+      ? await this.#client.execute({
+          sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.id IN (${marks(nodeIds)}) AND n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)}`,
+          args: [...nodeIds, ...scopeIds, ...scopeIds],
+        })
+      : { rows: [] };
+    // A prospective scope set replaces the stored-scope clause; the parent and mention rules still apply.
+    const prospective = input.recordScopeIds;
+    const visibleRecord = prospective ? visibleRecordContentSql(scopeIds) : visibleRecordSql(scopeIds);
+    const probeRecords = prospective ? isKnowledgeScopeVisible(prospective, scopeIds) : true;
+    const visibleRecords =
+      recordIds.length && probeRecords
+        ? await this.#client.execute({
+            sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.id IN (${marks(recordIds)}) AND r.deletedAt IS NULL AND ${visibleRecord.sql}`,
+            args: [...recordIds, ...visibleRecord.args],
+          })
+        : { rows: [] };
+    return {
+      nodeIds: visibleNodes.rows.map(row => String(row.id)),
+      recordIds: visibleRecords.rows.map(row => String(row.id)),
+      ...(prospective ? { recordScopeIdsApplied: true as const } : {}),
+    };
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
@@ -2275,13 +2326,40 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     tx: Transaction,
     recordId: string,
     text: string,
+    source: string | undefined,
     resolutionScopeIds: KnowledgeScopeIds,
     recordScopeIds: KnowledgeScopeIds,
     importRunId?: string,
   ): Promise<void> {
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [recordId] });
     for (const name of parseKnowledgeWikilinks(text)) {
-      let node = await this.#resolveNode(tx, name, resolutionScopeIds);
+      const bindings = await tx.execute({
+        sql: `SELECT source,nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE address=?`,
+        args: [name],
+      });
+      const addressed: Array<{ node: KnowledgeNode; scopeIds: KnowledgeScopeIds; preferred: boolean }> = [];
+      for (const binding of bindings.rows) {
+        const nodeId = binding.nodeId;
+        if (nodeId == null) continue;
+        const candidate = await this.#getNode(tx, String(nodeId));
+        if (!candidate) continue;
+        const candidateScopeIds = await this.#getNodeScopeIds(tx, candidate.id);
+        if (isKnowledgeNodeVisible(candidate, candidateScopeIds, resolutionScopeIds)) {
+          addressed.push({ node: candidate, scopeIds: candidateScopeIds, preferred: binding.source === source });
+        }
+      }
+      addressed.sort(
+        (left, right) =>
+          Number(right.preferred) - Number(left.preferred) ||
+          right.scopeIds.length - left.scopeIds.length ||
+          left.node.id.localeCompare(right.node.id),
+      );
+      const preferred = addressed.find(candidate => candidate.preferred)?.node;
+      const uniqueAddressedNodeIds = new Set(addressed.map(candidate => candidate.node.id));
+      let node =
+        preferred ??
+        (uniqueAddressedNodeIds.size === 1 ? addressed[0]?.node : null) ??
+        (await this.#resolveNode(tx, name, resolutionScopeIds));
       if (!node) node = await this.#createNode(tx, { name, scopeIds: recordScopeIds, importRunId });
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_MENTIONS}" (recordId,targetNodeId) VALUES (?,?)`,

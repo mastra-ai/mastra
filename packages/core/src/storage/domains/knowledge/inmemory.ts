@@ -6,6 +6,7 @@ import {
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
   assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
@@ -46,6 +47,8 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
   ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -729,6 +732,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#replaceMentions(
       record.id,
       record.text,
+      record.source,
       input.resolutionScopeIds ?? input.scopeIds,
       input.scopeIds,
       input.importRunId,
@@ -800,6 +804,20 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         found.add(record.source);
     }
     return [...found];
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    assertKnowledgeVisibilityProbeLimit(input);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const nodeIds = [...new Set(input.nodeIds)].filter(id => {
+      const node = this.#db.knowledgeNodes.get(id);
+      return Boolean(node && !node.deletedAt && isKnowledgeNodeVisible(node, this.#nodeScopeIds(id), scopeIds));
+    });
+    const recordIds = [...new Set(input.recordIds)].filter(id => {
+      const record = this.#db.knowledgeRecords.get(id);
+      return Boolean(record && !record.deletedAt && this.#isRecordVisible(record, scopeIds, input.recordScopeIds));
+    });
+    return { nodeIds, recordIds, ...(input.recordScopeIds ? { recordScopeIdsApplied: true as const } : {}) };
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
@@ -1401,8 +1419,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return [...(this.#db.knowledgeRecordScopes.get(recordId) ?? [])].sort();
   }
 
-  #isRecordVisible(record: KnowledgeRecord, visibleScopeIds: KnowledgeScopeIds): boolean {
-    if (!isKnowledgeScopeVisible(this.#recordScopeIds(record.id), visibleScopeIds)) return false;
+  #isRecordVisible(
+    record: KnowledgeRecord,
+    visibleScopeIds: KnowledgeScopeIds,
+    recordScopeIds = this.#recordScopeIds(record.id),
+  ): boolean {
+    if (!isKnowledgeScopeVisible(recordScopeIds, visibleScopeIds)) return false;
     const relatedNodeIds = [record.nodeId, ...(this.#db.knowledgeMentions.get(`record:${record.id}`) ?? [])];
     return relatedNodeIds.every(nodeId => {
       const node = this.#db.knowledgeNodes.get(nodeId);
@@ -1419,13 +1441,32 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   #replaceMentions(
     recordId: string,
     text: string,
+    source: string | undefined,
     resolutionScopeIds: KnowledgeScopeIds,
     recordScopeIds: KnowledgeScopeIds,
     importRunId?: string,
   ): void {
     const mentions = new Set<string>();
     for (const name of parseKnowledgeWikilinks(text)) {
-      let node = this.#resolveNode({ name, scopeIds: resolutionScopeIds });
+      const addressed = [...this.#db.knowledgeNodeAddresses.values()]
+        .filter(entry => entry.address === name)
+        .map(entry => ({ entry, node: this.#db.knowledgeNodes.get(entry.nodeId) }))
+        .filter((candidate): candidate is { entry: KnowledgeNodeAddress; node: KnowledgeNode } =>
+          Boolean(
+            candidate.node &&
+            isKnowledgeNodeVisible(candidate.node, this.#nodeScopeIds(candidate.node.id), resolutionScopeIds),
+          ),
+        )
+        .sort(
+          (left, right) =>
+            Number(right.entry.source === source) - Number(left.entry.source === source) ||
+            this.#nodeScopeIds(right.node.id).length - this.#nodeScopeIds(left.node.id).length ||
+            left.node.id.localeCompare(right.node.id),
+        );
+      const preferred = addressed.find(candidate => candidate.entry.source === source)?.node;
+      const uniqueAddressedNodeIds = new Set(addressed.map(candidate => candidate.node.id));
+      let node = preferred ?? (uniqueAddressedNodeIds.size === 1 ? addressed[0]?.node : undefined);
+      node ??= this.#resolveNode({ name, scopeIds: resolutionScopeIds }) ?? undefined;
       node ??= this.#createNode({ name, kind: 'node', scopeIds: recordScopeIds, importRunId });
       mentions.add(node.id);
     }

@@ -103,6 +103,7 @@ export {
 } from './processors/observational-memory/subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,
+  KnowledgeSemanticSearchResult,
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
   SubconsciousBuiltInObservationAgent,
@@ -698,6 +699,7 @@ export class Memory extends MastraMemory {
               vector: this.vector!,
               embedder: this.embedder!,
               embedderOptions: this.embedderOptions,
+              getLogger: () => this.logger,
             }),
         )
         .catch(error => {
