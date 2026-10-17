@@ -1861,8 +1861,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -1874,8 +1874,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -1890,8 +1890,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -1903,8 +1903,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -1945,7 +1945,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "file": {
-                  "base64Data": "data:text/plain;base64,Hello World",
+                  "base64Data": "Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -1958,7 +1958,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "file": {
-                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
+                  "base64Data": "QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -1977,8 +1977,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                   "content": [
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:text/plain;base64,Hello World",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "text/plain",
@@ -1990,8 +1990,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                     },
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:image/jpeg;base64,QkFVRw==",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "image/jpeg",
@@ -2065,8 +2065,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -2078,8 +2078,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -2094,8 +2094,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -2107,8 +2107,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -2149,7 +2149,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "file": {
-                  "base64Data": "data:text/plain;base64,Hello World",
+                  "base64Data": "Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -2162,7 +2162,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "file": {
-                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
+                  "base64Data": "QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -2181,8 +2181,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                   "content": [
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:text/plain;base64,Hello World",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "text/plain",
@@ -2194,8 +2194,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                     },
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:image/jpeg;base64,QkFVRw==",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "image/jpeg",
@@ -9905,8 +9905,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -9918,8 +9918,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -9934,8 +9934,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -9947,8 +9947,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -9989,7 +9989,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "file": {
-                  "base64Data": "data:text/plain;base64,Hello World",
+                  "base64Data": "Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -10002,7 +10002,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "file": {
-                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
+                  "base64Data": "QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -10021,8 +10021,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                   "content": [
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:text/plain;base64,Hello World",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "text/plain",
@@ -10034,8 +10034,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                     },
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:image/jpeg;base64,QkFVRw==",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "image/jpeg",
@@ -10121,8 +10121,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -10134,8 +10134,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -10150,8 +10150,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:text/plain;base64,Hello World",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "text/plain",
@@ -10163,8 +10163,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": {
-                  "type": "url",
-                  "url": {},
+                  "data": "data:image/jpeg;base64,QkFVRw==",
+                  "type": "data",
                 },
                 "filename": undefined,
                 "mediaType": "image/jpeg",
@@ -10205,7 +10205,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "file": {
-                  "base64Data": "data:text/plain;base64,Hello World",
+                  "base64Data": "Hello World",
                   "mediaType": "text/plain",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -10218,7 +10218,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "file": {
-                  "base64Data": "data:image/jpeg;base64,QkFVRw==",
+                  "base64Data": "QkFVRw==",
                   "mediaType": "image/jpeg",
                   "type": "file",
                   "uint8ArrayData": undefined,
@@ -10237,8 +10237,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                   "content": [
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:text/plain;base64,Hello World",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "text/plain",
@@ -10250,8 +10250,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                     },
                     {
                       "data": {
-                        "type": "url",
-                        "url": {},
+                        "data": "data:image/jpeg;base64,QkFVRw==",
+                        "type": "data",
                       },
                       "filename": undefined,
                       "mediaType": "image/jpeg",

@@ -24,7 +24,9 @@ function toJSONValue(value: unknown): ToolResultPart['output'] {
 function fileData(part: Extract<Part, { type: 'file' }>): FilePart['data'] {
   return 'providerReference' in part && part.providerReference != null
     ? { type: 'reference', reference: part.providerReference as Record<string, string> }
-    : { type: 'url', url: new URL(part.url) };
+    : part.url.startsWith('data:')
+      ? { type: 'data', data: part.url }
+      : { type: 'url', url: new URL(part.url) };
 }
 
 function providerOptions(metadata: unknown) {
@@ -99,7 +101,10 @@ export function convertUIToModelMessages(messages: Array<Omit<UIMessage, 'id'>>)
                 providerExecuted: tool.providerExecuted,
                 ...providerOptions(tool.callProviderMetadata),
               });
-              if (tool.providerExecuted === true && (tool.state === 'output-available' || tool.state === 'output-error')) {
+              if (
+                tool.providerExecuted === true &&
+                (tool.state === 'output-available' || tool.state === 'output-error')
+              ) {
                 content.push({
                   type: 'tool-result',
                   toolCallId: tool.toolCallId,
