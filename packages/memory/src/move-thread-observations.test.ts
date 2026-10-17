@@ -28,13 +28,22 @@ function createVectorStore() {
       ids.forEach((id: string, i: number) => index(indexName).set(id, { vector: vectors[i], metadata: metadata[i] }));
       return ids;
     }),
-    query: vi.fn(async ({ indexName, filter, topK = 10 }: any) =>
-      [...index(indexName).entries()]
+    query: vi.fn(async ({ indexName, filter, topK = 10, includeVector }: any) => {
+      // Like Vectorize: at most 20 results when values and metadata come back.
+      if (includeVector && topK > 20) throw new Error(`topK ${topK} exceeds 20`);
+      return [...index(indexName).entries()]
         .filter(([, entry]) => matches(entry.metadata, filter))
         .slice(0, topK)
-        .map(([id, entry]) => ({ id, score: 1, metadata: entry.metadata })),
-    ),
+        .map(([id, entry]) => ({
+          id,
+          score: 1,
+          metadata: entry.metadata,
+          ...(includeVector ? { vector: entry.vector } : {}),
+        }));
+    }),
     updateVector: vi.fn(async ({ indexName, id, update }: any) => {
+      // Like Vectorize: metadata-only updates are rejected.
+      if (!update.vector) throw new Error('vector values are required');
       const entry = index(indexName).get(id)!;
       index(indexName).set(id, { vector: update.vector ?? entry.vector, metadata: update.metadata ?? entry.metadata });
     }),
@@ -97,6 +106,25 @@ describe('moving a thread to another resource', () => {
     expect((await memory.searchMessages({ query: 'notes', resourceId: 'session-b' })).results).toEqual([
       expect.objectContaining({ threadId: 'session-b' }),
     ]);
+  });
+
+  it('moves every observation of a thread, across batches', async () => {
+    const { memory } = createMemory();
+    await seedThread(memory, 'session-a', 'session-a', 'The deploy target is staging');
+    for (let i = 0; i < 24; i++) {
+      await memory.indexObservation({
+        text: `Observation ${i}`,
+        groupId: `group-${i}`,
+        range: `msg-${i}:msg-${i}`,
+        threadId: 'session-a',
+        resourceId: 'session-a',
+        recordId: 'session-a-record',
+      });
+    }
+
+    await memory.updateThreadResourceId({ threadId: 'session-a', resourceId: 'factory-1' });
+
+    expect((await memory.searchMessages({ query: 'observation', resourceId: 'session-a' })).results).toEqual([]);
   });
 
   it('moves nothing when the thread already belongs to the resource', async () => {

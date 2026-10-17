@@ -3699,7 +3699,9 @@ Notes:
         const stale = await vector.query({
           indexName,
           queryVector,
-          topK: 500,
+          // Vectorize caps topK at 20 when values and metadata are returned.
+          topK: 20,
+          includeVector: true,
           filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
         });
         const pending = stale.filter(result => !moved.has(result.id));
@@ -3717,7 +3719,11 @@ Notes:
           await vector.updateVector({
             indexName,
             id: result.id,
-            update: { metadata: { ...result.metadata, resource_id: resourceId } },
+            // Some stores (Vectorize) reject metadata-only updates, so send the existing values back.
+            update: {
+              metadata: { ...result.metadata, resource_id: resourceId },
+              ...(result.vector ? { vector: result.vector } : {}),
+            },
           });
         }
       }
