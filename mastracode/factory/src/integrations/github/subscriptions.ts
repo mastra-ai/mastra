@@ -32,7 +32,6 @@ export interface SubscribeToPullRequestInput {
   ownerId: string;
   resourceId: string;
   threadId: string;
-  sessionScope?: string;
   source: GithubSignalSubscriptionSource;
   subscribedByUserId?: string;
 }
@@ -41,7 +40,6 @@ export interface ThreadSubscriptionTarget {
   orgId: string;
   resourceId: string;
   threadId: string;
-  sessionScope?: string;
 }
 
 export interface PullRequestSubscriptionTarget {
@@ -62,8 +60,7 @@ function sameSession(row: GithubSignalSubscriptionRow, input: SubscribeToPullReq
     row.orgId === input.orgId &&
     row.sessionId === input.sessionId &&
     row.resourceId === input.resourceId &&
-    row.threadId === input.threadId &&
-    (row.sessionScope ?? '') === (input.sessionScope ?? '')
+    row.threadId === input.threadId
   );
 }
 
@@ -84,7 +81,6 @@ export async function subscribeToPullRequest(
     sessionId: input.sessionId,
     resourceId: input.resourceId,
     threadId: input.threadId,
-    sessionScope: input.sessionScope ?? '',
     status: 'open',
     data: {
       installationExternalId: input.installationExternalId,
@@ -116,15 +112,14 @@ export async function listPullRequestSubscriptionsForThread(
     row =>
       row.orgId === input.orgId &&
       row.resourceId === input.resourceId &&
-      row.threadId === input.threadId &&
-      (row.sessionScope ?? '') === (input.sessionScope ?? ''),
+      row.threadId === input.threadId,
   );
-  if (matching.length > 0 || input.sessionScope) return matching;
+  if (matching.length > 0) return matching;
   // A user session is addressed by its own id (its thread is its session), but
   // its subscriptions were recorded under the Factory project that owns the
   // repository. Answer those rows for the session that created them.
   const owned = await storage.subscriptions.listBySession(input.resourceId);
-  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId && !row.sessionScope);
+  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId);
 }
 
 export async function listPullRequestSubscriptions(

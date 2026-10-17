@@ -43,7 +43,7 @@ function setup({
   const controller = {
     queryThreadById: vi.fn(async () => thread),
     queryThreads: vi.fn(async () => []),
-    getSessionByResource: vi.fn(async () => live),
+    getSession: vi.fn(async () => live),
     createSession: vi.fn(async () => {
       calls.push('create');
       return created;
@@ -91,7 +91,7 @@ describe('deliverFactorySessionNotification', () => {
       thread: { id: 'thread-stored', resourceId: 'session-victim' },
     });
     await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
-    expect(controller.getSessionByResource).not.toHaveBeenCalled();
+    expect(controller.getSession).not.toHaveBeenCalled();
     expect(controller.createSession).not.toHaveBeenCalled();
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
@@ -124,7 +124,7 @@ describe('deliverFactorySessionNotification', () => {
   it('skips a missing thread without creating or sending', async () => {
     const { controller, agent, deliver } = setup({ thread: null, offline: true });
     await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-found' });
-    expect(controller.getSessionByResource).not.toHaveBeenCalled();
+    expect(controller.getSession).not.toHaveBeenCalled();
     expect(controller.createSession).not.toHaveBeenCalled();
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
@@ -176,7 +176,7 @@ describe('deliverFactorySessionNotification', () => {
     const controller = {
       queryThreadById: vi.fn(async () => ({ id: 'thread-stored', resourceId: 'session-b' })),
       queryThreads: vi.fn(),
-      getSessionByResource: vi.fn(async () => live),
+      getSession: vi.fn(async () => live),
       createSession: vi.fn(),
       getCurrentAgent: vi.fn(() => agent),
     };
@@ -213,7 +213,7 @@ describe('resolveSessionThread', () => {
   } = {}) {
     return resolveSessionThread({
       controller: {
-        getSessionByResource: vi.fn(async () => (current ? fakeSession(current) : undefined)),
+        getSession: vi.fn(async () => (current ? fakeSession(current) : undefined)),
         queryThreads: vi.fn(async () => threads),
       } as unknown as FactoryDeliveryController,
       sessions: { getBySessionId: vi.fn(async () => ROW) },

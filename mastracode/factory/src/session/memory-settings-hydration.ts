@@ -31,7 +31,7 @@ export function layerPersonalMemorySettings(
 }
 
 export interface MemorySettingsHydrationSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   state: {
     get: () => MastraCodeState | undefined;
     set: (updates: Partial<MastraCodeState>) => Promise<void> | void;
@@ -60,7 +60,7 @@ export async function hydrateSessionMemorySettings(
   if (isFactoryRun && hasResolvedOrg(state.factoryOrgId)) return;
 
   try {
-    const record = await sourceControl.sessions.getBySessionId(session.identity.getResourceId());
+    const record = await sourceControl.sessions.getBySessionId(session.identity.getId());
     await seedSessionOrg(session, record?.orgId);
   } catch (error) {
     console.warn('[Factory session hydration] Unable to resolve the session organization.', error);

@@ -5,14 +5,12 @@ export type AgentControllerSession = ReturnType<AgentController['session']>;
 
 export interface CreateAgentControllerClientArgs {
   agentControllerId: string;
-  /** Omit for controller-level reads; without it there is no session to talk to. */
-  resourceId?: string;
   /**
-   * Per-worktree session scope (the worktree's project path). Sessions sharing
-   * a resourceId but scoped differently are independent server-side sessions,
-   * so the client cache must be keyed by scope too.
+   * The session to talk to, addressed by its session id. Factory sessions are
+   * still created under their own id as resource. Omit for controller-level
+   * reads; without it there is no session to talk to.
    */
-  scope?: string;
+  resourceId?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -25,12 +23,8 @@ type AgentControllerClientEntry = {
 
 const clientCache = new Map<string, AgentControllerClientEntry>();
 
-const cacheKey = (
-  agentControllerId: string,
-  resourceId: string | undefined,
-  baseUrl: string,
-  scope: string | undefined,
-) => JSON.stringify([baseUrl, agentControllerId, resourceId ?? null, scope ?? null]);
+const cacheKey = (agentControllerId: string, sessionId: string | undefined, baseUrl: string) =>
+  JSON.stringify([baseUrl, agentControllerId, sessionId ?? null]);
 
 export function requireAgentControllerSession(session: AgentControllerSession | null) {
   if (!session) throw new Error('Agent controller session is not available');
@@ -45,21 +39,19 @@ export function requireAgentController(controller: AgentController | null) {
 export function createAgentControllerClient({
   agentControllerId,
   resourceId,
-  scope,
   baseUrl = '',
   enabled = true,
 }: CreateAgentControllerClientArgs) {
   if (!enabled) return { client: null, controller: null, session: null };
 
-  const normalizedScope = scope || undefined;
-  const key = cacheKey(agentControllerId, resourceId, baseUrl, normalizedScope);
+  const key = cacheKey(agentControllerId, resourceId, baseUrl);
   const cached = clientCache.get(key);
   if (cached) return cached;
 
   // query-client.ts owns retry policy; silently re-POSTing non-idempotent sends duplicates messages
   const client = new MastraClient({ baseUrl, credentials: 'include', retries: 0 });
   const controller = client.getAgentController(agentControllerId);
-  const session = resourceId ? controller.session(resourceId, normalizedScope) : null;
+  const session = resourceId ? controller.session(resourceId) : null;
   const entry = { client, controller, session };
   clientCache.set(key, entry);
   return entry;
@@ -67,8 +59,7 @@ export function createAgentControllerClient({
 
 export interface InvokeWorkspaceSkillArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   name: string;
   arguments?: string;
   baseUrl?: string;
@@ -88,7 +79,7 @@ export class WorkspaceSkillInvocationError extends Error {
 
 async function requestWorkspaceSkill(
   action: 'prepare' | 'invoke',
-  { agentControllerId, resourceId, scope, name, arguments: skillArguments, baseUrl = '' }: InvokeWorkspaceSkillArgs,
+  { agentControllerId, sessionId, name, arguments: skillArguments, baseUrl = '' }: InvokeWorkspaceSkillArgs,
 ): Promise<{ skill: string; message: string }> {
   const response = await fetch(
     `${baseUrl}/web/agent-controller/${encodeURIComponent(agentControllerId)}/skills/${action}`,
@@ -96,7 +87,7 @@ async function requestWorkspaceSkill(
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ resourceId, scope, name, arguments: skillArguments }),
+      body: JSON.stringify({ sessionId, name, arguments: skillArguments }),
     },
   );
   if (response.ok) {

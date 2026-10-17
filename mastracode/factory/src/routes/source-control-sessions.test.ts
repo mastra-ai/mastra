@@ -130,7 +130,7 @@ describe('source-control session routes', () => {
       threadId,
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: sessionId });
+      await controller.deleteSession({ sessionId });
     });
     expect(session.identity.getId()).toBe(sessionId);
     expect(session.thread.getId()).toBe(threadId);
@@ -247,7 +247,7 @@ describe('source-control session routes', () => {
     expect(queryThreads).toHaveBeenCalledWith({ resourceId: sessionId });
     expect(generateTitle).toHaveBeenCalledWith({
       threadId,
-      resourceId: sessionId,
+      sessionId,
       requestContext: expect.any(RequestContext),
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({

@@ -405,7 +405,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
               error,
             });
           });
-          await options.controller?.deleteSession({ resourceId: session.sessionId });
+          await options.controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {
             sessionId: session.sessionId,
@@ -457,7 +457,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           const title = await nameSession(sessionId, async () => {
             const generated = await options.controller!.generateThreadTitle({
               threadId: thread.id,
-              resourceId: sessionId,
+              sessionId,
               requestContext,
               ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
             });

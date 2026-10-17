@@ -53,7 +53,7 @@ export function useUpdateAgentControllerSettingsMutation({
   enabled = true,
 }: AgentControllerMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
   const settingsQueryKey = queryKeys.agentControllerSettings(agentControllerId, resourceId, scope);
 
   return useMutation({

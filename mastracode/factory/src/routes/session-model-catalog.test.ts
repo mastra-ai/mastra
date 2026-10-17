@@ -120,9 +120,10 @@ describe('session-owner model catalog', () => {
   it.each(['user', 'hybrid'] as const)(
     'uses the owner catalog and default for a collaborator in %s scope',
     async scope => {
-      const { app } = await setup(scope);
+      const { app, project } = await setup(scope);
+      // The session runs under its Factory's resource; it is found by its session id.
       const response = await app.request(
-        '/web/config/models?resourceId=session-1&threadId=chat-thread&scope=org&userId=viewer',
+        `/web/config/models?sessionId=session-1&resourceId=${project.id}&threadId=chat-thread&scope=org&userId=viewer`,
       );
       expect(response.status).toBe(200);
       const body = await response.json();

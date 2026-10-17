@@ -37,7 +37,6 @@ describe('GitLab merge-request subscription store', () => {
       ownerId: 'user-a',
       resourceId: 'resource-a',
       threadId: 'thread-a',
-      sessionScope: '/workspace/a',
       source: 'explicit-tool',
       subscribedByUserId: 'user-a',
     };
@@ -78,7 +77,6 @@ describe('GitLab merge-request subscription store', () => {
         resourceId: 'factory-project',
         sessionId: 'session-u',
         threadId: 'session-u',
-        sessionScope: undefined,
       },
       storage,
     );
@@ -91,12 +89,6 @@ describe('GitLab merge-request subscription store', () => {
     expect(
       await listMergeRequestSubscriptionsForThread(
         { orgId: 'org-b', resourceId: 'session-u', threadId: 'session-u' },
-        storage,
-      ),
-    ).toEqual([]);
-    expect(
-      await listMergeRequestSubscriptionsForThread(
-        { orgId: 'org-a', resourceId: 'session-u', threadId: 'session-u', sessionScope: '/x' },
         storage,
       ),
     ).toEqual([]);
@@ -115,21 +107,21 @@ describe('GitLab merge-request subscription store', () => {
     expect(await listMergeRequestSubscriptions(baseInput, storage)).toHaveLength(1);
   });
 
-  it('separates sessions by scope and only removes the matching one', async () => {
+  it('separates sessions by session id and only removes the matching one', async () => {
     await subscribeToMergeRequest(baseInput, storage);
-    await subscribeToMergeRequest({ ...baseInput, sessionScope: '/workspace/b' }, storage);
+    await subscribeToMergeRequest({ ...baseInput, sessionId: 'session-b', threadId: 'thread-b' }, storage);
     expect(await listMergeRequestSubscriptions(baseInput, storage)).toHaveLength(2);
 
     await unsubscribeFromMergeRequest(baseInput, storage);
     const remaining = await listMergeRequestSubscriptions(baseInput, storage);
     expect(remaining).toHaveLength(1);
-    expect(remaining[0]?.sessionScope).toBe('/workspace/b');
+    expect(remaining[0]?.sessionId).toBe('session-b');
     expect(await listMergeRequestSubscriptionsForThread(baseInput, storage)).toHaveLength(0);
   });
 
   it('lists only open rows for webhook fan-out unless terminal rows are requested', async () => {
     const open = await subscribeToMergeRequest(baseInput, storage);
-    const closed = await subscribeToMergeRequest({ ...baseInput, sessionScope: '/workspace/b' }, storage);
+    const closed = await subscribeToMergeRequest({ ...baseInput, sessionId: 'session-b', threadId: 'thread-b' }, storage);
     await retireMergeRequestSubscription(closed.id, 'closed', storage);
 
     const target = { host: 'gitlab.example.com', projectId: '101', changeRequestId: '17' };
@@ -141,7 +133,7 @@ describe('GitLab merge-request subscription store', () => {
 
   it('retires every open subscription for a merge request the sweep found merged', async () => {
     await subscribeToMergeRequest(baseInput, storage);
-    await subscribeToMergeRequest({ ...baseInput, sessionScope: '/workspace/b' }, storage);
+    await subscribeToMergeRequest({ ...baseInput, sessionId: 'session-b', threadId: 'thread-b' }, storage);
     await subscribeToMergeRequest({ ...baseInput, changeRequestId: '18' }, storage);
 
     await retireMergeRequestSubscriptions(

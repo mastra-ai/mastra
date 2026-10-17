@@ -112,8 +112,9 @@ export async function buildLinearAgentTools({
     AgentControllerRequestContext<{ factoryProjectId?: string }> | undefined;
   if (!ctx) return {};
 
-  // Board-run resourceId is the work-item session id, not the project id stored
-  // in factory_projects. Project-scoped sessions may not carry factoryProjectId.
+  // Prefer the Factory recorded on the session. Factory sessions run under the
+  // Factory as their resource, so the resource is the fallback; a legacy
+  // session whose resource is its own id resolves to no project.
   const projectId = ctx.getState().factoryProjectId ?? ctx.resourceId;
   if (!projectId) return {};
 

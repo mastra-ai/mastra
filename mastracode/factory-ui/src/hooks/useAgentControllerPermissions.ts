@@ -21,7 +21,6 @@ export function useAgentControllerPermissions({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope,
     baseUrl,
     enabled,
   });

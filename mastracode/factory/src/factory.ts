@@ -811,7 +811,7 @@ export class MastraFactory {
           abortSession: async (binding): Promise<void> => {
             const controller = this.#prepared?.base.controller;
             if (!controller) return;
-            const session = await controller.getSessionByResource(binding.resourceId);
+            const session = await controller.getSession(binding.sessionId);
             if (session?.stream.isActive()) session.abort();
           },
           // Session retirement supersedes the older direct sandbox release: it
@@ -1013,8 +1013,7 @@ export class MastraFactory {
         ? {
             workItems: workItemsStorage,
             controller: {
-              getSessionByResource: async (resourceId: string) =>
-                this.#prepared?.base.controller.getSessionByResource(resourceId),
+              getSession: async (sessionId: string) => this.#prepared?.base.controller.getSession(sessionId),
             },
           }
         : {}),
@@ -1193,7 +1192,7 @@ export class MastraFactory {
           // trust field the recovery writes is missing, now, not later when
           // the agent's tools are assembled. Unbound sessions never gain these
           // fields and pay one binding lookup per prompt.
-          if (context?.threadId && context.resourceId) {
+          if (context?.threadId && context.sessionId) {
             const current = context.getState();
             const trustStateComplete =
               Boolean(current.factoryProjectId) &&
@@ -1258,7 +1257,7 @@ export class MastraFactory {
                     workItems: workItemsStorage,
                     boards: this.#boards,
                     isRunning: async sessionId => {
-                      const session = await this.#prepared?.base.controller.getSessionByResource(sessionId);
+                      const session = await this.#prepared?.base.controller.getSession(sessionId);
                       return session?.stream.isActive() ?? false;
                     },
                     notifications: async () => (await factoryMessaging())?.notifications ?? null,
@@ -1674,7 +1673,7 @@ export class MastraFactory {
         session,
         (outcome, since) =>
           reportSessionRunEnd({
-            sessionId: session.identity.getResourceId(),
+            sessionId: session.identity.getId(),
             threadId: session.thread.getId(),
             outcome,
             since,
@@ -1682,7 +1681,7 @@ export class MastraFactory {
         {
           onApprovalRequested: request =>
             notifyApprovalRequested({
-              sessionId: session.identity.getResourceId(),
+              sessionId: session.identity.getId(),
               threadId: session.thread.getId(),
               ...request,
             }),

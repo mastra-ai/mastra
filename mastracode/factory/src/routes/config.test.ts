@@ -947,7 +947,7 @@ describe('OM routes with a tenant', () => {
     const controller = {
       ...makeAgentController([{ provider: opts.provider ?? 'anthropic', hasApiKey: true }]),
       listModes: () => [{ id: 'build', defaultModelId: opts.defaultModelId }],
-      getSessionByResource: async () => session ?? undefined,
+      getSession: async (sessionId: string) => (sessionId === 'r1' ? (session ?? undefined) : undefined),
     };
     const app = new Hono();
     if (opts.authEnabled !== false) {
@@ -1024,7 +1024,7 @@ describe('OM routes with a tenant', () => {
     });
     const session = makeOmSession({ currentModelId: 'deepseek/deepseek-v4-pro' });
     const res = await buildApp(session, { defaultModelId: 'anthropic/claude-opus-5' }).request(
-      '/web/config/om?resourceId=r1',
+      '/web/config/om?sessionId=r1',
     );
 
     expect(res.status).toBe(200);
@@ -1049,7 +1049,7 @@ describe('OM routes with a tenant', () => {
       key: 'sk-deepseek',
     });
     const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
@@ -1061,7 +1061,7 @@ describe('OM routes with a tenant', () => {
   it('reports a gateway route available when only the Mastra gateway key is configured', async () => {
     vi.spyOn(MastraCodeGateway, 'getMastraGatewayApiKey').mockReturnValue('mg-test');
     const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
@@ -1072,7 +1072,7 @@ describe('OM routes with a tenant', () => {
 
   it('reports a gateway route unavailable without a gateway key or provider credential', async () => {
     const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
@@ -1117,7 +1117,7 @@ describe('OM routes with a tenant', () => {
     expect(read.status).toBe(404);
 
     const write = await putJson(app, '/web/config/om/observer/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'anthropic/claude-fable-5',
       factoryId: foreign.id,
     });
@@ -1130,7 +1130,7 @@ describe('OM routes with a tenant', () => {
   it('persists a role model switch without materializing the other auto role', async () => {
     const session = makeOmSession();
     const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'anthropic/claude-fable-5',
     });
     expect(res.status).toBe(200);
@@ -1147,13 +1147,13 @@ describe('OM routes with a tenant', () => {
     const app = buildApp(makeOmSession());
 
     const unknownRole = await putJson(app, '/web/config/om/scribe/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'anthropic/claude-fable-5',
     });
     expect(unknownRole.status).toBe(400);
     expect((await unknownRole.json()).error).toBe('Unknown OM role "scribe"');
 
-    const missing = await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1' });
+    const missing = await putJson(app, '/web/config/om/observer/model', { sessionId: 'r1' });
     expect(missing.status).toBe(400);
     expect((await missing.json()).error).toBe('Missing required field: modelId');
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
@@ -1169,7 +1169,7 @@ describe('OM routes with a tenant', () => {
     await session.om.observer.switchModel({ modelId: 'session-only/observer' });
 
     const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'auto',
     });
 
@@ -1184,8 +1184,8 @@ describe('OM routes with a tenant', () => {
   it('keeps independently selected role models on later switches', async () => {
     const session = makeOmSession();
     const app = buildApp(session);
-    await putJson(app, '/web/config/om/reflector/model', { resourceId: 'r1', modelId: 'openai/gpt-5.6' });
-    await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' });
+    await putJson(app, '/web/config/om/reflector/model', { sessionId: 'r1', modelId: 'openai/gpt-5.6' });
+    await putJson(app, '/web/config/om/observer/model', { sessionId: 'r1', modelId: 'anthropic/claude-fable-5' });
 
     const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
     expect(stored).toMatchObject({
@@ -1196,7 +1196,7 @@ describe('OM routes with a tenant', () => {
 
   it('persists thresholds to the memory-settings domain', async () => {
     const res = await putJson(buildApp(makeOmSession()), '/web/config/om/thresholds', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       observationThreshold: 25000,
       reflectionThreshold: 45000,
     });
@@ -1208,7 +1208,7 @@ describe('OM routes with a tenant', () => {
 
   it('persists observe-attachments to the memory-settings domain', async () => {
     const res = await putJson(buildApp(makeOmSession()), '/web/config/om/observe-attachments', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       value: false,
     });
     expect(res.status).toBe(200);
@@ -1256,21 +1256,21 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('falls back to the stored row when the resourceId has no live session', async () => {
+  it('falls back to the stored row when the session is not live', async () => {
     const app = buildApp(null);
 
-    const initial = await app.request('/web/config/om?resourceId=r1');
+    const initial = await app.request('/web/config/om?sessionId=r1');
     expect(initial.status).toBe(200);
     expect((await initial.json()).config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
 
     expect(
-      (await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' }))
+      (await putJson(app, '/web/config/om/observer/model', { sessionId: 'r1', modelId: 'anthropic/claude-fable-5' }))
         .status,
     ).toBe(200);
     expect(
-      (await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 25000 })).status,
+      (await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 25000 })).status,
     ).toBe(200);
-    expect((await putJson(app, '/web/config/om/observe-attachments', { resourceId: 'r1', value: false })).status).toBe(
+    expect((await putJson(app, '/web/config/om/observe-attachments', { sessionId: 'r1', value: false })).status).toBe(
       200,
     );
 
@@ -1283,7 +1283,7 @@ describe('OM routes with a tenant', () => {
 
   it('returns 503 when tenant mode has no memory-settings storage', async () => {
     const res = await putJson(buildApp(makeOmSession(), { withStorage: false }), '/web/config/om/thresholds', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       observationThreshold: 25000,
     });
     expect(res.status).toBe(503);
@@ -1298,7 +1298,7 @@ describe('OM routes with a tenant', () => {
     });
 
     const session = makeOmSession();
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
     expect(res.status).toBe(200);
     const { config } = await res.json();
     expect(config.observerModelId).toBe('openai/gpt-5.6');
@@ -1313,7 +1313,7 @@ describe('OM routes with a tenant', () => {
     await session.om.observer.switchModel({ modelId: 'alibaba-token-plan/deepseek-v4-flash' });
     session.state.set({ observationThreshold: 99000 });
 
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
     expect(res.status).toBe(200);
     const { config } = await res.json();
     expect(config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
@@ -1326,7 +1326,7 @@ describe('OM routes with a tenant', () => {
   it('uses a sentinel local row when auth is disabled — never settings.json', async () => {
     const session = makeOmSession();
     const app = buildApp(session, { authEnabled: false });
-    const res = await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 7000 });
+    const res = await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 7000 });
     expect(res.status).toBe(200);
 
     const stored = await seed.memorySettings.get({ orgId: 'local', userId: 'local' });

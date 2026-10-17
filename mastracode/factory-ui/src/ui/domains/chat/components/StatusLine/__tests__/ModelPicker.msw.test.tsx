@@ -181,7 +181,13 @@ function renderPicker({
       <ChatConnectionContext.Provider
         value={{
           status: 'ready',
-          state: { controllerId: AGENT_CONTROLLER_ID, resourceId: 'session-1', modeId: 'build', modelId },
+          state: {
+            controllerId: AGENT_CONTROLLER_ID,
+            sessionId: 'session-1',
+            resourceId: 'session-1',
+            modeId: 'build',
+            modelId,
+          },
         }}
       >
         <ChatModelsProvider>

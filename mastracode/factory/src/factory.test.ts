@@ -522,7 +522,7 @@ describe('MastraFactory.prepare', () => {
     });
 
     const session = {
-      identity: { getResourceId: () => 'session-1' },
+      identity: { getId: () => 'session-1', getResourceId: () => 'session-1' },
       om: {
         observer: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
         reflector: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
@@ -826,7 +826,7 @@ describe('MastraFactory.prepare', () => {
       },
       role: 'review',
       session: { sessionId: 'session-1', branch: 'review/pr-17', threadId: 'session-1' },
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
       kickoffKey: 'github-review-17',
       kickoffMessage: null,
     });
@@ -835,7 +835,8 @@ describe('MastraFactory.prepare', () => {
     const context = new RequestContext();
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
+      sessionId: 'session-1',
       threadId: 'session-1',
       getState: () => state,
       setState: async (updates: Record<string, unknown>) => {
@@ -884,7 +885,7 @@ describe('MastraFactory.prepare', () => {
       },
       role: 'review',
       session: { sessionId: 'session-1', branch: 'review/pr-18', threadId: 'session-1' },
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
       kickoffKey: 'github-review-18',
       kickoffMessage: null,
     });
@@ -898,7 +899,8 @@ describe('MastraFactory.prepare', () => {
     const context = new RequestContext();
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
+      sessionId: 'session-1',
       threadId: 'session-1',
       getState: () => state,
       setState: async (updates: Record<string, unknown>) => {
@@ -959,7 +961,7 @@ describe('MastraFactory.prepare', () => {
         },
         role: 'review',
         session: { sessionId: 'session-1', branch: 'review/mr-17', threadId: 'session-1' },
-        resourceId: 'session-1',
+        resourceId: '11111111-2222-4333-8444-555555555555',
         kickoffKey: 'gitlab-review-prompt-17',
         kickoffMessage: null,
       });
@@ -967,7 +969,8 @@ describe('MastraFactory.prepare', () => {
       const context = new RequestContext();
       context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
       context.set('controller', {
-        resourceId: 'session-1',
+        resourceId: '11111111-2222-4333-8444-555555555555',
+        sessionId: 'session-1',
         threadId: 'session-1',
         session: { modeId: 'review' },
         getState: () => state,
@@ -1074,8 +1077,8 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', {
       resourceId: 'resource-1',
+      sessionId: 'session-1',
       threadId: 'thread-1',
-      scope: '/worktree',
       getState: () => ({ factoryProjectId: binding.factoryProjectId }),
     });
 
@@ -1130,7 +1133,12 @@ describe('MastraFactory.prepare', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
       if (interactive) requestContext.set('factoryInteractive', true);
-      requestContext.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      requestContext.set('controller', {
+        sessionId: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
       return requestContext;
     }
 

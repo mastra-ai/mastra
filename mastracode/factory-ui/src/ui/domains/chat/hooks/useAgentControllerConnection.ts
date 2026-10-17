@@ -52,7 +52,6 @@ export function useAgentControllerConnection({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope,
     baseUrl,
     enabled,
   });

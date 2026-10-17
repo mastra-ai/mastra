@@ -82,7 +82,7 @@ function setup({
       threads === 'gone' ? undefined : { id: threadId, resourceId: threadId.replace(/^thread-/, '') },
     ),
     queryThreads: vi.fn(async () => []),
-    getSessionByResource: vi.fn(async (resourceId: string) => liveSession(resourceId)),
+    getSession: vi.fn(async (resourceId: string) => liveSession(resourceId)),
     createSession: vi.fn(),
     getCurrentAgent: vi.fn(() => agent),
   };

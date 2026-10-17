@@ -13,7 +13,7 @@ import {
 
 function createSession(state: MastraCodeState = {}) {
   return {
-    identity: { getResourceId: () => 'session-1' },
+    identity: { getId: () => 'session-1' },
     state: {
       get: () => state,
       set: vi.fn(async updates => Object.assign(state, updates)),

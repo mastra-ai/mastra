@@ -10,6 +10,7 @@ export const settingsFactory: FactoryProjectPayload = {
 
 export const settingsSession: AgentControllerSessionState = {
   controllerId: 'code',
+  sessionId: 'fp-1',
   resourceId: 'fp-1',
   modeId: 'build',
   modelId: 'openai/gpt-4o-mini',
