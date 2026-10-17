@@ -664,6 +664,66 @@ describe('LSPManager', () => {
     });
   });
 
+  describe('prepareQuery file content', () => {
+    it('opens the file with provided content without reading', async () => {
+      const readFile = vi.fn();
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+      const query = await fsManager.prepareQuery('/project/src/app.ts', 'const provided = 1');
+      query?.release();
+
+      expect(readFile).not.toHaveBeenCalled();
+      expect(mockNotifyOpen).toHaveBeenCalledWith('/project/src/app.ts', 'const provided = 1', 'typescript');
+      await fsManager.shutdownAll();
+    });
+
+    it('reads file content through the workspace filesystem', async () => {
+      const readFile = vi.fn().mockResolvedValue('const remote = 1');
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+      const query = await fsManager.prepareQuery('/s3/src/app.ts');
+      query?.release();
+
+      expect(readFile).toHaveBeenCalledWith('/s3/src/app.ts', { encoding: 'utf-8' });
+      expect(mockNotifyOpen).toHaveBeenCalledWith('/s3/src/app.ts', 'const remote = 1', 'typescript');
+      await fsManager.shutdownAll();
+    });
+
+    it('decodes Buffer content from the workspace filesystem', async () => {
+      const readFile = vi.fn().mockResolvedValue(Buffer.from('const buffered = 1'));
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+      const query = await fsManager.prepareQuery('/s3/src/app.ts');
+      query?.release();
+
+      expect(mockNotifyOpen).toHaveBeenCalledWith('/s3/src/app.ts', 'const buffered = 1', 'typescript');
+      await fsManager.shutdownAll();
+    });
+
+    it('falls back to the host filesystem when the workspace filesystem cannot read the file', async () => {
+      const os = await import('node:os');
+      const nodePath = await import('node:path');
+      const nodeFs = await import('node:fs/promises');
+      const tempDir = await nodeFs.mkdtemp(nodePath.join(os.tmpdir(), 'lsp-manager-test-'));
+      const filePath = nodePath.join(tempDir, 'app.ts');
+      await nodeFs.writeFile(filePath, 'const host = 1');
+
+      const readFile = vi.fn().mockRejectedValue(new Error('not found'));
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+      try {
+        const query = await fsManager.prepareQuery(filePath);
+        query?.release();
+
+        expect(readFile).toHaveBeenCalled();
+        expect(mockNotifyOpen).toHaveBeenCalledWith(filePath, 'const host = 1', 'typescript');
+      } finally {
+        await fsManager.shutdownAll();
+        await nodeFs.rm(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('severity mapping', () => {
     it('maps severity 1 to error', async () => {
       mockWaitForDiagnostics.mockResolvedValueOnce([
