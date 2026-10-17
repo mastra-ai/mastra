@@ -662,11 +662,17 @@ export function createDurableToolCallStep() {
       // snapshot, when the running engine supports that (#26435).
       const publishAfterPersist = async (publish: () => Promise<void>) => {
         const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        // The run is suspending again, so a later resume of it is no longer a duplicate (#27365).
-        if (entry?.resumeToolCallId !== undefined) clearResumeInFlight(runId, entry.resumeToolCallId);
+        // Once the new suspension is saved, a later resume of the tool call is a decision on
+        // that suspension, not a duplicate. Clearing earlier would let a duplicate approval
+        // of the previous gate approve the new one (#27365).
+        const resumedToolCallId = entry?.resumeToolCallId;
+        const clearAndPublish = async () => {
+          if (resumedToolCallId !== undefined) clearResumeInFlight(runId, resumedToolCallId);
+          await publish();
+        };
         const pending = entry?.pendingSuspensionEvents;
-        if (pending) pending.push(publish);
-        else await publish();
+        if (pending) pending.push(clearAndPublish);
+        else await clearAndPublish();
       };
       let resumeMessageList = messageList;
       // A durable engine can replay the completed LLM step on a cold resume,

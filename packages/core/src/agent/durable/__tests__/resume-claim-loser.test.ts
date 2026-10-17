@@ -257,6 +257,7 @@ describe('DurableAgent resume claim loser (#27365)', () => {
 describe('execution lease timing', () => {
   afterEach(() => {
     delete process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS;
+    delete process.env.MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
     vi.resetModules();
   });
 
@@ -271,5 +272,19 @@ describe('execution lease timing', () => {
     const overridden = await import('../execution-fence');
     expect(overridden.EXECUTION_LEASE_TTL_MS).toBe(6_000);
     expect(overridden.EXECUTION_LEASE_RENEW_INTERVAL_MS).toBe(2_000);
+  });
+
+  it('ignores a renew interval that is not shorter than the TTL', async () => {
+    process.env.MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = '20000';
+    vi.resetModules();
+    const tooLong = await import('../execution-fence');
+    expect(tooLong.EXECUTION_LEASE_TTL_MS).toBe(15_000);
+    expect(tooLong.EXECUTION_LEASE_RENEW_INTERVAL_MS).toBe(5_000);
+
+    process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS = '2';
+    delete process.env.MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
+    vi.resetModules();
+    const tiny = await import('../execution-fence');
+    expect(tiny.EXECUTION_LEASE_RENEW_INTERVAL_MS).toBe(1);
   });
 });

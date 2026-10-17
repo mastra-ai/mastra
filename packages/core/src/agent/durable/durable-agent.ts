@@ -3147,17 +3147,11 @@ export class DurableAgent<
         const hasExplicitVersion = !!callSiteSelector && 'versionId' in callSiteSelector;
         const currentVersionId = this.toRawConfig()?.resolvedVersionId as string | undefined;
         if (!hasExplicitVersion && pinnedVersionId !== currentVersionId) {
+          let resolved: Agent | undefined;
           try {
-            const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
+            resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
               versionId: pinnedVersionId,
             });
-            if (resolved !== (this as unknown as Agent)) {
-              return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(
-                runId,
-                resumeData,
-                options,
-              );
-            }
           } catch (versionError) {
             // The pinned version may have been deleted while the run sat
             // suspended — resume on the current definition rather than
@@ -3168,6 +3162,12 @@ export class DurableAgent<
               pinnedVersionId,
               error: versionError,
             });
+          }
+          if (resolved && resolved !== (this as unknown as Agent)) {
+            // Hand the tool-call marker to the pinned agent's resume(), which
+            // re-takes it synchronously before its first await.
+            releaseResumeMarker();
+            return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(runId, resumeData, options);
           }
         }
       }
