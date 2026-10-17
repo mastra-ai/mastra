@@ -23,9 +23,8 @@ function hasPendingToolCall(message: MastraDBMessage): boolean {
  * when:
  *
  * - Cursor collision: buffering advances the persisted cursor to
- *   `max(buffered.createdAt) + 1ms`, and later candidate selection requires
- *   `createdAt > cursor`. If the retained message sits at the same or +1ms
- *   timestamp, the cursor would permanently hide it even after its result
+ *   `max(buffered.createdAt)`, and later candidate selection requires
+ *   `createdAt > cursor`. If the retained message shares that timestamp, the cursor would permanently hide it even after its result
  *   arrives.
  * - Split tool exchange: a `toolCallId` appears on both sides of the cut, so
  *   the observer would see half of a tool exchange.
@@ -65,7 +64,7 @@ export function selectSafeBufferPrefix(messages: MastraDBMessage[]): MastraDBMes
 
   const unsafeBoundary = prefix.some(
     message =>
-      new Date(message.createdAt).getTime() + 1 >= retainedTime ||
+      new Date(message.createdAt).getTime() >= retainedTime ||
       message.content.parts?.some(
         part => part.type === 'tool-invocation' && retainedToolIds.has(part.toolInvocation.toolCallId),
       ),

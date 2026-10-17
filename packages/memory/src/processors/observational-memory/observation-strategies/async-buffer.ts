@@ -133,8 +133,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const messageIds = messages.map(m => m.id);
-    const maxTs = this.getMaxMessageTimestamp(messages);
-    const lastObservedAt = new Date(maxTs.getTime() + 1);
+    const lastObservedAt = this.getMaxMessageTimestamp(messages);
 
     return {
       observations: newObservations,
@@ -189,6 +188,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
               messageIds: processed.observedMessageIds,
               messageTokens,
               lastObservedAt: processed.lastObservedAt,
+              cursorExact: true,
               suggestedContinuation: processed.suggestedContinuation,
               currentTask: processed.currentTask,
               threadTitle: processed.threadTitle,

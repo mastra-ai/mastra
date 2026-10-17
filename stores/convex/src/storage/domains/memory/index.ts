@@ -1181,6 +1181,7 @@ export class MemoryConvex extends MemoryStorage {
     >({
       id: input.id,
       chunk,
+      chunkCursorExact: input.chunk.cursorExact,
       lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
       updatedAt: new Date().toISOString(),
     });

@@ -2661,7 +2661,7 @@ ${formattedMessages}
           onBufferedChunkPersisted: async () => {
             // Update the buffer cursor so the next buffer only sees messages newer than this one.
             const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
-            BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTs.getTime() + 1));
+            BufferingCoordinator.lastBufferedAtTime.set(bufferKey, maxTs);
             releaseChunkWrite();
           },
         }).run(),
@@ -3702,7 +3702,7 @@ ${formattedMessages}
 
         // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
         const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);
-        BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTimestamp.getTime() + 1));
+        BufferingCoordinator.lastBufferedAtTime.set(bufferKey, maxTimestamp);
         releaseChunkWrite();
       };
 

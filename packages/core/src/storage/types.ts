@@ -1188,6 +1188,11 @@ export interface BufferedObservationChunkInput {
   messageTokens: number;
   /** When the messages were observed */
   lastObservedAt: Date;
+  /**
+   * `lastObservedAt` is the exact newest-message time. Absent for chunks from older producers,
+   * which stored newest-message time + 1ms; coverage checks then allow for that 1ms.
+   */
+  cursorExact?: boolean;
   /** Optional suggested continuation from the observer */
   suggestedContinuation?: string;
   /** Optional current task context */
@@ -1348,7 +1353,7 @@ export interface ObservationalMemoryRecord {
   lastBufferedAtTokens: number;
   /**
    * Timestamp cursor for buffered messages.
-   * Set to the max message timestamp (+1ms) of the last successfully buffered chunk.
+   * Set to the max message timestamp of the last successfully buffered chunk.
    * Used to filter out already-buffered messages when starting the next buffer.
    * Reset on activation.
    */
@@ -1416,7 +1421,7 @@ export interface UpdateBufferedObservationsInput {
   id: string;
   /** The observation chunk to add to the buffer */
   chunk: BufferedObservationChunkInput;
-  /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
+  /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp. */
   lastBufferedAtTime?: Date;
 }
 

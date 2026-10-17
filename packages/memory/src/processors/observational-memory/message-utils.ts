@@ -284,8 +284,12 @@ export function filterObservedMessages(opts: {
       }
 
       if (lastObservedAt && msg.createdAt) {
-        const msgDate = new Date(msg.createdAt);
-        if (msgDate <= lastObservedAt) {
+        const msgTime = new Date(msg.createdAt).getTime();
+        // The cursor is the newest observed message time. When observed ids are recorded, a
+        // message sharing that millisecond is only observed if its id says so.
+        const cursorTime = new Date(lastObservedAt).getTime();
+        const atOrBefore = observedIds.size > 0 ? msgTime < cursorTime : msgTime <= cursorTime;
+        if (atOrBefore) {
           if (hasPendingPair) continue;
           messagesToRemove.push(msg.id);
         }

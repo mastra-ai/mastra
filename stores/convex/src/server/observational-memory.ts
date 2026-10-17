@@ -151,12 +151,16 @@ export function mergeReflectionWithUnreflected(
 // ---------------------------------------------------------------------------
 
 /**
- * A buffered chunk stores `lastObservedAt = max message time + 1ms`; it is wholly covered by
- * the cursor iff `cursor >= chunk.lastObservedAt - 1ms`.
+ * A buffered chunk is wholly covered by the cursor iff `cursor >=` its newest-message time.
+ * `cursorExact` chunks store that time directly; older producers stored it + 1ms.
  */
-export function isChunkCoveredByCursor(chunkLastObservedAt: string, cursor: string | null | undefined): boolean {
+export function isChunkCoveredByCursor(
+  chunkLastObservedAt: string,
+  cursor: string | null | undefined,
+  cursorExact = false,
+): boolean {
   if (!cursor) return false;
-  return Date.parse(cursor) >= Date.parse(chunkLastObservedAt) - 1;
+  return Date.parse(cursor) >= Date.parse(chunkLastObservedAt) - (cursorExact ? 0 : 1);
 }
 
 /** The later of two ISO cursors (`null` only when both are absent). */
@@ -523,7 +527,7 @@ export async function handleObservationalMemoryOperation(
       // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
       if (
         chunks.some(chunk => chunk.cycleId === request.chunk.cycleId) ||
-        isChunkCoveredByCursor(request.chunk.lastObservedAt, doc.lastObservedAt)
+        isChunkCoveredByCursor(request.chunk.lastObservedAt, doc.lastObservedAt, request.chunkCursorExact)
       ) {
         return { ok: true, result: { persisted: false, recordId: doc.id } };
       }

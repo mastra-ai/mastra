@@ -153,7 +153,7 @@ describe('PostgreSQL Storage Tests', () => {
       // before the pending tool-call response is, so the gap is deterministic.
       // MessageList stamps the response strictly after every message it already
       // holds (+2ms under a frozen clock), so the live tool-call request never
-      // lands on the +1ms cursor-collision boundary; that guard is unit-tested.
+      // lands on the cursor-collision boundary; that guard is unit-tested.
       const fixture = await clientToolLifecycle(connectionString, true, {
         beforeActorResponse: () => vi.setSystemTime(start + gap),
       });

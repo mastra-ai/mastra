@@ -273,6 +273,8 @@ export type StorageRequest =
       tableName: TABLE_NAMES | string;
       id: string;
       chunk: SerializedOMChunk;
+      /** `chunk.lastObservedAt` is the exact newest-message time (see `cursorExact`). */
+      chunkCursorExact?: boolean;
       /** ISO timestamp */
       lastBufferedAtTime?: string;
       /** ISO timestamp */

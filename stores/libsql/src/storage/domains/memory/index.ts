@@ -2765,7 +2765,7 @@ export class MemoryLibSQL extends MemoryStorage {
           // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
           if (
             existingChunks.some(existing => existing.cycleId === input.chunk.cycleId) ||
-            isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, target.lastObservedAt)
+            isBufferedChunkCoveredByCursor(input.chunk, target.lastObservedAt)
           ) {
             return { persisted: false, recordId: target.id };
           }
