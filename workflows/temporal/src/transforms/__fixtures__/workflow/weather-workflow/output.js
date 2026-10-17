@@ -1,4 +1,4 @@
-import { defineSignal, defineQuery, proxyActivities, setHandler, condition, log, ApplicationFailure, sleep, executeChild } from '@temporalio/workflow';
+import { defineSignal, defineQuery, proxyActivities, setHandler, ApplicationFailure, condition, log, sleep, executeChild } from '@temporalio/workflow';
 
 const resumeSignal = defineSignal('mastra.resume');
 const statusQuery = defineQuery('mastra.status');
@@ -28,8 +28,9 @@ class TemporalExecutionEngine {
     setHandler(statusQuery, () => this.currentResult);
   }
   async execute(params) {
-    this.initData = params.input;
-    this.initialState = params.initialState;
+    const timeTravel = params.timeTravel;
+    this.initData = timeTravel?.inputData ?? params.input;
+    this.initialState = timeTravel?.state ?? params.initialState;
     this.executionContext = {
       ...(params.requestContext !== undefined && {
         requestContext: params.requestContext
@@ -42,22 +43,38 @@ class TemporalExecutionEngine {
       }),
       workflowId: params.workflowId
     };
-    let result = params.input;
+    let startIndex = 0;
+    let result = this.initData;
     const stepResults = {};
+    if (timeTravel) {
+      const [targetIndex, ...innerPath] = timeTravel.executionPath ?? [];
+      const targetEntry = params.graph.steps[targetIndex];
+      if (!Number.isInteger(targetIndex) || innerPath.length > 0 || targetEntry?.type !== 'step' || timeTravel.steps?.length !== 1 || targetEntry.step.id !== timeTravel.steps[0]) {
+        throw ApplicationFailure.nonRetryable('Temporal time travel currently supports only top-level sequential step targets.');
+      }
+      startIndex = targetIndex;
+      for (const [id, stepResult] of Object.entries(timeTravel.stepResults ?? {})) {
+        stepResults[id] = id === 'input' || stepResult?.__temporalStepResult === true ? stepResult : {
+          __temporalStepResult: true,
+          ...stepResult
+        };
+      }
+      result = timeTravel.inputData ?? stepResults[targetEntry.step.id]?.payload ?? this.initData;
+    }
     this.currentResult = {
       status: 'running',
-      input: params.input,
-      state: params.initialState,
+      input: this.initData,
+      state: this.initialState,
       steps: stepResults
     };
-    for (const entry of params.graph.steps) {
+    for (const entry of params.graph.steps.slice(startIndex)) {
       result = await this.executeEntry(entry, result, stepResults);
     }
     this.currentResult = {
       status: 'success',
-      input: params.input,
+      input: this.initData,
       result,
-      state: params.initialState,
+      state: this.initialState,
       steps: stepResults
     };
     return this.currentResult;
@@ -348,7 +365,9 @@ function createWorkflow(workflowId, options) {
         steps: stepFlow
       },
       input: startArgs?.inputData,
-      initialState: startArgs?.initialState
+      initialState: startArgs?.initialState,
+      timeTravel: startArgs?.timeTravel,
+      timeTravelLineage: startArgs?.timeTravelLineage
     });
   };
   return Object.assign(workflow, {

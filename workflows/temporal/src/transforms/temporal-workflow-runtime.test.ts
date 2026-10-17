@@ -95,6 +95,186 @@ describe('temporal workflow runtime helper module', () => {
     });
   });
 
+  it('executes a seeded sequential time-travel replacement from the target step', async () => {
+    const first = vi.fn();
+    const second = vi.fn(async ({ inputData }) => ({ value: inputData.value + 1 }));
+    const third = vi.fn(async ({ inputData }) => ({ value: inputData.value + 1 }));
+    proxyActivities.mockReturnValue({ first, second, third });
+
+    const seededFirst = {
+      __temporalStepResult: true,
+      status: 'success',
+      payload: { value: 1 },
+      output: { value: 2 },
+      startedAt: 1,
+      endedAt: 2,
+    };
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('time-travel-workflow').then('first').then('second').then('third').commit();
+    const result = await workflow({
+      inputData: { value: 100 },
+      initialState: { preserved: true },
+      runId: 'run-1',
+      timeTravel: {
+        inputData: { value: 20 },
+        state: { preserved: true },
+        executionPath: [1],
+        steps: ['second'],
+        stepResults: {
+          input: { value: 1 },
+          first: seededFirst,
+          second: { status: 'running', payload: { value: 2 }, startedAt: 3 },
+        },
+      },
+      timeTravelLineage: {
+        previousTemporalRunId: 'temporal-run-1',
+        target: ['second'],
+      },
+    });
+
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith({
+      inputData: { value: 20 },
+      initData: { value: 20 },
+      runId: 'run-1',
+      workflowId: 'time-travel-workflow',
+    });
+    expect(third).toHaveBeenCalledWith({
+      inputData: { value: 21 },
+      initData: { value: 20 },
+      runId: 'run-1',
+      workflowId: 'time-travel-workflow',
+    });
+    expect(result).toEqual({
+      status: 'success',
+      input: { value: 20 },
+      result: { value: 22 },
+      state: { preserved: true },
+      steps: {
+        input: { value: 1 },
+        first: seededFirst,
+        second: succeeded({ value: 21 }),
+        third: succeeded({ value: 22 }),
+      },
+    });
+  });
+
+  it('allows a seeded time-travel replacement to suspend and resume', async () => {
+    const first = vi.fn();
+    const approval = vi
+      .fn()
+      .mockResolvedValueOnce({ __temporalSuspension: true, suspendPayload: { reason: 'review again' } })
+      .mockResolvedValueOnce({ approved: true });
+    proxyActivities.mockReturnValue({ first, approval });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('time-travel-workflow').then('first').then('approval').commit();
+    const run = workflow({
+      inputData: { orderId: 'replacement' },
+      runId: 'run-1',
+      timeTravel: {
+        inputData: { orderId: 'original' },
+        state: { attempts: 1 },
+        executionPath: [1],
+        steps: ['approval'],
+        stepResults: {
+          input: { orderId: 'original' },
+          first: {
+            status: 'success',
+            payload: { orderId: 'original' },
+            output: { orderId: 'order-1' },
+            startedAt: 1,
+            endedAt: 2,
+          },
+          approval: { status: 'running', payload: { orderId: 'order-1' }, startedAt: 3 },
+        },
+      },
+    });
+
+    await vi.waitFor(() => expect(condition).toHaveBeenCalledOnce());
+    expect(first).not.toHaveBeenCalled();
+    expect(approval).toHaveBeenCalledTimes(1);
+
+    const statusHandler = setHandler.mock.calls.find(([name]) => name === 'mastra.status')?.[1];
+    expect(statusHandler?.()).toMatchObject({
+      status: 'suspended',
+      state: { attempts: 1 },
+      suspended: [['approval']],
+      steps: {
+        first: expect.objectContaining({ status: 'success' }),
+        approval: expect.objectContaining({ status: 'suspended' }),
+      },
+    });
+
+    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
+    await expect(run).resolves.toMatchObject({
+      status: 'success',
+      result: { approved: true },
+      state: { attempts: 1 },
+      steps: {
+        first: expect.objectContaining({ status: 'success' }),
+        approval: expect.objectContaining({ status: 'success', resumeData: { approved: true } }),
+      },
+    });
+  });
+
+  it.each([
+    { name: 'parallel', executionPath: [0, 0] },
+    { name: 'conditional', executionPath: [0, 0] },
+    { name: 'loop', executionPath: [0, 0] },
+    { name: 'foreach', executionPath: [0] },
+  ])('rejects a seeded time-travel target inside $name control flow non-retryably', async ({ name, executionPath }) => {
+    proxyActivities.mockReturnValue({ target: vi.fn(), condition: vi.fn() });
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const base = createWorkflow('time-travel-workflow');
+    const workflow =
+      name === 'parallel'
+        ? base.parallel([{ type: 'step', step: { id: 'target' } }]).commit()
+        : name === 'conditional'
+          ? base.branch([['condition', 'target']]).commit()
+          : name === 'loop'
+            ? base.dowhile('target', 'condition').commit()
+            : base.foreach('target').commit();
+
+    await expect(
+      workflow({
+        inputData: { value: 1 },
+        timeTravel: {
+          inputData: { value: 1 },
+          state: {},
+          executionPath,
+          steps: ['target'],
+          stepResults: { target: { status: 'running', payload: { value: 1 }, startedAt: 1 } },
+        },
+      }),
+    ).rejects.toMatchObject({ nonRetryable: true });
+    expect(nonRetryable).toHaveBeenCalledWith(
+      'Temporal time travel currently supports only top-level sequential step targets.',
+    );
+  });
+
+  it('rejects malformed seeded execution paths before running activities', async () => {
+    const first = vi.fn();
+    proxyActivities.mockReturnValue({ first });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('time-travel-workflow').then('first').commit();
+
+    await expect(
+      workflow({
+        inputData: { value: 1 },
+        timeTravel: {
+          inputData: { value: 1 },
+          state: {},
+          executionPath: [4],
+          steps: ['first'],
+          stepResults: { first: { status: 'running', payload: { value: 1 }, startedAt: 1 } },
+        },
+      }),
+    ).rejects.toMatchObject({ nonRetryable: true });
+    expect(first).not.toHaveBeenCalled();
+  });
+
   it('durably waits for a resume signal when a step suspends', async () => {
     const approval = vi
       .fn()
