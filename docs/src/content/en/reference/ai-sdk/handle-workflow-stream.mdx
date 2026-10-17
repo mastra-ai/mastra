@@ -13,7 +13,7 @@ Framework-agnostic handler for streaming workflow execution in AI SDK-compatible
 
 `handleWorkflowStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
-`handleWorkflowStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+`handleWorkflowStream()` emits an AI SDK v7 UI message stream.
 
 Use [`workflowRoute()`](/reference/ai-sdk/workflow-route) if you want to create a workflow route inside a Mastra server.
 
@@ -49,14 +49,6 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'version',
-    type: "'v5' | 'v6' | 'v7'",
-    description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers. Pass `'v7'` when your app is typed against AI SDK v7.",
-    isOptional: true,
-    defaultValue: "'v5'",
-  },
   {
     name: 'mastra',
     type: 'Mastra',

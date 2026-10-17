@@ -27,7 +27,6 @@ export async function POST(req: Request) {
   const stream = await handleChatStream({
     mastra,
     agentId: 'weatherAgent',
-    version: 'v7',
     params,
   })
   return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)

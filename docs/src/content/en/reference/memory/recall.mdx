@@ -256,8 +256,8 @@ const allMessages = await memory!.recall({
 })
 
 // Convert to AI SDK format if needed
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
-const uiMessages = toAISdkV5Messages(messages)
+import { toAISdkMessages } from '@mastra/ai-sdk/ui'
+const uiMessages = toAISdkMessages(messages)
 ```
 
 ### Related

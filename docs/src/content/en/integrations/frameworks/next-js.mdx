@@ -128,7 +128,6 @@ export async function POST(req: Request) {
   const stream = await handleChatStream({
     mastra,
     agentId: 'weather-agent',
-    version: 'v7',
     params: {
       ...params,
       memory: {
@@ -154,7 +153,7 @@ export async function GET() {
     console.log('No previous messages found.')
   }
 
-  const uiMessages = toAISdkMessages(response?.messages || [], { version: 'v7' })
+  const uiMessages = toAISdkMessages(response?.messages || [])
 
   return NextResponse.json(uiMessages)
 }

@@ -119,7 +119,7 @@ They return a `ReadableStream` that you can wrap with [`createUIMessageStreamRes
 
 :::tip AI SDK version compatibility
 
-The framework-agnostic handlers default to AI SDK v5 for backward compatibility. Pass the version that matches your installed AI SDK, such as `version: 'v7'` for AI SDK v7. For best TypeScript inference with `handleChatStream()`, pass `messages` as `UIMessage[]` from your installed `ai` version.
+The framework-agnostic handlers target AI SDK v7. For best TypeScript inference with `handleChatStream()`, pass `messages` as `UIMessage[]` from your installed `ai` version.
 
 :::
 
@@ -139,7 +139,6 @@ The examples below show you how to use them with Next.js App Router.
       const stream = await handleChatStream({
         mastra,
         agentId: 'weatherAgent',
-        version: 'v7',
         params,
       })
       return createUIMessageStreamResponse({ stream })
@@ -864,18 +863,17 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
-`toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+`toAISdkStream()` emits an AI SDK v7 UI message stream.
 
 ```typescript
 import { toAISdkStream } from '@mastra/ai-sdk'
 
-const v5Stream = toAISdkStream(mastraStream, { from: 'agent' })
-const v6Stream = toAISdkStream(mastraStream, { from: 'agent', version: 'v6' })
+const stream = toAISdkStream(mastraStream, { from: 'agent' })
 ```
 
 ### Loading historical messages
 
-When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/ai-sdk/to-ai-sdk-v5-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
+When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
 
 ### Passing additional data
 

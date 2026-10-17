@@ -17,7 +17,7 @@
   "redirects": [
     {
       "source": "/reference/ai-sdk/to-ai-sdk-v4-messages",
-      "destination": "/reference/ai-sdk/to-ai-sdk-v5-messages",
+      "destination": "/reference/ai-sdk/to-ai-sdk-messages",
       "permanent": true
     },
     {
@@ -2291,8 +2291,13 @@
       "permanent": true
     },
     {
+      "source": "/reference/ai-sdk/to-ai-sdk-v5-messages",
+      "destination": "/reference/ai-sdk/to-ai-sdk-messages",
+      "permanent": true
+    },
+    {
       "source": "/reference/ai-sdk/to-ai-sdk-v4-messages/llms.txt",
-      "destination": "/reference/ai-sdk/to-ai-sdk-v5-messages/llms.txt",
+      "destination": "/reference/ai-sdk/to-ai-sdk-messages/llms.txt",
       "permanent": true
     },
     {
@@ -4173,6 +4178,11 @@
     {
       "source": "/reference/migrations/agentnetwork/llms.txt",
       "destination": "/reference/migrations/network-to-supervisor/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/ai-sdk/to-ai-sdk-v5-messages/llms.txt",
+      "destination": "/reference/ai-sdk/to-ai-sdk-messages/llms.txt",
       "permanent": true
     }
   ]

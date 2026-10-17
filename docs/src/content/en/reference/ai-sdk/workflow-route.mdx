@@ -14,7 +14,7 @@ Creates a workflow route handler for streaming workflow execution in AI SDK form
 
 Use [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream) if you need a framework-agnostic handler.
 
-`workflowRoute()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+`workflowRoute()` emits an AI SDK v7 UI message stream.
 
 :::tip Agent streaming in workflows
 
@@ -65,14 +65,6 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'version',
-    type: "'v5' | 'v6' | 'v7'",
-    description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers. Pass `'v7'` when your app is typed against AI SDK v7.",
-    isOptional: true,
-    defaultValue: "'v5'",
-  },
   {
     name: 'path',
     type: 'string',

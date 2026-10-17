@@ -1,6 +1,6 @@
 ---
 title: "Reference: toAISdkMessages() | AI SDK"
-description: "Converts messages from input formats to AI SDK UI message format. toAISdkMessages() keeps the existing AI SDK v5/default behavior."
+description: "Converts messages from input formats to AI SDK UI message format. toAISdkMessages() emits AI SDK v7 UI messages."
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/client-js"
@@ -10,9 +10,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # toAISdkMessages()
 
-Converts messages from input formats to AI SDK UI message format. `toAISdkMessages()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
-
-`version: 'v6'` uses the MessageList AI SDK v6 UI output path. MessageList input detection and ingestion remain unchanged.
+Converts messages from input formats to AI SDK UI message format. `toAISdkMessages()` emits AI SDK v7 UI messages.
 
 ## Usage example
 
@@ -33,7 +31,7 @@ const storedMessages = [
 
 export default function Chat() {
   const { messages } = useChat({
-    initialMessages: toAISdkMessages(storedMessages, { version: 'v6' }),
+    initialMessages: toAISdkMessages(storedMessages),
   })
 
   return (
@@ -130,9 +128,7 @@ const messages = toAISdkMessages(['Hello', 'How can I help you today?'])
 ```typescript
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 
-const messages = toAISdkMessages(['Hello', 'How can I help you today?'], {
-  version: 'v6',
-})
+const messages = toAISdkMessages(['Hello', 'How can I help you today?'], {})
 ```
 
 ### Loading messages with Mastra client
@@ -150,4 +146,4 @@ const uiMessages = toAISdkMessages(messages)
 ## Related
 
 - [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream)
-- [`toAISdkV5Messages()`](/reference/ai-sdk/to-ai-sdk-v5-messages)
+- [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages)

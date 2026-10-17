@@ -123,7 +123,7 @@ Create `src/pages/api/chat.ts`:
 ```ts title="src/pages/api/chat.ts"
 import type { APIRoute } from 'astro'
 import { handleChatStream } from '@mastra/ai-sdk'
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 import { createUIMessageStreamResponse } from 'ai'
 import { mastra } from '@/mastra'
 
@@ -161,7 +161,7 @@ export const GET: APIRoute = async () => {
     console.log('No previous messages found.')
   }
 
-  const uiMessages = toAISdkV5Messages(response?.messages || [])
+  const uiMessages = toAISdkMessages(response?.messages || [])
 
   return Response.json(uiMessages)
 }
