@@ -21,7 +21,7 @@ const mockLogger = {
  * from a MessageList and run the filter over it.
  */
 async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): Promise<LanguageModelV4Prompt> {
-  const prompt = await messageList.get.all.aiV5.llmPrompt();
+  const prompt = await messageList.get.all.aiSdk.llmPrompt();
   const result = await filter.processLLMRequest?.({
     prompt,
     model: 'test-model' as any,
@@ -498,7 +498,7 @@ describe('Processors Integration Tests', () => {
     // Test 2: Apply token limiting with a low limit to force truncation
     // The limiter uses ~24 tokens for conversation overhead + ~3.8 per message
     const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const limited = await tokenLimiter.processLLMRequest({
       prompt,
@@ -609,7 +609,7 @@ describe('Processors Integration Tests', () => {
       'input',
     );
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const run = async (processors: any[]) =>
       new ProcessorRunner({

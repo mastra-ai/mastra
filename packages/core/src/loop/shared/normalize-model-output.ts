@@ -5,9 +5,8 @@
  * Base64 payloads (`image-data`/`file-data`, and `image-url` parts carrying a
  * `data:` URI) are stored as the V2 `media` content type. Remote-URL parts
  * (`image-url`/`file-url`) are kept as-is because `media.data` is Base64-only —
- * the spec-boundary prompt converters (aiV5PromptToAIV6Prompt /
- * aiV5PromptToAIV7Prompt) emit the correct URL-shaped part for the target
- * model's specification version.
+ * the prompt converter (aiV5PromptToAIV7Prompt) emits the URL-tagged file part
+ * v7 providers expect.
  *
  * `providerOptions` and any other author-supplied keys are preserved.
  */

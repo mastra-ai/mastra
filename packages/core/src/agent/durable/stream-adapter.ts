@@ -607,7 +607,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               await onFinish({
                 runId,
                 ...(model.modelId && model.provider && model.version ? { model } : {}),
-                messages: messageList.get.response.aiV5.model(),
+                messages: messageList.get.response.aiSdk.model(),
                 object,
                 usedFallbackValue: output.usedFallbackValue,
                 error: output.error,

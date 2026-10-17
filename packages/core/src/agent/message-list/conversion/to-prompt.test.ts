@@ -1,7 +1,7 @@
 import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 
-import { aiV5PromptToAIV6Prompt, aiV5PromptToAIV7Prompt } from './to-prompt';
+import { aiV5PromptToAIV7Prompt } from './to-prompt';
 
 function toolResultPrompt(parts: unknown[]): LanguageModelV4Prompt {
   return [
@@ -26,86 +26,6 @@ function firstOutputValue(prompt: LanguageModelV4Prompt): unknown[] {
 
 // Regression tests for #22618 — tool-result URL parts must survive the
 // V2 → V3 / V2 → V4 spec-boundary prompt conversions with providerOptions intact.
-describe('aiV5PromptToAIV6Prompt tool-result content', () => {
-  it('converts Base64 media parts to image-data/file-data, preserving providerOptions', () => {
-    const result = aiV5PromptToAIV6Prompt(
-      toolResultPrompt([
-        { type: 'media', data: 'aGVsbG8=', mediaType: 'image/png', providerOptions: { p: { keep: true } } },
-        { type: 'media', data: 'aGVsbG8=', mediaType: 'application/pdf' },
-      ]),
-    );
-
-    expect(firstOutputValue(result)).toEqual([
-      { type: 'image-data', data: 'aGVsbG8=', mediaType: 'image/png', providerOptions: { p: { keep: true } } },
-      { type: 'file-data', data: 'aGVsbG8=', mediaType: 'application/pdf' },
-    ]);
-  });
-
-  it('passes image-url and file-url parts through untouched', () => {
-    const imagePart = {
-      type: 'image-url',
-      url: 'https://example.com/radar.png',
-      providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
-    };
-    const filePart = { type: 'file-url', url: 'https://example.com/report.pdf' };
-
-    const result = aiV5PromptToAIV6Prompt(toolResultPrompt([imagePart, filePart]));
-
-    expect(firstOutputValue(result)[0]).toBe(imagePart);
-    expect(firstOutputValue(result)[1]).toBe(filePart);
-  });
-
-  it('heals legacy media parts carrying a remote URL into image-url/file-url', () => {
-    const result = aiV5PromptToAIV6Prompt(
-      toolResultPrompt([
-        {
-          type: 'media',
-          data: 'https://example.com/radar.png',
-          mediaType: 'image/jpeg',
-          providerOptions: { p: { keep: true } },
-        },
-        { type: 'media', data: 'https://example.com/report.pdf', mediaType: 'application/pdf' },
-      ]),
-    );
-
-    expect(firstOutputValue(result)).toEqual([
-      {
-        type: 'image-url',
-        url: 'https://example.com/radar.png',
-        mediaType: 'image/jpeg',
-        providerOptions: { p: { keep: true } },
-      },
-      { type: 'file-url', url: 'https://example.com/report.pdf', mediaType: 'application/pdf' },
-    ]);
-  });
-
-  it('heals legacy media parts with mixed-case URL schemes (RFC 3986)', () => {
-    const result = aiV5PromptToAIV6Prompt(
-      toolResultPrompt([
-        { type: 'media', data: 'HTTPS://example.com/radar.png', mediaType: 'image/png' },
-        { type: 'media', data: 'HTTP://example.com/report.pdf', mediaType: 'application/pdf' },
-      ]),
-    );
-
-    expect(firstOutputValue(result)).toEqual([
-      { type: 'image-url', url: 'HTTPS://example.com/radar.png', mediaType: 'image/png' },
-      { type: 'file-url', url: 'HTTP://example.com/report.pdf', mediaType: 'application/pdf' },
-    ]);
-  });
-
-  it('is idempotent when applied twice (llmPrompt selection + router V3 wrapper)', () => {
-    const prompt = toolResultPrompt([
-      { type: 'media', data: 'aGVsbG8=', mediaType: 'image/png' },
-      { type: 'image-url', url: 'https://example.com/radar.png' },
-    ]);
-
-    const once = aiV5PromptToAIV6Prompt(prompt);
-    const twice = aiV5PromptToAIV6Prompt(once);
-
-    expect(firstOutputValue(twice)).toEqual(firstOutputValue(once));
-  });
-});
-
 describe('aiV5PromptToAIV7Prompt tool-result content', () => {
   it('converts Base64 media parts to file parts with tagged data, preserving providerOptions', () => {
     const result = aiV5PromptToAIV7Prompt(

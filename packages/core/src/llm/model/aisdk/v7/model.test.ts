@@ -127,7 +127,7 @@ describe('AISDKV7LanguageModel', () => {
         'input',
       );
 
-      const prompt = await messageList.get.all.aiV6.llmPrompt();
+      const prompt = await messageList.get.all.aiSdk.llmPrompt();
       const legacyFilePart =
         prompt[0]?.role === 'user' ? prompt[0].content.find(part => part.type === 'file') : undefined;
 

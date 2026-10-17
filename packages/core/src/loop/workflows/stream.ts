@@ -381,8 +381,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         const initialData = {
           messageId: messageId,
           messages: {
-            all: messageList.get.all.aiV5.model(),
-            user: messageList.get.input.aiV5.model(),
+            all: messageList.get.all.aiSdk.model(),
+            user: messageList.get.input.aiSdk.model(),
             nonUser: [],
           },
           output: {

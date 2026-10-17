@@ -113,7 +113,7 @@ async function runMappingStep(
     )?.toolInvocation as Record<string, any> | undefined;
 
   const v6 = (toolCallId: string) =>
-    recalled.get.all.aiV6
+    recalled.get.all.aiSdk
       .ui()
       .flatMap(m => m.parts)
       .find((p: any) => 'toolCallId' in p && p.toolCallId === toolCallId) as Record<string, any> | undefined;

@@ -44,9 +44,9 @@ function hasExplicitModelOutput(part: ReturnType<typeof toolResultPart>): boolea
 
 describe('explicit tool model output provenance', () => {
   it.each([
-    ['aiV5', (list: MessageList) => list.get.all.aiV5.llmPrompt({})],
-    ['aiV6', (list: MessageList) => list.get.all.aiV6.llmPrompt({})],
-    ['aiV7', (list: MessageList) => list.get.all.aiV7.llmPrompt({})],
+    ['aiV5', (list: MessageList) => list.get.all.aiSdk.llmPrompt({})],
+    ['aiV6', (list: MessageList) => list.get.all.aiSdk.llmPrompt({})],
+    ['aiV7', (list: MessageList) => list.get.all.aiSdk.llmPrompt({})],
   ] as const)('survives the %s prompt path as own Mastra metadata', async (_, getPrompt) => {
     const list = new MessageList();
     list.add(makeToolResultMessage({ modelOutput: compactOutput }), 'memory');
@@ -69,9 +69,9 @@ describe('explicit tool model output provenance', () => {
     list.add(makeToolResultMessage(metadata), 'memory');
 
     for (const prompt of [
-      await list.get.all.aiV5.llmPrompt({}),
-      await list.get.all.aiV6.llmPrompt({}),
-      await list.get.all.aiV7.llmPrompt({}),
+      await list.get.all.aiSdk.llmPrompt({}),
+      await list.get.all.aiSdk.llmPrompt({}),
+      await list.get.all.aiSdk.llmPrompt({}),
     ]) {
       expect(hasExplicitModelOutput(toolResultPart(prompt))).toBe(false);
     }

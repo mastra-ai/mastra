@@ -117,9 +117,9 @@ describe('createAgenticExecutionWorkflow response message handling', () => {
         inputData: {
           messageId: 'msg-1',
           messages: {
-            all: messageList.get.all.aiV5.model(),
-            user: messageList.get.input.aiV5.model(),
-            nonUser: messageList.get.response.aiV5.model(),
+            all: messageList.get.all.aiSdk.model(),
+            user: messageList.get.input.aiSdk.model(),
+            nonUser: messageList.get.response.aiSdk.model(),
           },
           output: {
             usage: testUsage,

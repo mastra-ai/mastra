@@ -1109,7 +1109,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // A retried attempt was rolled back, so the last response content belongs to an earlier step.
                 content: isRetriedStep
                   ? []
-                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
+                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiSdk.modelContent(-1)),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
@@ -1151,7 +1151,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
-                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                  uiMessages: messageList.get.response.aiSdk.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 },
                 providerMetadata: providerMetadata ?? chunk.payload.providerMetadata,
               };
@@ -1343,8 +1343,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 response = {
                   ...otherMetadata,
-                  messages: messageList.get.response.aiV5.model(),
-                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                  messages: messageList.get.response.aiSdk.model(),
+                  uiMessages: messageList.get.response.aiSdk.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
               } else if (self.#bufferedSteps.length > 0) {
                 // Durable finish chunks carry no model metadata; the last step's response
@@ -1502,9 +1502,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
                     response = {
                       ...otherMetadata,
-                      messages: self.messageList.get.response.aiV5.model(),
+                      messages: self.messageList.get.response.aiSdk.model(),
                       uiMessages:
-                        self.messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                        self.messageList.get.response.aiSdk.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
 
@@ -1584,7 +1584,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 toolResults: self.#toolResults,
                 steps: self.#bufferedSteps,
                 totalUsage: self.#getTotalUsage(),
-                content: messageList.get.response.aiV5.stepContent(),
+                content: messageList.get.response.aiSdk.stepContent(),
                 suspendPayload: undefined,
                 resumeSchema: undefined,
               });
@@ -1596,7 +1596,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
-                  content: messageList.get.response.aiV5.stepContent(),
+                  content: messageList.get.response.aiSdk.stepContent(),
                   request: await self.request,
                   error: self.error,
                   reasoning: await self.reasoning,
@@ -1607,7 +1607,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   response: {
                     ...(await self.response),
                     ...baseFinishStep.response,
-                    messages: messageList.get.response.aiV5.model(),
+                    messages: messageList.get.response.aiSdk.model(),
                     dbMessages: self.messageList.get.response.db(),
                   },
                   usage: chunk.payload.output.usage,
@@ -1745,7 +1745,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               totalUsage: self.#getTotalUsage(),
               warnings: self.#warnings,
               finishReason: 'suspended',
-              content: self.messageList.get.response.aiV5.stepContent(),
+              content: self.messageList.get.response.aiSdk.stepContent(),
               object: undefined,
               request: self.#request,
               response: {

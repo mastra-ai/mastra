@@ -1488,7 +1488,7 @@ export class AgentController<TState = {}> {
       page: 0,
       orderBy: { field: 'createdAt', direction: 'DESC' },
     });
-    const messages = new MessageList().add(recent.messages.reverse(), 'memory').get.all.aiV5.ui();
+    const messages = new MessageList().add(recent.messages.reverse(), 'memory').get.all.aiSdk.ui();
     if (!messages.some(message => message.role === 'user')) {
       throw new Error('This conversation has no message to name it from yet.');
     }

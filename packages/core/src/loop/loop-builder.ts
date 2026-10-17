@@ -1,8 +1,8 @@
 import type { StepResult, ToolSet } from '@internal/ai-v7';
-import { toAISDKUsage } from '../stream/aisdk/v5/transform';
 import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
 import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability';
+import { toAISDKUsage } from '../stream/aisdk/v5/transform';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -43,7 +43,6 @@ import { createToolCallStep } from './workflows/agentic-execution/tool-call-step
 import { pruneAgentLoopSnapshot } from './workflows/prune-snapshot';
 import { llmIterationOutputSchema } from './workflows/schema';
 import type { LLMIterationData } from './workflows/schema';
-
 
 type LoopStepResult<Tools extends ToolSet> = Omit<StepResult<Tools>, 'performance'> &
   Partial<Pick<StepResult<Tools>, 'performance'>>;
@@ -242,9 +241,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             isContinued: true,
           },
           messages: {
-            all: messageList.get.all.aiV5.model(),
-            user: messageList.get.input.aiV5.model(),
-            nonUser: messageList.get.response.aiV5.model(),
+            all: messageList.get.all.aiSdk.model(),
+            user: messageList.get.input.aiSdk.model(),
+            nonUser: messageList.get.response.aiSdk.model(),
           },
         };
       },
@@ -495,9 +494,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           typedInputData.stepResult.isContinued = true;
         }
         typedInputData.messages = {
-          all: messageList.get.all.aiV5.model(),
-          user: messageList.get.input.aiV5.model(),
-          nonUser: messageList.get.response.aiV5.model(),
+          all: messageList.get.all.aiSdk.model(),
+          user: messageList.get.input.aiSdk.model(),
+          nonUser: messageList.get.response.aiSdk.model(),
         };
       }
 

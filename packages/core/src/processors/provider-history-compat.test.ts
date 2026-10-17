@@ -1310,7 +1310,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
 
     const runRequest = (handler: ProviderHistoryCompat, messageList: MessageList, provider: string) =>
       handler.processLLMRequest({
-        ...makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider }),
+        ...makeRequestArgs(messageList.get.all.aiSdk.prompt(), { provider }),
         messageList,
       });
 
@@ -1424,7 +1424,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
       messageList.add([createUserMessage('continue on claude')], 'input');
 
       const result = await handler.processLLMRequest(
-        makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider: ANTHROPIC }),
+        makeRequestArgs(messageList.get.all.aiSdk.prompt(), { provider: ANTHROPIC }),
       );
 
       expect(result).toBeUndefined();
@@ -2109,7 +2109,7 @@ describe('anthropicOrphanedThinkingStep', () => {
   }
 
   const assistantPromptShapes = (list: MessageList) =>
-    list.get.all.aiV5
+    list.get.all.aiSdk
       .prompt()
       .flatMap(message =>
         message.role === 'assistant' && Array.isArray(message.content)
@@ -2202,7 +2202,7 @@ describe('anthropicOrphanedThinkingStep', () => {
     });
 
     expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
-    expect(JSON.stringify(args.messageList.get.all.aiV5.prompt())).not.toContain('SIG_A');
+    expect(JSON.stringify(args.messageList.get.all.aiSdk.prompt())).not.toContain('SIG_A');
   });
 
   it('leaves healthy thinking steps alone and does not retry', async () => {
@@ -2435,7 +2435,7 @@ describe('anthropicToolIdFormat is prompt-scoped, not persisted', () => {
     messageList.add([createUserMessage('thanks')], 'input');
 
     const result = await handler.processLLMRequest({
-      ...makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider: 'anthropic.messages' }),
+      ...makeRequestArgs(messageList.get.all.aiSdk.prompt(), { provider: 'anthropic.messages' }),
       messageList,
     });
 

@@ -42,7 +42,7 @@ describe('Anthropic signed thinking round-trip', () => {
     list.add(dbMessage, 'memory');
     list.add({ role: 'user', content: 'Continue.' }, 'input');
 
-    const reasoning = getAssistantReasoningParts(list.get.all.aiV5.prompt());
+    const reasoning = getAssistantReasoningParts(list.get.all.aiSdk.prompt());
     expect(reasoning).toHaveLength(1);
     expect(reasoning[0]).toEqual(anthropicThinkingPart);
   });
@@ -60,7 +60,7 @@ describe('Anthropic signed thinking round-trip', () => {
     );
     list.add({ role: 'user', content: 'Use that context.' }, 'input');
 
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
     const result = await new ProviderHistoryCompat().processLLMRequest({
       prompt,
       model: { provider: 'anthropic.messages' },
@@ -147,7 +147,7 @@ describe('Anthropic signed thinking round-trip', () => {
     list.add(anthropicDbMessage, 'memory');
     list.add({ role: 'user', content: 'Continue.' }, 'input');
 
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
     const result = await new ProviderHistoryCompat().processLLMRequest({
       prompt,
       model: { provider: 'anthropic.messages' },

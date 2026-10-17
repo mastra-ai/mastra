@@ -27,7 +27,7 @@ describe('MessageList - File URL Handling', () => {
     messageList.add(v2Message, 'user');
 
     // Get V3 messages to see internal representation
-    const v5Messages = messageList.get.all.aiV5.ui();
+    const v5Messages = messageList.get.all.aiSdk.ui();
     const v5FilePart = v5Messages[0].parts.find((p: any) => p.type === 'file');
 
     // V3 should have URL in the url field
@@ -136,7 +136,7 @@ describe('MessageList - File URL Handling', () => {
       const list = new MessageList();
       list.add(msg, 'user');
 
-      const v5Messages = list.get.all.aiV5.ui();
+      const v5Messages = list.get.all.aiSdk.ui();
       const v5FilePart = v5Messages[0].parts.find((p: any) => p.type === 'file');
 
       const v2Messages = list.get.all.db();
@@ -186,7 +186,7 @@ describe('MessageList - File URL Handling', () => {
       'image/png': [/^https:\/\/placehold\.co\//],
     };
 
-    const llmPrompt = await messageList.get.all.aiV5.llmPrompt({
+    const llmPrompt = await messageList.get.all.aiSdk.llmPrompt({
       downloadConcurrency: 1,
       downloadRetries: 1,
       supportedUrls,
@@ -233,7 +233,7 @@ describe('MessageList - File URL Handling', () => {
       messageList.add(v2Message, 'user');
 
       // Test with provider that does NOT support URLs (empty supportedUrls)
-      const llmPrompt = await messageList.get.all.aiV5.llmPrompt({
+      const llmPrompt = await messageList.get.all.aiSdk.llmPrompt({
         downloadConcurrency: 1,
         downloadRetries: 1,
         supportedUrls: {}, // No URL support

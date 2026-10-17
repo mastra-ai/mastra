@@ -75,7 +75,7 @@ describe('Agent memory: streamed document sources', () => {
     );
     expect(storedParts.filter(part => part.type === 'source' && !part.source.url)).toEqual([]);
 
-    const [uiMessage] = new MessageList().add(assistant!, 'memory').get.all.aiV5.ui();
+    const [uiMessage] = new MessageList().add(assistant!, 'memory').get.all.aiSdk.ui();
     expect(uiMessage!.parts).toContainEqual(
       expect.objectContaining({ type: 'source-document', sourceId: 'doc-1', filename: 'q3.pdf' }),
     );

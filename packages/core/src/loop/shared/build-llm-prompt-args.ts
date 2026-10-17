@@ -3,7 +3,7 @@
  * non-durable `loop/workflows/agentic-execution/llm-execution-step.ts` and
  * the durable `agent/durable/workflows/steps/llm-execution.ts`.
  *
- * Returns the args that get forwarded to `messageList.get.all.aiV5.llmPrompt`
+ * Returns the args that get forwarded to `messageList.get.all.aiSdk.llmPrompt`
  * / `aiV6.llmPrompt`. Resolves the model's `supportedUrls` (which AI SDK
  * providers may expose as a `PromiseLike`) before handing it back, so callers
  * can `await` once and forget.

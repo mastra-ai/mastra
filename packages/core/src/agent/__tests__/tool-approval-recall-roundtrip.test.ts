@@ -115,7 +115,7 @@ function findStoredToolInvocation(messages: MastraDBMessage[], toolCallId: strin
 
 /** Project recalled messages to AI SDK v6 UI parts and pull the part for a toolCallId. */
 function findV6ToolPart(messages: MastraDBMessage[], toolCallId: string) {
-  const uiMessages = new MessageList().add(messages, 'memory').get.all.aiV6.ui();
+  const uiMessages = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
   for (const uiMessage of uiMessages) {
     for (const part of uiMessage.parts) {
       if ('toolCallId' in part && part.toolCallId === toolCallId) {

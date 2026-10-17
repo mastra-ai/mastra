@@ -58,7 +58,7 @@ describe('MessageList - Split tool call args across messages (#12405)', () => {
     );
 
     // Step 4: Convert messages to AIV5 model format
-    const modelMessages = messageList.get.all.aiV5.model();
+    const modelMessages = messageList.get.all.aiSdk.model();
 
     // Find the tool-result message
     const toolResultMsg = modelMessages.find(msg => msg.role === 'tool');
@@ -132,7 +132,7 @@ describe('MessageList - Split tool call args across messages (#12405)', () => {
     );
 
     // Convert to AIV5 model format
-    const modelMessages = messageList.get.all.aiV5.model();
+    const modelMessages = messageList.get.all.aiSdk.model();
 
     // Find tool-result messages
     const toolResultMessages = modelMessages.filter(msg => msg.role === 'tool');
@@ -204,7 +204,7 @@ describe('MessageList - Split tool call args across messages (#12405)', () => {
     );
 
     // Convert and verify
-    const modelMessages = messageList.get.all.aiV5.model();
+    const modelMessages = messageList.get.all.aiSdk.model();
     const toolResultMsg = modelMessages.find(msg => msg.role === 'tool');
 
     expect(toolResultMsg).toBeDefined();

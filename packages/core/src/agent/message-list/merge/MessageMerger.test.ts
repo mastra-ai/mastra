@@ -147,7 +147,7 @@ describe('MessageMerger insertion positions', () => {
     const restored = new MessageList();
     restored.add({ ...serialized, createdAt: new Date(serialized.createdAt) }, 'memory');
     expect(restored.get.all.db()).toEqual(list.get.all.db());
-    const modelParts = restored.get.all.aiV5.model().flatMap(msg => {
+    const modelParts = restored.get.all.aiSdk.model().flatMap(msg => {
       if (typeof msg.content === 'string') return [msg.content];
       return msg.content.map(part => {
         if (part.type === 'text') return part.text;

@@ -5,7 +5,7 @@ import { MessageList } from '../index';
 // Regression coverage for the abort-orphaned-tool fix (#17995). The fix leaves an
 // abort-cancelled tool as an incomplete `state:'call'`, not a fabricated `state:'result'`
 // carrying the abort message. This drives that shape through the real to-LLM prompt path
-// (`get.all.aiV5.prompt()`, filterIncompleteToolCalls=true) and proves the call is dropped
+// (`get.all.aiSdk.prompt()`, filterIncompleteToolCalls=true) and proves the call is dropped
 // before the model. Load-bearing: feed the PRE-fix shape (`state:'result'`, result =
 // 'The operation was aborted.') and every assertion below fails (the abort string reaches
 // the model) — the silent fake-success the fix prevents.
@@ -47,7 +47,7 @@ describe('aborted tool call — to-LLM prompt (resume) path', () => {
       'memory',
     );
 
-    const prompt = messageList.get.all.aiV5.prompt();
+    const prompt = messageList.get.all.aiSdk.prompt();
     const serialized = JSON.stringify(prompt);
     const { toolCalls, toolResults } = collectToolPairs(prompt);
 
@@ -85,7 +85,7 @@ describe('aborted tool call — to-LLM prompt (resume) path', () => {
       'memory',
     );
 
-    const prompt = messageList.get.all.aiV5.prompt();
+    const prompt = messageList.get.all.aiSdk.prompt();
     const serialized = JSON.stringify(prompt);
     const { toolCalls, toolResults } = collectToolPairs(prompt);
 

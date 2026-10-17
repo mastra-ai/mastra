@@ -852,7 +852,7 @@ async function processOutputStream<OUTPUT = undefined>({
           try {
             await tool?.onInputStart?.({
               toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model(),
+              messages: messageList.get.input.aiSdk.model(),
               abortSignal: options?.abortSignal,
               context: undefined,
             });
@@ -873,7 +873,7 @@ async function processOutputStream<OUTPUT = undefined>({
             await tool?.onInputDelta?.({
               inputTextDelta: chunk.payload.argsTextDelta,
               toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model(),
+              messages: messageList.get.input.aiSdk.model(),
               abortSignal: options?.abortSignal,
               context: undefined,
             });
@@ -1518,7 +1518,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (openedBoundary?.appended) appendedStepBoundary = iterationBoundary;
       let transcriptStep: TranscriptStep = {
         messageId: currentMessageId,
-        start: messageList.get.response.aiV5.ui().find(message => message.id === currentMessageId)?.parts.length ?? 0,
+        start: messageList.get.response.aiSdk.ui().find(message => message.id === currentMessageId)?.parts.length ?? 0,
         end: 0,
       };
 
@@ -1642,7 +1642,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         if (lastPreviousStep) {
           const refreshedContent = lastTranscriptStep
             ? getTranscriptStepContent(messageList, lastTranscriptStep)
-            : messageList.get.response.aiV5.modelContent(previousSteps.length);
+            : messageList.get.response.aiSdk.modelContent(previousSteps.length);
           // Durable agents deserialize a fresh MessageList per workflow step, so
           // the re-extraction can legitimately come back empty there. Never let
           // that wipe content we already have.
@@ -1878,12 +1878,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           downloadConcurrency,
           skipUnavailableAttachments: inputData.skipUnavailableAttachments,
         });
-        const llmPromptForModel =
-          currentStep.model?.specificationVersion === 'v4'
-            ? messageList.get.all.aiV7.llmPrompt
-            : currentStep.model?.specificationVersion === 'v3'
-              ? messageList.get.all.aiV6.llmPrompt
-              : messageList.get.all.aiV5.llmPrompt;
+        const llmPromptForModel = messageList.get.all.aiSdk.llmPrompt;
         let downloadError: MastraError | undefined;
         let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
           if (!isDownloadAssetsError(error)) {
@@ -2724,7 +2719,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           metadata: {},
           output: { text: '', toolCalls: [], usage: {}, steps },
-          messages: { all: messageList.get.all.aiV5.model(), user: messageList.get.input.aiV5.model(), nonUser: [] },
+          messages: { all: messageList.get.all.aiSdk.model(), user: messageList.get.input.aiSdk.model(), nonUser: [] },
           processorRetryCount: inputData.processorRetryCount,
           ...(activeFallbackModelIndex > 0 ? { fallbackModelIndex: activeFallbackModelIndex } : {}),
           ...(inputData.skipUnavailableAttachments ? { skipUnavailableAttachments: true } : {}),
@@ -2790,9 +2785,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps: [],
           },
           messages: {
-            all: messageList.get.all.aiV5.model(),
-            user: messageList.get.input.aiV5.model(),
-            nonUser: messageList.get.response.aiV5.model(),
+            all: messageList.get.all.aiSdk.model(),
+            user: messageList.get.input.aiSdk.model(),
+            nonUser: messageList.get.response.aiSdk.model(),
           },
         });
       };
@@ -2943,8 +2938,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
 
         const messages = {
-          all: messageList.get.all.aiV5.model(),
-          user: messageList.get.input.aiV5.model(),
+          all: messageList.get.all.aiSdk.model(),
+          user: messageList.get.input.aiSdk.model(),
           // Do not return failed assistant output as new response messages for this retry step.
           // That output was already added to messageList while processing the failed stream;
           // returning it in messages.nonUser would make agentic-execution/index.ts append it again.
@@ -3214,7 +3209,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const steps = inputData.output?.steps || [];
 
       transcriptStep.end =
-        messageList.get.response.aiV5.ui().find(message => message.id === transcriptStep?.messageId)?.parts.length ?? 0;
+        messageList.get.response.aiSdk.ui().find(message => message.id === transcriptStep?.messageId)?.parts.length ??
+        0;
       transcriptSteps[steps.length] = transcriptStep;
       const currentIterationContent = getTranscriptStepContent(messageList, transcriptStep);
 
@@ -3238,7 +3234,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           providerMetadata: runState.state.providerOptions,
           finishReason: runState.state.stepResult?.reason,
           content: currentIterationContent,
-          response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
+          response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiSdk.model() },
           request: request,
           usage: outputStream._getImmediateUsage(),
           tripwire: stepTripwireData,
@@ -3289,9 +3285,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         shouldRetry && processOutputStepTripwire ? processOutputStepTripwire.message : undefined;
 
       const messages = {
-        all: messageList.get.all.aiV5.model(),
-        user: messageList.get.input.aiV5.model(),
-        nonUser: messageList.get.response.aiV5.model(),
+        all: messageList.get.all.aiSdk.model(),
+        user: messageList.get.input.aiSdk.model(),
+        nonUser: messageList.get.response.aiSdk.model(),
       };
 
       // Determine step result

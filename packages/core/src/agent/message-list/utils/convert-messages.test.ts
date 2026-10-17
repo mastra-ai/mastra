@@ -117,13 +117,12 @@ describe('convertMessages', () => {
       ]);
     });
 
-    it('converts to AIV5.UI as an output-available tool part carrying the reason', () => {
+    it('converts to AIV5.UI as an output-denied tool part', () => {
       const [uiMessage] = convertMessages(deniedMessage).to('AIV5.UI');
       const toolPart = uiMessage.parts.find((p: any) => p.type === 'tool-findUserTool') as any;
       expect(toolPart).toMatchObject({
-        state: 'output-available',
+        state: 'output-denied',
         toolCallId: 'call-1',
-        output: 'Tool call was not approved by the user',
       });
     });
 

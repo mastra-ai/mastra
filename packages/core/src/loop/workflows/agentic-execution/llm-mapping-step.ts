@@ -162,9 +162,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return bail({
           ...initialResult,
           messages: {
-            all: rest.messageList.get.all.aiV5.model(),
-            user: rest.messageList.get.input.aiV5.model(),
-            nonUser: rest.messageList.get.response.aiV5.model(),
+            all: rest.messageList.get.all.aiSdk.model(),
+            user: rest.messageList.get.input.aiSdk.model(),
+            nonUser: rest.messageList.get.response.aiSdk.model(),
           },
         });
       };
@@ -395,9 +395,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           return {
             ...initialResult,
             messages: {
-              all: rest.messageList.get.all.aiV5.model(),
-              user: rest.messageList.get.input.aiV5.model(),
-              nonUser: rest.messageList.get.response.aiV5.model(),
+              all: rest.messageList.get.all.aiSdk.model(),
+              user: rest.messageList.get.input.aiSdk.model(),
+              nonUser: rest.messageList.get.response.aiSdk.model(),
             },
           };
         }
@@ -413,9 +413,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return bail({
           ...initialResult,
           messages: {
-            all: rest.messageList.get.all.aiV5.model(),
-            user: rest.messageList.get.input.aiV5.model(),
-            nonUser: rest.messageList.get.response.aiV5.model(),
+            all: rest.messageList.get.all.aiSdk.model(),
+            user: rest.messageList.get.input.aiSdk.model(),
+            nonUser: rest.messageList.get.response.aiSdk.model(),
           },
         });
       }
@@ -546,9 +546,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return {
           ...initialResult,
           messages: {
-            all: rest.messageList.get.all.aiV5.model(),
-            user: rest.messageList.get.input.aiV5.model(),
-            nonUser: rest.messageList.get.response.aiV5.model(),
+            all: rest.messageList.get.all.aiSdk.model(),
+            user: rest.messageList.get.input.aiSdk.model(),
+            nonUser: rest.messageList.get.response.aiSdk.model(),
           },
         };
       }

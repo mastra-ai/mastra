@@ -168,7 +168,7 @@ describe('MessageList V5 Support', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add('Hello from user', 'input');
 
-        const v5Messages = list.get.all.aiV5.ui();
+        const v5Messages = list.get.all.aiSdk.ui();
         expect(v5Messages).toHaveLength(1);
         expect(v5Messages[0].role).toBe('user');
 
@@ -206,7 +206,7 @@ describe('MessageList V5 Support', () => {
         };
 
         list.add(v2Message, 'response');
-        const v5Messages = list.get.all.aiV5.ui();
+        const v5Messages = list.get.all.aiSdk.ui();
 
         // Find the tool part
         const toolPart = v5Messages[0].parts.find(
@@ -248,7 +248,7 @@ describe('MessageList V5 Support', () => {
         };
 
         list.add(v2Message, 'response');
-        const v5Messages = list.get.all.aiV5.ui();
+        const v5Messages = list.get.all.aiSdk.ui();
 
         // Find the tool part
         const toolPart = v5Messages[0].parts.find(
@@ -290,7 +290,7 @@ describe('MessageList V5 Support', () => {
         };
 
         list.add(v2Message, 'response');
-        const v5Messages = list.get.all.aiV5.ui();
+        const v5Messages = list.get.all.aiSdk.ui();
 
         expect(v5Messages[0].parts[0]).toMatchObject({
           type: 'reasoning',
@@ -320,7 +320,7 @@ describe('MessageList V5 Support', () => {
         };
 
         list.add(v2Message, 'input');
-        const v5Messages = list.get.all.aiV5.ui();
+        const v5Messages = list.get.all.aiSdk.ui();
 
         expect(v5Messages[0].parts[0]).toMatchObject({
           type: 'file',
@@ -337,7 +337,7 @@ describe('MessageList V5 Support', () => {
         // Add a user message to avoid empty message list error
         list.add({ role: 'user', content: 'Hello' }, 'input');
 
-        const v5Prompt = list.get.all.aiV5.prompt();
+        const v5Prompt = list.get.all.aiSdk.prompt();
         expect(v5Prompt[0]).toMatchObject({
           role: 'system',
           content: 'You are a helpful assistant',
@@ -359,7 +359,7 @@ describe('MessageList V5 Support', () => {
         };
 
         list.add(v4CoreMessage, 'response');
-        const v5Model = list.get.all.aiV5.model();
+        const v5Model = list.get.all.aiSdk.model();
 
         // TODO: This test is currently failing because tool-call parts
         // are converted to UI-style tool parts with 'input-available' state
@@ -381,13 +381,13 @@ describe('MessageList V5 Support', () => {
   });
 
   describe('AI SDK V5 API', () => {
-    describe('list.get.all.aiV5.*', () => {
+    describe('list.get.all.aiSdk.*', () => {
       it('model() should return AIV5 ModelMessages', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add('User message', 'input');
         list.add({ role: 'assistant', content: 'Assistant response' }, 'response');
 
-        const modelMessages = list.get.all.aiV5.model();
+        const modelMessages = list.get.all.aiSdk.model();
 
         expect(modelMessages).toHaveLength(2);
         expect(modelMessages[0].role).toBe('user');
@@ -404,7 +404,7 @@ describe('MessageList V5 Support', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add('User message', 'input');
 
-        const uiMessages = list.get.all.aiV5.ui();
+        const uiMessages = list.get.all.aiSdk.ui();
 
         expect(uiMessages).toHaveLength(1);
         expect(uiMessages[0].role).toBe('user');
@@ -461,7 +461,7 @@ describe('MessageList V5 Support', () => {
         list.addSystem('System prompt');
         list.add('User message', 'input');
 
-        const prompt = list.get.all.aiV5.prompt();
+        const prompt = list.get.all.aiSdk.prompt();
 
         expect(prompt).toHaveLength(2);
         expect(prompt[0]).toMatchObject({
@@ -477,7 +477,7 @@ describe('MessageList V5 Support', () => {
       it('prompt() should pass through empty message list unchanged', () => {
         const list = new MessageList({ threadId, resourceId });
 
-        const prompt = list.get.all.aiV5.prompt();
+        const prompt = list.get.all.aiSdk.prompt();
         expect(prompt).toHaveLength(0);
       });
 
@@ -485,7 +485,7 @@ describe('MessageList V5 Support', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add({ role: 'assistant', content: 'I am ready to help' }, 'response');
 
-        const prompt = list.get.all.aiV5.prompt();
+        const prompt = list.get.all.aiSdk.prompt();
 
         expect(prompt).toHaveLength(1);
         expect(prompt[0]).toMatchObject({
@@ -500,7 +500,7 @@ describe('MessageList V5 Support', () => {
         list.add('User input', 'input');
         list.add({ role: 'assistant', content: 'Response' }, 'response');
 
-        const llmPrompt = await list.get.all.aiV5.llmPrompt();
+        const llmPrompt = await list.get.all.aiSdk.llmPrompt();
 
         // llmPrompt returns messages array directly based on the implementation
         expect(Array.isArray(llmPrompt)).toBe(true);
@@ -518,7 +518,7 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
       list.add('Simple string message', 'input');
 
-      const v5Model = list.get.all.aiV5.model();
+      const v5Model = list.get.all.aiSdk.model();
 
       expect(v5Model[0].content).toEqual([expect.objectContaining({ type: 'text', text: 'Simple string message' })]);
     });
@@ -540,7 +540,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(v4CoreWithTool, 'response');
 
-      const v5Model = list.get.all.aiV5.model();
+      const v5Model = list.get.all.aiSdk.model();
       expect(v5Model[0].content).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -574,7 +574,7 @@ describe('MessageList V5 Support', () => {
         'user',
       );
 
-      const uiMessages = messageList.get.all.aiV5.ui();
+      const uiMessages = messageList.get.all.aiSdk.ui();
       expect(uiMessages).toHaveLength(1);
 
       const filePart = uiMessages[0].parts.find(p => p.type === 'file');
@@ -604,7 +604,7 @@ describe('MessageList V5 Support', () => {
         'user',
       );
 
-      const uiMessages = messageList.get.all.aiV5.ui();
+      const uiMessages = messageList.get.all.aiSdk.ui();
       const filePart = uiMessages[0].parts.find(p => p.type === 'file');
 
       if (filePart?.type === 'file') {
@@ -631,7 +631,7 @@ describe('MessageList V5 Support', () => {
         'user',
       );
 
-      const uiMessages = messageList.get.all.aiV5.ui();
+      const uiMessages = messageList.get.all.aiSdk.ui();
       const filePart = uiMessages[0].parts.find(p => p.type === 'file');
 
       if (filePart?.type === 'file') {
@@ -657,7 +657,7 @@ describe('MessageList V5 Support', () => {
         'user',
       );
 
-      const uiMessages = messageList.get.all.aiV5.ui();
+      const uiMessages = messageList.get.all.aiSdk.ui();
       const filePart = uiMessages[0].parts.find(p => p.type === 'file');
 
       if (filePart?.type === 'file') {
@@ -683,7 +683,7 @@ describe('MessageList V5 Support', () => {
         'user',
       );
 
-      const uiMessages = messageList.get.all.aiV5.ui();
+      const uiMessages = messageList.get.all.aiSdk.ui();
       const filePart = uiMessages[0].parts.find(p => p.type === 'file');
 
       if (filePart?.type === 'file') {
@@ -716,7 +716,7 @@ describe('MessageList V5 Support', () => {
       messageList.add(v2Message, 'user');
 
       // Get V5 UI messages (used for message processing)
-      const v5UiMessages = messageList.get.all.aiV5.ui();
+      const v5UiMessages = messageList.get.all.aiSdk.ui();
       const v5UiFilePart = v5UiMessages[0].parts.find((p: any) => p.type === 'file');
 
       if (v5UiFilePart?.type === 'file') {
@@ -737,7 +737,7 @@ describe('MessageList V5 Support', () => {
       }
 
       // Get V5 UI messages (used for AI SDK v5 output)
-      const v5UIMessages = messageList.get.all.aiV5.ui();
+      const v5UIMessages = messageList.get.all.aiSdk.ui();
       const v5FilePart = v5UIMessages[0].parts.find(p => p.type === 'file');
 
       // The URL should be in the url field, not wrapped as data URI
@@ -748,7 +748,7 @@ describe('MessageList V5 Support', () => {
       }
 
       // Get V5 Model messages (what gets sent to the LLM via AI SDK)
-      const v5ModelMessages = messageList.get.all.aiV5.model();
+      const v5ModelMessages = messageList.get.all.aiSdk.model();
       const v5ModelContent = v5ModelMessages[0].content;
 
       // Check the model message content
@@ -788,7 +788,7 @@ describe('MessageList V5 Support', () => {
         }).not.toThrow();
 
         // Verify the URL is properly handled
-        const v5UI = messageList.get.all.aiV5.ui();
+        const v5UI = messageList.get.all.aiSdk.ui();
         const filePart = v5UI[0].parts.find(p => p.type === 'file');
 
         if (filePart?.type === 'file') {
@@ -820,7 +820,7 @@ describe('MessageList V5 Support', () => {
           'user',
         );
 
-        const v5UI = messageList.get.all.aiV5.ui();
+        const v5UI = messageList.get.all.aiSdk.ui();
         const filePart = v5UI[0].parts.find(p => p.type === 'file');
 
         if (filePart?.type === 'file') {
@@ -863,7 +863,7 @@ describe('MessageList V5 Support', () => {
           'user',
         );
 
-        const v5UI = messageList.get.all.aiV5.ui();
+        const v5UI = messageList.get.all.aiSdk.ui();
         const fileParts = v5UI[0].parts.filter(p => p.type === 'file');
 
         // Should have all three file parts converted correctly
@@ -885,10 +885,10 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
 
       // Both v4 and v5 should pass through empty list
-      const v4Prompt = list.get.all.aiV5.prompt();
+      const v4Prompt = list.get.all.aiSdk.prompt();
       expect(v4Prompt).toHaveLength(0);
 
-      const v5Prompt = list.get.all.aiV5.prompt();
+      const v5Prompt = list.get.all.aiSdk.prompt();
       expect(v5Prompt).toHaveLength(0);
     });
 
@@ -904,8 +904,8 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
       list.add({ role: 'assistant', content: 'Assistant only' }, 'response');
 
-      const v4Prompt = list.get.all.aiV5.prompt();
-      const v5Prompt = list.get.all.aiV5.prompt();
+      const v4Prompt = list.get.all.aiSdk.prompt();
+      const v5Prompt = list.get.all.aiSdk.prompt();
 
       expect(v4Prompt.map(m => m.role)).toEqual(['assistant']);
       expect(v5Prompt.map(m => m.role)).toEqual(['assistant']);
@@ -939,7 +939,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(incompleteToolMessage, 'response');
 
-      const v5UI = list.get.all.aiV5.ui();
+      const v5UI = list.get.all.aiSdk.ui();
       // Find the tool part (may not be first)
       const toolPart = v5UI[0].parts.find(p => p.type && typeof p.type === 'string' && p.type.startsWith('tool-'));
 
@@ -978,7 +978,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(messageWithEmptyReasoning, 'response');
 
-      const v4Core = list.get.all.aiV5.model();
+      const v4Core = list.get.all.aiSdk.model();
       // Empty reasoning should be filtered out in conversion
       expect(v4Core[0].content).toHaveLength(1);
       expect(v4Core[0].content[0]).toMatchObject({
@@ -995,8 +995,8 @@ describe('MessageList V5 Support', () => {
       list.add('Second user message', 'input');
       list.add({ role: 'assistant', content: 'Second response' }, 'response');
 
-      const v4Core = list.get.all.aiV5.model();
-      const v5Model = list.get.all.aiV5.model();
+      const v4Core = list.get.all.aiSdk.model();
+      const v5Model = list.get.all.aiSdk.model();
 
       expect(v4Core).toHaveLength(4);
       expect(v5Model).toHaveLength(4);
@@ -1048,7 +1048,7 @@ describe('MessageList V5 Support', () => {
         expect(filePart?.providerMetadata).toEqual(providerMetadata);
 
         // Convert back to V5 UI and check providerMetadata is still there
-        const v5UIBack = list.get.all.aiV5.ui();
+        const v5UIBack = list.get.all.aiSdk.ui();
         expect(v5UIBack).toHaveLength(1);
         const v5FilePart = v5UIBack[0].parts.find(p => p.type === 'file');
         expect(v5FilePart).toBeDefined();
@@ -1089,7 +1089,7 @@ describe('MessageList V5 Support', () => {
         expect(textPart?.providerMetadata).toEqual(providerMetadata);
 
         // Convert back to V5 UI and check providerMetadata is still there
-        const v5UIBack = list.get.all.aiV5.ui();
+        const v5UIBack = list.get.all.aiSdk.ui();
         expect(v5UIBack).toHaveLength(1);
         const v5TextPart = v5UIBack[0].parts.find(p => p.type === 'text');
         expect(v5TextPart).toBeDefined();
@@ -1131,7 +1131,7 @@ describe('MessageList V5 Support', () => {
         expect(reasoningPart?.providerMetadata).toEqual(providerMetadata);
 
         // Convert back to V5 UI and check providerMetadata is still there
-        const v5UIBack = list.get.all.aiV5.ui();
+        const v5UIBack = list.get.all.aiSdk.ui();
         expect(v5UIBack).toHaveLength(1);
         const v5ReasoningPart = v5UIBack[0].parts.find(p => p.type === 'reasoning');
         expect(v5ReasoningPart).toBeDefined();
@@ -1176,19 +1176,14 @@ describe('MessageList V5 Support', () => {
         expect(toolPart?.providerMetadata).toEqual(callProviderMetadata);
 
         // Convert back to V5 UI and check callProviderMetadata is still there
-        const v5UIBack = list.get.all.aiV5.ui();
+        const v5UIBack = list.get.all.aiSdk.ui();
         expect(v5UIBack).toHaveLength(1);
         const v5ToolPart = v5UIBack[0].parts.find(p => p.type === 'tool-test_tool');
         expect(v5ToolPart).toBeDefined();
         if (!isToolUIPart(v5ToolPart!) || !(`callProviderMetadata` in v5ToolPart)) {
           throw new Error(`should be a tool part with callProviderMetadata`);
         }
-        expect(v5ToolPart?.callProviderMetadata).toEqual(
-          expect.objectContaining({
-            ...callProviderMetadata,
-            mastra: { createdAt: expect.any(Number) },
-          }),
-        );
+        expect(v5ToolPart?.callProviderMetadata).toEqual(callProviderMetadata);
       });
 
       it('should preserve providerMetadata on source-url parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
@@ -1223,7 +1218,7 @@ describe('MessageList V5 Support', () => {
         expect(sourcePart?.providerMetadata).toEqual(providerMetadata);
 
         // Convert back to V5 UI and check providerMetadata is still there
-        const v5UIBack = list.get.all.aiV5.ui();
+        const v5UIBack = list.get.all.aiSdk.ui();
         expect(v5UIBack).toHaveLength(1);
         const v5SourcePart = v5UIBack[0].parts.find(p => p.type === 'source-url');
         expect(v5SourcePart).toBeDefined();
@@ -1281,7 +1276,7 @@ describe('MessageList V5 Support', () => {
         expect(reasoningPart?.providerMetadata).toEqual(reasoningProviderMetadata);
 
         // Convert back to V5 UI and verify all metadata still there
-        const v5UIBack = list.get.all.aiV5.ui();
+        const v5UIBack = list.get.all.aiSdk.ui();
         const v5Parts = v5UIBack[0].parts;
 
         const v5TextPart = v5Parts.find(p => p.type === 'text');
@@ -1410,7 +1405,7 @@ describe('MessageList V5 Support', () => {
       list.add(originalMessage, 'response');
 
       // Convert back to V5 UI format
-      const v5Messages = list.get.all.aiV5.ui();
+      const v5Messages = list.get.all.aiSdk.ui();
       expect(v5Messages).toHaveLength(1);
 
       // Find the data-progress part in the converted message
@@ -1459,7 +1454,7 @@ describe('MessageList V5 Support', () => {
       list.add(toolResultMessage, 'response');
 
       // llmPrompt should use the stored modelOutput, not the raw result
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       expect(toolRole).toBeDefined();
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
@@ -1503,7 +1498,7 @@ describe('MessageList V5 Support', () => {
       list.add(toolResultMessage, 'response');
 
       // llmPrompt should use stored modelOutput
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output.type).toBe('text');
@@ -1552,13 +1547,13 @@ describe('MessageList V5 Support', () => {
       list.add(continuationMessage, 'input');
 
       // llmPrompt should surface the transformed multimodal output, not the raw json
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       expect(toolRole).toBeDefined();
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({
         type: 'content',
-        value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+        value: [{ type: 'file', data: { type: 'data', data: 'base64imagedata' }, mediaType: 'image/jpeg' }],
       });
 
       // Raw result should still be preserved in the stored messages
@@ -1572,7 +1567,7 @@ describe('MessageList V5 Support', () => {
       });
     });
 
-    it('translates tool-result media to image-data for v6 (spec v3) models', async () => {
+    it('translates image tool-result media to v7 file parts', async () => {
       const list = new MessageList({ threadId, resourceId });
 
       list.add('Take a screenshot', 'input');
@@ -1605,17 +1600,16 @@ describe('MessageList V5 Support', () => {
 
       list.add(continuationMessage, 'input');
 
-      // v6 (spec 'v3') providers only accept image-data/file-data, not media.
-      const prompt = await list.get.all.aiV6.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({
         type: 'content',
-        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+        value: [{ type: 'file', data: { type: 'data', data: 'base64imagedata' }, mediaType: 'image/jpeg' }],
       });
     });
 
-    it('translates non-image tool-result media to file-data for v6 (spec v3) models', async () => {
+    it('translates non-image tool-result media to v7 file parts', async () => {
       const list = new MessageList({ threadId, resourceId });
 
       list.add('Fetch a document', 'input');
@@ -1648,12 +1642,12 @@ describe('MessageList V5 Support', () => {
 
       list.add(continuationMessage, 'input');
 
-      const prompt = await list.get.all.aiV6.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({
         type: 'content',
-        value: [{ type: 'file-data', data: 'base64pdfdata', mediaType: 'application/pdf' }],
+        value: [{ type: 'file', data: { type: 'data', data: 'base64pdfdata' }, mediaType: 'application/pdf' }],
       });
     });
 
@@ -1700,7 +1694,7 @@ describe('MessageList V5 Support', () => {
       expect(toolPart.providerMetadata?.mastra?.modelOutput).toBeUndefined();
       expect(toolPart.toolInvocation.result.content[1].data).toBe('base64data');
 
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({
@@ -1756,7 +1750,7 @@ describe('MessageList V5 Support', () => {
         'response',
       );
 
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({ type: 'text', value: 'Explicit summary wins' });
@@ -1792,7 +1786,7 @@ describe('MessageList V5 Support', () => {
         'response',
       );
 
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({
@@ -1867,14 +1861,14 @@ describe('MessageList V5 Support', () => {
 
       list.add(toolResultMessage, 'response');
 
-      const modelToolMessage = list.get.all.aiV5.model().find(message => message.role === 'tool');
+      const modelToolMessage = list.get.all.aiSdk.model().find(message => message.role === 'tool');
       const modelToolResult = (modelToolMessage as any).content.find((part: any) => part.type === 'tool-result');
       expect(modelToolResult.output).toEqual({
         type: 'json',
         value: { displayName: 'Acme', apiKey: 'secret-value' },
       });
 
-      const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
+      const uiToolParts = list.get.all.aiSdk.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
       const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-transformed') as any;
       expect(uiToolPart.input).toEqual({ customerId: 'cus_123' });
       expect(uiToolPart.output).toEqual({ displayName: 'Acme' });
@@ -1994,7 +1988,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(toolResultMessage, 'response');
 
-      const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
+      const uiToolParts = list.get.all.aiSdk.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
       const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-transformed') as any;
       expect(uiToolPart.input).toBeNull();
       expect(uiToolPart.output).toBeNull();
@@ -2050,7 +2044,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(toolResultMessage, 'response');
 
-      const modelMessages = list.get.all.aiV5.model();
+      const modelMessages = list.get.all.aiSdk.model();
       const toolModelMessage = modelMessages.find(message => message.role === 'tool') as any;
       const toolModelPart = toolModelMessage.content.find((part: any) => part.type === 'tool-result');
       expect(toolModelPart.output).toEqual({
@@ -2119,7 +2113,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(multiToolMessage, 'response');
 
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRoles = prompt.filter(m => m.role === 'tool');
 
       const allToolResults = toolRoles.flatMap((m: any) => m.content.filter((p: any) => p.type === 'tool-result'));
@@ -2167,7 +2161,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(toolResultMessage, 'response');
 
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
 
@@ -2227,7 +2221,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(toolResultMessage, 'response');
 
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolResults = prompt
         .filter(m => m.role === 'tool')
         .flatMap((m: any) => m.content.filter((p: any) => p.type === 'tool-result'));

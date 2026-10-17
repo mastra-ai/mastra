@@ -1,5 +1,4 @@
 import type * as AIV5 from '@internal/ai-v7';
-import type * as AIV6 from '@internal/ai-v7';
 
 import type { MastraDBMessage, MessageListInput } from '../index';
 
@@ -12,9 +11,9 @@ import { MessageList } from '../index';
  * - `Mastra.V2` - Current database storage format
  * - `AIV5.UI` - AI SDK v5 UIMessage format (for frontend components)
  * - `AIV5.Model` - AI SDK v5 ModelMessage format (for LLM API calls)
- * - `AIV6.UI` - AI SDK v6 UIMessage format (for frontend components)
+ * - `AIV5.UI` - AI SDK v6 UIMessage format (for frontend components)
  */
-export type OutputFormat = 'Mastra.V2' | 'AIV5.UI' | 'AIV5.Model' | 'AIV6.UI';
+export type OutputFormat = 'Mastra.V2' | 'AIV5.UI' | 'AIV5.Model' | 'AIV5.UI';
 
 class MessageConverter {
   private messageList: MessageList;
@@ -46,21 +45,21 @@ class MessageConverter {
   to(format: 'AIV5.Model'): AIV5.ModelMessage[];
   /**
    * Convert messages to AI SDK v6 UIMessage format.
-   * @param format - The format 'AIV6.UI'
+   * @param format - The format 'AIV5.UI'
    * @returns Array of UIMessages for use with AI SDK v6 frontend components
    */
-  to(format: 'AIV6.UI'): AIV6.UIMessage[];
+  to(format: 'AIV5.UI'): AIV5.UIMessage[];
   to(format: OutputFormat): unknown[] {
     switch (format) {
       // Old format keys (backward compatibility)
       case 'Mastra.V2':
         return this.messageList.get.all.db();
       case 'AIV5.UI':
-        return this.messageList.get.all.aiV5.ui();
+        return this.messageList.get.all.aiSdk.ui();
       case 'AIV5.Model':
-        return this.messageList.get.all.aiV5.model();
-      case 'AIV6.UI':
-        return this.messageList.get.all.aiV6.ui();
+        return this.messageList.get.all.aiSdk.model();
+      case 'AIV5.UI':
+        return this.messageList.get.all.aiSdk.ui();
       default:
         throw new Error(`Unsupported output format: ${format}`);
     }

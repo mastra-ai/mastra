@@ -973,12 +973,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               model: currentModel,
               skipUnavailableAttachments,
             });
-            const llmPromptForModel =
-              currentModel.specificationVersion === 'v4'
-                ? messageList.get.all.aiV7.llmPrompt
-                : currentModel.specificationVersion === 'v3'
-                  ? messageList.get.all.aiV6.llmPrompt
-                  : messageList.get.all.aiV5.llmPrompt;
+            const llmPromptForModel = messageList.get.all.aiSdk.llmPrompt;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV4Prompt;
             // Identify OM's prompt message by its source ID and position before request
             // processors run. Equal text in real user messages is not synthetic context.
@@ -988,7 +983,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             if (continuationIndex !== -1) {
               const precedingMessages = createRunMessageList({ mastra });
               precedingMessages.add(dbMessages.slice(0, continuationIndex), 'input');
-              const precedingUserCount = precedingMessages.get.all.aiV5
+              const precedingUserCount = precedingMessages.get.all.aiSdk
                 .model()
                 .filter(message => message.role === 'user' && message.content.length > 0).length;
               omContinuationPrompt = inputMessages.filter(message => message.role === 'user')[precedingUserCount];

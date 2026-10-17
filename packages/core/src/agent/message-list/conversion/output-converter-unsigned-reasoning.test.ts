@@ -73,7 +73,7 @@ function shape(prompt: ReturnType<MessageList['get']['all']['aiV5']['prompt']>) 
 
 describe('unsigned reasoning from a dead step (#24558)', () => {
   it('drops the unsigned reasoning-only message and keeps the tool call/result pairs in order', () => {
-    const prompt = buildList(reasoning('step died before the signature arrived')).get.all.aiV5.prompt();
+    const prompt = buildList(reasoning('step died before the signature arrived')).get.all.aiSdk.prompt();
 
     expect(shape(prompt)).toEqual([
       { role: 'user', parts: ['text'] },
@@ -94,7 +94,7 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
   });
 
   it('drops unsigned reasoning in prompt-with-suspended mode but keeps it in response mode', () => {
-    const ui = buildList(reasoning('step died before the signature arrived')).get.all.aiV5.ui();
+    const ui = buildList(reasoning('step died before the signature arrived')).get.all.aiSdk.ui();
     const suspended = aiV5UIMessagesToAIV5ModelMessages(ui, [], 'prompt-with-suspended');
     const response = aiV5UIMessagesToAIV5ModelMessages(ui, [], 'response');
     expect(JSON.stringify(suspended)).not.toContain('step died before the signature arrived');
@@ -116,7 +116,7 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
     );
     list.add(userMessage('u2', 'again'), 'memory');
 
-    expect(roundTrip(list).get.all.aiV5.prompt()).toEqual([
+    expect(roundTrip(list).get.all.aiSdk.prompt()).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
       { role: 'user', content: [{ type: 'text', text: 'again' }] },
     ]);
@@ -134,7 +134,7 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
   ])('keeps a reasoning-only message carrying %s.%s in prompt mode', (namespace, key) => {
     const prompt = buildList(
       reasoning('replayable thinking', undefined, { [namespace]: { [key]: 'token' } }),
-    ).get.all.aiV5.prompt();
+    ).get.all.aiSdk.prompt();
 
     const kept = prompt.find(
       m =>

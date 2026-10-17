@@ -448,7 +448,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           await tool?.onInputAvailable?.({
             toolCallId: inputData.toolCallId,
             input: inputData.args,
-            messages: messageList.get.input.aiV5.model(),
+            messages: messageList.get.input.aiSdk.model(),
             abortSignal,
             context: undefined,
           });
@@ -812,8 +812,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
           // Regular tools retain the input-only context expected by the AI SDK tool contract.
           messages: isAgentTool
-            ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
-            : messageList.get.input.aiV5.model(),
+            ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiSdk.model())
+            : messageList.get.input.aiSdk.model(),
           getMessages: () => messageList.get.all.db(),
           outputWriter,
           // Pass current step span as parent for tool call spans

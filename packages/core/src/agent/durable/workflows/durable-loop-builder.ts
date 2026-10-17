@@ -663,7 +663,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           const list = createRunMessageList({ mastra: rt.mastra }).deserialize(
             (transcript ?? (await openMessageListState(params, state))).read(),
           );
-          deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+          deferredChunk.payload._durableResponseMessages = list.get.response.aiSdk.model();
         } catch (error) {
           rt.logger?.warn?.(`[DurableAgent] Could not rebuild step-finish messages: ${error}`);
         }

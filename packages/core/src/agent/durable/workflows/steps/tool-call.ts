@@ -1211,7 +1211,7 @@ export function createDurableToolCallStep() {
           await (tool as any).onInputAvailable({
             toolCallId,
             input: cleanedArgs,
-            messages: messageList ? messageList.get.input.aiV5.model() : [],
+            messages: messageList ? messageList.get.input.aiSdk.model() : [],
           });
         } catch (hookError) {
           logger?.error?.('Error calling onInputAvailable', hookError);
@@ -1266,12 +1266,12 @@ export function createDurableToolCallStep() {
           contextMessageList.get.all.db().filter(message => message.id !== 'om-continuation'),
           'input',
         );
-        delegationMessages = delegationList.get.all.aiV5.prompt();
+        delegationMessages = delegationList.get.all.aiSdk.prompt();
       }
 
       const toolOptionsWithoutWriter = {
         toolCallId,
-        messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
+        messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiSdk.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,

@@ -20,7 +20,7 @@ describe('createProcessorSendSignal visibility', () => {
     expect(boundary).toHaveBeenCalledOnce();
     expect(rotateResponseMessageId).toHaveBeenCalledOnce();
     expect(messageList.get.all.db()).toEqual([expect.objectContaining({ id: signal.id, role: 'signal' })]);
-    expect(JSON.stringify(messageList.get.all.aiV5.model())).toContain('Continue working');
+    expect(JSON.stringify(messageList.get.all.aiSdk.model())).toContain('Continue working');
   });
 
   it('does not mark a response boundary when no rotation is wired (issue #21940)', async () => {
@@ -49,6 +49,6 @@ describe('createProcessorSendSignal visibility', () => {
 
     expect(custom).toHaveBeenCalledExactlyOnceWith(signal.toDataPart());
     expect(messageList.get.all.db()).toEqual([expect.objectContaining({ id: signal.id, role: 'signal' })]);
-    expect(JSON.stringify(messageList.get.all.aiV5.model())).toContain('Visible signal');
+    expect(JSON.stringify(messageList.get.all.aiSdk.model())).toContain('Visible signal');
   });
 });

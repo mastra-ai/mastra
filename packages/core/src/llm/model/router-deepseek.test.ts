@@ -118,7 +118,7 @@ describe('DeepSeek router history compatibility', () => {
       const router = new ModelRouterLanguageModel({ id: 'deepseek/deepseek-flash', apiKey: 'test-key' });
       const list = history();
       const before = JSON.stringify(list.get.all.db());
-      const result = await router[method]({ prompt: await list.get.all.aiV5.llmPrompt(), tools });
+      const result = await router[method]({ prompt: await list.get.all.aiSdk.llmPrompt(), tools });
       const parts = await collect(result.stream);
 
       expect(requests[0]).toMatchObject({
@@ -183,7 +183,7 @@ describe('DeepSeek router history compatibility', () => {
         'memory',
       );
       restored.add({ role: 'user', content: 'One more question' }, 'input');
-      await collect((await router[method]({ prompt: await restored.get.all.aiV5.llmPrompt(), tools })).stream);
+      await collect((await router[method]({ prompt: await restored.get.all.aiSdk.llmPrompt(), tools })).stream);
       expect(requests[1]).toMatchObject({
         messages: expect.arrayContaining([
           expect.objectContaining({ role: 'assistant', content: 'Answer', reasoning_content: 'New thinking' }),
@@ -201,7 +201,7 @@ describe('DeepSeek router history compatibility', () => {
     async (type, reasoningEffort, expectedType, expectedEffort) => {
       const router = new ModelRouterLanguageModel({ id: 'deepseek/deepseek-flash', apiKey: 'test-key' });
       const result = await router.doGenerate({
-        prompt: await history().get.all.aiV5.llmPrompt(),
+        prompt: await history().get.all.aiSdk.llmPrompt(),
         providerOptions: { deepseek: { thinking: { type }, reasoningEffort } },
       });
       await collect(result.stream);

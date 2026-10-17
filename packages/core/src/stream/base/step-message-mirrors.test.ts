@@ -35,9 +35,9 @@ describe('step message mirrors', () => {
         response: {
           id: `res-${i}`,
           modelId: 'mock',
-          messages: messageList.get.response.aiV5.model(),
+          messages: messageList.get.response.aiSdk.model(),
           dbMessages: messageList.get.response.db(),
-          uiMessages: messageList.get.response.aiV5.ui(),
+          uiMessages: messageList.get.response.aiSdk.ui(),
         },
       };
     });

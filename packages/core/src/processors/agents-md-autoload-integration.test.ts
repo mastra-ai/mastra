@@ -177,7 +177,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     });
 
     // The AGENTS.md content should appear in the LLM prompt
-    const promptMessages = await messageList.get.all.aiV5.prompt();
+    const promptMessages = await messageList.get.all.aiSdk.prompt();
     const promptTexts = promptMessages.filter((m: any) => m.role === 'user').map((m: any) => extractPromptText(m));
 
     const hasAgentsMd = promptTexts.some(
@@ -598,7 +598,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     );
 
     // The AGENTS.md signal should still be visible in the prompt for step 2
-    const promptMessages = await messageList.get.all.aiV5.prompt();
+    const promptMessages = await messageList.get.all.aiSdk.prompt();
     const promptTexts = promptMessages.filter((m: any) => m.role === 'user').map((m: any) => extractPromptText(m));
 
     const hasAgentsMd = promptTexts.some(

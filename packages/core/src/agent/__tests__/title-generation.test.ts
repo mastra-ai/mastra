@@ -2479,7 +2479,7 @@ function titleGenerationTests(version: 'v2') {
     });
 
     it('should handle file parts after .ui() conversion uses url/mediaType (regression)', async () => {
-      // Verify that MessageList.aiV5.ui() converts core-format file parts (data/mimeType)
+      // Verify that MessageList.aiSdk.ui() converts core-format file parts (data/mimeType)
       // into UI-format (url/mediaType), which is what generateTitleFromUserMessage
       // iterates over. The original bug was that the code read part.data/part.mimeType
       // on UI-format parts where those properties are undefined.
@@ -2495,7 +2495,7 @@ function titleGenerationTests(version: 'v2') {
           },
           'user',
         )
-        .get.all.aiV5.ui()
+        .get.all.aiSdk.ui()
         .at(-1);
 
       expect(uiMessage).toBeDefined();

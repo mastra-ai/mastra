@@ -935,7 +935,7 @@ describe('TokenLimiterProcessor', () => {
       messageList: MessageList,
       systemMessages: Array<{ role: 'system'; content: string }> = [],
     ) => {
-      const prompt = [...systemMessages, ...(await messageList.get.all.aiV5.llmPrompt())] as LanguageModelV4Prompt;
+      const prompt = [...systemMessages, ...(await messageList.get.all.aiSdk.llmPrompt())] as LanguageModelV4Prompt;
 
       return limiter.processLLMRequest({
         prompt,
@@ -1422,7 +1422,7 @@ describe('TokenLimiterProcessor', () => {
           role: 'system' as const,
           content: typeof message.content === 'string' ? message.content : '',
         })),
-        ...(await messageList.get.all.aiV5.llmPrompt()),
+        ...(await messageList.get.all.aiSdk.llmPrompt()),
       ] as LanguageModelV4Prompt;
 
       await expect(

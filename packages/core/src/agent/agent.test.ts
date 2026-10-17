@@ -2028,7 +2028,7 @@ describe('Agent Tests', () => {
     messageList.add(emptyAssistant_Core, 'memory');
     messageList.add(userMessage_Core, 'memory');
 
-    const finalCoreMessages = await messageList.get.all.aiV5.llmPrompt();
+    const finalCoreMessages = await messageList.get.all.aiSdk.llmPrompt();
 
     // Expected:
     // 1. Assistant message with tool-1 call.
@@ -2064,7 +2064,7 @@ describe('Agent Tests', () => {
 
   it('should properly sanitize incomplete tool calls from memory messages', async () => {
     const messageList = new MessageList();
-    // Original CoreMessages for context, but we'll test the output of list.get.all.aiV5.model()
+    // Original CoreMessages for context, but we'll test the output of list.get.all.aiSdk.model()
     const toolResultOne_Core: CoreMessage = {
       role: 'tool',
       content: [
@@ -2093,7 +2093,7 @@ describe('Agent Tests', () => {
     messageList.add(toolResultTwo_Core, 'memory');
     messageList.add(toolCallThree_Core, 'memory');
 
-    const finalCoreMessages = await messageList.get.all.aiV5.llmPrompt();
+    const finalCoreMessages = await messageList.get.all.aiSdk.llmPrompt();
 
     // Expected: toolCallThree (orphaned assistant call) should be gone.
     // toolResultOne assumes the tool call was completed, so should be present

@@ -44,7 +44,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       },
     ];
 
-    const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+    const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     // The order should be preserved: msg-1, msg-2, msg-3, msg-4
     expect(result).toHaveLength(4);
@@ -71,7 +71,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
 
     // Run multiple times to catch non-deterministic behavior
     for (let run = 0; run < 10; run++) {
-      const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+      const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
       expect(result).toHaveLength(messageCount);
       for (let i = 0; i < messageCount; i++) {
@@ -111,7 +111,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
     ];
 
     // This mimics what toAISdkV5Messages does
-    const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+    const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     // Verify exact order preservation
     expect(result.map(m => m.id)).toEqual(['first', 'second', 'third', 'fourth']);
@@ -130,7 +130,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       { id: 'c1', role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'C1' }] }, createdAt: time3 },
     ];
 
-    const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+    const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     // Messages should be in order: sorted by timestamp, then by original order for equal timestamps
     expect(result.map(m => m.id)).toEqual(['a1', 'a2', 'b1', 'b2', 'c1']);
@@ -216,7 +216,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
     ];
 
     // This is what toAISdkV5Messages does
-    const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+    const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     // Expected order:
     // 1. user: "hello"
@@ -271,7 +271,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       },
     ];
 
-    const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+    const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     expect(result).toHaveLength(4);
 
@@ -317,7 +317,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         },
       ];
 
-      const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+      const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
       expect(result).toHaveLength(3);
 
@@ -367,7 +367,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         },
       ];
 
-      const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+      const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
       // Messages should be sorted by their timestamps
       const texts = result.map(m => {
@@ -397,7 +397,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         },
       ];
 
-      const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+      const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
       expect(result).toHaveLength(3);
 
@@ -435,7 +435,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         'memory',
       );
 
-      list.get.all.aiV5.prompt();
+      list.get.all.aiSdk.prompt();
       list.add({ role: 'user', content: 'Generated timestamp after prompt conversion' }, 'input');
 
       const generatedMessage = list.get.all.db().at(-1);
@@ -614,7 +614,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         },
       ];
 
-      const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+      const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('ui-msg-1');
@@ -708,7 +708,7 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
         },
       ];
 
-      const result = new MessageList().add(messages, 'memory').get.all.aiV5.ui();
+      const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
       expect(result).toHaveLength(4);
 

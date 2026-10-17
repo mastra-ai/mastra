@@ -457,7 +457,7 @@ describe('Memory', () => {
         });
 
         const { messages } = await saveMemory.recall({ threadId: thread.id, resourceId: 'resource-1' });
-        const prompt = new MessageList().add(messages, 'memory').get.all.aiV5.prompt();
+        const prompt = new MessageList().add(messages, 'memory').get.all.aiSdk.prompt();
 
         expect(prompt.map(message => message.role)).toEqual(['user', 'assistant']);
         const assistant = prompt[1]!;
@@ -508,7 +508,7 @@ describe('Memory', () => {
           });
 
           const { messages } = await saveMemory.recall({ threadId: thread.id, resourceId: 'resource-1' });
-          const prompt = new MessageList().add(messages, 'memory').get.all.aiV5.prompt();
+          const prompt = new MessageList().add(messages, 'memory').get.all.aiSdk.prompt();
           const assistants = prompt.filter(message => message.role === 'assistant');
 
           expect(JSON.stringify(prompt)).not.toContain('updateWorkingMemory');
@@ -2558,7 +2558,7 @@ describe('Memory', () => {
       const list = new MessageList({ threadId, resourceId }).add(loadedMessages, 'memory');
 
       // llmPrompt should use the stored modelOutput — no tools needed
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const toolResult = prompt.flatMap((m: any) => m.content).find((p: any) => p.type === 'tool-result');
       expect(toolResult).toBeDefined();
       expect(toolResult.output).toEqual({

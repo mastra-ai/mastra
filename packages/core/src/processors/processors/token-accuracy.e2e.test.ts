@@ -37,7 +37,7 @@ describe('TokenLimiterProcessor', () => {
       messageList.add(msg, 'input');
     }
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     const result = await limiter.processLLMRequest({
       prompt,
       model: { modelId: 'test-model' } as any,
@@ -101,7 +101,7 @@ describe('TokenLimiterProcessor', () => {
       messageList.add(msg, 'input');
     }
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     const result = await limiter.processLLMRequest({
       prompt,
       model: { modelId: 'test-model' } as any,
@@ -309,7 +309,7 @@ describe('TokenLimiterProcessor', () => {
 
 describe('ToolCallFilter', () => {
   const runFilter = async (filter: ToolCallFilter, messageList: MessageList) => {
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     const result = await filter.processLLMRequest?.({
       prompt,
       model: 'test-model' as any,
@@ -369,7 +369,7 @@ describe('ToolCallFilter', () => {
       toolNames: ['weather', 'calculator'],
     });
     const messageList = new MessageList().add(messagesV2, 'memory');
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const result = await runFilter(new ToolCallFilter({ exclude: [] }), messageList);
 

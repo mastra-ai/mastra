@@ -56,7 +56,7 @@ describe('MessageList - Anthropic empty tool input issue (#11376)', () => {
     );
 
     // Step 4: Convert messages to AIV5 model format (what gets sent to LLM)
-    const modelMessages = messageList.get.all.aiV5.model();
+    const modelMessages = messageList.get.all.aiSdk.model();
 
     // Find the tool-result message (should be role 'tool')
     const toolResultMsg = modelMessages.find(msg => msg.role === 'tool');
@@ -123,7 +123,7 @@ describe('MessageList - Anthropic empty tool input issue (#11376)', () => {
     );
 
     // Convert to AIV5 model format
-    const modelMessages = messageList.get.all.aiV5.model();
+    const modelMessages = messageList.get.all.aiSdk.model();
 
     const toolResultMsg = modelMessages.find(msg => msg.role === 'tool');
 
@@ -217,7 +217,7 @@ describe('MessageList - Anthropic empty tool input issue (#11376)', () => {
     );
 
     // Convert to AIV5 model format
-    const modelMessages = messageList.get.all.aiV5.model();
+    const modelMessages = messageList.get.all.aiSdk.model();
 
     // Find all tool-result messages
     const toolResultMessages = modelMessages.filter(msg => msg.role === 'tool');

@@ -72,7 +72,7 @@ describe('AIV6Adapter — suspended tool state rehydration', () => {
 
   it('includes the part in MessageList v6 and v7 UI output', () => {
     const list = new MessageList().add(createMessage(), 'memory');
-    for (const messages of [list.get.all.aiV6.ui(), list.get.all.aiV7.ui()]) {
+    for (const messages of [list.get.all.aiSdk.ui(), list.get.all.aiSdk.ui()]) {
       expect(messages[0]!.parts.filter(p => p.type === 'data-tool-call-suspended')).toHaveLength(1);
     }
   });

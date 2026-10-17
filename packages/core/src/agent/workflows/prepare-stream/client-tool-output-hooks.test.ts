@@ -618,7 +618,7 @@ describe('applyClientToolModelOutput', () => {
   }
 
   async function toolResultPromptOutput(messageList: MessageList, toolCallId: string): Promise<unknown> {
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     for (const message of prompt) {
       if (message.role !== 'tool') continue;
       for (const part of message.content) {

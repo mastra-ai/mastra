@@ -21,7 +21,7 @@ describe('MessageList AI SDK v6 support', () => {
     it('omits an opening empty reasoning part instead of throwing', () => {
       const message = emptyReasoningMessage('opening-reasoning', [{ type: 'reasoning', reasoning: '', details: [] }]);
 
-      const result = new MessageList().add(message, 'memory').get.all.aiV6.ui();
+      const result = new MessageList().add(message, 'memory').get.all.aiSdk.ui();
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ id: 'opening-reasoning', role: 'assistant', parts: [] });
@@ -39,7 +39,7 @@ describe('MessageList AI SDK v6 support', () => {
           ]),
           'memory',
         )
-        .get.all.aiV6.ui();
+        .get.all.aiSdk.ui();
 
       expect(result[0]?.parts).toEqual([
         { type: 'text', text: 'Before' },
@@ -50,7 +50,7 @@ describe('MessageList AI SDK v6 support', () => {
     it('omits a reasoning part with no details key at all', () => {
       const result = new MessageList()
         .add(emptyReasoningMessage('no-details', [{ type: 'reasoning', reasoning: '' } as any]), 'memory')
-        .get.all.aiV6.ui();
+        .get.all.aiSdk.ui();
 
       expect(result).toHaveLength(1);
       expect(result[0]?.parts).toEqual([]);
@@ -73,8 +73,8 @@ describe('MessageList AI SDK v6 support', () => {
       );
 
       // one bad part previously threw for the entire list, returning no messages at all
-      expect(list.get.all.aiV6.ui()).toHaveLength(list.get.all.aiV5.ui().length);
-      expect(list.get.all.aiV6.ui().map(m => m.id)).toEqual(['user-1', 'assistant-1', 'assistant-2', 'assistant-3']);
+      expect(list.get.all.aiSdk.ui()).toHaveLength(list.get.all.aiSdk.ui().length);
+      expect(list.get.all.aiSdk.ui().map(m => m.id)).toEqual(['user-1', 'assistant-1', 'assistant-2', 'assistant-3']);
     });
 
     it('keeps reasoning metadata and tool approvals when an empty reasoning part is omitted', () => {
@@ -101,7 +101,7 @@ describe('MessageList AI SDK v6 support', () => {
           ]),
           'memory',
         )
-        .get.all.aiV6.ui();
+        .get.all.aiSdk.ui();
 
       const parts = result[0]?.parts ?? [];
       expect(parts).toContainEqual(
@@ -116,7 +116,7 @@ describe('MessageList AI SDK v6 support', () => {
     it('omits an empty reasoning part on the v7 projection too', () => {
       const result = new MessageList()
         .add(emptyReasoningMessage('v7-reasoning', [{ type: 'reasoning', reasoning: '', details: [] }]), 'memory')
-        .get.all.aiV7.ui();
+        .get.all.aiSdk.ui();
 
       expect(result).toHaveLength(1);
       expect(result[0]?.parts).toEqual([]);
@@ -130,7 +130,7 @@ describe('MessageList AI SDK v6 support', () => {
           ]),
           'memory',
         )
-        .get.all.aiV6.ui();
+        .get.all.aiSdk.ui();
 
       expect(result[0]?.parts).toEqual([expect.objectContaining({ type: 'reasoning', text: '' })]);
     });
@@ -152,7 +152,7 @@ describe('MessageList AI SDK v6 support', () => {
       },
     ];
 
-    const result = new MessageList().add(messages, 'memory').get.all.aiV6.ui();
+    const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
 
     expectTypeOf(result).toEqualTypeOf<UIMessageV6[]>();
     expect(result).toHaveLength(2);
@@ -185,7 +185,7 @@ describe('MessageList AI SDK v6 support', () => {
     ];
 
     const list = new MessageList().add(messages, 'memory');
-    const result = list.get.all.aiV6.ui();
+    const result = list.get.all.aiSdk.ui();
 
     expect(result[0]?.parts).toMatchObject([
       {
@@ -231,7 +231,7 @@ describe('MessageList AI SDK v6 support', () => {
       'memory',
     );
 
-    expect(list.get.all.aiV6.ui()[0]?.parts.map(part => part.type)).toEqual([
+    expect(list.get.all.aiSdk.ui()[0]?.parts.map(part => part.type)).toEqual([
       'text',
       'source-document',
       'tool-search',
@@ -265,7 +265,7 @@ describe('MessageList AI SDK v6 support', () => {
       'memory',
     );
 
-    expect(list.get.all.aiV6.ui()[0]?.parts).toMatchObject([
+    expect(list.get.all.aiSdk.ui()[0]?.parts).toMatchObject([
       {
         type: 'source-document',
         sourceId: 'doc-1',
@@ -503,7 +503,7 @@ describe('MessageList AI SDK v6 support', () => {
       },
     ];
 
-    const result = new MessageList().add(messages, 'response').get.all.aiV6.ui();
+    const result = new MessageList().add(messages, 'response').get.all.aiSdk.ui();
 
     expect(result[0]?.parts).toMatchObject([
       {
@@ -556,7 +556,7 @@ describe('MessageList AI SDK v6 support', () => {
       'response',
     );
 
-    const result = list.get.all.aiV6.ui();
+    const result = list.get.all.aiSdk.ui();
     const approvalResponsePart = result
       .flatMap(message => message.parts)
       .find(part => AIV6.isToolUIPart(part) && part.state === 'approval-responded');
@@ -600,7 +600,7 @@ describe('MessageList AI SDK v6 support', () => {
       },
     };
 
-    const uiMessage = new MessageList().add([toolResultMessage], 'memory').get.all.aiV6.ui()[0]!;
+    const uiMessage = new MessageList().add([toolResultMessage], 'memory').get.all.aiSdk.ui()[0]!;
     const toolUIPart = uiMessage.parts.find(part => AIV6.isToolUIPart(part)) as any;
 
     // Stored modelOutput travels on the v6 UI part as callProviderMetadata
@@ -740,7 +740,7 @@ describe('MessageList AI SDK v6 support', () => {
       },
     ];
 
-    const result = new MessageList().add(messages, 'memory').get.all.aiV6.ui();
+    const result = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
     const toolParts = result[0]?.parts.filter(part => AIV6.isToolUIPart(part)) ?? [];
 
     expect(toolParts).toHaveLength(1);
@@ -837,7 +837,7 @@ describe('MessageList AI SDK v6 support', () => {
       'response',
     );
 
-    const approvalResponsePart = list.get.all.aiV6
+    const approvalResponsePart = list.get.all.aiSdk
       .ui()
       .flatMap(message => message.parts)
       .find(part => AIV6.isToolUIPart(part) && part.state === 'approval-responded');
@@ -889,7 +889,7 @@ describe('MessageList AI SDK v6 support', () => {
     expect(
       new MessageList()
         .add(messages, 'memory')
-        .get.all.aiV6.ui()[0]
+        .get.all.aiSdk.ui()[0]
         ?.parts.map(part => part.type),
     ).toEqual(['source-url', 'data-custom']);
   });

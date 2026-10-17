@@ -250,31 +250,6 @@ function isRemoteUrl(data: string): boolean {
   return /^https?:\/\//i.test(data);
 }
 
-/**
- * Convert v5-authored media tool results to the `image-data`/`file-data` shape
- * expected only by AI SDK v6 (`v3`) providers. V5 providers accept `media`, and
- * V7 providers expect `file` parts with tagged data instead. `image-url` and
- * `file-url` parts are natively valid V3 tool-result content and pass through
- * unchanged; legacy `media` parts carrying a remote URL are healed into them.
- *
- * See: https://github.com/mastra-ai/mastra/issues/17876 and
- * https://github.com/mastra-ai/mastra/issues/22618
- */
-export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV4Prompt): LanguageModelV4Prompt {
-  return convertToolResultContent(prompt, (contentPart, partType, mediaType) => {
-    if (partType !== `media`) return contentPart;
-    const isImage = mediaType.startsWith(`image/`);
-    const data = contentPart.data as string;
-    const remoteUrl = isRemoteUrl(data) ? parseUrl(data) : undefined;
-    if (remoteUrl) {
-      const rest = { ...contentPart };
-      delete rest.data;
-      return { ...rest, type: isImage ? `image-url` : `file-url`, url: data };
-    }
-    return { ...contentPart, type: isImage ? `image-data` : `file-data`, mediaType };
-  });
-}
-
 // V4 file parts carry `url: URL`. Unparseable strings pass through so a bad
 // tool output reaches the provider instead of throwing mid-request.
 function parseUrl(url: unknown): URL | undefined {

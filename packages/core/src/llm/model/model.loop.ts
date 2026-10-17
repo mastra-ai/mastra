@@ -171,7 +171,7 @@ export class MastraLLMVNext extends MastraBase {
       stopWhenToUse = stopWhen ?? llmStepCountIs(5);
     }
 
-    const messages = messageList.get.all.aiV5.model();
+    const messages = messageList.get.all.aiSdk.model();
 
     const firstModel = this.#firstModel.model;
 

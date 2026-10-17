@@ -2009,11 +2009,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -2201,11 +2196,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
                   "value": "value",
                 },
                 "providerExecuted": undefined,
-                "providerOptions": {
-                  "mastra": {
-                    "createdAt": 1704067200000,
-                  },
-                },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",

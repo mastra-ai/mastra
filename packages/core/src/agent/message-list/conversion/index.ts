@@ -1,4 +1,4 @@
-export { aiV5ModelMessageToV2PromptMessage, aiV5PromptToAIV6Prompt, aiV5PromptToAIV7Prompt } from './to-prompt';
+export { aiV5ModelMessageToV2PromptMessage, aiV5PromptToAIV7Prompt } from './to-prompt';
 export { coreContentToString, messagesAreEqual } from './utils';
 export {
   inputToMastraDBMessage,
