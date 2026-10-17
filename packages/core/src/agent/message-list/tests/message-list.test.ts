@@ -1,4 +1,4 @@
-import type { ModelMessage as CoreMessage, UIMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage as CoreMessage, UIMessage } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage, UIMessageWithMetadata } from '../';
 import type { MastraMessageV1 } from '../../../memory';

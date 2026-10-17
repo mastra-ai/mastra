@@ -1,11 +1,11 @@
 import type {
-  LanguageModelV2CallOptions,
-  LanguageModelV2FunctionTool,
-  LanguageModelV2ProviderDefinedTool,
-} from '@ai-sdk/provider-v5';
-import { stepCountIs, tool } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-sdk-v5/test';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+  LanguageModelV4CallOptions,
+  LanguageModelV4FunctionTool,
+  LanguageModelV4ProviderTool,
+} from '@ai-sdk/provider';
+import { stepCountIs, tool } from '@internal/ai-v7';
+import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-v7/test';
+import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';
@@ -102,7 +102,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 throw new Error('test error');
               },
@@ -138,7 +138,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async ({ providerOptions }) => {
                 expect(providerOptions).toStrictEqual({
                   aProvider: { someKey: 'someValue' },
@@ -179,7 +179,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     it('should filter available tools to only the ones in activeTools', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      let tools: (LanguageModelV2FunctionTool | LanguageModelV2ProviderDefinedTool)[] | undefined;
+      let tools: (LanguageModelV4FunctionTool | LanguageModelV4ProviderTool)[] | undefined;
 
       const result = await loopFn({
         methodType: 'stream',
@@ -188,7 +188,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async ({ tools: toolsArg }) => {
                 tools = toolsArg;
 
@@ -280,7 +280,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               id: 'test-model',
               maxRetries: 0,
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doStream: async ({ prompt, tools, toolChoice }) => {
                   stepInputs.push({ prompt, tools, toolChoice });
 
@@ -2484,7 +2484,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
     describe('2 steps: initial, tool-result with prepareStep', () => {
       let result: any;
-      let doStreamCalls: Array<LanguageModelV2CallOptions>;
+      let doStreamCalls: Array<LanguageModelV4CallOptions>;
       let prepareStepCalls: Array<{
         model: {
           modelId: string;
@@ -2509,7 +2509,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               id: 'test-model',
               maxRetries: 0,
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doStream: async options => {
                   doStreamCalls.push(options);
                   switch (doStreamCalls.length) {
@@ -3145,7 +3145,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     //     result = await loopFn({
     //   methodType: 'stream',
     //       runId,
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doStream: async ({ prompt, tools, toolChoice }) => {
     //           switch (responseCount++) {
     //             case 0: {
@@ -4130,7 +4130,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               id: 'test-model',
               maxRetries: 0,
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doStream: async () => {
                   switch (responseCount++) {
                     case 0: {
@@ -5051,7 +5051,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 throw new Error('test error');
               },
@@ -5189,7 +5189,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 switch (responseCount++) {
                   case 0:
@@ -6741,10 +6741,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //     describe('object output', () => {
   //       it('should set responseFormat to json and send schema as part of the responseFormat', async () => {
-  //         let callOptions!: LanguageModelV2CallOptions;
+  //         let callOptions!: LanguageModelV4CallOptions;
 
   //         const result = streamText({
-  //           model: new MockLanguageModelV2({
+  //           model: new MockLanguageModelV4({
   //             doStream: async args => {
   //               callOptions = args;
   //               return {
@@ -7090,7 +7090,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //   describe.skip('options.messages', () => {
   //     it('should support models that use "this" context in supportedUrls', async () => {
   //       let supportedUrlsCalled = false;
-  //       class MockLanguageModelWithImageSupport extends MockLanguageModelV2 {
+  //       class MockLanguageModelWithImageSupport extends MockLanguageModelV4 {
   //         constructor() {
   //           super({
   //             supportedUrls() {
@@ -7242,7 +7242,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         {
           id: 'test-model',
           maxRetries: 0,
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doStream: async options => {
               capturedOptions = options;
 
@@ -7405,7 +7405,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         {
           id: 'test-model',
           maxRetries: 0,
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doStream: async options => {
               capturedOptions = options;
               return {
@@ -8222,7 +8222,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               id: 'test-model',
               maxRetries: 0,
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doStream: async () => ({
                   stream: new ReadableStream({
                     async pull(controller) {
@@ -8431,7 +8431,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               id: 'test-model',
               maxRetries: 0,
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doStream: async () => ({
                   stream: new ReadableStream({
                     start() {

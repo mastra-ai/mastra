@@ -1,13 +1,9 @@
 import { createHmac } from 'node:crypto';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
-import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
-import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createOpenAI } from '@ai-sdk/openai';
+import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { attachModelStreamTransport } from '../../stream/types';
 import type { StreamTransport } from '../../stream/types';
-import { AISDKV5LanguageModel } from './aisdk/v5/model';
-import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { AISDKV7LanguageModel } from './aisdk/v7/model';
 import { MASTRA_GATEWAY_STREAM_TRANSPORT } from './gateways/base.js';
 import type {
@@ -25,22 +21,16 @@ import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAITransport, ProviderOptions, ResponsesWebSocketOptions } from './provider-options.js';
 import type { ModelRouterModelId } from './provider-registry.js';
 import { modelSupportsTemperature } from './provider-registry.js';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
+import type { MastraLanguageModelV4, OpenAICompatibleConfig } from './shared.types';
 
 export { defaultGateways, gateways } from './gateways/defaults.js';
 
-/**
- * Type guard to check if a model is a LanguageModelV4 (AI SDK v7)
- */
-function isLanguageModelV4(model: GatewayLanguageModel): model is LanguageModelV4 {
-  return model.specificationVersion === 'v4';
-}
-
-/**
- * Type guard to check if a model is a LanguageModelV3 (AI SDK v6)
- */
-function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV3 {
-  return model.specificationVersion === 'v3';
+function assertLanguageModelV4(model: GatewayLanguageModel): asserts model is LanguageModelV4 {
+  if (model.specificationVersion !== 'v4') {
+    throw new Error(
+      `Gateway returned a model with specificationVersion "${model.specificationVersion}". Mastra requires AI SDK v7 providers (specificationVersion "v4").`,
+    );
+  }
 }
 
 const OPENAI_WS_ALLOWLIST = new Set(['openai']);
@@ -106,10 +96,10 @@ function mergeHeaders(
   return { ...baseHeaders, ...authHeaders };
 }
 
-type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
+type StreamResult = Awaited<ReturnType<LanguageModelV4['doStream']>>;
 
-export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
-  readonly specificationVersion = 'v2' as const;
+export class ModelRouterLanguageModel implements MastraLanguageModelV4 {
+  readonly specificationVersion = 'v4' as const;
   readonly defaultObjectGenerationMode = 'json' as const;
   readonly supportsStructuredOutputs = true;
   readonly supportsImageUrls = true;
@@ -290,7 +280,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
    * into telemetry backends.
    */
   serializeForSpan(): {
-    specificationVersion: 'v2';
+    specificationVersion: 'v4';
     modelId: string;
     provider: string;
     gatewayId: string;
@@ -381,7 +371,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     this.setStreamTransportHandle({ resolvedTransport, transport, responsesWebSocket });
   }
 
-  private stripUnsupportedSamplingParams(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+  private stripUnsupportedSamplingParams(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
     const supports = modelSupportsTemperature(this.config.routerId);
     if (supports !== false) return options;
 
@@ -390,7 +380,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return rest;
   }
 
-  async doGenerate(options: LanguageModelV2CallOptions): Promise<StreamResult> {
+  async doGenerate(options: LanguageModelV4CallOptions): Promise<StreamResult> {
     const resolved = this.#manager.resolveModelId(this.config.routerId);
     let auth: GatewayAuthResult;
     try {
@@ -405,7 +395,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
             controller.enqueue({
               type: 'error',
               error: error,
-            } as LanguageModelV2StreamPart);
+            } as LanguageModelV4StreamPart);
             controller.close();
           },
         }),
@@ -421,20 +411,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       ...resolved,
     });
 
-    // Handle V2, V3, and V4 models
-    if (isLanguageModelV4(model)) {
-      const aiSDKV7Model = new AISDKV7LanguageModel(model);
-      return aiSDKV7Model.doGenerate(sanitizedOptions as any) as unknown as Promise<StreamResult>;
-    }
-    if (isLanguageModelV3(model)) {
-      const aiSDKV6Model = new AISDKV6LanguageModel(model);
-      return aiSDKV6Model.doGenerate(sanitizedOptions as any) as unknown as Promise<StreamResult>;
-    }
-    const aiSDKV5Model = new AISDKV5LanguageModel(model);
-    return aiSDKV5Model.doGenerate(sanitizedOptions);
+    assertLanguageModelV4(model);
+    return new AISDKV7LanguageModel(model).doGenerate(sanitizedOptions);
   }
 
-  async doStream(options: LanguageModelV2CallOptions): Promise<StreamResult> {
+  async doStream(options: LanguageModelV4CallOptions): Promise<StreamResult> {
     // Validate API key and return error stream if validation fails
     const resolved = this.#manager.resolveModelId(this.config.routerId);
     let auth: GatewayAuthResult;
@@ -450,7 +431,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
             controller.enqueue({
               type: 'error',
               error: error,
-            } as LanguageModelV2StreamPart);
+            } as LanguageModelV4StreamPart);
             controller.close();
           },
         }),
@@ -480,25 +461,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       ...resolved,
     });
 
-    // Handle V2, V3, and V4 models
-    const streamTransport = this.#lastStreamTransport;
-    if (isLanguageModelV4(model)) {
-      const aiSDKV7Model = new AISDKV7LanguageModel(model);
-      // Cast V4 stream result to V2 format - the stream contents are compatible at runtime
-      const streamResult = (await aiSDKV7Model.doStream(sanitizedOptions as any)) as unknown as StreamResult;
-      attachModelStreamTransport(streamResult, streamTransport);
-      return streamResult;
-    }
-    if (isLanguageModelV3(model)) {
-      const aiSDKV6Model = new AISDKV6LanguageModel(model);
-      // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      const streamResult = (await aiSDKV6Model.doStream(sanitizedOptions as any)) as unknown as StreamResult;
-      attachModelStreamTransport(streamResult, streamTransport);
-      return streamResult;
-    }
-    const aiSDKV5Model = new AISDKV5LanguageModel(model);
-    const streamResult = await aiSDKV5Model.doStream(sanitizedOptions);
-    attachModelStreamTransport(streamResult, streamTransport);
+    assertLanguageModelV4(model);
+    const streamResult = await new AISDKV7LanguageModel(model).doStream(sanitizedOptions);
+    attachModelStreamTransport(streamResult, this.#lastStreamTransport);
     return streamResult;
   }
 

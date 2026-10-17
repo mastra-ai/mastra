@@ -13,7 +13,7 @@
  * up as a size/duplication change rather than a production OOM.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -30,7 +30,7 @@ import { createEventedAgent } from '../create-evented-agent';
  */
 function createLoopingModel(toolIterations: number, toolName: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount += 1;
       const stream =

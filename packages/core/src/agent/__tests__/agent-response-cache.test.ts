@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraServerCache } from '../../cache';
 import { MockMemory } from '../../memory/mock';
@@ -7,7 +7,7 @@ import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function createRecordingModel(modelId: string, responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     modelId,
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -162,7 +162,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
     });
 
     it('does not cache failed runs (errors are not replayed)', async () => {
-      const failingModel = new MockLanguageModelV2({
+      const failingModel = new MockLanguageModelV4({
         modelId: 'failing',
         doGenerate: async () => {
           throw new Error('boom');

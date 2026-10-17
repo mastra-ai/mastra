@@ -6,8 +6,8 @@
  * is handled correctly in various formats.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -21,7 +21,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a simple text model
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -71,7 +71,7 @@ describe('DurableAgent UIMessage handling', () => {
         id: 'uimessage-agent',
         name: 'UIMessage Agent',
         instructions: 'Process messages with metadata.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -99,7 +99,7 @@ describe('DurableAgent UIMessage handling', () => {
         id: 'mixed-metadata-agent',
         name: 'Mixed Metadata Agent',
         instructions: 'Process messages.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -126,7 +126,7 @@ describe('DurableAgent UIMessage handling', () => {
         id: 'preserve-metadata-agent',
         name: 'Preserve Metadata Agent',
         instructions: 'Process messages.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -162,7 +162,7 @@ describe('DurableAgent UIMessage handling', () => {
         id: 'string-content-agent',
         name: 'String Content Agent',
         instructions: 'Process messages.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -183,7 +183,7 @@ describe('DurableAgent UIMessage handling', () => {
         id: 'parts-content-agent',
         name: 'Parts Content Agent',
         instructions: 'Process messages.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -207,7 +207,7 @@ describe('DurableAgent UIMessage handling', () => {
         id: 'empty-content-agent',
         name: 'Empty Content Agent',
         instructions: 'Process messages.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -230,7 +230,7 @@ describe('DurableAgent UIMessage handling', () => {
         id: 'stream-uimessage-agent',
         name: 'Stream UIMessage Agent',
         instructions: 'Process and stream.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -267,7 +267,7 @@ describe('DurableAgent UIMessage edge cases', () => {
       id: 'nested-metadata-agent',
       name: 'Nested Metadata Agent',
       instructions: 'Process messages.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -307,7 +307,7 @@ describe('DurableAgent UIMessage edge cases', () => {
       id: 'special-metadata-agent',
       name: 'Special Metadata Agent',
       instructions: 'Process messages.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -336,7 +336,7 @@ describe('DurableAgent UIMessage edge cases', () => {
       id: 'null-metadata-agent',
       name: 'Null Metadata Agent',
       instructions: 'Process messages.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -365,7 +365,7 @@ describe('DurableAgent UIMessage edge cases', () => {
       id: 'id-variations-agent',
       name: 'ID Variations Agent',
       instructions: 'Process messages.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -402,7 +402,7 @@ describe('DurableAgent UIMessage edge cases', () => {
       id: 'assistant-metadata-agent',
       name: 'Assistant Metadata Agent',
       instructions: 'Process messages.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

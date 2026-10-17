@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -16,7 +16,7 @@ describe('DurableAgent settleExecution error emission', () => {
       id: 'emit-error-agent',
       name: 'Emit Error Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2() as any,
+      model: new MockLanguageModelV4() as any,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     vi.spyOn(durableAgent as any, 'logger', 'get').mockReturnValue({ warn });
@@ -47,7 +47,7 @@ describe('EventedAgent.executeWorkflow terminal error emission', () => {
       id: 'evented-emit-error-agent',
       name: 'Evented Emit Error Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2() as any,
+      model: new MockLanguageModelV4() as any,
     });
     const eventedAgent = createEventedAgent({ agent: baseAgent, pubsub });
     vi.spyOn(eventedAgent as any, 'logger', 'get').mockReturnValue({ warn });

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
@@ -26,7 +26,7 @@ describe('Tool suspension memory persistence', () => {
     });
 
     // Create a mock model that will generate a tool call
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => {
         return {
           stream: convertArrayToReadableStream([

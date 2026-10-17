@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
@@ -15,7 +15,7 @@ describe('activeTools enforcement at execution time', () => {
     const hiddenExecute = vi.fn().mockResolvedValue('hidden result');
 
     let callCount = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => {
         callCount++;
         if (callCount === 1) {
@@ -88,7 +88,7 @@ describe('activeTools enforcement at execution time', () => {
     const allowedExecute = vi.fn().mockResolvedValue('allowed result');
 
     let callCount = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => {
         callCount++;
         if (callCount === 1) {
@@ -156,7 +156,7 @@ describe('activeTools enforcement at execution time', () => {
     const tool2Execute = vi.fn().mockResolvedValue('result2');
 
     let callCount = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => {
         callCount++;
         if (callCount === 1) {

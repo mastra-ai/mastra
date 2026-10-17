@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import { createRunScopeKey } from '../../../mastra/run-scope';
 import type { MemoryRunState } from '../../../memory/run-state';

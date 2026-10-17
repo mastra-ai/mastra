@@ -1,4 +1,4 @@
-import type { SystemModelMessage as CoreSystemMessage } from '@internal/ai-sdk-v5';
+import type { SystemModelMessage as CoreSystemMessage } from '@internal/ai-v7';
 
 import { serializeMessages, deserializeMessages } from './serialization';
 import type { SerializedMessage } from './serialization';

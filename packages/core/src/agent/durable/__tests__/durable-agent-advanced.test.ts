@@ -9,8 +9,8 @@
  * - Workflow state serialization
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -24,7 +24,7 @@ import { createDurableAgent } from '../create-durable-agent';
 // ============================================================================
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -51,7 +51,7 @@ function createTextModel(text: string) {
 
 function _createJsonModel(jsonData: unknown) {
   const jsonString = JSON.stringify(jsonData);
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -98,7 +98,7 @@ describe('DurableAgent instructions handling', () => {
       id: 'instructions-agent',
       name: 'Instructions Agent',
       instructions: 'You are a helpful assistant that speaks formally.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -116,7 +116,7 @@ describe('DurableAgent instructions handling', () => {
       id: 'array-instructions-agent',
       name: 'Array Instructions Agent',
       instructions: ['First instruction.', 'Second instruction.', 'Third instruction.'],
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -140,7 +140,7 @@ describe('DurableAgent instructions handling', () => {
           },
         },
       },
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -168,7 +168,7 @@ describe('DurableAgent instructions handling', () => {
       id: 'no-instructions-agent',
       name: 'No Instructions Agent',
       instructions: '',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -184,7 +184,7 @@ describe('DurableAgent instructions handling', () => {
       id: 'override-instructions-agent',
       name: 'Override Instructions Agent',
       instructions: 'Default instructions',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -214,7 +214,7 @@ describe('DurableAgent context handling', () => {
       id: 'context-agent',
       name: 'Context Agent',
       instructions: 'You are helpful',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -232,7 +232,7 @@ describe('DurableAgent context handling', () => {
       id: 'string-context-agent',
       name: 'String Context Agent',
       instructions: 'You are helpful',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -266,7 +266,7 @@ describe('DurableAgent message format handling', () => {
       id: 'string-message-agent',
       name: 'String Message Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -283,7 +283,7 @@ describe('DurableAgent message format handling', () => {
       id: 'array-string-agent',
       name: 'Array String Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -299,7 +299,7 @@ describe('DurableAgent message format handling', () => {
       id: 'message-object-agent',
       name: 'Message Object Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -319,7 +319,7 @@ describe('DurableAgent message format handling', () => {
       id: 'mixed-format-agent',
       name: 'Mixed Format Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -336,7 +336,7 @@ describe('DurableAgent message format handling', () => {
       id: 'empty-content-agent',
       name: 'Empty Content Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -352,7 +352,7 @@ describe('DurableAgent message format handling', () => {
       id: 'multipart-agent',
       name: 'Multipart Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -397,7 +397,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'serialization-test-agent',
       name: 'Serialization Test Agent',
       instructions: 'Test instructions',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { testTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -434,7 +434,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'model-config-agent',
       name: 'Model Config Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -456,7 +456,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'state-serialize-agent',
       name: 'State Serialize Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -481,7 +481,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'options-serialize-agent',
       name: 'Options Serialize Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -509,7 +509,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'full-model-settings-agent',
       name: 'Full Model Settings Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -551,7 +551,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'lossy-model-settings-agent',
       name: 'Lossy Model Settings Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -581,7 +581,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'misc-options-agent',
       name: 'Misc Options Agent',
       instructions: 'Default instructions',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -616,7 +616,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'instructions-override-agent',
       name: 'Instructions Override Agent',
       instructions: 'DEFAULT_INSTRUCTIONS',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -636,7 +636,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'system-message-agent',
       name: 'System Message Agent',
       instructions: 'DEFAULT_INSTRUCTIONS',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -679,7 +679,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'complex-tool-agent',
       name: 'Complex Tool Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { complexTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -698,7 +698,7 @@ describe('DurableAgent workflow state serialization', () => {
       id: 'messagelist-agent',
       name: 'MessageList Agent',
       instructions: 'Test instructions',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -744,7 +744,7 @@ describe('DurableAgent model configuration', () => {
       id: 'model-extract-agent',
       name: 'Model Extract Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -761,14 +761,14 @@ describe('DurableAgent model configuration', () => {
       id: 'model-registry-agent',
       name: 'Model Registry Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const result = await durableAgent.prepare('Test');
 
     // Model should be stored in registry
-    // Note: The model may be wrapped (e.g., in AISDKV5LanguageModel), so we check properties
+    // Note: The model may be wrapped (e.g., in AISDKV7LanguageModel), so we check properties
     const storedModel = durableAgent.runRegistry.getModel(result.runId);
     expect(storedModel).toBeDefined();
     expect(storedModel?.modelId).toBe('mock-model-id');
@@ -798,7 +798,7 @@ describe('DurableAgent ID and name handling', () => {
       id: 'agent-id',
       name: 'Explicit Name',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -816,7 +816,7 @@ describe('DurableAgent ID and name handling', () => {
     const baseAgent = new Agent({
       id: 'agent-id-as-name',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -831,7 +831,7 @@ describe('DurableAgent ID and name handling', () => {
       id: 'agent-with-dashes_and_underscores',
       name: 'Special ID Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -864,7 +864,7 @@ describe('DurableAgent ID generation', () => {
       id: 'unique-id-agent',
       name: 'Unique ID Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -889,7 +889,7 @@ describe('DurableAgent ID generation', () => {
       id: 'unique-messageid-agent',
       name: 'Unique MessageID Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -912,7 +912,7 @@ describe('DurableAgent ID generation', () => {
       id: 'custom-runid-agent',
       name: 'Custom RunID Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -948,7 +948,7 @@ describe('DurableAgent concurrent operations', () => {
       id: 'concurrent-agent',
       name: 'Concurrent Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -981,7 +981,7 @@ describe('DurableAgent concurrent operations', () => {
       id: 'isolation-agent',
       name: 'Isolation Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { tool1 },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1026,7 +1026,7 @@ describe('DurableAgent lazy initialization', () => {
       id: 'lazy-init-agent',
       name: 'Lazy Init Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -1046,7 +1046,7 @@ describe('DurableAgent lazy initialization', () => {
       id: 'init-after-prepare-agent',
       name: 'Init After Prepare Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -1066,7 +1066,7 @@ describe('DurableAgent lazy initialization', () => {
       id: 'init-after-stream-agent',
       name: 'Init After Stream Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -1086,7 +1086,7 @@ describe('DurableAgent lazy initialization', () => {
       id: 'single-init-agent',
       name: 'Single Init Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

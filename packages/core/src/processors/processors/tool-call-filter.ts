@@ -1,10 +1,10 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 
 import type { ProcessLLMRequestArgs, ProcessLLMRequestResult, Processor } from '../index';
 
 type StepResults = ProcessLLMRequestArgs['steps'];
 
-type PromptMessage = LanguageModelV2Prompt[number];
+type PromptMessage = LanguageModelV4Prompt[number];
 type PromptPart = Extract<PromptMessage, { role: 'assistant' }>['content'][number];
 type ToolCallPart = Extract<PromptPart, { type: 'tool-call' }>;
 type ToolResultPart = Extract<PromptPart, { type: 'tool-result' }>;
@@ -67,7 +67,7 @@ export class ToolCallFilter implements Processor {
     const replacementTexts = this.getReplacementTexts(prompt, excludedToolCallIds);
     const idsWithToolCallPart = this.getToolCallPartIds(prompt);
 
-    const filtered: LanguageModelV2Prompt = [];
+    const filtered: LanguageModelV4Prompt = [];
     let changed = false;
 
     for (const message of prompt) {
@@ -129,7 +129,7 @@ export class ToolCallFilter implements Processor {
    * are preserved instead. Each assistant message containing tool calls counts as one
    * step, in prompt order, so history and the current run are treated the same way.
    */
-  private getPreservedToolCallIds(prompt: LanguageModelV2Prompt, steps: StepResults): Set<string> {
+  private getPreservedToolCallIds(prompt: LanguageModelV4Prompt, steps: StepResults): Set<string> {
     if (this.filterAfterToolSteps === undefined) {
       // Every tool call the current run has produced so far arrives in `steps`, whether
       // the loop is on its second iteration or resuming after a suspension. Anything
@@ -191,7 +191,7 @@ export class ToolCallFilter implements Processor {
    * Resolves which tool call ids to remove. Ids are always excluded as a
    * call/result pair so no dangling tool call or orphaned tool result is sent.
    */
-  private getExcludedToolCallIds(prompt: LanguageModelV2Prompt, preservedToolCallIds: Set<string>): Set<string> {
+  private getExcludedToolCallIds(prompt: LanguageModelV4Prompt, preservedToolCallIds: Set<string>): Set<string> {
     const excluded = new Set<string>();
 
     for (const message of prompt) {
@@ -215,7 +215,7 @@ export class ToolCallFilter implements Processor {
    * `providerOptions.mastra.modelOutput` value proves the prompt output came from
    * the tool's `toModelOutput` mapping.
    */
-  private getReplacementTexts(prompt: LanguageModelV2Prompt, excludedToolCallIds: Set<string>): Map<string, string> {
+  private getReplacementTexts(prompt: LanguageModelV4Prompt, excludedToolCallIds: Set<string>): Map<string, string> {
     const texts = new Map<string, string>();
     if (!this.preserveModelOutput) {
       return texts;
@@ -242,7 +242,7 @@ export class ToolCallFilter implements Processor {
     return texts;
   }
 
-  private getToolCallIds(prompt: LanguageModelV2Prompt): Set<string> {
+  private getToolCallIds(prompt: LanguageModelV4Prompt): Set<string> {
     const ids = new Set<string>();
     for (const message of prompt) {
       if (message.role === 'system' || message.role === 'user') continue;
@@ -254,7 +254,7 @@ export class ToolCallFilter implements Processor {
     return ids;
   }
 
-  private getToolCallPartIds(prompt: LanguageModelV2Prompt): Set<string> {
+  private getToolCallPartIds(prompt: LanguageModelV4Prompt): Set<string> {
     const ids = new Set<string>();
     for (const message of prompt) {
       if (message.role !== 'assistant') continue;

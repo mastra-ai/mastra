@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent/agent';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -43,7 +43,7 @@ function makeAgent(id: string): Agent {
     id,
     name: id,
     instructions: 'test',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',

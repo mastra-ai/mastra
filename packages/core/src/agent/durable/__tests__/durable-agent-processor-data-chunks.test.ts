@@ -13,8 +13,8 @@
  *   messageList doesn't cross the step boundary)
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -26,7 +26,7 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -48,7 +48,7 @@ function createTextModel(text: string) {
 
 function createToolCallingModel(toolName: string, toolArgs: Record<string, unknown>) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -124,7 +124,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
       id: 'data-step-agent',
       name: 'Data Step Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('assistant response') as LanguageModelV2,
+      model: createTextModel('assistant response') as LanguageModelV4,
       memory: mockMemory,
       outputProcessors: [processor as any],
     });
@@ -180,7 +180,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
       id: 'data-tool-agent',
       name: 'Data Tool Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV4,
       tools: { getWeather: weatherTool },
       memory: mockMemory,
       outputProcessors: [processor as any],
@@ -237,7 +237,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
       id: 'tool-writer-agent',
       name: 'Tool Writer Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('probe', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('probe', { city: 'NYC' }) as LanguageModelV4,
       tools: { probe: probeTool },
       memory: mockMemory,
     });
@@ -291,7 +291,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
       model: createToolCallingModel('probe', {
         city: 'NYC',
         _background: { disposition: 'awaited' },
-      }) as LanguageModelV2,
+      }) as LanguageModelV4,
       tools: { probe: probeTool },
       memory: mockMemory,
       backgroundTasks: { tools: { probe: true } },

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
@@ -11,7 +11,7 @@ const RESOURCE = 'resource-tool-title';
 
 function createTwoStepModel() {
   let doStreamCallCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       doStreamCallCount++;
       if (doStreamCallCount === 1) {

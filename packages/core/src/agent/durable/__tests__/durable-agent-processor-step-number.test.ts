@@ -6,8 +6,8 @@
  * agentic loop. Regression test for #24279.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -18,7 +18,7 @@ import { createDurableAgent } from '../create-durable-agent';
 
 function createTwoStepToolThenTextModel(toolName: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -105,7 +105,7 @@ function createAgent(processor: Processor) {
     id: 'step-number-agent',
     name: 'Step Number Agent',
     instructions: 'noop',
-    model: createTwoStepToolThenTextModel('echoTool') as LanguageModelV2,
+    model: createTwoStepToolThenTextModel('echoTool') as LanguageModelV4,
     tools: { echoTool: tool },
     // processOutputStep only runs for output processors
     inputProcessors: [processor],

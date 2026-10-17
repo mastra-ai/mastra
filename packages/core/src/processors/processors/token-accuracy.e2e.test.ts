@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { getLLMTestMode, defaultNameGenerator, getLLMRecordingsDir } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -323,7 +323,7 @@ describe('ToolCallFilter', () => {
     return result?.prompt ?? prompt;
   };
 
-  const toolPartsIn = (prompt: LanguageModelV2Prompt, toolName?: string) =>
+  const toolPartsIn = (prompt: LanguageModelV4Prompt, toolName?: string) =>
     prompt.flatMap(message =>
       typeof message.content === 'string'
         ? []

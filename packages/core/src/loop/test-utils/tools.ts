@@ -1,5 +1,5 @@
-import { dynamicTool, jsonSchema, stepCountIs } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
+import { dynamicTool, jsonSchema, stepCountIs } from '@internal/ai-v7';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { MastraModelOutput } from '../../stream/base/output';
@@ -12,7 +12,7 @@ import {
   testUsage,
 } from './utils';
 import { convertAsyncIterableToArray } from './stream-helpers';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
@@ -756,7 +756,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             maxRetries: 0,
             id: 'test-model',
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async ({ prompt, tools, toolChoice }) => {
                 expect(tools).toStrictEqual([
                   {
@@ -842,7 +842,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 switch (responseCount++) {
                   case 0:
@@ -1159,7 +1159,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async ({ prompt, tools, toolChoice }) => {
                 stepInputs.push({ prompt, tools, toolChoice });
 
@@ -1286,7 +1286,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 switch (responseCount++) {
                   case 0:
@@ -1456,7 +1456,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 switch (responseCount++) {
                   case 0:

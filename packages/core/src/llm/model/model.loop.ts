@@ -1,4 +1,4 @@
-import type { ModelMessage, StopCondition, ToolSet } from '@internal/ai-sdk-v5';
+import type { ModelMessage, StopCondition, ToolSet } from '@internal/ai-v7';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';

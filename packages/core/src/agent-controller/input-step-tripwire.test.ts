@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
@@ -14,7 +14,7 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 /** Calls a tool on its first step, then answers, so one run makes two model calls. */
 function makeToolCallingModel() {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       return {

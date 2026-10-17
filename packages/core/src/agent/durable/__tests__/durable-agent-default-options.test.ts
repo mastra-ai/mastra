@@ -9,8 +9,8 @@
  * workflow input, mirroring the non-durable Agent.stream()/generate() paths.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -42,7 +42,7 @@ function createRepeatedToolThenTextModel(
   finalText: string,
 ) {
   let callCount = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       callCount += 1;
       const stream: ReadableStream<any> =
@@ -305,7 +305,7 @@ describe('DurableAgent defaultOptions (#17790)', () => {
         id: 'e2e-default-maxsteps-agent',
         name: 'E2E Default MaxSteps Agent',
         instructions: 'Use tools until done.',
-        model: loopModel as LanguageModelV2,
+        model: loopModel as LanguageModelV4,
         tools: { loopTool },
         defaultOptions: { maxSteps: 10 },
       });

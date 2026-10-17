@@ -6,8 +6,8 @@
  * correctly influence tool execution order.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -32,7 +32,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
     providerExecuted: false,
   }));
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -54,7 +54,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
  * Creates a simple text model
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -114,7 +114,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'concurrency-agent',
         name: 'Concurrency Agent',
         instructions: 'Use both tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { tool1, tool2 },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -140,7 +140,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'default-concurrency-agent',
         name: 'Default Concurrency Agent',
         instructions: 'Use tool',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { tool1 },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -176,7 +176,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'sequential-agent',
         name: 'Sequential Agent',
         instructions: 'Use tools sequentially',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { tool1, tool2 },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -214,7 +214,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'approval-concurrency-agent',
         name: 'Approval Concurrency Agent',
         instructions: 'Use tools with approval',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { tool1, tool2 },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -256,7 +256,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'mixed-approval-concurrency-agent',
         name: 'Mixed Approval Concurrency Agent',
         instructions: 'Use mixed tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { normalTool, approvalTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -297,7 +297,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'suspend-concurrency-agent',
         name: 'Suspend Concurrency Agent',
         instructions: 'Use both tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { quickTool, suspendTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -318,7 +318,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'negative-concurrency-agent',
         name: 'Negative Concurrency Agent',
         instructions: 'Test negative value',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -337,7 +337,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'zero-concurrency-agent',
         name: 'Zero Concurrency Agent',
         instructions: 'Test zero value',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -380,7 +380,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'high-concurrency-agent',
         name: 'High Concurrency Agent',
         instructions: 'Use many tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { tool1, tool2, tool3 },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -408,7 +408,7 @@ describe('DurableAgent tool concurrency', () => {
         id: 'serialize-concurrency-agent',
         name: 'Serialize Concurrency Agent',
         instructions: 'Test serialization',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { tool1 },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

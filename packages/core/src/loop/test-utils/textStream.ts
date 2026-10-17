@@ -1,9 +1,9 @@
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { createMessageListWithUserMessage, expectPromptWithoutMastraCreatedAt } from './utils';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';
 import type { loop } from '../loop';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
 
 export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.textStream', () => {
@@ -17,7 +17,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async ({ prompt }) => {
                 expectPromptWithoutMastraCreatedAt(prompt, [
                   {

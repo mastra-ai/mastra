@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { MastraServerCache } from '../../cache';
 import { buildResponseCacheKey, ResponseCache } from '../../processors/processors/response-cache';
@@ -61,7 +61,7 @@ async function waitForSets(cache: RecordingServerCache, expected: number) {
  * OpenAI image URLs) receive.
  */
 function createUrlCapableModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     modelId: 'url-capable-model',
     supportedUrls: { '*': [/^https?:\/\/.*$/] },
     doStream: async () => ({

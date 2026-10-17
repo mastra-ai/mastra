@@ -1,4 +1,4 @@
-import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolSet } from '@internal/ai-v7';
 import { z } from 'zod/v4';
 import { TripWire } from '../../../agent/trip-wire';
 import { createObservabilityContext } from '../../../observability';

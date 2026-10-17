@@ -1,9 +1,9 @@
 import type {
-  LanguageModelV2FinishReason,
-  LanguageModelV2CallWarning,
-  SharedV2ProviderMetadata,
-} from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
+  SharedV4Warning,
+  SharedV4ProviderMetadata,
+} from '@ai-sdk/provider';
+import type { FinishReason, LanguageModelRequestMetadata } from '@internal/ai-v7';
+import type { LanguageModelUsage } from '../../stream/types';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
@@ -384,8 +384,8 @@ export interface DurableLLMStepOutput {
   toolCalls: DurableToolCallInput[];
   /** Step result metadata */
   stepResult: {
-    reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
-    warnings: LanguageModelV2CallWarning[];
+    reason: FinishReason | 'abort' | 'tripwire' | 'retry';
+    warnings: SharedV4Warning[];
     isContinued: boolean;
     signalPreempted?: boolean;
     totalUsage?: LanguageModelUsage;
@@ -400,7 +400,7 @@ export interface DurableLLMStepOutput {
     id?: string;
     modelId?: string;
     timestamp?: string; // ISO string for serialization
-    providerMetadata?: SharedV2ProviderMetadata;
+    providerMetadata?: SharedV4ProviderMetadata;
     headers?: Record<string, string>;
     request?: LanguageModelRequestMetadata;
   };

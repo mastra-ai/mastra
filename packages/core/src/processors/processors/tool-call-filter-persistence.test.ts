@@ -1,5 +1,5 @@
-import { stepCountIs } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
+import { stepCountIs } from '@internal/ai-v7';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { Mastra } from '../..';

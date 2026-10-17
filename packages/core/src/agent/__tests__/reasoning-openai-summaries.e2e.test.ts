@@ -1,4 +1,4 @@
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
+import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

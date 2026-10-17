@@ -14,8 +14,8 @@
  * request).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -42,7 +42,7 @@ let modelCallCount = 0;
  */
 function makeToolThenStopModel() {
   modelCallCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       modelCallCount++;
       if (modelCallCount === 1) {
@@ -93,7 +93,7 @@ function makeToolThenStopModel() {
  * Used for single-iteration tests (initial echoes, pre-run drain).
  */
 function makeSimpleTextModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -149,7 +149,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
           id: 'signal-echo-agent',
           name: 'signal-echo-agent',
           instructions: 'You are helpful.',
-          model: makeSimpleTextModel() as LanguageModelV2,
+          model: makeSimpleTextModel() as LanguageModelV4,
         });
 
         const durableAgent = createDurableAgent({ agent, pubsub });
@@ -328,7 +328,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
       async type => {
         // Model always produces text (no tool calls) → normally single iteration
         let callNum = 0;
-        const model = new MockLanguageModelV2({
+        const model = new MockLanguageModelV4({
           doStream: async () => {
             callNum++;
             return {
@@ -354,7 +354,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
           id: 'force-continue-agent',
           name: 'force-continue-agent',
           instructions: 'You are helpful.',
-          model: model as LanguageModelV2,
+          model: model as LanguageModelV4,
         });
 
         const durableAgent = createDurableAgent({ agent, pubsub });
@@ -483,7 +483,7 @@ describe.each(['durable', 'evented', 'evented-split'] as const)('%s pending queu
       name: 'Pending queue owner',
       instructions: 'Test',
       memory: new MockMemory(),
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           requestStarted = true;
           await requestGate;

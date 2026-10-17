@@ -11,7 +11,7 @@
  * Fix 2 (this PR): Propagate idle-start errors to the subscription stream via
  *         the new `run-failed` event so the controller surfaces an error event.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -32,7 +32,7 @@ class PushOnlyPubSub extends EventEmitterPubSub {
 }
 
 function createTextStreamModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

@@ -1,5 +1,5 @@
-import { openai } from '@ai-sdk/openai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { openai } from '@ai-sdk/openai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../../error';
@@ -25,7 +25,7 @@ function makeSubAgent(id: string, responseText: string) {
     name: id,
     description: `Sub-agent: ${id}`,
     instructions: 'You are a helpful sub-agent.',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -41,7 +41,7 @@ function makeSubAgent(id: string, responseText: string) {
 // Helper: create a sub-agent mock model that calls a specific tool then stops
 function makeSubAgentModelWithTool(toolName: string, toolArgs: Record<string, any>) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       if (callCount === 1) {
@@ -76,7 +76,7 @@ function makeSubAgentModelWithTool(toolName: string, toolArgs: Record<string, an
 // Helper: create a supervisor model that delegates to a sub-agent tool then stops
 function makeSupervisorModel(agentKey: string, prompt: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       if (callCount === 1) {
@@ -135,7 +135,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         id: 'supervisor',
         name: 'supervisor',
         instructions: 'You delegate to tools',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => {
             callCount++;
             if (callCount === 1) {
@@ -202,7 +202,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         id: 'test-agent',
         name: 'test-agent',
         instructions: 'You use tools',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => {
             callCount++;
             if (callCount === 1) {
@@ -419,7 +419,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         name: 'stream-erroring-tool-sub-agent',
         description: 'Sub-agent whose tool throws',
         instructions: 'You look things up.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => {
             subAgentCallCount++;
             return {
@@ -462,7 +462,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
 
       let supervisorCallCount = 0;
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doStream: async () => {
           supervisorCallCount++;
           return {
@@ -599,7 +599,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         name: 'stream-client-tool-sub-agent',
         description: 'Sub-agent with a client tool',
         instructions: 'You add products to the cart.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
@@ -624,7 +624,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
 
       let supervisorCallCount = 0;
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doStream: async () => {
           supervisorCallCount++;
           if (supervisorCallCount === 1) {
@@ -700,7 +700,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         name: 'stream-sub-agent',
         description: 'A streaming sub-agent',
         instructions: 'You respond with text.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
@@ -721,7 +721,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
 
       let supervisorCallCount = 0;
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doStream: async () => {
           supervisorCallCount++;
           if (supervisorCallCount === 1) {
@@ -794,7 +794,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       const subAgent = makeSubAgent('silent-agent', '');
       const promptsSeenByParent: string[] = [];
 
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           promptsSeenByParent.push(JSON.stringify(prompt));
           if (promptsSeenByParent.length === 1) {
@@ -855,14 +855,14 @@ describe('Supervisor Pattern Integration Tests', () => {
         name: 'failing-agent',
         description: 'A sub-agent that fails.',
         instructions: 'You are a failing sub-agent.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => {
             throw delegationError;
           },
         }),
       });
       const promptsSeenByParent: string[] = [];
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           promptsSeenByParent.push(JSON.stringify(prompt));
           if (promptsSeenByParent.length === 1) {
@@ -1113,7 +1113,7 @@ describe('Supervisor Pattern Integration Tests', () => {
     it('should allow onDelegationStart to modify the prompt sent to the sub-agent', async () => {
       const receivedPrompts: string[] = [];
 
-      const subAgentModel = new MockLanguageModelV2({
+      const subAgentModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           // Capture all user message contents to verify the modified prompt
           const messages = Array.isArray(prompt) ? prompt : [prompt];
@@ -1199,7 +1199,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         name: 'observer-agent',
         description: 'Captures delegated context.',
         instructions: 'Use the provided context.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async options => {
             subAgentPrompt = options.prompt;
             return {
@@ -1316,7 +1316,7 @@ describe('Supervisor Pattern Integration Tests', () => {
 
       // Model that would call the sub-agent twice if not bailed
       let callCount = 0;
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount <= 2) {
@@ -1390,7 +1390,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         id: 'configured-agent',
         name: 'Configured Agent',
         instructions: 'Test agent',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -1439,7 +1439,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         id: 'iteration-agent',
         name: 'Iteration Agent',
         instructions: 'Test agent',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -1620,7 +1620,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 
     // Sub-agent mock: calls findUserTool on first invocation using doStream
     let subCallCount = 0;
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doStream: async () => {
         subCallCount++;
         if (subCallCount === 1) {
@@ -1674,7 +1674,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 
     // Supervisor mock: calls agent-approvalSubAgent using doStream
     let supervisorCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doStream: async () => {
         supervisorCallCount++;
         if (supervisorCallCount === 1) {
@@ -1773,7 +1773,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 
     // Sub-agent mock: calls findUserTool on first invocation using doStream
     let subCallCount = 0;
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doStream: async () => {
         subCallCount++;
         if (subCallCount === 1) {
@@ -1827,7 +1827,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 
     // Supervisor mock: calls agent-approvalDeclineSubAgent using doStream
     let supervisorCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doStream: async () => {
         supervisorCallCount++;
         if (supervisorCallCount === 1) {
@@ -1950,7 +1950,7 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
     let subCallCount = 0;
     let secondDelegationSawPersistedMemory = false;
 
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         subCallCount++;
 
@@ -2007,7 +2007,7 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
 
     // Supervisor model: always delegates to worker-agent, alternating between tool-call and stop
     let supervisorCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doGenerate: async () => {
         supervisorCallCount++;
         if (supervisorCallCount % 2 === 1) {
@@ -2212,7 +2212,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
       id: 'scorer-supervisor',
       name: 'Scorer Supervisor',
       instructions: 'You complete tasks.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -2275,7 +2275,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
       id: 'final-text-agent',
       name: 'Final Text Agent',
       instructions: 'Do the task.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -2331,7 +2331,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
       id: 'failing-final-text-agent',
       name: 'Failing Final Text Agent',
       instructions: 'Do the task.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           const text = answers[Math.min(call++, answers.length - 1)]!;
           return {
@@ -2396,7 +2396,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
       id: 'adaptive-scorer-supervisor',
       name: 'Adaptive Scorer Supervisor',
       instructions: 'You complete tasks iteratively.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           modelCallCount++;
           return {
@@ -2482,7 +2482,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You use tools and respond',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -2615,7 +2615,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       id: 'counter-agent',
       name: 'Counter Agent',
       instructions: 'You keep calling the counter tool',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           // Always return tool calls to test stopping
@@ -2718,7 +2718,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       id: 'feedback-stop-agent',
       name: 'Feedback Stop Agent',
       instructions: 'You look up data and summarize findings.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           callCount++;
           if (callCount <= 2) {
@@ -2811,7 +2811,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       id: 'stubborn-agent',
       name: 'Stubborn Agent',
       instructions: 'You keep fetching data.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           callCount++;
           // Always return tool calls — model never voluntarily stops
@@ -2878,7 +2878,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       id: 'feedback-agent',
       name: 'Feedback Agent',
       instructions: 'You respond to feedback',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           callCount++;
 
@@ -3003,7 +3003,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       id: 'continue-override-stream-agent',
       name: 'Continue Override Stream Agent',
       instructions: 'You may take multiple turns.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -3098,7 +3098,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       id: 'test-agent',
       name: 'test agent',
       instructions: 'Test agent',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -3204,7 +3204,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
       id: 'all-strategy-supervisor',
       name: 'All Strategy Supervisor',
       instructions: 'You complete tasks.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           modelCallCount++;
           return {
@@ -3280,7 +3280,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
       id: 'any-strategy-supervisor',
       name: 'Any Strategy Supervisor',
       instructions: 'You complete tasks.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -3338,7 +3338,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
       id: 'scorer-results-supervisor',
       name: 'Scorer Results Supervisor',
       instructions: 'You complete tasks.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -3390,7 +3390,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
     };
 
     const makeStreamModel = () =>
-      new MockLanguageModelV2({
+      new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -3472,7 +3472,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
       id: 'multi-iter-callback-supervisor',
       name: 'Multi Iteration Callback Supervisor',
       instructions: 'You complete tasks iteratively.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           modelCallCount++;
           return {
@@ -3552,7 +3552,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
       id: 'max-iter-supervisor',
       name: 'Max Iteration Supervisor',
       instructions: 'You complete tasks.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           modelCallCount++;
           return {
@@ -3612,7 +3612,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
 
     let subAgentReceivedPrompts: any[] = [];
 
-    const subAgentMockModel = new MockLanguageModelV2({
+    const subAgentMockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         subAgentReceivedPrompts.push(prompt);
         return {
@@ -3640,7 +3640,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       id: 'supervisor-history-test',
       name: 'Supervisor History Test',
       instructions: 'Delegate questions to the question-answer-agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           supervisorCallCount++;
           if (supervisorCallCount === 1) {
@@ -3709,7 +3709,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
 
     // Sub-agent needs both doGenerate and doStream. When the supervisor calls stream(),
     // sub-agents are also invoked via agent.stream(), so doStream is what captures prompts.
-    const subAgentMockModel = new MockLanguageModelV2({
+    const subAgentMockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         subAgentReceivedPrompts.push(prompt);
         return {
@@ -3771,7 +3771,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       id: 'supervisor-feedback-visibility',
       name: 'Supervisor Feedback Visibility',
       instructions: 'Delegate work to the sub-agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           supervisorCallCount++;
           supervisorLLMReceivedPrompts.push(prompt);
@@ -3952,7 +3952,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     let subAgentReceivedPrompts: any[] = [];
     const filteredMessages: any[] = [];
 
-    const subAgentMockModel = new MockLanguageModelV2({
+    const subAgentMockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         subAgentReceivedPrompts.push(prompt);
         return {
@@ -3979,7 +3979,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       id: 'supervisor-context-filter',
       name: 'Supervisor Context Filter',
       instructions: 'Delegate to sub-agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           supervisorCallCount++;
           if (supervisorCallCount === 1) {
@@ -4114,7 +4114,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
         id: 'context-isolation-supervisor',
         name: 'context-isolation-supervisor',
         instructions: 'Delegate to sub-agents.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async ({ prompt }) => {
             supervisorCallCount++;
             supervisorPrompts.push(prompt);
@@ -4209,7 +4209,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
 
     let subAgentReceivedPrompts: any[] = [];
 
-    const subAgentMockModel = new MockLanguageModelV2({
+    const subAgentMockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         subAgentReceivedPrompts.push(prompt);
         return {
@@ -4240,7 +4240,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       id: 'supervisor-memory-isolation',
       name: 'Supervisor Memory Isolation',
       instructions: 'Delegate to sub-agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           supervisorCallCount++;
           if (supervisorCallCount === 1) {
@@ -4359,7 +4359,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
   });
 
   it('should isolate sub-agent memory when threadId and resourceId are set via requestContext reserved keys', async () => {
-    const subAgentMockModel = new MockLanguageModelV2({
+    const subAgentMockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -4389,7 +4389,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       id: 'supervisor-reserved-keys',
       name: 'Supervisor Reserved Keys',
       instructions: 'Delegate to sub-agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           supervisorCallCount++;
           if (supervisorCallCount === 1) {
@@ -4484,7 +4484,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     it('should preserve sub-agent own instructions when parent LLM provides instructions via tool call', async () => {
       const capturedSystemMessages: string[] = [];
 
-      const subAgentModel = new MockLanguageModelV2({
+      const subAgentModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           const messages = Array.isArray(prompt) ? prompt : [prompt];
           for (const msg of messages) {
@@ -4519,7 +4519,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       });
 
       let callCount = 0;
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -4576,7 +4576,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     it('should use only agent own instructions when parent LLM does not provide instructions', async () => {
       const capturedSystemMessages: string[] = [];
 
-      const subAgentModel = new MockLanguageModelV2({
+      const subAgentModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           const messages = Array.isArray(prompt) ? prompt : [prompt];
           for (const msg of messages) {
@@ -4641,7 +4641,7 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
 
     // Sub-agent model: captures prompts to verify what context it receives
     let subCallCount = 0;
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         subCallCount++;
         subAgentReceivedPrompts.push(prompt as any[]);
@@ -4702,7 +4702,7 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     // The supervisor's final text response includes the record ID so context
     // flows through text conversation rather than leaked tool results.
     let supervisorCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doGenerate: async () => {
         supervisorCallCount++;
         // Odd calls: delegate to sub-agent
@@ -4832,7 +4832,7 @@ describe('Supervisor Pattern - Output processor propagation in streaming delegat
     };
 
     // Sub-agent streams raw text, but has an output processor that modifies it
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -4862,7 +4862,7 @@ describe('Supervisor Pattern - Output processor propagation in streaming delegat
 
     // Supervisor delegates to sub-agent on first call, then returns final text on second call
     let supervisorCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doStream: async () => {
         supervisorCallCount++;
         if (supervisorCallCount === 1) {
@@ -4955,7 +4955,7 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
 
     // Sub-agent model: captures prompts and tools
     let subCallCount = 0;
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt, tools }) => {
         subCallCount++;
         subAgentReceivedPrompts.push(prompt as any[]);
@@ -5015,7 +5015,7 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
 
     // Supervisor model: delegates to data-agent on each call
     let supervisorCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doGenerate: async () => {
         supervisorCallCount++;
         if (supervisorCallCount % 2 === 1) {
@@ -5121,7 +5121,7 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
   // Sub-agent stream model that calls a tool once, then stops.
   function makeSubAgentStreamModelWithTool(toolName: string, toolArgs: Record<string, any>) {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -5159,7 +5159,7 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
   // Supervisor stream model that delegates to a sub-agent tool once, then stops.
   function makeSupervisorStreamModel(agentKey: string, prompt: string) {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -5300,7 +5300,7 @@ describe('Delegation maxSteps cap', () => {
   // simulating the LLM filling the optional maxSteps delegation arg.
   function makeSupervisorModelWithMaxSteps(agentKey: string, prompt: string, maxSteps: number) {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async () => {
         callCount++;
         if (callCount === 1) {
@@ -5339,7 +5339,7 @@ describe('Delegation maxSteps cap', () => {
       name: id,
       description: `Sub-agent: ${id}`,
       instructions: 'You are a helpful sub-agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',

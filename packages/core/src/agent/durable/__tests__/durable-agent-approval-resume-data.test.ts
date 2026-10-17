@@ -8,8 +8,8 @@
  *
  * Regression test for https://github.com/mastra-ai/mastra/issues/24561
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -29,7 +29,7 @@ function createToolCallThenTextModel(
   onResumeCall?: () => void,
 ) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ abortSignal }) => {
       callCount++;
       if (callCount > 1 && abortOnResume) {
@@ -120,7 +120,7 @@ async function runApprovalGatedTool(
     id: 'approval-resume-data-agent',
     name: 'Approval Resume Data Agent',
     instructions: 'Use the approval tool.',
-    model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV2,
+    model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV4,
     tools: { approvalTool },
   });
   const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -212,7 +212,7 @@ describe('DurableAgent approval resume data', () => {
       id: 'evented-approval-cleanup-agent',
       name: 'Evented Approval Cleanup Agent',
       instructions: 'Use the approval tool.',
-      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV2,
+      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV4,
       memory,
       tools: { approvalTool },
     });
@@ -284,7 +284,7 @@ describe('DurableAgent approval resume data', () => {
         { name: 'approvalTool', args: { value: 'test' } },
         true,
         resumeModelStarted,
-      ) as LanguageModelV2,
+      ) as LanguageModelV4,
       tools: { approvalTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -331,7 +331,7 @@ describe('DurableAgent approval resume data', () => {
         { name: 'approvalTool', args: { value: 'test' } },
         true,
         resumeModelStarted,
-      ) as LanguageModelV2,
+      ) as LanguageModelV4,
       tools: { approvalTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -371,7 +371,7 @@ describe('DurableAgent approval resume data', () => {
       id: 'approval-resume-fail-agent',
       name: 'Approval Resume Fail Agent',
       instructions: 'Use the approval tool.',
-      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV2,
+      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV4,
       tools: { approvalTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

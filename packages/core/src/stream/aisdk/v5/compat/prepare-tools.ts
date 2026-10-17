@@ -1,15 +1,10 @@
 import type {
-  LanguageModelV2FunctionTool,
-  LanguageModelV2ProviderDefinedTool,
-  LanguageModelV2ToolChoice,
-} from '@ai-sdk/provider-v5';
-import type {
-  LanguageModelV3FunctionTool,
-  LanguageModelV3ProviderTool,
-  LanguageModelV3ToolChoice,
-} from '@ai-sdk/provider-v6';
-import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
-import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+  LanguageModelV4FunctionTool,
+  LanguageModelV4ProviderTool,
+  LanguageModelV4ToolChoice,
+} from '@ai-sdk/provider';
+import { asSchema, tool as toolFn } from '@internal/ai-v7';
+import type { Tool, ToolChoice } from '@internal/ai-v7';
 import type { ModelToolDefinition } from '../../../../observability';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 import { isProviderDefinedTool } from '../../../../tools/toolchecks';
@@ -19,12 +14,9 @@ export type ModelSpecVersion = 'v2' | 'v3' | 'v4';
 
 /** Combined tool types for both V2 and V3 */
 type PreparedTool =
-  | LanguageModelV2FunctionTool
-  | LanguageModelV2ProviderDefinedTool
-  | LanguageModelV3FunctionTool
-  | LanguageModelV3ProviderTool;
+  LanguageModelV4FunctionTool | LanguageModelV4ProviderTool | LanguageModelV4FunctionTool | LanguageModelV4ProviderTool;
 
-type PreparedToolChoice = LanguageModelV2ToolChoice | LanguageModelV3ToolChoice;
+type PreparedToolChoice = LanguageModelV4ToolChoice | LanguageModelV4ToolChoice;
 
 /**
  * Recursively fixes JSON Schema properties that lack a 'type' key.
@@ -113,10 +105,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
       ? Object.entries(tools || {}).filter(([name]) => activeTools.includes(name as keyof TOOLS))
       : Object.entries(tools || {});
 
-  // Provider tool type differs between versions:
-  // - V2 (AI SDK v5): 'provider-defined'
-  // - V3/V4 (AI SDK v6/v7): 'provider'
-  const providerToolType = targetVersion === 'v2' ? 'provider-defined' : 'provider';
+  const providerToolType = 'provider';
 
   return {
     tools: filteredTools
@@ -206,18 +195,16 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
                 // Preserve strict through v2 preparation because the model router may
                 // still forward these tools to an AI SDK v6 / V3 model later. Actual
-                // V2 model calls strip this field at the AISDKV5LanguageModel boundary.
+                // V2 model calls strip this field at the AISDKV7LanguageModel boundary.
                 ...(strict != null ? { strict } : {}),
                 providerOptions: sdkTool.providerOptions,
               };
-            case 'provider-defined': {
-              // Fallback for tools that pass through toolFn and still get recognized as provider-defined
-              const providerId = (sdkTool as any).id;
-              const providerName = (sdkTool as any).name ?? name;
+            case 'provider': {
+              // Fallback for tools that pass through toolFn and still get recognized as provider tools
               return {
                 type: providerToolType,
-                name: providerName,
-                id: providerId,
+                name: (sdkTool as any).name ?? name,
+                id: (sdkTool as any).id,
                 args: (sdkTool as any).args,
               } as PreparedTool;
             }

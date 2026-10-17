@@ -1,10 +1,5 @@
-import { openai } from '@ai-sdk/openai';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { openai as openai_v6 } from '@ai-sdk/openai-v6';
-import { openai as openai_v7 } from '@ai-sdk/openai-v7';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
-import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
+import { openai, openai as openai_v5, openai as openai_v6, openai as openai_v7 } from '@ai-sdk/openai';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
@@ -31,7 +26,7 @@ beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
 function runStreamE2ETest(version: 'v2' | 'v3' | 'v4') {
-  let openaiModel: LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
+  let openaiModel: LanguageModelV4 | LanguageModelV4 | LanguageModelV4;
 
   {
     openaiModel = openai_v5('gpt-4o-mini');
@@ -558,7 +553,7 @@ function runStreamE2ETest(version: 'v2' | 'v3' | 'v4') {
             // After PR changes: sanitizeV5UIMessages filters out input-available tool parts
             // and keeps only output-available parts. When convertToModelMessages processes
             // an output-available tool part, it generates both function_call and function_call_output.
-            // @ai-sdk/openai-v6 sends the full function_call item; v5 sends an item_reference.
+            // @ai-sdk/openai sends the full function_call item; v5 sends an item_reference.
             expect.objectContaining({ type: 'item_reference', id: expect.stringContaining(`fc_`) }),
             expect.objectContaining({
               type: 'function_call_output',

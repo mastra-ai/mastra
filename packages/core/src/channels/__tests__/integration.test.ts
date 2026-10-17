@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
@@ -36,7 +36,7 @@ function createTestAgent(id: string, options?: { channels?: ChannelConfig }) {
     id,
     name: `Test Agent ${id}`,
     instructions: 'You are a test agent',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',

@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent/agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
@@ -204,7 +204,7 @@ describe('createCodingAgent', () => {
   it('retries an Anthropic cyber stop with factory defaults', async () => {
     const prompts: any[] = [];
     const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt);
         const content =

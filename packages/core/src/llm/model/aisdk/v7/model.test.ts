@@ -1,4 +1,4 @@
-import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider-v7';
+import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../../../agent/message-list';
 import { MastraError } from '../../../../error';

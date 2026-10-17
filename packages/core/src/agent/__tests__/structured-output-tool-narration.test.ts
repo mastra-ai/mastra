@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -28,7 +28,7 @@ function hasToolResults(prompt: unknown[]) {
 }
 
 function createNarratingModel(intermediateText: string, finalText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const final = hasToolResults(prompt);
       return {
@@ -89,7 +89,7 @@ describe('structured output with text before tool calls (#25038)', () => {
         id: 'narration-agent',
         name: 'Narration Agent',
         instructions: 'Say what you will look up, then call tools.',
-        model: createNarratingModel(intermediate, FINAL) as LanguageModelV2,
+        model: createNarratingModel(intermediate, FINAL) as LanguageModelV4,
         tools: { lookup: lookupTool },
       });
 
@@ -109,7 +109,7 @@ describe('structured output with text before tool calls (#25038)', () => {
         id: 'narration-agent-invalid',
         name: 'Narration Agent',
         instructions: 'Say what you will look up, then call tools.',
-        model: createNarratingModel(JSON.stringify({ answer: 'draft' }), 'not json at all') as LanguageModelV2,
+        model: createNarratingModel(JSON.stringify({ answer: 'draft' }), 'not json at all') as LanguageModelV4,
         tools: { lookup: lookupTool },
       });
 
@@ -140,7 +140,7 @@ describe('structured output with text before tool calls (#25038)', () => {
         id: 'durable-narration-agent',
         name: 'Durable Narration Agent',
         instructions: 'Say what you will look up, then call tools.',
-        model: createNarratingModel(intermediate, FINAL) as LanguageModelV2,
+        model: createNarratingModel(intermediate, FINAL) as LanguageModelV4,
         tools: { lookup: lookupTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

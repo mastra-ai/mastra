@@ -18,8 +18,8 @@
  * with no error raised.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -39,7 +39,7 @@ import { createBaseIterationStateUpdate } from '../workflows/shared/iteration-st
 function createTwoIterationModel() {
   let turn = 0;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       turn += 1;
 
@@ -147,7 +147,7 @@ describe('durable agent requestContextEntries across iterations', () => {
         id: 'request-context-iterations-agent',
         name: 'Request Context Iterations Agent',
         instructions: 'Use the tool, then answer.',
-        model: createTwoIterationModel() as LanguageModelV2,
+        model: createTwoIterationModel() as LanguageModelV4,
         tools: { echoTool },
       });
 

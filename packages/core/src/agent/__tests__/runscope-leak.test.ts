@@ -16,10 +16,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 function makeReplyModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -122,7 +122,7 @@ describe('agentic-loop RunScope leak vectors', () => {
     // a TTL-expired registration must eventually drop both the registration
     // and the scope.
     let callCount = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {

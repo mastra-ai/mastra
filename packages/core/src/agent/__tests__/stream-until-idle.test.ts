@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
@@ -20,7 +20,7 @@ import { resolveAgentScopes } from '../scopes';
  */
 function makeScriptedModel(scripts: Array<(abortSignal?: AbortSignal) => ReadableStream<any>>) {
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('doGenerate not used in these tests');
     },
@@ -1273,7 +1273,7 @@ describe('Agent.streamUntilIdle', () => {
     const memory = new MockMemory();
 
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('doGenerate not used');
       },

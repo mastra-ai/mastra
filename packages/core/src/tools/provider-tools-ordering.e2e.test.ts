@@ -1,4 +1,4 @@
-import { anthropic } from '@ai-sdk/anthropic-v5';
+import { anthropic } from '@ai-sdk/anthropic';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

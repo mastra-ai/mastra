@@ -1,7 +1,7 @@
-import { tool, ToolLoopAgent } from '@internal/ai-v6';
+import { tool, ToolLoopAgent } from '@internal/ai-v7';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { MockLanguageModelV3, convertArrayToReadableStreamV3 } from '../../agent/__tests__/mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStreamV3 } from '../../agent/__tests__/mock-model';
 import { Agent } from '../../agent/agent';
 import { Mastra } from '../../mastra';
 import { toolLoopAgentToMastraAgent, isToolLoopAgentLike, getSettings } from '../index';
@@ -14,7 +14,7 @@ const MODEL = 'openai/gpt-4o-mini';
  * and returns a dummy response.
  */
 function createCapturingMockModel(onCapture?: (options: any) => void) {
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doGenerate: async options => {
       onCapture?.(options);
       return {
@@ -58,7 +58,7 @@ function createToolCallingMockModel(toolName: string, toolInput: Record<string, 
   let callCount = 0;
   const inputStr = JSON.stringify(toolInput);
 
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       if (callCount === 1) {
@@ -621,7 +621,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
 
     it('should apply system message override from prepareStep', async () => {
       let capturedPrompt: any = null;
-      const mockModel = new MockLanguageModelV3({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           capturedPrompt = options.prompt;
           return {
@@ -733,7 +733,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
 
     it('should receive model override from prepareCall in prepareStep', async () => {
       // Create models with distinct modelIds so we can identify which one was passed
-      const originalModel = new MockLanguageModelV3({
+      const originalModel = new MockLanguageModelV4({
         modelId: 'original-model',
         doGenerate: async () => ({
           finishReason: { unified: 'stop', raw: undefined },
@@ -763,7 +763,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
         }),
       });
 
-      const overrideModel = new MockLanguageModelV3({
+      const overrideModel = new MockLanguageModelV4({
         modelId: 'override-model',
         doGenerate: async () => ({
           finishReason: { unified: 'stop', raw: undefined },
@@ -834,7 +834,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       let instructionsSeenInPrepareCall: any;
       let instructionsReturnedFromPrepareCall: string | undefined;
 
-      const mockModel = new MockLanguageModelV3({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           capturedPrompt = options.prompt;
           return {
@@ -916,7 +916,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
     it('should apply prepareCall temperature and prepareStep toolChoice together', async () => {
       let capturedOptions: any = null;
 
-      const mockModel = new MockLanguageModelV3({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           capturedOptions = options;
           return {
@@ -1000,7 +1000,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
     it('should allow prepareStep to modify messages', async () => {
       let capturedPrompt: any = null;
 
-      const mockModel = new MockLanguageModelV3({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           capturedPrompt = options.prompt;
           return {

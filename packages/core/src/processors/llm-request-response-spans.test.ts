@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, expect, it, vi } from 'vitest';
 import { ProcessorRunner } from './runner';
 import { TripWire } from './index';
@@ -12,7 +12,7 @@ const mockLogger = {
   trackException: () => {},
 } as any;
 
-function makePrompt(): LanguageModelV2Prompt {
+function makePrompt(): LanguageModelV4Prompt {
   return [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }];
 }
 

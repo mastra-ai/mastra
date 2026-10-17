@@ -5,13 +5,13 @@ import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 /**
  * Creates a simple mock model for testing.
  */
 function createSimpleMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -287,7 +287,7 @@ describe('Memory readOnly option on resume', () => {
   function createToolCallingModel() {
     let call = 0;
     let genCall = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async () => {
         genCall++;
         const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };

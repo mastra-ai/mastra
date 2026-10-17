@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { openai } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { openai } from '@ai-sdk/openai';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 describe('StructuredOutputProcessor Integration Tests', () => {
-  function testStructuredOutput(model: LanguageModelV2) {
+  function testStructuredOutput(model: LanguageModelV4) {
     describe('with real LLM', () => {
       it('should convert unstructured text to structured JSON for color analysis', async () => {
         const colorSchema = z.object({
@@ -190,7 +190,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
         const result = await agent.generate('Tell me about the weather today in a casual way.', {
           structuredOutput: {
             schema: strictSchema,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 throw new Error('test error');
               },

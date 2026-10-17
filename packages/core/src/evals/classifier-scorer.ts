@@ -1,4 +1,4 @@
-import type { SharedV4ProviderMetadata, SharedV4ProviderOptions, SharedV4Warning } from '@ai-sdk/provider-v7';
+import type { SharedV4ProviderMetadata, SharedV4ProviderOptions, SharedV4Warning } from '@ai-sdk/provider';
 import type { z } from 'zod/v4';
 
 import type {

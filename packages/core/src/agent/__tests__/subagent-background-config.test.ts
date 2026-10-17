@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../tools';
@@ -6,7 +6,7 @@ import { Agent } from '../agent';
 
 describe('sub-agent background config derivation', () => {
   it('does not inspect sub-agent tools when background task dispatch is disabled', async () => {
-    const model = new MockLanguageModelV2();
+    const model = new MockLanguageModelV4();
     const child = new Agent({
       id: 'child',
       name: 'child',
@@ -29,7 +29,7 @@ describe('sub-agent background config derivation', () => {
   });
 
   it('derives sub-agent background config when background task dispatch is enabled', async () => {
-    const model = new MockLanguageModelV2();
+    const model = new MockLanguageModelV4();
     const child = new Agent({
       id: 'child',
       name: 'child',

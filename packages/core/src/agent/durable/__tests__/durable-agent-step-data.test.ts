@@ -4,8 +4,8 @@
  * and onFinish — and a per-call `model` must be the model that runs.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -36,7 +36,7 @@ function expectStepData(steps: any[], modelId: string) {
 
 function toolThenTextModel(modelId: string) {
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     modelId,
     doStream: async () => {
       calls++;
@@ -90,7 +90,7 @@ describe('DurableAgent step data (#26780)', () => {
         id: 'step-data-agent',
         name: 'Step Data Agent',
         instructions: 'Test',
-        model: agentModel.model as LanguageModelV2,
+        model: agentModel.model as LanguageModelV4,
         tools: { probe },
       }),
       pubsub,
@@ -100,7 +100,7 @@ describe('DurableAgent step data (#26780)', () => {
     let finish: any;
     const { output, cleanup } = await durableAgent.stream('go', {
       maxSteps: 5,
-      model: perCallModel.model as LanguageModelV2,
+      model: perCallModel.model as LanguageModelV4,
       onStepFinish: (e: any) => void stepEvents.push(e),
       onFinish: (e: any) => void (finish = e),
     });
@@ -135,7 +135,7 @@ describe('DurableAgent step data (#26780)', () => {
         id: 'step-data-generate',
         name: 'Step Data Generate',
         instructions: 'Test',
-        model: agentModel.model as LanguageModelV2,
+        model: agentModel.model as LanguageModelV4,
         tools: { probe: probe() },
       }),
       pubsub,
@@ -143,7 +143,7 @@ describe('DurableAgent step data (#26780)', () => {
 
     const result: any = await durableAgent.generate('go', {
       maxSteps: 5,
-      model: perCallModel.model as LanguageModelV2,
+      model: perCallModel.model as LanguageModelV4,
     });
 
     expect(perCallModel.calls()).toBe(2);
@@ -159,7 +159,7 @@ describe('DurableAgent step data (#26780)', () => {
         id: 'step-data-evented',
         name: 'Step Data Evented',
         instructions: 'Test',
-        model: model.model as LanguageModelV2,
+        model: model.model as LanguageModelV4,
         tools: { probe: probe() },
       }),
     });
@@ -186,7 +186,7 @@ describe('DurableAgent step data (#26780)', () => {
         id: 'step-data-resume',
         name: 'Step Data Resume',
         instructions: 'Test',
-        model: model.model as LanguageModelV2,
+        model: model.model as LanguageModelV4,
         memory: new MockMemory(),
         tools: { probe: probe(true) },
       }),
@@ -210,7 +210,7 @@ describe('DurableAgent step data (#26780)', () => {
 
   it('keeps steps completed before an approval in the resumed onFinish', async () => {
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       modelId: 'resume-model',
       doStream: async () => {
         calls++;
@@ -249,7 +249,7 @@ describe('DurableAgent step data (#26780)', () => {
         id: 'step-data-resume-prior',
         name: 'Step Data Resume Prior',
         instructions: 'Test',
-        model: model as LanguageModelV2,
+        model: model as LanguageModelV4,
         memory: new MockMemory(),
         tools: { free: tool('free', false), gated: tool('gated', true) },
       }),
@@ -280,7 +280,7 @@ describe('DurableAgent step data (#26780)', () => {
   it('gives onAbort the completed steps and output.response the run messages (toolsets)', async () => {
     const abort = new AbortController();
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       modelId: 'abort-model',
       doStream: async () => {
         calls++;
@@ -310,7 +310,7 @@ describe('DurableAgent step data (#26780)', () => {
         id: 'step-data-abort',
         name: 'Step Data Abort',
         instructions: 'Test',
-        model: model as LanguageModelV2,
+        model: model as LanguageModelV4,
       }),
       pubsub,
     });
@@ -338,7 +338,7 @@ describe('DurableAgent step data (#26780)', () => {
         id: 'step-data-response',
         name: 'Step Data Response',
         instructions: 'Test',
-        model: model.model as LanguageModelV2,
+        model: model.model as LanguageModelV4,
       }),
       pubsub,
     });

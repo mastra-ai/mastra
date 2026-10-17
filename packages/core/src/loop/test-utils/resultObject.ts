@@ -1,6 +1,5 @@
-import { tool } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream as convertArrayToReadableStreamV2 } from '@internal/ai-sdk-v5/test';
-import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
+import { tool } from '@internal/ai-v7';
+import { convertArrayToReadableStream as convertArrayToReadableStreamV2, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';

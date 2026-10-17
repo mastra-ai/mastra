@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -23,7 +23,7 @@ const THREAD = 'thread-1';
 // final answer and the goal step scores it).
 function singleStepModel(text = 'Working on it.', delayMs = 0) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -48,7 +48,7 @@ function goalJudgeModel(
   spyStream?: (props: any) => void,
 ) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async props => {
       spyStream?.(props);
       const decision = decisions[Math.min(call, decisions.length - 1)];
@@ -74,7 +74,7 @@ function goalJudgeModel(
 // goal state processor is projected without a preceding judge run.
 function toolThenAnswerModel() {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       const chunks: any[] = [
@@ -552,7 +552,7 @@ describe('in-loop goal scoring', () => {
 
   it('goal judge activity observation does not block structured-output fallback', async () => {
     const streamCalls: any[] = [];
-    const judge = new MockLanguageModelV2({
+    const judge = new MockLanguageModelV4({
       doStream: async props => {
         streamCalls.push(props);
         const fallbackText = '{"decision":"done","reason":"stream fallback"}';

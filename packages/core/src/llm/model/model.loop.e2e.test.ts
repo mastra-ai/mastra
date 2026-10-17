@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai-v5';
+import { openai } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -10,14 +10,14 @@ import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { MastraLLMVNext } from './model.loop';
-import type { MastraLanguageModelV2 } from './shared.types';
+import type { MastraLanguageModelV4 } from './shared.types';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
 
 const model = new MastraLLMVNext({
-  models: [{ model: openai('gpt-4o-mini') as unknown as MastraLanguageModelV2, maxRetries: 0, id: 'test-model' }],
+  models: [{ model: openai('gpt-4o-mini') as unknown as MastraLanguageModelV4, maxRetries: 0, id: 'test-model' }],
 });
 
 // The agentic loop runs on the evented workflow engine, which needs a

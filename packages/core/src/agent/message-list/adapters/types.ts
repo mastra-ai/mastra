@@ -1,4 +1,4 @@
-import type { IdGenerator } from '@internal/ai-sdk-v5';
+import type { IdGenerator } from '@internal/ai-v7';
 
 import type { MastraDBMessage } from '../state/types';
 import type { AIV5Type } from '../types';

@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
@@ -25,7 +25,7 @@ import { createEventedAgent } from '../index';
  */
 describe('durable/evented agent — run-local topics are never written to the cache (#21668)', () => {
   function makeMockModel() {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'hi' },
@@ -33,7 +33,7 @@ describe('durable/evented agent — run-local topics are never written to the ca
         ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
       }),
-    }) as LanguageModelV2;
+    }) as LanguageModelV4;
   }
 
   function makeRegisteredAgent(id: string) {

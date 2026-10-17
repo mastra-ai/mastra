@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { RequestContext } from '../../request-context';
 import { mockTextModel } from '../../test-utils/llm-mock';
@@ -39,7 +39,7 @@ describe('Dynamic Model Selection with Fallback', () => {
   });
 
   it('should support a dynamic function returning a single v2 model without exposing a model list', async () => {
-    const premiumModel = new MockLanguageModelV2({
+    const premiumModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -76,7 +76,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       }),
     });
 
-    const standardModel = new MockLanguageModelV2({
+    const standardModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -132,7 +132,7 @@ describe('Dynamic Model Selection with Fallback', () => {
   });
 
   it('should support all models being dynamic in fallback array', async () => {
-    const model1 = new MockLanguageModelV2({
+    const model1 = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Model 1 failed');
       },
@@ -146,7 +146,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       },
     });
 
-    const model2 = new MockLanguageModelV2({
+    const model2 = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -248,7 +248,7 @@ describe('Dynamic Model Selection with Fallback', () => {
   });
 
   it('should support config object with dynamic model selection', async () => {
-    const workingModel = new MockLanguageModelV2({
+    const workingModel = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -325,7 +325,7 @@ describe('Dynamic Model Selection with Fallback', () => {
 
   it('should support dynamic function returning fallback array', async () => {
     // This is the key feature - a function that returns an entire fallback array
-    const failingModel = new MockLanguageModelV2({
+    const failingModel = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Primary model failed');
       },
@@ -339,7 +339,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       },
     });
 
-    const backupModel = new MockLanguageModelV2({
+    const backupModel = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -416,7 +416,7 @@ describe('Dynamic Model Selection with Fallback', () => {
 
   it('should inherit agent-level maxRetries when not specified in dynamic fallback array', async () => {
     // This test verifies the bug fix: dynamic arrays should inherit this.maxRetries
-    const workingModel = new MockLanguageModelV2({
+    const workingModel = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -486,7 +486,7 @@ describe('Dynamic Model Selection with Fallback', () => {
 
   it('should inherit agent-level maxRetries for static arrays passed to resolveModelFallbacks', async () => {
     // This test verifies that static arrays also inherit maxRetries correctly
-    const workingModel = new MockLanguageModelV2({
+    const workingModel = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -575,7 +575,7 @@ describe('Dynamic Model Selection with Fallback', () => {
   });
 
   it('should support async dynamic function returning fallback array', async () => {
-    const model1 = new MockLanguageModelV2({
+    const model1 = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Model 1 failed');
       },
@@ -589,7 +589,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       },
     });
 
-    const model2 = new MockLanguageModelV2({
+    const model2 = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -663,7 +663,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     let primaryCallCount = 0;
     let nestedCallCount = 0;
 
-    const failingModel = new MockLanguageModelV2({
+    const failingModel = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Nested model failed');
       },
@@ -677,7 +677,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       },
     });
 
-    const workingModel = new MockLanguageModelV2({
+    const workingModel = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -762,7 +762,7 @@ describe('Dynamic Model Selection with Fallback', () => {
   });
 
   it('should skip disabled models and use first enabled model', async () => {
-    const disabledModel = new MockLanguageModelV2({
+    const disabledModel = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Disabled model should not be called');
       },
@@ -776,7 +776,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       },
     });
 
-    const enabledModel = new MockLanguageModelV2({
+    const enabledModel = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -839,7 +839,7 @@ describe('Dynamic Model Selection with Fallback', () => {
   });
 
   it('should throw error when all models are disabled', async () => {
-    const disabledModel = new MockLanguageModelV2({
+    const disabledModel = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Should not be called');
       },
@@ -869,7 +869,7 @@ describe('Dynamic Model Selection with Fallback', () => {
 
   describe('labeled { model, id } results', () => {
     function textModel(text: string) {
-      return new MockLanguageModelV2({
+      return new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],

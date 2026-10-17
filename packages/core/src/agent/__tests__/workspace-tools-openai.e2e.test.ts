@@ -7,9 +7,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { openai as openai_v6 } from '@ai-sdk/openai-v6';
-import { openai as openai_v7 } from '@ai-sdk/openai-v7';
+import { openai as openai_v5, openai as openai_v6, openai as openai_v7 } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest';

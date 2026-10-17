@@ -1,9 +1,9 @@
-import type { LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import { ModelRouterLanguageModel } from './router';
 
-const tools: LanguageModelV2CallOptions['tools'] = [
+const tools: LanguageModelV4CallOptions['tools'] = [
   { type: 'function', name: 'lookup', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
 ];
 const usage = {
@@ -13,9 +13,9 @@ const usage = {
   completion_tokens_details: { reasoning_tokens: 3 },
 };
 
-async function collect(stream: ReadableStream<LanguageModelV2StreamPart>) {
+async function collect(stream: ReadableStream<LanguageModelV4StreamPart>) {
   const reader = stream.getReader();
-  const parts: LanguageModelV2StreamPart[] = [];
+  const parts: LanguageModelV4StreamPart[] = [];
   while (true) {
     const { done, value } = await reader.read();
     if (done) return parts;

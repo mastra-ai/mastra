@@ -1,9 +1,9 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 
 import { aiV5PromptToAIV6Prompt, aiV5PromptToAIV7Prompt } from './to-prompt';
 
-function toolResultPrompt(parts: unknown[]): LanguageModelV2Prompt {
+function toolResultPrompt(parts: unknown[]): LanguageModelV4Prompt {
   return [
     {
       role: 'tool',
@@ -16,10 +16,10 @@ function toolResultPrompt(parts: unknown[]): LanguageModelV2Prompt {
         },
       ],
     },
-  ] as unknown as LanguageModelV2Prompt;
+  ] as unknown as LanguageModelV4Prompt;
 }
 
-function firstOutputValue(prompt: LanguageModelV2Prompt): unknown[] {
+function firstOutputValue(prompt: LanguageModelV4Prompt): unknown[] {
   const message = prompt[0] as unknown as { content: { output: { value: unknown[] } }[] };
   return message.content[0]!.output.value;
 }

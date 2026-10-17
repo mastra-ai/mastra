@@ -1,4 +1,4 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { MastraBase } from '../../base';
 import { attachModelStreamTransport, readModelStreamTransport } from '../types';
 import type { ChunkType, CreateStream, OnResult } from '../types';
@@ -53,7 +53,7 @@ export abstract class MastraModelInput extends MastraBase {
     controller,
   }: {
     runId: string;
-    stream: ReadableStream<LanguageModelV2StreamPart | Record<string, unknown>>;
+    stream: ReadableStream<LanguageModelV4StreamPart | Record<string, unknown>>;
     controller: ReadableStreamDefaultController<ChunkType>;
   }): Promise<void>;
 

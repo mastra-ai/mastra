@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 
 import { Agent } from '../../agent';
 
@@ -7,7 +7,7 @@ const agent = new Agent({
   id: 'unconsumed-threadless-agent',
   name: 'Unconsumed threadless cleanup test',
   instructions: 'Test',
-  model: new MockLanguageModelV2({
+  model: new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

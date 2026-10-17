@@ -5,11 +5,9 @@
  * Some models return finishReason: 'stop' even when tool calls are present.
  * The agent loop must continue processing tool results in all cases.
  */
-import { anthropic } from '@ai-sdk/anthropic-v5';
-import { google } from '@ai-sdk/google-v5';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { openai as openai_v6 } from '@ai-sdk/openai-v6';
-import { openai as openai_v7 } from '@ai-sdk/openai-v7';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
+import { openai as openai_v5, openai as openai_v6, openai as openai_v7 } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

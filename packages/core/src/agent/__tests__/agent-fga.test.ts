@@ -1,7 +1,7 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { FGADeniedError } from '../../auth/ee/fga-check';
@@ -44,7 +44,7 @@ function createMockMastra(fgaProvider?: IFGAProvider) {
 }
 
 function createMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

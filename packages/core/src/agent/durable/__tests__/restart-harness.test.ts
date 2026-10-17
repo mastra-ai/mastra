@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { DurableStepIds, AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
@@ -21,7 +21,7 @@ const streamStart = (id: string) => [
 // Decides from the transcript, so graph 2 makes the call graph 1 would have
 // made for the same history: two tool rounds, then text.
 function createModel(calls: { count: number }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       calls.count++;
       const answered = prompt.filter(m => m.role === 'tool').flatMap(m => m.content).length;

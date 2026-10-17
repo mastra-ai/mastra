@@ -5,8 +5,8 @@
  * Validates that tools can suspend execution and be resumed with data.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -23,7 +23,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a mock model that returns a tool call
  */
 function createToolCallModel(toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -61,7 +61,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
     providerExecuted: false,
   }));
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -83,7 +83,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
  * Creates a simple text model
  */
 function _createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -147,7 +147,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'suspension-agent',
         name: 'Suspension Agent',
         instructions: 'You can use interactive tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { interactiveTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -181,7 +181,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'schema-suspension-agent',
         name: 'Schema Suspension Agent',
         instructions: 'Use suspendable tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { suspendableTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -219,7 +219,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'confirmation-agent',
         name: 'Confirmation Agent',
         instructions: 'Ask for confirmation when needed',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { askForConfirmation: confirmationTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -246,7 +246,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'auto-resume-agent',
         name: 'Auto Resume Agent',
         instructions: 'Use auto-resuming tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { autoResumeTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -291,7 +291,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'multi-tool-agent',
         name: 'Multi Tool Agent',
         instructions: 'Validate then process data',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { validateData: validateTool, processData: processTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -329,7 +329,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'chained-agent',
         name: 'Chained Agent',
         instructions: 'Execute tool chain',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { chainedTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -358,7 +358,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'memory-suspension-agent',
         name: 'Memory Suspension Agent',
         instructions: 'Use memory with suspension',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { memoryTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -398,7 +398,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'readonly-confirmation-agent',
         name: 'ReadOnly Confirmation Agent',
         instructions: 'Ask for confirmation when needed',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { askForConfirmation: confirmationTool },
         memory,
       });
@@ -448,7 +448,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'stateful-agent',
         name: 'Stateful Agent',
         instructions: 'Manage state',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { statefulTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -490,7 +490,7 @@ describe('DurableAgent tool suspension', () => {
         id: 'complex-schema-agent',
         name: 'Complex Schema Agent',
         instructions: 'Handle complex schemas',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { complexTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -532,7 +532,7 @@ describe('DurableAgent suspension edge cases', () => {
       id: 'normal-tool-agent',
       name: 'Normal Tool Agent',
       instructions: 'Use normal tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { normalTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -574,7 +574,7 @@ describe('DurableAgent suspension edge cases', () => {
       id: 'mixed-suspension-agent',
       name: 'Mixed Suspension Agent',
       instructions: 'Use both quick and slow tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { quickTool, slowTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

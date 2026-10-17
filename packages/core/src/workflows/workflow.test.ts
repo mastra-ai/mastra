@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
 import type {
   WorkflowResult,
@@ -12,7 +12,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
@@ -523,7 +523,7 @@ describe('Workflow (Default Engine Specifics)', () => {
         suspendedToolRunId: null,
         resumeData: null,
       });
-      return new MockLanguageModelV2({
+      return new MockLanguageModelV4({
         ...(provider ? { provider: provider as any } : {}),
         ...(modelId ? { modelId: modelId as any } : {}),
         doGenerate: async () => ({

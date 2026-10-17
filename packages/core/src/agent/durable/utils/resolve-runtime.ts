@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { resolveModelConfig } from '../../../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';

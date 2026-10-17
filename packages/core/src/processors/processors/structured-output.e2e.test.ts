@@ -1,5 +1,5 @@
-import { openai } from '@ai-sdk/openai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { openai } from '@ai-sdk/openai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
@@ -53,7 +53,7 @@ describe('Structured Output with Tool Execution', () => {
     };
 
     // Create mock model that calls a tool and returns structured output
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         // Check if this is the first call or after tool execution
         const hasToolResults = prompt.some(

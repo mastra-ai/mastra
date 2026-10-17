@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect } from 'vitest';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
@@ -8,7 +8,7 @@ describe('Agent usage tracking', () => {
     describe('generate', () => {
       it('should expose usage with inputTokens and outputTokens (AI SDK v5 format)', async () => {
         // Create a V2 mock that returns usage in AI SDK v5 format
-        const model = new MockLanguageModelV2({
+        const model = new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [{ type: 'text', text: 'Hello world!' }],
             finishReason: 'stop',
@@ -61,7 +61,7 @@ describe('Agent usage tracking', () => {
 
     describe('stream', () => {
       it('should expose usage in stream with AI SDK v5 format', async () => {
-        const model = new MockLanguageModelV2({
+        const model = new MockLanguageModelV4({
           doStream: async () => {
             return {
               stream: convertArrayToReadableStream([

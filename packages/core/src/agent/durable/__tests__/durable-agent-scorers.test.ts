@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../../evals';
@@ -16,12 +16,12 @@ import { createDurableAgent } from '../create-durable-agent';
 
 describe('DurableAgent Scorers', () => {
   let pubsub: EventEmitterPubSub;
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
 
   beforeEach(() => {
     pubsub = new EventEmitterPubSub();
 
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -48,7 +48,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         scorers: {
           testScorer: {
             scorer: testScorer,
@@ -75,7 +75,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         scorers: {
           testScorer: {
             scorer: testScorer,
@@ -99,7 +99,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -127,7 +127,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         scorers: {
           defaultScorer: {
             scorer: defaultScorer,
@@ -164,7 +164,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         scorers: {
           myScorer: {
             scorer: testScorer,
@@ -196,7 +196,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         scorers: {
           first: { scorer: scorer1 },
           second: { scorer: scorer2, sampling: { type: 'none' } },
@@ -220,7 +220,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -236,7 +236,7 @@ describe('DurableAgent Scorers', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -258,7 +258,7 @@ describe('DurableAgent Scorers', () => {
 // ============================================================================
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -279,7 +279,7 @@ function createTextModel(text: string) {
 
 function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -340,7 +340,7 @@ describe('DurableAgent scoringData propagation', () => {
       id: 'scoring-data-generate-agent',
       name: 'Scoring Data Generate Agent',
       instructions: 'Be brief.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -368,7 +368,7 @@ describe('DurableAgent scoringData propagation', () => {
       id: 'scoring-data-default-agent',
       name: 'Scoring Data Default Agent',
       instructions: 'Be brief.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -385,7 +385,7 @@ describe('DurableAgent scoringData propagation', () => {
       id: 'scoring-data-stream-agent',
       name: 'Scoring Data Stream Agent',
       instructions: 'Be brief.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -414,7 +414,7 @@ describe('DurableAgent scoringData propagation', () => {
       id: 'scoring-data-resume-agent',
       name: 'Scoring Data Resume Agent',
       instructions: 'Use the search tool when asked.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { searchTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -458,7 +458,7 @@ describe('DurableAgent scoringData propagation', () => {
       id: 'scoring-data-defaults-agent',
       name: 'Scoring Data Defaults Agent',
       instructions: 'Use the search tool when asked.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { searchTool },
       // Merged into resolvedOptions on resume — must NOT override the
       // run-level opt-in persisted at prepare time.

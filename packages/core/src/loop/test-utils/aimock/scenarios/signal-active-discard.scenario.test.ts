@@ -11,7 +11,7 @@
  * active at send time on every engine.
  */
 
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { stepCountIs } from '@internal/ai-v7';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';

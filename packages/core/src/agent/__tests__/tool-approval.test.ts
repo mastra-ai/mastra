@@ -6,7 +6,7 @@ import { MockMemory } from '../../memory';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const mockStorage = new InMemoryStore();
 
@@ -42,7 +42,7 @@ export function toolApprovalAndSuspensionTests(version: 'v2') {
 
         // Create a mock model that handles tool calls
         let callCount = 0;
-        const mockModel = new MockLanguageModelV2({
+        const mockModel = new MockLanguageModelV4({
           doStream: async () => {
             callCount++;
             if (callCount === 1) {
@@ -191,7 +191,7 @@ export function toolApprovalAndSuspensionTests(version: 'v2') {
         });
 
         const makeModel = () =>
-          new MockLanguageModelV2({
+          new MockLanguageModelV4({
             doStream: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               warnings: [],
@@ -266,7 +266,7 @@ export function toolApprovalAndSuspensionTests(version: 'v2') {
         // the persisted suspend snapshot). This proves the resume call re-supplies and re-evaluates
         // the function, so approval survives a real suspend -> resume cycle without serialization.
         let callCount = 0;
-        const mockModel = new MockLanguageModelV2({
+        const mockModel = new MockLanguageModelV4({
           doStream: async () => {
             callCount++;
             if (callCount === 1) {
@@ -382,7 +382,7 @@ describe('goal activity at tool approval', () => {
       requireApproval: true,
       execute: async input => input,
     });
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         await new Promise(resolve => setTimeout(resolve, 20));
         return {

@@ -12,7 +12,7 @@
  * - finishReason indicates the run was aborted
  */
 
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { stepCountIs } from '@internal/ai-v7';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';

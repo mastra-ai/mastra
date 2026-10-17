@@ -12,8 +12,8 @@
  * observable agent surface: model call count, streamed chunks, and the client resume.
  */
 
-import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -33,8 +33,8 @@ const TOOL_CALL_ID = 'tc-1';
  */
 function createClientToolModel(finalText: string) {
   let callCount = 0;
-  const prompts: LanguageModelV2CallOptions['prompt'][] = [];
-  const model = new MockLanguageModelV2({
+  const prompts: LanguageModelV4CallOptions['prompt'][] = [];
+  const model = new MockLanguageModelV4({
     doStream: async options => {
       callCount++;
       prompts.push(options.prompt);
@@ -70,7 +70,7 @@ function createClientToolModel(finalText: string) {
         warnings: [],
       };
     },
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 
   return { model, modelCalls: () => callCount, prompts };
 }

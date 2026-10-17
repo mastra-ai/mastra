@@ -8,7 +8,7 @@
  * probe confirming the run is dead, or an explicit `cleanup()` tears it down.
  */
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -43,7 +43,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
       id: 'observe-detach-agent',
       name: 'Observe Detach Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2() as any,
+      model: new MockLanguageModelV4() as any,
     });
     agent = createDurableAgent({ agent: baseAgent, pubsub, cleanupTimeoutMs: CLEANUP_MS }) as DurableAgent;
     void new Mastra({ agents: { 'observe-detach-agent': agent as any }, logger: false, storage: new InMemoryStore() });
@@ -178,7 +178,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
         id: 'no-cleanup',
         name: 'No Cleanup',
         instructions: 'test',
-        model: new MockLanguageModelV2() as any,
+        model: new MockLanguageModelV4() as any,
       }),
       pubsub,
       cleanupTimeoutMs: 0,

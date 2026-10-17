@@ -1,4 +1,4 @@
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-v7';
 
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 

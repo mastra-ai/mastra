@@ -6,8 +6,8 @@
  * to the model and save the reply into the sibling's thread.
  */
 
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
@@ -26,8 +26,8 @@ type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; s
 
 // One tool call, then text once the tool has answered.
 function createModel(prompts: string[]) {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }: { prompt: LanguageModelV2Prompt }) => {
+  return new MockLanguageModelV4({
+    doStream: async ({ prompt }: { prompt: LanguageModelV4Prompt }) => {
       prompts.push(JSON.stringify(prompt));
       const parts = prompt.some(message => message.role === 'tool')
         ? [

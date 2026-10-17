@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';

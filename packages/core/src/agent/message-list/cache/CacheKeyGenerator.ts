@@ -1,4 +1,4 @@
-import * as AIV5 from '@internal/ai-sdk-v5';
+import * as AIV5 from '@internal/ai-v7';
 
 import { getImageCacheKey, resolveFilePartMediaTypeAndData } from '../prompt/image-utils';
 import type { LegacyCoreMessage, LegacyUIMessage } from '../state/legacy-shapes';
@@ -196,7 +196,7 @@ export class CacheKeyGenerator {
         key += part.text;
         key = appendResponseProviderItemKeys(key, (part as any).providerMetadata);
       }
-      if (AIV5.isToolUIPart(part) || part.type === 'dynamic-tool') {
+      if (AIV5.isToolUIPart(part)) {
         key += part.toolCallId;
         key += part.state;
       }

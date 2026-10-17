@@ -35,7 +35,7 @@
  * packages/core/src/agent-controller/tools.ts, claim (b) FAILS (fork renders) —
  * that is the RED that proves the clear is load-bearing.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
@@ -93,7 +93,7 @@ function allPostedText(adapter: any, chatThread: any): string {
 
 /** A model that always emits the given text — used for the fork's stream. */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

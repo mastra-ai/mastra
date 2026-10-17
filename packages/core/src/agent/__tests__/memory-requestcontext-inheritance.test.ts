@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 /**
  * Creates a mock model that returns a simple text response.
  */
 function createSimpleMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',

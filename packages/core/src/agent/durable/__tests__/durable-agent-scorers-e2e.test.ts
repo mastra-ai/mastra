@@ -8,8 +8,8 @@
  * `Agent.#runScorers` produces in the non-durable path.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { createScorer } from '../../../evals';
 import type { ScoringHookInput } from '../../../evals';
@@ -45,7 +45,7 @@ afterAll(() => {
 });
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -98,7 +98,7 @@ describe('DurableAgent scorers — end-to-end parity', () => {
       id: 'scored-agent-1',
       name: 'scored-agent-1',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('Final answer.') as LanguageModelV2,
+      model: createTextModel('Final answer.') as LanguageModelV4,
       scorers: { parity: { scorer: taskScorer } },
     });
 
@@ -154,7 +154,7 @@ describe('DurableAgent scorers — end-to-end parity', () => {
       id: 'scored-agent-2',
       name: 'scored-agent-2',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('Done.') as LanguageModelV2,
+      model: createTextModel('Done.') as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -189,7 +189,7 @@ describe('DurableAgent scorers — end-to-end parity', () => {
       id: 'no-scorer-agent',
       name: 'no-scorer-agent',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('Plain answer.') as LanguageModelV2,
+      model: createTextModel('Plain answer.') as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

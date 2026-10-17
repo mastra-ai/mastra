@@ -8,7 +8,7 @@
  * - <available_skills> is always injected into system messages
  * - skill-read-* tools are always available (no activation gate)
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
@@ -96,7 +96,7 @@ describe('stateless skill tool behavior', () => {
       const capturedPrompts: any[] = [];
       let callCount = 0;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           callCount++;
           capturedPrompts.push(prompt);
@@ -181,7 +181,7 @@ describe('stateless skill tool behavior', () => {
       const capturedToolSets: any[] = [];
       let totalCallCount = 0;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async ({ tools }) => {
           totalCallCount++;
           capturedToolSets.push(tools);
@@ -252,7 +252,7 @@ describe('stateless skill tool behavior', () => {
       const capturedPrompts: any[] = [];
       let totalCallCount = 0;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           totalCallCount++;
           capturedPrompts.push(prompt);

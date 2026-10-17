@@ -562,7 +562,7 @@ export class A2AAgent implements SubAgent {
 
   getModel: SubAgent['getModel'] = async () =>
     ({
-      specificationVersion: 'v2',
+      specificationVersion: 'v4',
     }) as Awaited<ReturnType<SubAgent['getModel']>>;
 
   hasOwnMemory(): boolean {

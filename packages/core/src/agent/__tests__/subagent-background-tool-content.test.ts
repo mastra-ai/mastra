@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage';
@@ -42,7 +42,7 @@ describe('sub-agent background dispatch tool content', () => {
   // that previously failed.
   function capturingSupervisorModel(capturedPrompts: any[]) {
     let call = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async (options: any) => {
         capturedPrompts.push(options.prompt);
         call++;
@@ -89,7 +89,7 @@ describe('sub-agent background dispatch tool content', () => {
       name: 'helper',
       description: 'A helper sub-agent.',
       instructions: 'Say hello.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],

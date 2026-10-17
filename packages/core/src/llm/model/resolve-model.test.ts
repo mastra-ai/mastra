@@ -1,7 +1,6 @@
-import { openai } from '@ai-sdk/openai-v5';
+import { openai } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 import { RequestContext } from '../../request-context';
-import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV7LanguageModel } from './aisdk/v7/model';
 import { isOpenAICompatibleObjectConfig, resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
@@ -23,7 +22,7 @@ describe('resolveModelConfig', () => {
   it('should return a LanguageModel instance as-is', async () => {
     const model = openai('gpt-4o');
     const result = await resolveModelConfig(model);
-    expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+    expect(result).toBeInstanceOf(AISDKV7LanguageModel);
     expect(result.modelId).toBe('gpt-4o');
     expect(result.provider).toBe('openai.responses');
     expect(result.specificationVersion).toBe('v2');
@@ -49,7 +48,7 @@ describe('resolveModelConfig', () => {
     const model = openai('gpt-4o');
     const dynamicFn = () => model;
     const result = await resolveModelConfig(dynamicFn);
-    expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+    expect(result).toBeInstanceOf(AISDKV7LanguageModel);
     expect(result.modelId).toBe('gpt-4o');
     expect(result.provider).toBe('openai.responses');
     expect(result.specificationVersion).toBe('v2');
@@ -73,7 +72,7 @@ describe('resolveModelConfig', () => {
     it('exposes the label on a model built by a dynamic function', async () => {
       const result = await resolveModelConfig(() => ({ model: openai('gpt-4o'), id: 'mastra/openai/gpt-4o' }));
 
-      expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result).toBeInstanceOf(AISDKV7LanguageModel);
       expect(result.provider).toBe('openai.responses');
       expect(result.modelId).toBe('gpt-4o');
       expect((result as { id?: string }).id).toBe('mastra/openai/gpt-4o');
@@ -166,7 +165,7 @@ describe('resolveModelConfig', () => {
   });
 
   describe('unknown specificationVersion handling', () => {
-    it('should wrap a model with unknown specificationVersion as AISDKV5LanguageModel when it has doStream/doGenerate', async () => {
+    it('should wrap a model with unknown specificationVersion as AISDKV7LanguageModel when it has doStream/doGenerate', async () => {
       const model = {
         specificationVersion: 'v99',
         provider: 'ollama.responses',
@@ -176,7 +175,7 @@ describe('resolveModelConfig', () => {
         doStream: async () => ({}),
       };
       const result = await resolveModelConfig(model as any);
-      expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result).toBeInstanceOf(AISDKV7LanguageModel);
       expect(result.specificationVersion).toBe('v2');
       expect(result.modelId).toBe('llama3.2');
       expect(result.provider).toBe('ollama.responses');
@@ -189,7 +188,7 @@ describe('resolveModelConfig', () => {
         modelId: 'test-model',
       };
       const result = await resolveModelConfig(model as any);
-      expect(result).not.toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result).not.toBeInstanceOf(AISDKV7LanguageModel);
       expect(result).toBe(model);
     });
 

@@ -33,7 +33,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../message-list';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const TOOL_CALL_ID = 'call-1';
 // Anthropic reasoning-block signatures. In production these are cryptographic
@@ -96,7 +96,7 @@ function turn(
  */
 function scriptedModel(scripts: Array<Array<Record<string, unknown>>>) {
   let index = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const chunks = scripts[Math.min(index, scripts.length - 1)]!;
       index++;
@@ -115,7 +115,7 @@ function scriptedModel(scripts: Array<Array<Record<string, unknown>>>) {
 
 const mockExecute = vi.fn().mockResolvedValue({ performed: true });
 
-function buildAgent(model: MockLanguageModelV2) {
+function buildAgent(model: MockLanguageModelV4) {
   const memory = new MockMemory();
   const agent = new Agent({
     id: 'approval-reasoning-agent',

@@ -9,7 +9,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
@@ -77,7 +77,7 @@ describe('AgentController: mode availableTools with shared workspace', () => {
   }
 
   async function setupController({ modes, workspace }: { modes: AgentControllerMode[]; workspace: Workspace }) {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: (async (_options: any) => ({ stream: createTextStream() })) as any,
     });
 

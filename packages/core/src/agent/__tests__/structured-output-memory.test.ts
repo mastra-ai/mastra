@@ -4,7 +4,7 @@ import { MockMemory } from '../../memory/mock';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 /**
  * Regression test for issue #12800:
@@ -30,7 +30,7 @@ describe('Structured output with memory - assistant message in final position (#
     // Track what prompts are sent to the model
     const capturedPrompts: any[] = [];
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'anthropic',
       modelId: 'claude-opus-4-6',
       doGenerate: async options => {
@@ -156,7 +156,7 @@ describe('Structured output with memory - assistant message in final position (#
 
   it('guards Claude 5 assistant-role input without configured input processors or memory', async () => {
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'anthropic',
       modelId: 'claude-opus-5',
       doGenerate: async options => {
@@ -187,7 +187,7 @@ describe('Structured output with memory - assistant message in final position (#
 
   it('preserves assistant prefill for Claude 4.5', async () => {
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'anthropic',
       modelId: 'claude-sonnet-4-5',
       doGenerate: async options => {
@@ -218,7 +218,7 @@ describe('Structured output with memory - assistant message in final position (#
 
   it('does not guard non-Anthropic assistant-role input', async () => {
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'openai',
       modelId: 'gpt-5',
       doGenerate: async options => {
@@ -249,7 +249,7 @@ describe('Structured output with memory - assistant message in final position (#
 
   it('guards Gemini 3 assistant-role input without configured input processors or memory', async () => {
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'google',
       modelId: 'gemini-3.5-flash-lite',
       doGenerate: async options => {
@@ -284,7 +284,7 @@ describe('Structured output with memory - assistant message in final position (#
 
   it('guards Gemini 3 assistant-role input even without structured output', async () => {
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'google',
       modelId: 'gemini-3.5-flash-lite',
       doGenerate: async options => {
@@ -318,7 +318,7 @@ describe('Structured output with memory - assistant message in final position (#
   it('guards when an input processor swaps a non-Google model to Gemini 3 mid-step', async () => {
     const capturedPrompts: any[] = [];
     const makeModel = (provider: string, modelId: string) =>
-      new MockLanguageModelV2({
+      new MockLanguageModelV4({
         provider,
         modelId,
         doGenerate: async options => {
@@ -363,7 +363,7 @@ describe('Structured output with memory - assistant message in final position (#
   it('does not inject a user turn into Gemini 3 agentic-loop steps that follow a tool result', async () => {
     const capturedPrompts: any[] = [];
     let call = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'google',
       modelId: 'gemini-3.5-flash-lite',
       doGenerate: async options => {
@@ -410,7 +410,7 @@ describe('Structured output with memory - assistant message in final position (#
     // Shape left behind when a previous run died mid-tool: the call never got a result. Default
     // prompt conversion drops the unpaired call, leaving the assistant text as the trailing turn.
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'google',
       modelId: 'gemini-3.5-flash-lite',
       doGenerate: async options => {
@@ -454,7 +454,7 @@ describe('Structured output with memory - assistant message in final position (#
 
   it('preserves the trailing assistant turn for Anthropic without structured output (valid prefill)', async () => {
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'anthropic.messages',
       modelId: 'claude-opus-4-6',
       doGenerate: async options => {
@@ -486,7 +486,7 @@ describe('Structured output with memory - assistant message in final position (#
 
   it('preserves the trailing assistant turn for Gemini 2.5', async () => {
     const capturedPrompts: any[] = [];
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'google',
       modelId: 'gemini-2.5-flash',
       doGenerate: async options => {
@@ -528,7 +528,7 @@ describe('Structured output with memory - assistant message in final position (#
     // Track what prompts are sent to the model
     const capturedPrompts: any[] = [];
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       provider: 'anthropic',
       modelId: 'claude-opus-4-6',
       doGenerate: async options => {
@@ -672,7 +672,7 @@ describe('Structured output memory inheritance', () => {
     const resourceId = `structured-output-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
-    const mainModel = new MockLanguageModelV2({
+    const mainModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -704,7 +704,7 @@ describe('Structured output memory inheritance', () => {
     });
 
     const structuringPrompts: any[] = [];
-    const structuringModel = new MockLanguageModelV2({
+    const structuringModel = new MockLanguageModelV4({
       doGenerate: async options => {
         structuringPrompts.push(options.prompt);
         return {
@@ -846,7 +846,7 @@ describe('Structured output memory inheritance', () => {
     const threadId = globalThis.crypto.randomUUID();
     const resourceId = `structured-output-retry-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
-    const mainModel = new MockLanguageModelV2({
+    const mainModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -856,7 +856,7 @@ describe('Structured output memory inheritance', () => {
       }),
     });
     const structuringPrompts: unknown[] = [];
-    const structuringModel = new MockLanguageModelV2({
+    const structuringModel = new MockLanguageModelV4({
       doStream: async options => {
         structuringPrompts.push(options.prompt);
         const count = structuringPrompts.length === 1 ? 'invalid' : 4;
@@ -930,7 +930,7 @@ describe('Structured output memory inheritance', () => {
     const resourceId = `structured-output-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
-    const mainModel = new MockLanguageModelV2({
+    const mainModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -961,7 +961,7 @@ describe('Structured output memory inheritance', () => {
       }),
     });
 
-    const structuringModel = new MockLanguageModelV2({
+    const structuringModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -1035,7 +1035,7 @@ describe('Structured output memory inheritance', () => {
     const resourceId = `structured-output-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
-    const mainModel = new MockLanguageModelV2({
+    const mainModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -1067,7 +1067,7 @@ describe('Structured output memory inheritance', () => {
     });
 
     const structuringPrompts: any[] = [];
-    const structuringModel = new MockLanguageModelV2({
+    const structuringModel = new MockLanguageModelV4({
       doGenerate: async options => {
         structuringPrompts.push(options.prompt);
         return {
@@ -1181,7 +1181,7 @@ describe('Structured output memory inheritance', () => {
     const resourceId = `structured-output-streaming-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
 
-    const mainModel = new MockLanguageModelV2({
+    const mainModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -1214,7 +1214,7 @@ describe('Structured output memory inheritance', () => {
       }),
     });
 
-    const structuringModel = new MockLanguageModelV2({
+    const structuringModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -1334,7 +1334,7 @@ describe('Structured output stream memory persistence (#14659)', () => {
     };
     const expectedText = JSON.stringify(expectedObject);
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -25,7 +25,7 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 class OutdatedServer extends MastraServerBase {}
 
 function textModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -69,7 +69,7 @@ describe.each([
       id: `scoped-${kind}`,
       name: `Scoped ${kind}`,
       instructions: 'Test',
-      model: textModel() as LanguageModelV2,
+      model: textModel() as LanguageModelV4,
       memory,
       inputProcessors: [recorder],
       ...config,
@@ -137,7 +137,7 @@ describe.each([
   /** An agent whose first model call asks for an approved tool. A resumed process skips that call. */
   function approvalAgent(config: Partial<ConstructorParameters<typeof Agent>[0]> = {}, resumedProcess = false) {
     let calls = resumedProcess ? 1 : 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         calls++;
         const parts =
@@ -170,7 +170,7 @@ describe.each([
         return { ok: true };
       },
     });
-    const { agent } = build({ model: model as LanguageModelV2, tools: { approve }, ...config });
+    const { agent } = build({ model: model as LanguageModelV4, tools: { approve }, ...config });
     return { agent, toolSeen };
   }
 
@@ -377,7 +377,7 @@ describe('prepareForDurableExecution scopes', () => {
       id: 'prep-agent',
       name: 'Prep Agent',
       instructions: 'Test',
-      model: textModel() as LanguageModelV2,
+      model: textModel() as LanguageModelV4,
       memory: new MockMemory({ storage: new InMemoryStore() }),
       ...config,
     } as ConstructorParameters<typeof Agent>[0]);

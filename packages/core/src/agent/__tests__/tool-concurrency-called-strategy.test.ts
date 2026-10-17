@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
@@ -8,7 +8,7 @@ import { Agent } from '../agent';
 type ConcurrencyTracker = { running: number; peak: number };
 
 function twoParallelToolCalls(toolNames: string[]) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

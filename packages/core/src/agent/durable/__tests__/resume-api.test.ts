@@ -9,8 +9,8 @@
  * - Tool approval resume flow
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
@@ -41,7 +41,7 @@ import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
  * Creates a mock model that returns a tool call that will suspend
  */
 function createSuspendingToolModel(toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -70,7 +70,7 @@ function createSuspendingToolModel(toolName: string, toolArgs: object) {
  * Creates a text-only model for after resume
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -92,7 +92,7 @@ function createTextModel(text: string) {
 
 function createSuspendingThenTextModel(toolName: string, texts: string[]) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       const chunks =
@@ -257,7 +257,7 @@ describe('Resume API', () => {
         id: 'resume-test-agent',
         name: 'Resume Test Agent',
         instructions: 'Test resume',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -272,7 +272,7 @@ describe('Resume API', () => {
         id: 'resume-data-agent',
         name: 'Resume Data Agent',
         instructions: 'Test resume with data',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -299,7 +299,7 @@ describe('Resume API', () => {
         id: 'prepare-runid-agent',
         name: 'Prepare RunId Agent',
         instructions: 'Test prepare honors runId',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -324,7 +324,7 @@ describe('Resume API', () => {
         id: 'cold-resume-agent',
         name: 'Cold Resume Agent',
         instructions: 'Test cold resume rehydration',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -361,7 +361,7 @@ describe('Resume API', () => {
         id: 'completed-cold-resume-agent',
         name: 'Completed Cold Resume Agent',
         instructions: 'Test completed cold resume behavior',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       void new Mastra({ agents: { completedColdResumeAgent: durableAgent }, storage: store, logger: false });
@@ -388,7 +388,7 @@ describe('Resume API', () => {
         id: 'missing-cold-resume-agent',
         name: 'Missing Cold Resume Agent',
         instructions: 'Test missing cold resume behavior',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       void new Mastra({
@@ -408,7 +408,7 @@ describe('Resume API', () => {
         id: 'snapshot-owner-agent',
         name: 'Snapshot Owner Agent',
         instructions: 'Test snapshot ownership',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       void new Mastra({ agents: { snapshotOwnerAgent: durableAgent }, storage: store, logger: false });
@@ -431,7 +431,7 @@ describe('Resume API', () => {
         id: 'warm-resume-agent',
         name: 'Warm Resume Agent',
         instructions: 'Test warm resume behavior',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -450,7 +450,7 @@ describe('Resume API', () => {
         id: 'lost-race-resume-agent',
         name: 'Lost Race Resume Agent',
         instructions: 'Test lost resume race',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       const { runId } = await durableAgent.prepare('Start something');
@@ -486,7 +486,7 @@ describe('Resume API', () => {
         id: 'approval-options-agent',
         name: 'Approval Options Agent',
         instructions: 'Test approval option forwarding',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       const output = { marker: 'output' };
@@ -504,7 +504,7 @@ describe('Resume API', () => {
         id: 'decline-options-agent',
         name: 'Decline Options Agent',
         instructions: 'Test decline option forwarding',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       const output = { marker: 'declined-output' };
@@ -553,7 +553,7 @@ describe('Resume API', () => {
         id: 'stored-approval-options-agent',
         name: 'Stored Approval Options Agent',
         instructions: 'Test stored approval option forwarding',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       const runId = 'stored-approval-run';
@@ -598,7 +598,7 @@ describe('Resume API', () => {
         id: 'invalid-approval-data-agent',
         name: 'Invalid Approval Data Agent',
         instructions: 'Test invalid approval data rejection',
-        model: createTextModel('Unused') as LanguageModelV2,
+        model: createTextModel('Unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output: undefined } as any);
@@ -635,7 +635,7 @@ describe('Resume API', () => {
         id: 'context-resume-agent',
         name: 'Context Resume Agent',
         instructions: 'Test context preservation',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -669,7 +669,7 @@ describe('Resume API', () => {
         id: 'resume-untilidle-agent',
         name: 'Resume UntilIdle Agent',
         instructions: 'Test resume untilIdle',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -690,7 +690,7 @@ describe('Resume API', () => {
         id: 'resume-untilidle-ms-agent',
         name: 'Resume UntilIdle MaxIdleMs Agent',
         instructions: 'Test resume untilIdle maxIdleMs',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -712,7 +712,7 @@ describe('Resume API', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent });
@@ -728,7 +728,7 @@ describe('Resume API', () => {
         id: 'factory-resume-agent',
         name: 'Factory Resume Agent',
         instructions: 'Test factory resume',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({
@@ -785,7 +785,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
       id: 'replay-resume-agent',
       name: 'Replay Resume Agent',
       instructions: 'Test replay on resume',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { approvalTool },
     });
 
@@ -832,7 +832,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
       id: 'resume-until-idle-agent',
       name: 'Resume Until Idle Agent',
       instructions: 'Test resume until idle stream boundaries',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       memory: new MockMemory(),
       tools: { approvalTool },
     });
@@ -914,7 +914,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
           return { completed: true };
         },
       });
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ prompt }) =>
           JSON.stringify(prompt).includes('"type":"tool-result"')
             ? createTextModel('Resumed').doStream({ prompt } as any)
@@ -924,7 +924,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
         id: 'cache-miss-resume-agent',
         name: 'Cache Miss Resume Agent',
         instructions: 'Use the tool, then answer.',
-        model: model as LanguageModelV2,
+        model: model as LanguageModelV4,
         memory: new MockMemory({ storage: memoryStorage }),
         tools: { approvalTool: tool },
         outputProcessors: [
@@ -1004,7 +1004,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
         return { completed: true };
       },
     });
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) =>
         JSON.stringify(prompt).includes('"type":"tool-result"')
           ? createTextModel('Resumed').doStream({ prompt } as any)
@@ -1014,7 +1014,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
       id: 'persist-order-agent',
       name: 'Persist Order Agent',
       instructions: 'Use the tool, then answer.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       memory: new MockMemory({ storage: new InMemoryStore() }),
       tools: { approvalTool: tool },
     });
@@ -1058,7 +1058,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
       id: 'dedup-agent',
       name: 'Dedup Agent',
       instructions: 'Test deduplication',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({
@@ -1108,7 +1108,7 @@ describe('Resume with Tool Approval', () => {
       id: 'suspended-callback-agent',
       name: 'Suspended Callback Agent',
       instructions: 'Test suspended callback',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1135,7 +1135,7 @@ describe('Resume with Tool Approval', () => {
       id: 'finish-callback-agent',
       name: 'Finish Callback Agent',
       instructions: 'Test finish callback',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1162,7 +1162,7 @@ describe('Resume with Tool Approval', () => {
       id: 'error-callback-agent',
       name: 'Error Callback Agent',
       instructions: 'Test error callback',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1207,7 +1207,7 @@ describe('Resume State Preservation', () => {
       id: 'registry-agent',
       name: 'Registry Agent',
       instructions: 'Test registry',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { statefulTool },
     });
 
@@ -1236,7 +1236,7 @@ describe('Resume State Preservation', () => {
       id: 'cleanup-registry-agent',
       name: 'Cleanup Registry Agent',
       instructions: 'Test cleanup',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1277,7 +1277,7 @@ describe('Observe API', () => {
       id: 'observe-test-agent',
       name: 'Observe Test Agent',
       instructions: 'Test observe',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({
@@ -1296,7 +1296,7 @@ describe('Observe API', () => {
       id: 'shared-observe-agent',
       name: 'Shared Observe Agent',
       instructions: 'Test shared observer state',
-      model: createTextModel('unused') as LanguageModelV2,
+      model: createTextModel('unused') as LanguageModelV4,
     });
     const producer = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
     const observer = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
@@ -1351,7 +1351,7 @@ describe('Observe API', () => {
         id: 'partial-observe-agent',
         name: 'Partial Observe Agent',
         instructions: 'Test partial worker state',
-        model: createTextModel('unused') as LanguageModelV2,
+        model: createTextModel('unused') as LanguageModelV4,
         outputProcessors: [{ id: 'persisted-observer-processor', processOutputStream: ({ part }) => part }],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
@@ -1398,7 +1398,7 @@ describe('Observe API', () => {
         id: 'partial-owner-observe-agent',
         name: 'Partial Owner Observe Agent',
         instructions: 'Test partial worker ownership',
-        model: createTextModel('unused') as LanguageModelV2,
+        model: createTextModel('unused') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
       new Mastra({ agents: { durableAgent }, storage: store, logger: false });
@@ -1437,7 +1437,7 @@ describe('Observe API', () => {
       id: 'observe-failed-processors-agent',
       name: 'Observe Failed Processors Agent',
       instructions: 'Test observer processor fallback',
-      model: createTextModel('unused') as LanguageModelV2,
+      model: createTextModel('unused') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
     const mastra = new Mastra({ agents: { durableAgent }, storage: store, logger: false });
@@ -1484,7 +1484,7 @@ describe('Observe API', () => {
       id: 'observing-agent',
       name: 'Observing Agent',
       instructions: 'Test observer ownership',
-      model: createTextModel('unused') as LanguageModelV2,
+      model: createTextModel('unused') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
     new Mastra({ agents: { observingAgent: durableAgent }, storage: store, logger: false });
@@ -1508,7 +1508,7 @@ describe('Observe API', () => {
       id: 'observe-missing-entry-agent',
       name: 'Observe Missing Entry Agent',
       instructions: 'Test missing observer state',
-      model: createTextModel('unused') as LanguageModelV2,
+      model: createTextModel('unused') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
 
@@ -1525,7 +1525,7 @@ describe('Observe API', () => {
       id: 'observe-result-agent',
       name: 'Observe Result Agent',
       instructions: 'Test observe result',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({
@@ -1556,7 +1556,7 @@ describe('Observe API', () => {
       id: 'observe-index-agent',
       name: 'Observe Index Agent',
       instructions: 'Test indexed observe',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({
@@ -1587,7 +1587,7 @@ describe('Observe API', () => {
       id: 'observe-callbacks-agent',
       name: 'Observe Callbacks Agent',
       instructions: 'Test observe callbacks',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({
@@ -1634,7 +1634,7 @@ describe('per-call tool injection survives in-process resume', () => {
       id: 'clienttools-resume-agent',
       name: 'ClientTools Resume Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1662,7 +1662,7 @@ describe('per-call tool injection survives in-process resume', () => {
       id: 'toolsets-resume-agent',
       name: 'Toolsets Resume Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

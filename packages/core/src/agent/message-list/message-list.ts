@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -975,7 +975,7 @@ export class MessageList {
           downloadConcurrency: 10,
           downloadRetries: 3,
         },
-      ): Promise<LanguageModelV2Prompt> => {
+      ): Promise<LanguageModelV4Prompt> => {
         const promptMessages = this.getMessagesForModelPrompt().map(withUnavailableAttachmentPlaceholders);
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
@@ -1139,7 +1139,7 @@ export class MessageList {
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
         skipUnavailableAttachments?: boolean;
-      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
+      }): Promise<LanguageModelV4Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
     aiV7: {
       ui: () => this.toAIV6UIMessages(this.all.db()),
@@ -1152,7 +1152,7 @@ export class MessageList {
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
         skipUnavailableAttachments?: boolean;
-      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
+      }): Promise<LanguageModelV4Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
   };
 
@@ -2262,13 +2262,11 @@ export class MessageList {
       if (messageSource === `memory`) return null;
 
       // Check if the message is in a supported format for system messages
-      const isSupportedSystemFormat =
-        TypeDetector.isAIV6CoreMessage(message) ||
-        TypeDetector.isAIV5CoreMessage(message) ||
-        TypeDetector.isMastraDBMessage(message);
-
-      if (isSupportedSystemFormat) {
+      if (TypeDetector.isAIV5CoreMessage(message) || TypeDetector.isMastraDBMessage(message)) {
         return this.addSystem(message);
+      }
+      if (TypeDetector.isAIV6CoreMessage(message)) {
+        return this.addSystem(message as AIV6Type.ModelMessage);
       }
 
       // if we didn't add the message and we didn't ignore this intentionally, then it's a problem!

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
@@ -11,10 +11,10 @@ describe('Agent requestContextSchema', () => {
     apiKey: z.string(),
   });
 
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',

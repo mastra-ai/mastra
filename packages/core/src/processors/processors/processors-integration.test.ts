@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, it, expect } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -20,7 +20,7 @@ const mockLogger = {
  * ToolCallFilter rewrites the model prompt only, so these helpers build the real prompt
  * from a MessageList and run the filter over it.
  */
-async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): Promise<LanguageModelV2Prompt> {
+async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): Promise<LanguageModelV4Prompt> {
   const prompt = await messageList.get.all.aiV5.llmPrompt();
   const result = await filter.processLLMRequest?.({
     prompt,
@@ -36,7 +36,7 @@ async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): P
   return result?.prompt ?? prompt;
 }
 
-function toolPartsIn(prompt: LanguageModelV2Prompt, toolName?: string) {
+function toolPartsIn(prompt: LanguageModelV4Prompt, toolName?: string) {
   return prompt.flatMap(message =>
     typeof message.content === 'string'
       ? []
@@ -48,7 +48,7 @@ function toolPartsIn(prompt: LanguageModelV2Prompt, toolName?: string) {
   );
 }
 
-function textsIn(prompt: LanguageModelV2Prompt): string[] {
+function textsIn(prompt: LanguageModelV4Prompt): string[] {
   return prompt.flatMap(message =>
     typeof message.content === 'string'
       ? [message.content]

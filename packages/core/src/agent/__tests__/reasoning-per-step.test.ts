@@ -13,11 +13,11 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 function createTwoStepReasoningModel() {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       const chunks =
@@ -57,7 +57,7 @@ function createTwoStepReasoningModel() {
   });
 }
 
-function createAgent(model: MockLanguageModelV2) {
+function createAgent(model: MockLanguageModelV4) {
   return new Agent({
     name: 'per-step-reasoning',
     instructions: 'test agent',

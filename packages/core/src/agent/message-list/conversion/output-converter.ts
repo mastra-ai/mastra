@@ -1,4 +1,5 @@
-import * as AIV5 from '@internal/ai-sdk-v5';
+import { convertUIToModelMessages } from './ui-to-model';
+import * as AIV5 from '@internal/ai-v7';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { deepEqual } from '../../../utils/deep-equal';
@@ -113,7 +114,7 @@ function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T
  * Client-executed `tool_search` (non-null `call_id` in the input) replays as
  * a plain function call and is never dropped here.
  */
-function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart): boolean {
+function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart | AIV5Type.DynamicToolUIPart): boolean {
   if (AIV5.getToolName(part) !== 'tool_search') return false;
 
   // Only a provider-executed search replays by item reference. A user-defined tool
@@ -637,7 +638,7 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const converted: AIV5Type.ModelMessage[] = [];
   const dbMessagesById = new Map(dbMessages.map(message => [message.id, message]));
   for (const uiMsg of preprocessed) {
-    const produced = applyProviderToolErrorOutputs(AIV5.convertToModelMessages([uiMsg]), dbMessagesById.get(uiMsg.id));
+    const produced = applyProviderToolErrorOutputs(convertUIToModelMessages([uiMsg]), dbMessagesById.get(uiMsg.id));
     if (produced.length === 0) continue;
 
     const providerMetadata =

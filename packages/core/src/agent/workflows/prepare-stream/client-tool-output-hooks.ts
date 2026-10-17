@@ -108,7 +108,7 @@ export async function fireClientToolOutputHooks({
       if (!tool || tool.execute || typeof tool.onOutput !== 'function') continue;
 
       try {
-        await tool.onOutput({ ...result, abortSignal });
+        await tool.onOutput({ ...result, abortSignal, context: undefined });
       } catch (error) {
         logger?.error('Error calling client tool onOutput', {
           error,
@@ -152,7 +152,7 @@ export async function applyClientToolModelOutput({
   const isClientMappedTool = (
     tool: CoreTool,
   ): tool is CoreTool & { toModelOutput: NonNullable<CoreTool['toModelOutput']> } =>
-    !tool.execute && tool.type !== 'provider-defined' && typeof tool.toModelOutput === 'function';
+    !tool.execute && tool.type !== 'provider' && typeof tool.toModelOutput === 'function';
   if (!Object.values(tools).some(isClientMappedTool)) return;
 
   for (const message of messageList.get.input.db()) {

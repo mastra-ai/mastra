@@ -16,8 +16,8 @@
  * duplicate approval request).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -36,7 +36,7 @@ import { globalRunRegistry } from '../run-registry';
  * the conversation, then answers.
  */
 function makeSubAgentModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasToolResult = JSON.stringify(prompt).includes('classified-42');
       if (!hasToolResult) {
@@ -80,7 +80,7 @@ function makeSubAgentModel() {
 
 /** Supervisor model: delegates until the sub-agent's answer is in context. */
 function makeSupervisorModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasDelegationResult = JSON.stringify(prompt).includes('Secret retrieved');
       if (!hasDelegationResult) {
@@ -150,14 +150,14 @@ describe('durable delegated approval persisted runId', () => {
       name: 'subAgent',
       description: 'Fetches secrets',
       instructions: 'Fetch secrets with your tool.',
-      model: makeSubAgentModel() as LanguageModelV2,
+      model: makeSubAgentModel() as LanguageModelV4,
       tools: { secretTool },
     });
     return new Agent({
       id: 'supervisor',
       name: 'Supervisor',
       instructions: 'Delegate to subAgent.',
-      model: makeSupervisorModel() as LanguageModelV2,
+      model: makeSupervisorModel() as LanguageModelV4,
       agents: { subAgent },
       memory: mockMemory,
     });

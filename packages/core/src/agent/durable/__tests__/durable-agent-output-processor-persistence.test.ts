@@ -2,7 +2,7 @@
  * #26335: a processOutputStream rewrite of a model chunk must reach memory on a durable agent, the
  * same as on the default loop — memory holds what the client streamed, not the raw model output.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -16,7 +16,7 @@ import { createEventedAgent } from '../create-evented-agent';
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function textModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

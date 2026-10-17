@@ -6,7 +6,7 @@
  * 1. inputProcessors on Agent constructor - should merge with skills
  * 2. inputProcessors on generate()/stream() options - should merge with skills
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -132,7 +132,7 @@ function getToolNames(tools: unknown): string[] {
 }
 
 describe('Skills with Custom Processors (Issue #12612)', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
   let mockWorkspace: Workspace;
   let capturedTools: unknown;
   let capturedPrompt: unknown;
@@ -141,7 +141,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
     capturedTools = undefined;
     capturedPrompt = undefined;
 
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt, tools }) => {
         // Capture the tools that were passed to the model
         capturedTools = tools;

@@ -1,5 +1,5 @@
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
 import { MockMemory } from '../../memory';
@@ -7,12 +7,12 @@ import { Agent } from '../agent';
 
 function uiMessageTest(version: 'v2') {
   describe(`${version} - UIMessageWithMetadata support`, () => {
-    let dummyModel: MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV4;
     const mockMemory = new MockMemory();
 
     beforeEach(() => {
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               {

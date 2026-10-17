@@ -8,7 +8,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 vi.mock('../../evals/hooks', () => ({
   runScorer: vi.fn(),
@@ -56,7 +56,7 @@ function createScriptedModel() {
     () => textStep('All done'),
   ];
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const step = steps[Math.min(call++, steps.length - 1)]!;
       return { rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [], stream: step() };

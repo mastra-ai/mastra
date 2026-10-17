@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -47,7 +47,7 @@ function makeAgent(id: string, options?: { deferBy?: number }): Agent {
     id,
     name: id,
     instructions: 'test',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

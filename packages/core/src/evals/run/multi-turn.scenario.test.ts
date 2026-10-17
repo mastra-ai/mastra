@@ -7,7 +7,7 @@
  *
  * Full pipeline: AIMock scripted responses → OpenAI v6 provider → Agent → runEvals → scorers.
  */
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';

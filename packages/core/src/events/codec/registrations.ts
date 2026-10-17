@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { registerClass } from './registry';

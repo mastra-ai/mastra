@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { Mastra } from '../mastra';
@@ -46,7 +46,7 @@ describe('loop() only dispatches eagerly when eager execution is asked for expli
     const events: string[] = [];
     let stepCount = 0;
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         const isFirstStep = stepCount++ === 0;
         return {

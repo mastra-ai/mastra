@@ -1,7 +1,6 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { stepCountIs, tool } from '@internal/ai-sdk-v5';
+import { createOpenAI, createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { stepCountIs, tool } from '@internal/ai-v7';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
@@ -61,7 +60,7 @@ afterAll(() => mock.saveAndStop());
 
 function agentE2ETests({ version }: { version: 'v2' }) {
   const integration = new TestIntegration();
-  let openaiModel: LanguageModelV2;
+  let openaiModel: LanguageModelV4;
 
   beforeEach(() => {
     {

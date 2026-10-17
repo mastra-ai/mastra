@@ -5,15 +5,15 @@ import type {
   StaticToolResult,
   DynamicToolCall,
   DynamicToolResult,
-} from '@internal/ai-sdk-v5';
-import type { StepTripwireData } from '../../types';
+} from '@internal/ai-v7';
+import type { LanguageModelUsage, StepTripwireData } from '../../types';
 
 // ContentPart is not exported from ai, so we derive it from StepResult
 type ContentPart<TOOLS extends ToolSet> = StepResult<TOOLS>['content'][number];
-export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
+export class DefaultStepResult<TOOLS extends ToolSet> {
   readonly content: StepResult<TOOLS>['content'];
   readonly finishReason: StepResult<TOOLS>['finishReason'];
-  readonly usage: StepResult<TOOLS>['usage'];
+  readonly usage: LanguageModelUsage;
   readonly warnings: StepResult<TOOLS>['warnings'];
   readonly request: StepResult<TOOLS>['request'];
   readonly response: StepResult<TOOLS>['response'];
@@ -33,7 +33,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
   }: {
     content: StepResult<TOOLS>['content'];
     finishReason: StepResult<TOOLS>['finishReason'];
-    usage: StepResult<TOOLS>['usage'];
+    usage: LanguageModelUsage;
     warnings: StepResult<TOOLS>['warnings'];
     request: StepResult<TOOLS>['request'];
     response: StepResult<TOOLS>['response'];

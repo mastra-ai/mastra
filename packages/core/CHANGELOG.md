@@ -13813,8 +13813,8 @@
 ### Patch Changes
 
 - dependencies updates: ([#20149](https://github.com/mastra-ai/mastra/pull/20149))
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.13` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.13) (from `npm:@ai-sdk/provider-utils@5.0.11`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.4` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.4) (from `npm:@ai-sdk/provider@4.0.3`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.13` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.13) (from `npm:@ai-sdk/provider-utils@5.0.11`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@4.0.4` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/4.0.4) (from `npm:@ai-sdk/provider@4.0.3`, in `dependencies`)
 
 - Update provider registry and model documentation with latest models and providers ([`c8002da`](https://github.com/mastra-ai/mastra/commit/c8002da7775c468e2965b6ff5f82045450fa8cb9))
 
@@ -15710,15 +15710,15 @@
 ### Patch Changes
 
 - dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.9` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.9) (from `npm:@ai-sdk/provider-utils@5.0.7`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.9` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.9) (from `npm:@ai-sdk/provider-utils@5.0.7`, in `dependencies`)
 
 - dependencies updates: ([#19776](https://github.com/mastra-ai/mastra/pull/19776))
   - Updated dependency [`chat@^4.34.0` ↗︎](https://www.npmjs.com/package/chat/v/4.34.0) (from `^4.29.0`, in `dependencies`)
 
 - dependencies updates: ([#19813](https://github.com/mastra-ai/mastra/pull/19813))
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.30` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.30) (from `npm:@ai-sdk/provider-utils@3.0.28`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.40` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.40) (from `npm:@ai-sdk/provider-utils@4.0.38`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.11) (from `npm:@ai-sdk/provider-utils@5.0.9`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.30` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.30) (from `npm:@ai-sdk/provider-utils@3.0.28`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.40` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.40) (from `npm:@ai-sdk/provider-utils@4.0.38`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.11) (from `npm:@ai-sdk/provider-utils@5.0.9`, in `dependencies`)
 
 - Added a public ensureReady() method to FactoryStorageDomain so consumers can initialize a storage domain without going through a global registry. ([#19866](https://github.com/mastra-ai/mastra/pull/19866))
 
@@ -16055,9 +16055,9 @@
 ### Patch Changes
 
 - dependencies updates: ([#19813](https://github.com/mastra-ai/mastra/pull/19813))
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.30` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.30) (from `npm:@ai-sdk/provider-utils@3.0.28`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.40` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.40) (from `npm:@ai-sdk/provider-utils@4.0.38`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.11) (from `npm:@ai-sdk/provider-utils@5.0.9`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.30` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.30) (from `npm:@ai-sdk/provider-utils@3.0.28`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.40` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.40) (from `npm:@ai-sdk/provider-utils@4.0.38`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.11) (from `npm:@ai-sdk/provider-utils@5.0.9`, in `dependencies`)
 
 - Fixed fine-grained authorization (FGA) checks for `DurableAgent` execution and tool approvals. ([#19338](https://github.com/mastra-ai/mastra/pull/19338))
 
@@ -16330,7 +16330,7 @@
 ### Patch Changes
 
 - dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.9` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.9) (from `npm:@ai-sdk/provider-utils@5.0.7`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.9` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.9) (from `npm:@ai-sdk/provider-utils@5.0.7`, in `dependencies`)
 
 - Fixed bounded process output stalling other requests while high-volume commands continue streaming. ([#19600](https://github.com/mastra-ai/mastra/pull/19600))
 
@@ -16714,20 +16714,20 @@
 ### Patch Changes
 
 - dependencies updates: ([#16699](https://github.com/mastra-ai/mastra/pull/16699))
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.28` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.28) (from `npm:@ai-sdk/provider-utils@3.0.25`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.35` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.35) (from `npm:@ai-sdk/provider-utils@4.0.27`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.5` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.5) (from `npm:@ai-sdk/provider-utils@5.0.0`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.13` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.13) (from `npm:@ai-sdk/provider@3.0.10`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.2` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.2) (from `npm:@ai-sdk/provider@4.0.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.28` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.28) (from `npm:@ai-sdk/provider-utils@3.0.25`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.35` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.35) (from `npm:@ai-sdk/provider-utils@4.0.27`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.5` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.5) (from `npm:@ai-sdk/provider-utils@5.0.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@3.0.13` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/3.0.13) (from `npm:@ai-sdk/provider@3.0.10`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@4.0.2` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/4.0.2) (from `npm:@ai-sdk/provider@4.0.0`, in `dependencies`)
 
 - dependencies updates: ([#19328](https://github.com/mastra-ai/mastra/pull/19328))
   - Updated dependency [`@a2a-js/sdk@~0.3.14` ↗︎](https://www.npmjs.com/package/@a2a-js/sdk/v/0.3.14) (from `~0.3.13`, in `dependencies`)
 
 - dependencies updates: ([#19385](https://github.com/mastra-ai/mastra/pull/19385))
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.38` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.38) (from `npm:@ai-sdk/provider-utils@4.0.35`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.7` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.7) (from `npm:@ai-sdk/provider-utils@5.0.5`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.14` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.14) (from `npm:@ai-sdk/provider@3.0.13`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.3) (from `npm:@ai-sdk/provider@4.0.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.38` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.38) (from `npm:@ai-sdk/provider-utils@4.0.35`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.7` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.7) (from `npm:@ai-sdk/provider-utils@5.0.5`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@3.0.14` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/3.0.14) (from `npm:@ai-sdk/provider@3.0.13`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@4.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/4.0.3) (from `npm:@ai-sdk/provider@4.0.2`, in `dependencies`)
 
 - Update provider registry and model documentation with latest models and providers ([`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0))
 
@@ -17008,20 +17008,20 @@
 ### Patch Changes
 
 - dependencies updates: ([#16699](https://github.com/mastra-ai/mastra/pull/16699))
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.28` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.28) (from `npm:@ai-sdk/provider-utils@3.0.25`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.35` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.35) (from `npm:@ai-sdk/provider-utils@4.0.27`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.5` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.5) (from `npm:@ai-sdk/provider-utils@5.0.0`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.13` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.13) (from `npm:@ai-sdk/provider@3.0.10`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.2` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.2) (from `npm:@ai-sdk/provider@4.0.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.28` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.28) (from `npm:@ai-sdk/provider-utils@3.0.25`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.35` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.35) (from `npm:@ai-sdk/provider-utils@4.0.27`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.5` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.5) (from `npm:@ai-sdk/provider-utils@5.0.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@3.0.13` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/3.0.13) (from `npm:@ai-sdk/provider@3.0.10`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@4.0.2` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/4.0.2) (from `npm:@ai-sdk/provider@4.0.0`, in `dependencies`)
 
 - dependencies updates: ([#19328](https://github.com/mastra-ai/mastra/pull/19328))
   - Updated dependency [`@a2a-js/sdk@~0.3.14` ↗︎](https://www.npmjs.com/package/@a2a-js/sdk/v/0.3.14) (from `~0.3.13`, in `dependencies`)
 
 - dependencies updates: ([#19385](https://github.com/mastra-ai/mastra/pull/19385))
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.38` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.38) (from `npm:@ai-sdk/provider-utils@4.0.35`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.7` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.7) (from `npm:@ai-sdk/provider-utils@5.0.5`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.14` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.14) (from `npm:@ai-sdk/provider@3.0.13`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.3) (from `npm:@ai-sdk/provider@4.0.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.38` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.38) (from `npm:@ai-sdk/provider-utils@4.0.35`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@5.0.7` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/5.0.7) (from `npm:@ai-sdk/provider-utils@5.0.5`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@3.0.14` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/3.0.14) (from `npm:@ai-sdk/provider@3.0.13`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@4.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/4.0.3) (from `npm:@ai-sdk/provider@4.0.2`, in `dependencies`)
 
 - Fixed background task start chunks reaching agent stream onChunk callbacks. ([#18628](https://github.com/mastra-ai/mastra/pull/18628))
 
@@ -26688,13 +26688,13 @@ Bearer <token>` header. The token comes from the new
 ### Patch Changes
 
 - dependencies updates: ([#16126](https://github.com/mastra-ai/mastra/pull/16126))
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.25` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.25) (from `npm:@ai-sdk/provider-utils@3.0.23`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.26` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.26) (from `npm:@ai-sdk/provider-utils@4.0.23`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v5@npm:@ai-sdk/provider@2.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v5/v/2.0.3) (from `npm:@ai-sdk/provider@2.0.1`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.10) (from `npm:@ai-sdk/provider@3.0.8`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.25` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.25) (from `npm:@ai-sdk/provider-utils@3.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.26` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.26) (from `npm:@ai-sdk/provider-utils@4.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@2.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/2.0.3) (from `npm:@ai-sdk/provider@2.0.1`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@3.0.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/3.0.10) (from `npm:@ai-sdk/provider@3.0.8`, in `dependencies`)
 
 - dependencies updates: ([#16398](https://github.com/mastra-ai/mastra/pull/16398))
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.27` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.27) (from `npm:@ai-sdk/provider-utils@4.0.26`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.27` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.27) (from `npm:@ai-sdk/provider-utils@4.0.26`, in `dependencies`)
 
 - Update provider registry and model documentation with latest models and providers ([`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60))
 
@@ -27041,7 +27041,7 @@ Bearer <token>` header. The token comes from the new
 ### Patch Changes
 
 - dependencies updates: ([#16398](https://github.com/mastra-ai/mastra/pull/16398))
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.27` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.27) (from `npm:@ai-sdk/provider-utils@4.0.26`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.27` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.27) (from `npm:@ai-sdk/provider-utils@4.0.26`, in `dependencies`)
 
 - Fixed processor-combined workflows to use the agent logger so processor step failures are logged through the configured logger instead of console output. ([#16369](https://github.com/mastra-ai/mastra/pull/16369))
 
@@ -27373,10 +27373,10 @@ Bearer <token>` header. The token comes from the new
 ### Patch Changes
 
 - dependencies updates: ([#16126](https://github.com/mastra-ai/mastra/pull/16126))
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.25` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.25) (from `npm:@ai-sdk/provider-utils@3.0.23`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.26` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.26) (from `npm:@ai-sdk/provider-utils@4.0.23`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v5@npm:@ai-sdk/provider@2.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v5/v/2.0.3) (from `npm:@ai-sdk/provider@2.0.1`, in `dependencies`)
-  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.10) (from `npm:@ai-sdk/provider@3.0.8`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.25` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.25) (from `npm:@ai-sdk/provider-utils@3.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@4.0.26` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/4.0.26) (from `npm:@ai-sdk/provider-utils@4.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@2.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/2.0.3) (from `npm:@ai-sdk/provider@2.0.1`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider@npm:@ai-sdk/provider@3.0.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider/v/3.0.10) (from `npm:@ai-sdk/provider@3.0.8`, in `dependencies`)
 
 - Added A2A Agent Card signing config types for server configuration. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
 
@@ -40141,8 +40141,8 @@ Bearer <token>` header. The token comes from the new
 
   ```typescript
   import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
-  import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-  import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+  import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+  import type { LanguageModelV2 } from '@ai-sdk/provider';
 
   class MyCustomGateway extends MastraModelGateway {
     readonly id = 'my-custom-gateway';
@@ -43885,8 +43885,8 @@ Bearer <token>` header. The token comes from the new
 
   ```typescript
   import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
-  import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-  import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+  import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+  import type { LanguageModelV2 } from '@ai-sdk/provider';
 
   class MyCustomGateway extends MastraModelGateway {
     readonly id = 'my-custom-gateway';
@@ -45615,7 +45615,7 @@ Bearer <token>` header. The token comes from the new
 
 - clean up console logs in monorepo ([#7926](https://github.com/mastra-ai/mastra/pull/7926))
 
-- Update dependencies ai-v5 and @ai-sdk/provider-utils-v5 to latest ([#7884](https://github.com/mastra-ai/mastra/pull/7884))
+- Update dependencies ai-v5 and @ai-sdk/provider-utils to latest ([#7884](https://github.com/mastra-ai/mastra/pull/7884))
 
 - Added the ability to hide internal ai tracing spans (enabled by default) ([#7764](https://github.com/mastra-ai/mastra/pull/7764))
 
@@ -45775,7 +45775,7 @@ Bearer <token>` header. The token comes from the new
 
 ### Patch Changes
 
-- Update dependencies ai-v5 and @ai-sdk/provider-utils-v5 to latest ([#7884](https://github.com/mastra-ai/mastra/pull/7884))
+- Update dependencies ai-v5 and @ai-sdk/provider-utils to latest ([#7884](https://github.com/mastra-ai/mastra/pull/7884))
 
 - refactored handling of internal ai spans to be more intelligent ([#7876](https://github.com/mastra-ai/mastra/pull/7876))
 
@@ -46433,7 +46433,7 @@ Bearer <token>` header. The token comes from the new
 ### Patch Changes
 
 - [#6919](https://github.com/mastra-ai/mastra/pull/6919) [`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.3) (from `npm:@ai-sdk/provider-utils@3.0.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.3) (from `npm:@ai-sdk/provider-utils@3.0.0`, in `dependencies`)
   - Updated dependency [`ai@^4.3.19` ↗︎](https://www.npmjs.com/package/ai/v/4.3.19) (from `^4.3.16`, in `dependencies`)
   - Updated dependency [`ai-v5@npm:ai@5.0.15` ↗︎](https://www.npmjs.com/package/ai-v5/v/5.0.15) (from `npm:ai@5.0.0`, in `dependencies`)
 
@@ -46456,7 +46456,7 @@ Bearer <token>` header. The token comes from the new
 ### Patch Changes
 
 - [#6919](https://github.com/mastra-ai/mastra/pull/6919) [`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
-  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.3) (from `npm:@ai-sdk/provider-utils@3.0.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils@npm:@ai-sdk/provider-utils@3.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils/v/3.0.3) (from `npm:@ai-sdk/provider-utils@3.0.0`, in `dependencies`)
   - Updated dependency [`ai@^4.3.19` ↗︎](https://www.npmjs.com/package/ai/v/4.3.19) (from `^4.3.16`, in `dependencies`)
   - Updated dependency [`ai-v5@npm:ai@5.0.15` ↗︎](https://www.npmjs.com/package/ai-v5/v/5.0.15) (from `npm:ai@5.0.0`, in `dependencies`)
 

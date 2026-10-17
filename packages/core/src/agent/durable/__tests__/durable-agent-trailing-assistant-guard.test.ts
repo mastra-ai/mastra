@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -27,10 +27,10 @@ describe('DurableAgent trailing assistant guard', () => {
 
   it('guards Gemini 3 across steps without persisting the synthetic turn', async () => {
     const memory = new MockMemory();
-    const prompts: LanguageModelV2Prompt[] = [];
+    const prompts: LanguageModelV4Prompt[] = [];
     let call = 0;
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       provider: 'google.generative-ai',
       modelId: 'gemini-3.5-flash-lite',
       doStream: async options => {
@@ -96,7 +96,7 @@ describe('DurableAgent trailing assistant guard', () => {
       // drain
     }
 
-    const roles = (prompt: LanguageModelV2Prompt) => prompt.filter(m => m.role !== 'system').map(m => m.role);
+    const roles = (prompt: LanguageModelV4Prompt) => prompt.filter(m => m.role !== 'system').map(m => m.role);
     expect(roles(prompts[0]!)).toEqual(['user', 'assistant', 'user']);
     // The context turn added in step 1 is still present after the durable round trip.
     expect(roles(prompts[1]!)).toEqual(['user', 'assistant', 'user', 'assistant', 'tool']);

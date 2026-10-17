@@ -1,5 +1,5 @@
-import { stepCountIs } from '@internal/ai-sdk-v5';
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { stepCountIs } from '@internal/ai-v7';
+import { createOpenAI } from '@ai-sdk/openai';
 import { expect, it } from 'vitest';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 

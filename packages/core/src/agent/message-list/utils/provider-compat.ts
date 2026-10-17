@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolResultPart } from '@internal/ai-sdk-v5';
+import type { ModelMessage, ToolResultPart } from '@internal/ai-v7';
 
 import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';

@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -20,7 +20,7 @@ type Engine = 'plain' | 'durable' | 'evented';
 type ApprovalOrder = 'forward' | 'reverse' | 'concurrent';
 
 function createSingleCallModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -47,7 +47,7 @@ function createSingleCallModel() {
 }
 
 function createTwoCallModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const toolResultIds = new Set<string>();
       const visit = (value: unknown) => {
@@ -157,7 +157,7 @@ it('waits for async onSuspended before closing a re-suspended durable resume str
     id: 'durable-resuspension-callback-agent',
     name: 'Durable resuspension callback agent',
     instructions: 'Run the suspending tool.',
-    model: createSingleCallModel() as LanguageModelV2,
+    model: createSingleCallModel() as LanguageModelV4,
     tools: { suspendingTool },
   });
   const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -240,7 +240,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s agent queued schema-
         id: `${engine}-queued-approval-agent`,
         name: `${engine} queued approval agent`,
         instructions: 'Run both tool calls.',
-        model: createTwoCallModel() as LanguageModelV2,
+        model: createTwoCallModel() as LanguageModelV4,
         memory: new MockMemory(),
         tools: { suspendingTool },
       });

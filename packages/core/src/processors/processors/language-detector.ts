@@ -1,4 +1,4 @@
-import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';

@@ -7,8 +7,8 @@
  * processor_run spans nest under it instead of orphaning.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -21,7 +21,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
 function createTextStreamModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -179,7 +179,7 @@ describe('DurableAgent observability tracing', () => {
 
   function createToolCallThenTextModel() {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         callCount += 1;
         const chunks =
@@ -224,7 +224,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent-tool-calls',
         name: 'Trace Agent (tool calls)',
         instructions: 'You are a test assistant',
-        model: createToolCallThenTextModel() as LanguageModelV2,
+        model: createToolCallThenTextModel() as LanguageModelV4,
         tools: {
           get_weather: createTool({
             id: 'get_weather',
@@ -260,7 +260,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent-resume',
         name: 'Trace Agent (resume)',
         instructions: 'You are a test assistant',
-        model: createToolCallThenTextModel() as LanguageModelV2,
+        model: createToolCallThenTextModel() as LanguageModelV4,
         tools: {
           get_weather: createTool({
             id: 'get_weather',
@@ -304,7 +304,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent-text-only',
         name: 'Trace Agent (text only)',
         instructions: 'You are a test assistant',
-        model: createTextStreamModel('Hello') as LanguageModelV2,
+        model: createTextStreamModel('Hello') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       registerWithMockObservability(durableAgent as unknown as Agent);
@@ -330,7 +330,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent',
         name: 'Trace Agent',
         instructions: 'You are a test assistant',
-        model: createTextStreamModel('Hello') as LanguageModelV2,
+        model: createTextStreamModel('Hello') as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -366,7 +366,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'span-context-agent',
         name: 'Span Context Agent',
         instructions: 'You are a test assistant',
-        model: model as LanguageModelV2,
+        model: model as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       registerWithMockObservability(durableAgent as unknown as Agent);
@@ -391,7 +391,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'evented-trace-agent',
         name: 'Evented Trace Agent',
         instructions: 'You are a test assistant',
-        model: createTextStreamModel('Hello') as LanguageModelV2,
+        model: createTextStreamModel('Hello') as LanguageModelV4,
       });
       const eventedAgent = createEventedAgent({ agent: baseAgent, pubsub });
 
@@ -417,7 +417,7 @@ describe('DurableAgent observability tracing', () => {
           id: `${engine}-trace-agent-input-error`,
           name: 'Trace Agent (input error)',
           instructions: 'You are a test assistant',
-          model: createTextStreamModel('unreachable') as LanguageModelV2,
+          model: createTextStreamModel('unreachable') as LanguageModelV4,
           inputProcessors: [
             {
               id: 'throwing-input-processor',
@@ -485,7 +485,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent-input-proc',
         name: 'Trace Agent (input proc)',
         instructions: 'You are a test assistant',
-        model: createTextStreamModel('Hello') as LanguageModelV2,
+        model: createTextStreamModel('Hello') as LanguageModelV4,
         inputProcessors: [inputProcessor as any],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -518,7 +518,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent-output-proc',
         name: 'Trace Agent (output proc)',
         instructions: 'You are a test assistant',
-        model: createTextStreamModel('Hello') as LanguageModelV2,
+        model: createTextStreamModel('Hello') as LanguageModelV4,
         outputProcessors: [outputProcessor as any],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -559,7 +559,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent-output-step-proc',
         name: 'Trace Agent (output step proc)',
         instructions: 'You are a test assistant',
-        model: createTextStreamModel('Hello') as LanguageModelV2,
+        model: createTextStreamModel('Hello') as LanguageModelV4,
         outputProcessors: [outputStepProcessor as any],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -600,7 +600,7 @@ describe('DurableAgent observability tracing', () => {
         id: 'trace-agent-attrs',
         name: 'Trace Agent (attrs)',
         instructions: 'You are a helpful assistant',
-        model: createTextStreamModel('Hello') as LanguageModelV2,
+        model: createTextStreamModel('Hello') as LanguageModelV4,
         options: { tracingPolicy: policy },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

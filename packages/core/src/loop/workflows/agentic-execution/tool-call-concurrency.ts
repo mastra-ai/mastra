@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
 import type { RequireToolApproval } from '../../../tools';

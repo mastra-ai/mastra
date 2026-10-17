@@ -10,7 +10,7 @@
  * resolves and the run answers into memory without posting anything to the platform.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -57,7 +57,7 @@ function createMockAdapter() {
 
 /** Creates a deterministic streaming model that emits a single text response. */
 function replyingModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -84,7 +84,7 @@ const TOOL_ANSWER = 'The tool answer';
  * though it asked for a tool — the case the loop's tool-error recovery has to survive.
  */
 function toolThenReplyingModel(toolTurnFinishReason: 'tool-calls' | 'stop' = 'tool-calls') {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const sawToolResult = /tool-result-payload|getAnswer exploded/.test(JSON.stringify(prompt));
       return {
@@ -227,7 +227,7 @@ function suspendingSetup(id: string, executions: { count: number }) {
     },
   });
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasToolResult = JSON.stringify(prompt).includes('tool-result-payload');
       return {

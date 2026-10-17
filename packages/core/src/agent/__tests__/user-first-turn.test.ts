@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { MockMemory } from '../../memory/mock';
@@ -15,8 +15,8 @@ import { createDurableAgent } from '../durable/create-durable-agent';
  * @see https://github.com/mastra-ai/mastra/issues/22874
  */
 function createModel(provider: string, modelId: string) {
-  const prompts: LanguageModelV2Prompt[] = [];
-  const model = new MockLanguageModelV2({
+  const prompts: LanguageModelV4Prompt[] = [];
+  const model = new MockLanguageModelV4({
     provider,
     modelId,
     doStream: async options => {
@@ -42,7 +42,7 @@ function createModel(provider: string, modelId: string) {
 }
 
 function createPromptSpy() {
-  const seen: LanguageModelV2Prompt[] = [];
+  const seen: LanguageModelV4Prompt[] = [];
   const processor: InputProcessor = {
     id: 'prompt-spy',
     processLLMRequest: ({ prompt }) => {
@@ -57,7 +57,7 @@ const greetingFirst = [
   { role: 'user' as const, content: 'What is 2+2?' },
 ];
 
-const turns = (prompt: LanguageModelV2Prompt) =>
+const turns = (prompt: LanguageModelV4Prompt) =>
   prompt
     .filter(message => message.role !== 'system')
     .map(message => {

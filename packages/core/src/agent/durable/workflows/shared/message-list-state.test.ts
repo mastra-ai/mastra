@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
@@ -30,7 +30,7 @@ describe('readMessageListState', () => {
       },
     ];
     await memory.saveMessages({ messages: rows });
-    const agent = new Agent({ id: 'agent', name: 'agent', instructions: '', model: new MockLanguageModelV2(), memory });
+    const agent = new Agent({ id: 'agent', name: 'agent', instructions: '', model: new MockLanguageModelV4(), memory });
     const mastra = new Mastra({ agents: { agent }, storage, logger: false });
 
     const load = createStoredMessageLoader(memory);

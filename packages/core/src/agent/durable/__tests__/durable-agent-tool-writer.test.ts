@@ -8,8 +8,8 @@
  * Regression for https://github.com/mastra-ai/mastra/issues/24196
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -22,7 +22,7 @@ import { globalRunRegistry } from '../run-registry';
 
 function createToolCallingModel(toolName: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -99,7 +99,7 @@ describe('DurableAgent tool writer', () => {
       id: 'writer-agent',
       name: 'Writer Agent',
       instructions: 'test',
-      model: createToolCallingModel('emitTool') as LanguageModelV2,
+      model: createToolCallingModel('emitTool') as LanguageModelV4,
       tools: { emitTool },
     });
 
@@ -127,7 +127,7 @@ describe('DurableAgent tool writer', () => {
       id: 'writer-agent-fallback',
       name: 'Writer Agent Fallback',
       instructions: 'test',
-      model: createToolCallingModel('emitTool') as LanguageModelV2,
+      model: createToolCallingModel('emitTool') as LanguageModelV4,
       tools: { emitTool },
     });
 

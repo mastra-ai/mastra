@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 
 import type { MessageList } from '../agent/message-list';
 import { resolveFilePartMediaTypeAndData } from '../agent/message-list/prompt/image-utils';
@@ -182,7 +182,7 @@ function hasFile(messageList: MessageList): boolean {
 }
 
 // The call is tried again only once, so every file that may not be readable goes, not just the one named.
-function unsupportedParts(prompt: LanguageModelV2Prompt, rejected: Set<string>): PromptFilePart[] {
+function unsupportedParts(prompt: LanguageModelV4Prompt, rejected: Set<string>): PromptFilePart[] {
   return prompt.flatMap(message =>
     message.role !== 'user'
       ? []

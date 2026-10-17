@@ -1,6 +1,6 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { APICallError } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { APICallError } from '@internal/ai-v7';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -13,7 +13,7 @@ import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 
 function makeFailThenAnswerModel(failures = 1, recordPrompt?: (prompt: unknown) => void) {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       calls++;
       recordPrompt?.(prompt);
@@ -63,7 +63,7 @@ describe('durable agent API-error retry', () => {
         id: 'api-error-retry-count',
         name: 'api-error-retry-count',
         instructions: 'You are helpful.',
-        model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+        model: [{ model: makeFailThenAnswerModel() as LanguageModelV4, maxRetries: 0 }],
         inputProcessors: [observer],
         outputProcessors: [observer],
         maxProcessorRetries: 1,
@@ -97,7 +97,7 @@ describe('durable agent API-error retry', () => {
         id: 'memory-error-processor',
         name: 'memory-error-processor',
         instructions: 'You are helpful.',
-        model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+        model: [{ model: makeFailThenAnswerModel() as LanguageModelV4, maxRetries: 0 }],
         memory,
       });
       const memoryOptions = { memory: { thread: `thread-${durable}`, resource: 'resource-memory-error' } };
@@ -129,7 +129,7 @@ describe('durable agent API-error retry', () => {
       id: 'durable-api-error-rotation',
       name: 'durable-api-error-rotation',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel() as LanguageModelV4, maxRetries: 0 }],
       memory,
       maxProcessorRetries: 1,
       errorProcessors: [
@@ -181,7 +181,7 @@ describe('durable agent API-error retry', () => {
       id: 'durable-api-error-override',
       name: 'durable-api-error-override',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel() as LanguageModelV4, maxRetries: 0 }],
       maxProcessorRetries: 1,
     });
 
@@ -218,7 +218,7 @@ describe('durable agent API-error retry', () => {
       id: 'durable-api-error-rotation-chain',
       name: 'durable-api-error-rotation-chain',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(2) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(2) as LanguageModelV4, maxRetries: 0 }],
       maxProcessorRetries: 2,
       errorProcessors: [
         {
@@ -243,7 +243,7 @@ describe('durable agent API-error retry', () => {
   });
   it('keeps the final partial response and error together after retry-budget rotation', async () => {
     let attempts = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         attempts++;
         return {
@@ -265,7 +265,7 @@ describe('durable agent API-error retry', () => {
       id: 'durable-api-error-terminal-rotation',
       name: 'durable-api-error-terminal-rotation',
       instructions: 'You are helpful.',
-      model: [{ model: model as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: model as LanguageModelV4, maxRetries: 0 }],
       memory,
       maxProcessorRetries: 1,
       errorProcessors: [
@@ -315,7 +315,7 @@ describe('durable agent API-error retry', () => {
       id: 'durable-api-error-signal',
       name: 'durable-api-error-signal',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(1, prompt => prompts.push(prompt)) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(1, prompt => prompts.push(prompt)) as LanguageModelV4, maxRetries: 0 }],
       maxProcessorRetries: 1,
       errorProcessors: [
         {
@@ -346,7 +346,7 @@ describe('durable serialized hasErrorProcessors flag', () => {
       id: 'durable-flag-configured',
       name: 'durable-flag-configured',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV4, maxRetries: 0 }],
       errorProcessors: [{ id: 'custom', processAPIError: async () => ({ retry: false }) }],
     });
 
@@ -361,7 +361,7 @@ describe('durable serialized hasErrorProcessors flag', () => {
       id: 'durable-flag-override',
       name: 'durable-flag-override',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV4, maxRetries: 0 }],
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
@@ -377,7 +377,7 @@ describe('durable serialized hasErrorProcessors flag', () => {
       id: 'durable-flag-defaults-only',
       name: 'durable-flag-defaults-only',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV4, maxRetries: 0 }],
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
@@ -408,7 +408,7 @@ describe('durable error-processor resolution', () => {
       id: 'durable-error-resolver-throws',
       name: 'durable-error-resolver-throws',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(0, modelCall) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(0, modelCall) as LanguageModelV4, maxRetries: 0 }],
       outputProcessors: [redactor],
       errorProcessors: throwingResolver,
     });
@@ -428,7 +428,7 @@ describe('durable error-processor resolution', () => {
       id: 'durable-error-resolver-once',
       name: 'durable-error-resolver-once',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV4, maxRetries: 0 }],
       errorProcessorDefaults: false,
       errorProcessors: resolver,
     });
@@ -461,7 +461,7 @@ describe('durable error-processor resolution', () => {
         id: 'durable-rebuild-empty-override',
         name: 'durable-rebuild-empty-override',
         instructions: 'You are helpful.',
-        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV4, maxRetries: 0 }],
       });
 
       const rebuilt = await prepareThenEvict(agent, { errorProcessors: [] });
@@ -476,7 +476,7 @@ describe('durable error-processor resolution', () => {
         id: 'durable-rebuild-wrapped-config',
         name: 'durable-rebuild-wrapped-config',
         instructions: 'You are helpful.',
-        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV4, maxRetries: 0 }],
         errorProcessorDefaults: false,
         errorProcessors: [custom],
       });
@@ -492,7 +492,7 @@ describe('durable error-processor resolution', () => {
         id: 'durable-rebuild-defaults',
         name: 'durable-rebuild-defaults',
         instructions: 'You are helpful.',
-        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV4, maxRetries: 0 }],
       });
 
       const rebuilt = await prepareThenEvict(agent);

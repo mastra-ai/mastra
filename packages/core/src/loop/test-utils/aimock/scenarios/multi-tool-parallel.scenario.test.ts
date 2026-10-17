@@ -12,7 +12,7 @@
  * - Next turn receives all results in the messages array
  */
 
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { stepCountIs } from '@internal/ai-v7';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';

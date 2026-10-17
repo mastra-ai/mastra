@@ -1,4 +1,4 @@
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v5';
+import type { ModelMessage as CoreMessageV4 } from '@internal/ai-v7';
 import { describe, it, expect } from 'vitest';
 
 import { MessageList } from '../agent/message-list';

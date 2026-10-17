@@ -5,8 +5,8 @@
  * including tool calls, tool results, multi-step execution, and tool approval.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -21,7 +21,7 @@ import '../types';
 // ============================================================================
 
 function createToolCallModel(toolName: string, args: Record<string, unknown>) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -45,7 +45,7 @@ function createToolCallModel(toolName: string, args: Record<string, unknown>) {
 }
 
 function createMultiToolCallModel(toolCalls: Array<{ toolName: string; args: Record<string, unknown> }>) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -70,7 +70,7 @@ function createMultiToolCallModel(toolCalls: Array<{ toolName: string; args: Rec
 
 function _createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -130,7 +130,7 @@ describe('DurableAgent tool registration', () => {
   });
 
   it('should register tools with execute functions in registry', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -151,7 +151,7 @@ describe('DurableAgent tool registration', () => {
       id: 'tool-registration-agent',
       name: 'Tool Registration Agent',
       instructions: 'Use tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { echo: echoTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -168,7 +168,7 @@ describe('DurableAgent tool registration', () => {
   });
 
   it('should handle multiple tools', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -196,7 +196,7 @@ describe('DurableAgent tool registration', () => {
       id: 'multi-tool-agent',
       name: 'Multi Tool Agent',
       instructions: 'Calculate',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { add: addTool, multiply: multiplyTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -214,7 +214,7 @@ describe('DurableAgent tool registration', () => {
   });
 
   it('should handle tools with complex input schemas', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -245,7 +245,7 @@ describe('DurableAgent tool registration', () => {
       id: 'complex-tool-agent',
       name: 'Complex Tool Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { complex: complexTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -303,7 +303,7 @@ describe('DurableAgent tool execution through workflow', () => {
       id: 'tool-workflow-agent',
       name: 'Tool Workflow Agent',
       instructions: 'Greet users',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { greet: greetTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -319,7 +319,7 @@ describe('DurableAgent tool execution through workflow', () => {
   });
 
   it('should handle tool with async execution', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -343,7 +343,7 @@ describe('DurableAgent tool execution through workflow', () => {
       id: 'async-tool-agent',
       name: 'Async Tool Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { asyncTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -356,7 +356,7 @@ describe('DurableAgent tool execution through workflow', () => {
   });
 
   it('should handle tool execution errors', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -382,7 +382,7 @@ describe('DurableAgent tool execution through workflow', () => {
       id: 'error-tool-agent',
       name: 'Error Tool Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { errorTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -429,7 +429,7 @@ describe('DurableAgent tool metadata serialization', () => {
   });
 
   it('should serialize tool metadata without execute functions', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -453,7 +453,7 @@ describe('DurableAgent tool metadata serialization', () => {
       id: 'serialization-agent',
       name: 'Serialization Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { testTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -470,7 +470,7 @@ describe('DurableAgent tool metadata serialization', () => {
   });
 
   it('should preserve tool descriptions in metadata', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -491,7 +491,7 @@ describe('DurableAgent tool metadata serialization', () => {
       id: 'description-agent',
       name: 'Description Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { describedTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -520,7 +520,7 @@ describe('DurableAgent multi-step execution', () => {
   });
 
   it('should support maxSteps configuration', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -534,7 +534,7 @@ describe('DurableAgent multi-step execution', () => {
       id: 'max-steps-agent',
       name: 'Max Steps Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -567,7 +567,7 @@ describe('DurableAgent multi-step execution', () => {
       id: 'multi-tool-exec-agent',
       name: 'Multi Tool Exec Agent',
       instructions: 'Use multiple tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { tool1, tool2 },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -600,7 +600,7 @@ describe('DurableAgent tool choice configuration', () => {
   });
 
   it('should pass toolChoice: auto to workflow input', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -614,7 +614,7 @@ describe('DurableAgent tool choice configuration', () => {
       id: 'tool-choice-auto-agent',
       name: 'Tool Choice Auto Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -624,7 +624,7 @@ describe('DurableAgent tool choice configuration', () => {
   });
 
   it('should pass toolChoice: none to workflow input', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -638,7 +638,7 @@ describe('DurableAgent tool choice configuration', () => {
       id: 'tool-choice-none-agent',
       name: 'Tool Choice None Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -648,7 +648,7 @@ describe('DurableAgent tool choice configuration', () => {
   });
 
   it('should pass toolChoice: required to workflow input', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -662,7 +662,7 @@ describe('DurableAgent tool choice configuration', () => {
       id: 'tool-choice-required-agent',
       name: 'Tool Choice Required Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -688,7 +688,7 @@ describe('DurableAgent tool approval configuration', () => {
   });
 
   it('should pass requireToolApproval to workflow input', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -702,7 +702,7 @@ describe('DurableAgent tool approval configuration', () => {
       id: 'approval-config-agent',
       name: 'Approval Config Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -712,7 +712,7 @@ describe('DurableAgent tool approval configuration', () => {
   });
 
   it('should handle tool with requireApproval flag', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -734,7 +734,7 @@ describe('DurableAgent tool approval configuration', () => {
       id: 'approval-tool-agent',
       name: 'Approval Tool Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { approvalTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -764,7 +764,7 @@ describe('DurableAgent tool concurrency configuration', () => {
   });
 
   it('should pass toolCallConcurrency to workflow input', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -778,7 +778,7 @@ describe('DurableAgent tool concurrency configuration', () => {
       id: 'concurrency-agent',
       name: 'Concurrency Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

@@ -1,11 +1,6 @@
-import { delay } from '@ai-sdk/provider-utils-v6';
-import { tool } from '@internal/ai-sdk-v5';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV2,
-  mockValues,
-  mockId,
-} from '@internal/ai-sdk-v5/test';
-import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
+import { delay } from '@ai-sdk/provider-utils';
+import { tool } from '@internal/ai-v7';
+import { convertArrayToReadableStream as convertArrayToReadableStreamV2, mockValues, mockId, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';

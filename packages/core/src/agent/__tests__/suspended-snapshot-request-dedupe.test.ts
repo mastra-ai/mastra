@@ -16,7 +16,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 // Stands in for the tool-schema + system-instruction blob a provider echoes
 // back on every step. Distinctive so it can be counted in the snapshot.
@@ -46,7 +46,7 @@ function createApprovalTool() {
 // which suspends the run. Every response carries the same `request.body`.
 function createSteppingModel(stepsBeforeSuspend: number = STEPS_BEFORE_SUSPEND) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       const isLast = call > stepsBeforeSuspend;

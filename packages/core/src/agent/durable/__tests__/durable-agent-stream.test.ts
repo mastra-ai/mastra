@@ -5,8 +5,8 @@
  * including the workflow execution, pubsub event emission, and callbacks.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -25,7 +25,7 @@ import type { AgentStreamEvent } from '../types';
 // ============================================================================
 
 function createTextStreamModel(text: string, _options?: { delay?: number }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -45,7 +45,7 @@ function createTextStreamModel(text: string, _options?: { delay?: number }) {
 }
 
 function createMultiChunkStreamModel(chunks: string[]) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -65,7 +65,7 @@ function createMultiChunkStreamModel(chunks: string[]) {
 }
 
 function _createToolCallModel(toolName: string, args: Record<string, unknown>) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -95,7 +95,7 @@ function createToolCallThenTextModel(
   prompts: unknown[] = [],
 ) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async (options: any) => {
       prompts.push(options.prompt);
       callCount++;
@@ -183,7 +183,7 @@ describe('DurableAgent streaming execution', () => {
         rawCall: { rawPrompt: null, rawSettings: {} },
       }));
 
-      const mockModel = new MockLanguageModelV2({ doStream });
+      const mockModel = new MockLanguageModelV4({ doStream });
       const allowedTool = createTool({
         id: 'allowedTool',
         description: 'Allowed tool',
@@ -201,7 +201,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'active-tools-agent',
         name: 'Active Tools Agent',
         instructions: 'Use only enabled tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { allowedTool, hiddenTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -258,7 +258,7 @@ describe('DurableAgent streaming execution', () => {
         };
       });
 
-      const mockModel = new MockLanguageModelV2({ doStream });
+      const mockModel = new MockLanguageModelV4({ doStream });
       const hiddenExecute = vi.fn(async () => 'hidden');
       const allowedTool = createTool({
         id: 'allowedTool',
@@ -277,7 +277,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'active-tools-clear-agent',
         name: 'Active Tools Clear Agent',
         instructions: 'Use available tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { allowedTool, hiddenTool },
         inputProcessors: [
           {
@@ -346,7 +346,7 @@ describe('DurableAgent streaming execution', () => {
         };
       });
 
-      const mockModel = new MockLanguageModelV2({ doStream });
+      const mockModel = new MockLanguageModelV4({ doStream });
       const allowedTool = createTool({
         id: 'allowedTool',
         description: 'Allowed tool',
@@ -364,7 +364,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'active-tools-enforcement-agent',
         name: 'Active Tools Enforcement Agent',
         instructions: 'Use only enabled tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { allowedTool, hiddenTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -389,7 +389,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'stream-test-agent',
         name: 'Stream Test Agent',
         instructions: 'You are a helpful assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -428,7 +428,7 @@ describe('DurableAgent streaming execution', () => {
           id: agentId,
           name: agentId,
           instructions: 'Call echo, then describe what came back.',
-          model: createToolCallThenTextModel('echo', { text: 'hello' }, finalText, prompts) as LanguageModelV2,
+          model: createToolCallThenTextModel('echo', { text: 'hello' }, finalText, prompts) as LanguageModelV4,
           tools: { echo: echoTool },
         });
 
@@ -493,7 +493,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'multi-chunk-agent',
         name: 'Multi Chunk Agent',
         instructions: 'You are a helpful assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -518,7 +518,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'cleanup-test-agent',
         name: 'Cleanup Test Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -548,7 +548,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'finish-callback-agent',
         name: 'Finish Callback Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -569,7 +569,7 @@ describe('DurableAgent streaming execution', () => {
     });
 
     it('should invoke onError callback when error occurs', async () => {
-      const errorModel = new MockLanguageModelV2({
+      const errorModel = new MockLanguageModelV4({
         doStream: async () => {
           throw new Error('Simulated LLM error');
         },
@@ -581,7 +581,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'error-callback-agent',
         name: 'Error Callback Agent',
         instructions: 'Test',
-        model: errorModel as LanguageModelV2,
+        model: errorModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -609,7 +609,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'step-callback-agent',
         name: 'Step Callback Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -638,7 +638,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'pubsub-test-agent',
         name: 'Pubsub Test Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -673,7 +673,7 @@ describe('DurableAgent streaming execution', () => {
         id: 'isolation-test-agent',
         name: 'Isolation Test Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -725,7 +725,7 @@ describe('DurableAgent memory integration', () => {
       id: 'memory-test-agent',
       name: 'Memory Test Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -750,7 +750,7 @@ describe('DurableAgent memory integration', () => {
       id: 'registry-memory-agent',
       name: 'Registry Memory Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -778,7 +778,7 @@ describe('DurableAgent memory integration', () => {
       id: 'no-memory-agent',
       name: 'No Memory Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -798,7 +798,7 @@ describe('DurableAgent memory integration', () => {
       id: 'thread-object-agent',
       name: 'Thread Object Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -832,7 +832,7 @@ describe('DurableAgent error handling', () => {
   });
 
   it('should handle model throwing error during streaming', async () => {
-    const errorModel = new MockLanguageModelV2({
+    const errorModel = new MockLanguageModelV4({
       doStream: async () => {
         throw new Error('Model initialization failed');
       },
@@ -844,7 +844,7 @@ describe('DurableAgent error handling', () => {
       id: 'error-model-agent',
       name: 'Error Model Agent',
       instructions: 'Test',
-      model: errorModel as LanguageModelV2,
+      model: errorModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -887,7 +887,7 @@ describe('DurableAgent error handling', () => {
   });
 
   it('should cleanup registry on error', async () => {
-    const errorModel = new MockLanguageModelV2({
+    const errorModel = new MockLanguageModelV4({
       doStream: async () => {
         throw new Error('Cleanup test error');
       },
@@ -897,7 +897,7 @@ describe('DurableAgent error handling', () => {
       id: 'cleanup-error-agent',
       name: 'Cleanup Error Agent',
       instructions: 'Test',
-      model: errorModel as LanguageModelV2,
+      model: errorModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -939,7 +939,7 @@ describe('DurableAgent workflow input serialization', () => {
       id: 'serialization-agent',
       name: 'Serialization Agent',
       instructions: 'You are helpful',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -972,7 +972,7 @@ describe('DurableAgent workflow input serialization', () => {
       id: 'tool-serialization-agent',
       name: 'Tool Serialization Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { testTool },
     });
 
@@ -996,7 +996,7 @@ describe('DurableAgent workflow input serialization', () => {
       id: 'options-agent',
       name: 'Options Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -29,7 +29,7 @@ function toolCallStream(toolName: string, input: Record<string, unknown>) {
 }
 
 function makeSubAgentModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
@@ -44,7 +44,7 @@ function makeSubAgentModel() {
 function makeSupervisorModel() {
   let step = 0;
   const call = { toolName: 'agent-subAgent', input: { prompt: 'do the thing' } };
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       step++;
       return {
@@ -156,7 +156,7 @@ describe('delegation threadMetadata on resume (issue #24956)', () => {
       name: 'Sub Agent',
       description: 'Processes a single order.',
       instructions: 'Process the order by calling process-order.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           const done = JSON.stringify(prompt).includes('"processed"');
           return {
@@ -192,7 +192,7 @@ describe('delegation threadMetadata on resume (issue #24956)', () => {
   it('keeps the metadata from the first leg when the sub-agent resumes', async () => {
     const memory = new MockMemory();
     let step = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doStream: async () => {
         step++;
         return {

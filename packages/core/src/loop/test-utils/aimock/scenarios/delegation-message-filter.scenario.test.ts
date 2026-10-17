@@ -1,5 +1,5 @@
-import { createOpenAI } from '@ai-sdk/openai-v5';
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { createOpenAI } from '@ai-sdk/openai';
+import { stepCountIs } from '@internal/ai-v7';
 import { it, expect, vi } from 'vitest';
 import { Agent } from '../../../../agent';
 import type { MessageFilterContext } from '../../../../agent';

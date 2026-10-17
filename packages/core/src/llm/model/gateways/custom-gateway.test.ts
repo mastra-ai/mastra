@@ -1,5 +1,5 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../../../agent';
 import { Mastra } from '../../../mastra';
@@ -46,7 +46,7 @@ class TestCustomGateway extends MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> {
+  }): Promise<LanguageModelV4> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
@@ -97,7 +97,7 @@ class AnotherCustomGateway extends MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> {
+  }): Promise<LanguageModelV4> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,
@@ -133,7 +133,7 @@ function createPlainObjectGateway(): MastraModelGatewayInterface {
           supportedUrls: {},
           doGenerate: vi.fn(),
           doStream: vi.fn(async () => ({ stream: new ReadableStream() })),
-        }) as unknown as LanguageModelV2,
+        }) as unknown as LanguageModelV4,
     ),
   };
 }

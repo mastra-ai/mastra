@@ -1,4 +1,4 @@
-import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import type { JSONSchema7, Schema } from '@internal/ai-v7';
 import { AnthropicSchemaCompatLayer, applyCompatLayer } from '@mastra/schema-compat';
 import type { z as z3 } from 'zod/v3';
 import type { z as z4 } from 'zod/v4';

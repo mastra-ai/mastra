@@ -1,8 +1,8 @@
-import type { LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { AISDKV5LanguageModel } from '../../llm/model/aisdk/v5/model';
+import { AISDKV7LanguageModel } from '../../llm/model/aisdk/v7/model';
 import { loop } from '../../loop/loop';
 import { createMessageListWithUserMessage, defaultSettings } from '../../loop/test-utils/utils';
 import { MockMemory } from '../../memory/mock';
@@ -20,7 +20,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function answer(text = 'replacement answer'): LanguageModelV2StreamPart[] {
+function answer(text = 'replacement answer'): LanguageModelV4StreamPart[] {
   return [
     { type: 'stream-start', warnings: [] },
     { type: 'text-start', id: 'answer' },
@@ -43,7 +43,7 @@ describe('queued signals preempt default-loop reasoning', () => {
       const onStepFinish = vi.fn();
       const stopWhen = vi.fn(() => false);
       const memory = new MockMemory();
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           if (abortSignal) signals.push(abortSignal);
@@ -59,7 +59,7 @@ describe('queued signals preempt default-loop reasoning', () => {
           }
           return {
             warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'stream-start', warnings: [] });
                 controller.enqueue({ type: 'reasoning-start', id: 'discarded-block' });
@@ -156,7 +156,7 @@ describe('queued signals preempt default-loop reasoning', () => {
     const processAPIError = vi.fn();
     const onAbort = vi.fn();
     const memory = new MockMemory();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async ({ prompt, abortSignal }) => {
         prompts.push(prompt);
         if (prompts.length === 1) {
@@ -181,7 +181,7 @@ describe('queued signals preempt default-loop reasoning', () => {
       ...settings,
       methodType: 'generate',
       messageList: createMessageListWithUserMessage(),
-      models: [{ id: 'generate', model: new AISDKV5LanguageModel(model), maxRetries: 0 }],
+      models: [{ id: 'generate', model: new AISDKV7LanguageModel(model), maxRetries: 0 }],
       maxSteps: 3,
       options: { onAbort },
       errorProcessors: [{ id: 'track-errors', processAPIError }],
@@ -244,14 +244,14 @@ describe('queued signals preempt default-loop reasoning', () => {
         if (prior && modelCalls === 1)
           return {
             warnings: [],
-            stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
               { type: 'tool-call', toolCallId: 'prior-call', toolName: 'prior', input: '{}' },
               { type: 'finish', finishReason: 'tool-calls', usage: acceptedUsage },
             ]),
           };
         return {
           warnings: [],
-          stream: new ReadableStream<LanguageModelV2StreamPart>({
+          stream: new ReadableStream<LanguageModelV4StreamPart>({
             start(controller) {
               controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
               controller.enqueue({ type: 'reasoning-delta', id: 'discarded', delta: 'STALE_CANCELLED_REASONING' });
@@ -270,7 +270,7 @@ describe('queued signals preempt default-loop reasoning', () => {
           methodType: 'stream',
           messageList,
           models: [
-            { id: 'cancel', model: new AISDKV5LanguageModel(new MockLanguageModelV2({ doStream })), maxRetries: 0 },
+            { id: 'cancel', model: new AISDKV7LanguageModel(new MockLanguageModelV4({ doStream })), maxRetries: 0 },
           ],
           maxSteps: 3,
           onIterationComplete,
@@ -378,7 +378,7 @@ describe('queued signals preempt default-loop reasoning', () => {
       },
     };
     const prompts: unknown[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt);
         return { warnings: [], stream: convertArrayToReadableStream(answer()) };
@@ -430,7 +430,7 @@ describe('queued signals preempt default-loop reasoning', () => {
   it('restarts the interrupted model instead of falling through to the next fallback', async () => {
     const started = deferred<void>();
     const prompts: unknown[] = [];
-    const primary = vi.fn(async ({ prompt, abortSignal }: LanguageModelV2CallOptions) => {
+    const primary = vi.fn(async ({ prompt, abortSignal }: LanguageModelV4CallOptions) => {
       prompts.push(prompt);
       if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
       started.resolve();
@@ -447,8 +447,8 @@ describe('queued signals preempt default-loop reasoning', () => {
       memory: new MockMemory(),
       errorProcessorDefaults: false,
       model: [
-        { model: new MockLanguageModelV2({ modelId: 'primary', doStream: primary }), maxRetries: 2 },
-        { model: new MockLanguageModelV2({ modelId: 'fallback', doStream: fallback }), maxRetries: 0 },
+        { model: new MockLanguageModelV4({ modelId: 'primary', doStream: primary }), maxRetries: 2 },
+        { model: new MockLanguageModelV4({ modelId: 'fallback', doStream: fallback }), maxRetries: 0 },
       ],
     });
     const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
@@ -466,13 +466,13 @@ describe('queued signals preempt default-loop reasoning', () => {
 
   it('adds signals queued between the loop drain and the next step to that step request', async () => {
     const prompts: unknown[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt);
         if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
         return {
           warnings: [],
-          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+          stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
             { type: 'tool-call', toolCallId: 'call-1', toolName: 'probe', input: '{}' },
             { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ]),
@@ -510,7 +510,7 @@ describe('queued signals preempt default-loop reasoning', () => {
       throw new Error('primary model request failed');
     });
     const prompts: unknown[] = [];
-    const fallback = vi.fn(async ({ prompt, abortSignal }: LanguageModelV2CallOptions) => {
+    const fallback = vi.fn(async ({ prompt, abortSignal }: LanguageModelV4CallOptions) => {
       prompts.push(prompt);
       if (prompts.length === 1) {
         started.resolve();
@@ -530,8 +530,8 @@ describe('queued signals preempt default-loop reasoning', () => {
       memory,
       errorProcessorDefaults: false,
       model: [
-        { model: new MockLanguageModelV2({ modelId: 'primary', doStream: primary }), maxRetries: 0 },
-        { model: new MockLanguageModelV2({ modelId: 'fallback', doStream: fallback }), maxRetries: 0 },
+        { model: new MockLanguageModelV4({ modelId: 'primary', doStream: primary }), maxRetries: 0 },
+        { model: new MockLanguageModelV4({ modelId: 'fallback', doStream: fallback }), maxRetries: 0 },
       ],
     });
     const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
@@ -580,14 +580,14 @@ describe('queued signals preempt default-loop reasoning', () => {
         snapshots.push({ stepNumber, content: steps.map(step => JSON.stringify(step.content)) });
       },
     };
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt, abortSignal }) => {
         prompts.push(prompt);
         const index = prompts.length;
         if (index === 2)
           return {
             warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
                 controller.enqueue({ type: 'reasoning-delta', id: 'discarded', delta: 'STALE_REASONING_FINGERPRINT' });
@@ -596,7 +596,7 @@ describe('queued signals preempt default-loop reasoning', () => {
             }),
           };
         if (index === 4) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
-        const signed: LanguageModelV2StreamPart[] =
+        const signed: LanguageModelV4StreamPart[] =
           index === 1
             ? [
                 { type: 'reasoning-start', id: 'accepted-thinking' },
@@ -695,14 +695,14 @@ describe('queued signals preempt default-loop reasoning', () => {
     const onIterationComplete = vi.fn();
     const onAbort = vi.fn();
     const memory = new MockMemory();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt, abortSignal }) => {
         prompts.push(prompt);
         const number = prompts.length;
         if (number > ready.length) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
         return {
           warnings: [],
-          stream: new ReadableStream<LanguageModelV2StreamPart>({
+          stream: new ReadableStream<LanguageModelV4StreamPart>({
             start(controller) {
               controller.enqueue({ type: 'reasoning-start', id: `attempt-${number}` });
               controller.enqueue({
@@ -793,13 +793,13 @@ describe('queued signals preempt default-loop reasoning', () => {
     const started = deferred<void>();
     const memory = new MockMemory();
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ abortSignal }) => {
         calls++;
         if (calls > 1) return { stream: convertArrayToReadableStream(answer('{"answer":"ok"}')), warnings: [] };
         return {
           warnings: [],
-          stream: new ReadableStream<LanguageModelV2StreamPart>({
+          stream: new ReadableStream<LanguageModelV4StreamPart>({
             start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
               controller.enqueue({ type: 'reasoning-start', id: 'discarded-block' });
@@ -816,12 +816,12 @@ describe('queued signals preempt default-loop reasoning', () => {
       },
     });
     const structuringPrompts: unknown[] = [];
-    const structuringModel = new MockLanguageModelV2({
+    const structuringModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         structuringPrompts.push(prompt);
         return {
           warnings: [],
-          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+          stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
             { type: 'stream-start', warnings: [] },
             { type: 'text-start', id: 'object' },
             { type: 'text-delta', id: 'object', delta: '{"answer":"ok"}' },
@@ -877,12 +877,12 @@ describe('queued signals preempt default-loop reasoning', () => {
       let calls = 0;
       let endInvocations = 0;
       let processedDelta = false;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ abortSignal }) => {
           if (++calls > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
           return {
             warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'stream-start', warnings: [] });
                 controller.enqueue({ type: 'reasoning-start', id: 'raw' });

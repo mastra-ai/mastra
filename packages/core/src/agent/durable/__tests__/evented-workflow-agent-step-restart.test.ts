@@ -5,7 +5,7 @@
  * SIGKILL; here graph 1 is abandoned at a gate and graph 2 restarts from a copy
  * of its workflow rows.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -22,7 +22,7 @@ afterEach(async () => {
 
 /** Calls tool `step` for n = 1..count, one per model turn, then answers. Pure function of the prompt. */
 function createStepModel(count: number) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const done = prompt
         .filter(message => message.role === 'tool')

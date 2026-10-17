@@ -1,4 +1,4 @@
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-v7';
 import { MastraFGAPermissions } from '../../../auth/ee';
 import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';

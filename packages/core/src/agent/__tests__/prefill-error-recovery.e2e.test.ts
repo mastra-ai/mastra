@@ -11,7 +11,7 @@
  *
  * Related: https://github.com/mastra-ai/mastra/issues/13969
  */
-import { anthropic } from '@ai-sdk/anthropic-v5';
+import { anthropic } from '@ai-sdk/anthropic';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrefillErrorHandler } from '../../processors/prefill-error-handler';

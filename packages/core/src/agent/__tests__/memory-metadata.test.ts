@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
@@ -13,10 +13,10 @@ class SerializingMockMemory extends MockMemory {
 
 function memoryMetadataTests(version: 'v2') {
   describe(`${version} - agent memory with metadata`, () => {
-    let dummyModel: MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV4;
     beforeEach(() => {
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',

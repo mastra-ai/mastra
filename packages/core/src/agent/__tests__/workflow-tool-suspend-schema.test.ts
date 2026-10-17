@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { resolveToolCallConcurrency } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
@@ -68,7 +68,7 @@ async function getWorkflowTools(wfs: Record<string, any>, tools: Record<string, 
     id: 'wf-agent',
     name: 'wf-agent',
     instructions: 'Run workflows.',
-    model: new MockLanguageModelV2(),
+    model: new MockLanguageModelV4(),
     tools,
     workflows: wfs,
   });

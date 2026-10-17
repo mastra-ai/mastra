@@ -1,4 +1,4 @@
-import { isUrlSupported } from '@ai-sdk/provider-utils-v6';
+import { isUrlSupported } from '@ai-sdk/provider-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { fetchWithRetry } from '../../../utils/fetchWithRetry';
 import type { AIV5Type } from '../types';

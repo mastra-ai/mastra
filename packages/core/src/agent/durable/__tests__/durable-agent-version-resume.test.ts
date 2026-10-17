@@ -19,8 +19,8 @@
  * version selector, so the pin must always win there.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -33,7 +33,7 @@ import type { DurableAgent } from '../durable-agent';
 import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -108,7 +108,7 @@ describe('durable agent version pinning across suspend/resume', () => {
       id: 'versioned-durable-agent',
       name: 'Versioned Durable Agent',
       instructions: 'You find users.',
-      model: createTextModel('Resumed!') as LanguageModelV2,
+      model: createTextModel('Resumed!') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     const mastra = new Mastra({ agents: { versionedDurableAgent: durableAgent }, storage: store, logger: false });
@@ -362,7 +362,7 @@ describe('durable agent version pinning across crash/recover', () => {
       id: 'versioned-durable-agent',
       name: 'Versioned Durable Agent',
       instructions: 'You find users.',
-      model: createTextModel('Recovered!') as LanguageModelV2,
+      model: createTextModel('Recovered!') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     const mastra = new Mastra({ agents: { versionedDurableAgent: durableAgent }, storage: store, logger: false });

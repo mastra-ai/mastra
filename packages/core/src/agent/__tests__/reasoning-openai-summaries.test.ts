@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 function createOpenAISummaryStreamingModel(stream: any[]) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',

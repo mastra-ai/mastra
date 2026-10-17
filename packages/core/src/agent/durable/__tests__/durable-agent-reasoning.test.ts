@@ -1,13 +1,13 @@
 /**
  * DurableAgent Reasoning Tests
  *
- * Tests for AI SDK v6/LanguageModelV3 reasoning features.
+ * Tests for AI SDK v6/LanguageModelV4 reasoning features.
  * Validates that reasoning stream parts and extended thinking
  * work correctly through durable execution.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -21,7 +21,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a mock model that returns reasoning then text
  */
 function createReasoningModel(_reasoningText: string, responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -47,7 +47,7 @@ function createReasoningModel(_reasoningText: string, responseText: string) {
  * Creates a mock model with V3-style usage including reasoning tokens
  */
 function createReasoningUsageModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -77,7 +77,7 @@ function createReasoningUsageModel(responseText: string) {
  * Creates a simple text model
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -103,7 +103,7 @@ function createTextModel(text: string) {
 function createInterleavedModel(chunks: string[]) {
   const textChunks = chunks.flatMap(text => [{ type: 'text-delta' as const, id: 'text-1', delta: text }]);
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -146,7 +146,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'reasoning-agent',
         name: 'Reasoning Agent',
         instructions: 'Think through problems carefully.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -163,7 +163,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'reasoning-usage-agent',
         name: 'Reasoning Usage Agent',
         instructions: 'Analyze and respond.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -181,7 +181,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'stream-reasoning-agent',
         name: 'Stream Reasoning Agent',
         instructions: 'Think and respond.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -203,7 +203,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'interleaved-agent',
         name: 'Interleaved Agent',
         instructions: 'Process information.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -222,7 +222,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'serialize-reasoning-agent',
         name: 'Serialize Reasoning Agent',
         instructions: 'Think through problems.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -244,7 +244,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'model-config-agent',
         name: 'Model Config Agent',
         instructions: 'Analyze carefully.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -269,7 +269,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'reasoning-memory-agent',
         name: 'Reasoning Memory Agent',
         instructions: 'Think with context.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -296,7 +296,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'empty-reasoning-agent',
         name: 'Empty Reasoning Agent',
         instructions: 'Respond.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -313,7 +313,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'long-reasoning-agent',
         name: 'Long Reasoning Agent',
         instructions: 'Analyze thoroughly.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -334,7 +334,7 @@ describe('DurableAgent reasoning features', () => {
         id: 'special-chars-reasoning-agent',
         name: 'Special Chars Reasoning Agent',
         instructions: 'Handle special characters.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -358,7 +358,7 @@ describe('DurableAgent V3 usage format', () => {
 
   it('should handle V3-style usage with detailed token breakdown', async () => {
     // V3 models return more detailed usage info
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -385,7 +385,7 @@ describe('DurableAgent V3 usage format', () => {
       id: 'v3-usage-agent',
       name: 'V3 Usage Agent',
       instructions: 'Process with V3 usage.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

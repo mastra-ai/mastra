@@ -64,7 +64,7 @@ export type CoreTool = {
   outputSchema?: any;
   execute?: (inputData: any, context: any) => any;
   toModelOutput?: (output: any) => any;
-  type?: 'function' | 'provider-defined' | undefined;
+  type?: 'function' | 'provider' | undefined;
   args?: Record<string, any> | undefined;
 };
 

@@ -1,16 +1,16 @@
 import type {
-  LanguageModelV2CallWarning,
-  LanguageModelV2StreamPart,
-  SharedV2ProviderMetadata,
-} from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
+  SharedV4Warning,
+  LanguageModelV4StreamPart,
+  SharedV4ProviderMetadata,
+} from '@ai-sdk/provider';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-v7/test';
 import { expect } from 'vitest';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
 
 export function stripMastraCreatedAt<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -145,12 +145,12 @@ export function createTestModels({
   request = undefined,
   response = undefined,
 }: {
-  stream?: ReadableStream<LanguageModelV2StreamPart>;
+  stream?: ReadableStream<LanguageModelV4StreamPart>;
   request?: { body: string };
   response?: { headers: Record<string, string> };
-  warnings?: LanguageModelV2CallWarning[];
+  warnings?: SharedV4Warning[];
 } = {}): ModelManagerModelConfig[] {
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({ stream, request, response, warnings }),
     doGenerate: async () => ({
       content: [{ type: 'text' as const, text: 'Hello, world!' }],
@@ -175,7 +175,7 @@ export function createTestModels({
   ];
 }
 
-export const modelWithSources = new MockLanguageModelV2({
+export const modelWithSources = new MockLanguageModelV4({
   doStream: async () => ({
     stream: convertArrayToReadableStream([
       {
@@ -230,7 +230,7 @@ export const modelWithSources = new MockLanguageModelV2({
   }),
 });
 
-export const modelWithDocumentSources = new MockLanguageModelV2({
+export const modelWithDocumentSources = new MockLanguageModelV4({
   doStream: async () => ({
     stream: convertArrayToReadableStream([
       {
@@ -287,7 +287,7 @@ export const modelWithDocumentSources = new MockLanguageModelV2({
   }),
 });
 
-export const modelWithFiles = new MockLanguageModelV2({
+export const modelWithFiles = new MockLanguageModelV4({
   doStream: async () => ({
     stream: convertArrayToReadableStream([
       {
@@ -330,7 +330,7 @@ export const modelWithFiles = new MockLanguageModelV2({
   }),
 });
 
-export const modelWithReasoning = new MockLanguageModelV2({
+export const modelWithReasoning = new MockLanguageModelV4({
   doStream: async () => ({
     stream: convertArrayToReadableStream([
       {
@@ -356,7 +356,7 @@ export const modelWithReasoning = new MockLanguageModelV2({
         delta: '',
         providerMetadata: {
           testProvider: { signature: '1234567890' },
-        } as SharedV2ProviderMetadata,
+        } as SharedV4ProviderMetadata,
       },
       { type: 'reasoning-end', id: '1' },
       {
@@ -383,14 +383,14 @@ export const modelWithReasoning = new MockLanguageModelV2({
         id: '3',
         providerMetadata: {
           testProvider: { signature: '1234567890' },
-        } as SharedV2ProviderMetadata,
+        } as SharedV4ProviderMetadata,
       },
       {
         type: 'reasoning-start',
         id: '4',
         providerMetadata: {
           testProvider: { signature: '1234567890' },
-        } as SharedV2ProviderMetadata,
+        } as SharedV4ProviderMetadata,
       },
       {
         type: 'reasoning-delta',
@@ -407,14 +407,14 @@ export const modelWithReasoning = new MockLanguageModelV2({
         id: '4',
         providerMetadata: {
           testProvider: { signature: '0987654321' },
-        } as SharedV2ProviderMetadata,
+        } as SharedV4ProviderMetadata,
       },
       {
         type: 'reasoning-start',
         id: '5',
         providerMetadata: {
           testProvider: { signature: '1234567890' },
-        } as SharedV2ProviderMetadata,
+        } as SharedV4ProviderMetadata,
       },
       {
         type: 'reasoning-delta',
@@ -436,7 +436,7 @@ export const modelWithReasoning = new MockLanguageModelV2({
         id: '5',
         providerMetadata: {
           testProvider: { signature: '0987654321' },
-        } as SharedV2ProviderMetadata,
+        } as SharedV4ProviderMetadata,
       },
       { type: 'text-start', id: 'text-1' },
       { type: 'text-delta', id: 'text-1', delta: 'Hi' },

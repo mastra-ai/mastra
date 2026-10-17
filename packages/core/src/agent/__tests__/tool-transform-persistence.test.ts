@@ -3,8 +3,8 @@
  * tool-call `args` untouched, whichever save path (per-step save queue or the
  * final MessageHistory save) writes the assistant message.
  */
-import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
@@ -17,8 +17,8 @@ const resourceId = 'transform-resource';
 
 function createModel() {
   let call = 0;
-  return new MockLanguageModelV2({
-    doStream: async (_options: { prompt: LanguageModelV2Prompt }) => {
+  return new MockLanguageModelV4({
+    doStream: async (_options: { prompt: LanguageModelV4Prompt }) => {
       call++;
       const parts =
         call <= 2
@@ -51,7 +51,7 @@ function createModel() {
         warnings: [],
       };
     },
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 describe('tool transform persistence', () => {

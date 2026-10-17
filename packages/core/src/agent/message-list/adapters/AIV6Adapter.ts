@@ -1,5 +1,5 @@
-import * as AIV5 from '@internal/ai-sdk-v5';
-import * as AIV6 from '@internal/ai-v6';
+import * as AIV5 from '@internal/ai-v7';
+import * as AIV6 from '@internal/ai-v7';
 
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type {

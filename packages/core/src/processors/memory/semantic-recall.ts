@@ -1,4 +1,4 @@
-import type { SystemModelMessage } from '@internal/ai-sdk-v5';
+import type { SystemModelMessage } from '@internal/ai-v7';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
 import { MessageList, isMastraSignalMessage } from '../../agent';

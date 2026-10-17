@@ -1,10 +1,10 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundPromptTool } from '../../background-tasks';
 import { generateBackgroundTaskSystemPrompt } from '../../background-tasks';
 
 export interface InjectBackgroundTaskPromptOptions {
   /** Current LLM input messages — returned untouched when injection is skipped. */
-  inputMessages: LanguageModelV2Prompt;
+  inputMessages: LanguageModelV4Prompt;
   /**
    * Active background-task manager. When absent the helper is a no-op so the
    * caller does not need to gate the helper themselves.
@@ -30,7 +30,7 @@ export function injectBackgroundTaskPrompt({
   backgroundTaskManager,
   tools,
   agentBackgroundConfig,
-}: InjectBackgroundTaskPromptOptions): LanguageModelV2Prompt {
+}: InjectBackgroundTaskPromptOptions): LanguageModelV4Prompt {
   if (!backgroundTaskManager || !tools || agentBackgroundConfig?.disabled) {
     return inputMessages;
   }

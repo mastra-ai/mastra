@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { APICallError } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { APICallError } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
@@ -458,7 +458,7 @@ describe('ensureUserFirstTurn', () => {
   const bedrock = { provider: 'amazon-bedrock', modelId: 'amazon.nova-lite-v1:0' };
   const gemini = { provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' };
   const openai = { provider: 'openai.responses', modelId: 'gpt-4o-mini' };
-  const greeting: LanguageModelV2Prompt = [
+  const greeting: LanguageModelV4Prompt = [
     { role: 'system', content: 'Be terse.' },
     { role: 'assistant', content: [{ type: 'text', text: 'Hi! How can I help?' }] },
     { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
@@ -542,7 +542,7 @@ describe('isMaybeCerebras', () => {
 // cerebrasStripReasoningContent rule + ProviderHistoryCompat.processLLMRequest
 // ---------------------------------------------------------------------------
 
-function promptWithReasoning(): LanguageModelV2Prompt {
+function promptWithReasoning(): LanguageModelV4Prompt {
   return [
     { role: 'system', content: 'sys' },
     { role: 'user', content: [{ type: 'text', text: 'hi' }] },
@@ -557,7 +557,7 @@ function promptWithReasoning(): LanguageModelV2Prompt {
   ];
 }
 
-function makeRequestArgs(prompt: LanguageModelV2Prompt, model: unknown): ProcessLLMRequestArgs {
+function makeRequestArgs(prompt: LanguageModelV4Prompt, model: unknown): ProcessLLMRequestArgs {
   return {
     prompt,
     model: model as any,
@@ -580,7 +580,7 @@ const mockLogger = {
 } as any;
 
 describe('stripForeignProviderExecutedTools', () => {
-  const hostedToolPrompt = (provider: 'anthropic' | 'openai', toolCallId: string): LanguageModelV2Prompt => [
+  const hostedToolPrompt = (provider: 'anthropic' | 'openai', toolCallId: string): LanguageModelV4Prompt => [
     { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
     {
       role: 'assistant',
@@ -687,7 +687,7 @@ describe('anthropicStripForeignReasoningContent', () => {
   });
 
   it('preserves Anthropic-native reasoning parts', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       {
         role: 'assistant',
         content: [
@@ -727,7 +727,7 @@ describe('trailing assistant message protection', () => {
   const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' };
 
   /** Active tool-use continuation: last assistant is followed only by tool messages. */
-  function toolContinuationPrompt(): LanguageModelV2Prompt {
+  function toolContinuationPrompt(): LanguageModelV4Prompt {
     return [
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
       {
@@ -773,7 +773,7 @@ describe('trailing assistant message protection', () => {
   });
 
   it('strips foreign reasoning from a trailing tool continuation after switching to Anthropic', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'do the thing' }] },
       {
         role: 'assistant',
@@ -843,7 +843,7 @@ describe('trailing assistant message protection', () => {
   });
 
   it('omits assistant messages that become empty after stripping foreign reasoning', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
       {
         role: 'assistant',
@@ -871,7 +871,7 @@ describe('trailing assistant message protection', () => {
 });
 
 describe('azureSystemReminderTransform', () => {
-  const prompt: LanguageModelV2Prompt = [
+  const prompt: LanguageModelV4Prompt = [
     {
       role: 'system',
       content: 'Reminders use <system-reminder>context</system-reminder> wrappers.',
@@ -954,7 +954,7 @@ describe('cerebrasStripReasoningContent', () => {
   });
 
   it('preserves text and tool-call parts on assistant messages', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       {
         role: 'assistant',
         content: [
@@ -988,7 +988,7 @@ describe('cerebrasStripReasoningContent', () => {
   });
 
   it('returns undefined when no assistant message has a reasoning part', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
       {
         role: 'assistant',
@@ -1012,7 +1012,7 @@ describe('cerebrasStripReasoningContent', () => {
   it('does not touch user messages', () => {
     // Real-world prompts won't have user reasoning parts, but the rule should
     // remain assistant-scoped regardless.
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'ask' }] },
       {
         role: 'assistant',
@@ -1034,7 +1034,7 @@ describe('cerebrasStripReasoningContent', () => {
 describe('ProviderHistoryCompat.processLLMRequest', () => {
   it('rewrites memory reminders in Azure-bound prompts', async () => {
     const handler = new ProviderHistoryCompat();
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'system', content: 'Use <system-reminder> tags.' },
       { role: 'user', content: [{ type: 'text', text: '<system-reminder>Continue.</system-reminder>' }] },
     ];
@@ -1062,7 +1062,7 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     const result = await handler.processLLMRequest(args);
 
     expect(result).toEqual({ prompt: expect.any(Array) });
-    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
+    const assistant = (result as { prompt: LanguageModelV4Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
@@ -1076,13 +1076,13 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     const result = await handler.processLLMRequest(args);
 
     expect(result).toEqual({ prompt: expect.any(Array) });
-    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
+    const assistant = (result as { prompt: LanguageModelV4Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
   it('strips foreign provider-executed tool pairs through the built-in rule set', async () => {
     const handler = new ProviderHistoryCompat();
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       {
         role: 'assistant',
         content: [
@@ -1131,7 +1131,7 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
 
   it('returns undefined when nothing needs to change', async () => {
     const handler = new ProviderHistoryCompat();
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
       {
         role: 'assistant',
@@ -1168,7 +1168,7 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     const result = await handler.processLLMRequest(args);
 
     expect(result).toEqual({ prompt: expect.any(Array) });
-    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
+    const assistant = (result as { prompt: LanguageModelV4Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
@@ -1196,7 +1196,7 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     const result = await handler.processLLMRequest(args);
 
     expect(result).toEqual({ prompt: expect.any(Array) });
-    expect((result as { prompt: LanguageModelV2Prompt }).prompt.at(-1)).toEqual({
+    expect((result as { prompt: LanguageModelV4Prompt }).prompt.at(-1)).toEqual({
       role: 'user',
       content: [{ type: 'text', text: 'custom:cerebras.chat' }],
     });
@@ -1291,7 +1291,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
   };
 
   describe('preemptive applyToPrompt', () => {
-    const promptSignatures = (prompt: LanguageModelV2Prompt) =>
+    const promptSignatures = (prompt: LanguageModelV4Prompt) =>
       prompt.flatMap(message =>
         Array.isArray(message.content)
           ? message.content
@@ -1305,7 +1305,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
           : [],
       );
 
-    const promptAssistantContent = (prompt: LanguageModelV2Prompt) =>
+    const promptAssistantContent = (prompt: LanguageModelV4Prompt) =>
       prompt.filter(message => message.role === 'assistant').flatMap(message => message.content as any[]);
 
     const runRequest = (handler: ProviderHistoryCompat, messageList: MessageList, provider: string) =>
@@ -1323,7 +1323,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
       const result = await runRequest(handler, messageList, ANTHROPIC);
 
       expect(result).toEqual({ prompt: expect.any(Array) });
-      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      const prompt = (result as { prompt: LanguageModelV4Prompt }).prompt;
       expect(promptSignatures(prompt)).toEqual([]);
       // The visible text of the foreign turn is kept.
       expect(promptAssistantContent(prompt).map(part => part.type)).toEqual(['text']);
@@ -1338,7 +1338,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
       const result = await runRequest(handler, messageList, KIMI);
 
       expect(result).toEqual({ prompt: expect.any(Array) });
-      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+      expect(promptSignatures((result as { prompt: LanguageModelV4Prompt }).prompt)).toEqual([]);
     });
 
     it('keeps the target provider’s own signed reasoning', async () => {
@@ -1362,7 +1362,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
 
       const result = await runRequest(handler, messageList, ANTHROPIC);
 
-      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      const prompt = (result as { prompt: LanguageModelV4Prompt }).prompt;
       expect(promptSignatures(prompt)).toEqual(['anthropic-sig']);
     });
 
@@ -1374,7 +1374,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
 
       const result = await runRequest(handler, messageList, ANTHROPIC);
 
-      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+      expect(promptSignatures((result as { prompt: LanguageModelV4Prompt }).prompt)).toEqual([]);
     });
 
     it('drops foreign signed reasoning on the trailing assistant turn too (no protected-index exemption)', async () => {
@@ -1385,7 +1385,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
 
       const result = await runRequest(handler, messageList, ANTHROPIC);
 
-      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+      expect(promptSignatures((result as { prompt: LanguageModelV4Prompt }).prompt)).toEqual([]);
     });
 
     it('removes a turn emptied of all content by the drop (Anthropic rejects empty assistant content)', async () => {
@@ -1396,7 +1396,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
 
       const result = await runRequest(handler, messageList, ANTHROPIC);
 
-      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      const prompt = (result as { prompt: LanguageModelV4Prompt }).prompt;
       // The thinking-only foreign turn loses its only part; the message itself
       // must be removed rather than sent with `content: []`.
       expect(prompt.filter(message => message.role === 'assistant')).toEqual([]);
@@ -2260,7 +2260,7 @@ describe('anthropicOrphanedThinkingStep', () => {
 describe('anthropicToolIdFormat.applyToPrompt', () => {
   const ANTHROPIC_MODEL = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
 
-  function promptWithToolPair(ids: { call: string; result?: string }): LanguageModelV2Prompt {
+  function promptWithToolPair(ids: { call: string; result?: string }): LanguageModelV4Prompt {
     return [
       { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
       {
@@ -2284,7 +2284,7 @@ describe('anthropicToolIdFormat.applyToPrompt', () => {
     ];
   }
 
-  const idsIn = (prompt: LanguageModelV2Prompt) =>
+  const idsIn = (prompt: LanguageModelV4Prompt) =>
     prompt
       .flatMap(message => (message.content as any[]).map(part => (part as { toolCallId?: string }).toolCallId))
       .filter((id): id is string => typeof id === 'string');
@@ -2339,7 +2339,7 @@ describe('anthropicToolIdFormat.applyToPrompt', () => {
   });
 
   it('resolves collisions against ids already present, deterministically', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       {
         role: 'assistant',
         content: [
@@ -2362,7 +2362,7 @@ describe('anthropicToolIdFormat.applyToPrompt', () => {
   });
 
   it('assigns distinct replacements when two calls share one invalid original id', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       {
         role: 'assistant',
         content: [{ type: 'tool-call', toolCallId: 'dup.id', toolName: 'one', input: {} }],
@@ -2407,7 +2407,7 @@ describe('anthropicToolIdFormat.applyToPrompt', () => {
     );
 
     expect(result).toEqual({ prompt: expect.any(Array) });
-    expect(idsIn((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual(['call_abc_1', 'call_abc_1']);
+    expect(idsIn((result as { prompt: LanguageModelV4Prompt }).prompt)).toEqual(['call_abc_1', 'call_abc_1']);
   });
 
   it('keeps the reactive fix working for direct callers', () => {

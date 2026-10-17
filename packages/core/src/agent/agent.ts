@@ -1,4 +1,4 @@
-import type { UIMessage, ModelMessage } from '@internal/ai-sdk-v5';
+import type { UIMessage, ModelMessage } from '@internal/ai-v7';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';

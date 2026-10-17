@@ -14,8 +14,8 @@
  * the option.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -43,7 +43,7 @@ function fakeLogger() {
  */
 function createLoopingModel(toolIterations: number, toolName: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount += 1;
       const stream =
@@ -107,7 +107,7 @@ interface Harness {
  */
 async function setup(options: {
   agentId: string;
-  model: MockLanguageModelV2;
+  model: MockLanguageModelV4;
   tools: ToolsInput;
   recovery?: 'auto' | 'off';
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
@@ -116,7 +116,7 @@ async function setup(options: {
     id: options.agentId,
     name: options.agentId,
     instructions: 'Use your tools.',
-    model: options.model as LanguageModelV2,
+    model: options.model as LanguageModelV4,
     tools: options.tools,
   });
   const durableAgent = createDurableAgent({
@@ -278,7 +278,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
   describe('HITL under the default policy', () => {
     it('persists the suspended snapshot, resumes via approval, and does not warn about unclaimed resumes', async () => {
       let modelCall = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -478,7 +478,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         id: 'evented-pinned-agent',
         name: 'evented-pinned-agent',
         instructions: 'x',
-        model: createLoopingModel(1, 'echoTool') as LanguageModelV2,
+        model: createLoopingModel(1, 'echoTool') as LanguageModelV4,
       });
       const userPredicate: ShouldPersistSnapshotFn = ({ workflowStatus }) => workflowStatus === 'suspended';
       const eventedAgent = createEventedAgent({ agent: baseAgent, shouldPersistSnapshot: userPredicate });

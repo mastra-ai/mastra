@@ -1,8 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
-import { isAbortError } from '@ai-sdk/provider-utils-v6';
-import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import { APICallError } from '@internal/ai-sdk-v5';
-import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { isAbortError } from '@ai-sdk/provider-utils';
+import { APICallError } from '@internal/ai-v7';
+import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-v7';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { isDownloadAssetsError } from '../../../agent/message-list/prompt/download-assets';
@@ -855,6 +854,7 @@ async function processOutputStream<OUTPUT = undefined>({
               toolCallId: chunk.payload.toolCallId,
               messages: messageList.get.input.aiV5.model(),
               abortSignal: options?.abortSignal,
+              context: undefined,
             });
           } catch (error) {
             logger?.error('Error calling onInputStart', error);
@@ -875,6 +875,7 @@ async function processOutputStream<OUTPUT = undefined>({
               toolCallId: chunk.payload.toolCallId,
               messages: messageList.get.input.aiV5.model(),
               abortSignal: options?.abortSignal,
+              context: undefined,
             });
           } catch (error) {
             logger?.error('Error calling onInputDelta', error);
@@ -3239,7 +3240,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: currentIterationContent,
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
           request: request,
-          usage: outputStream._getImmediateUsage() as LanguageModelV2Usage,
+          usage: outputStream._getImmediateUsage(),
           tripwire: stepTripwireData,
         }),
       );

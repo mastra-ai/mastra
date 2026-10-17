@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
@@ -18,7 +18,7 @@ function createGatedModel() {
   const gates: Array<() => void> = [];
   let started!: () => void;
   let nextStart = new Promise<void>(resolve => (started = resolve));
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       const gate = new Promise<void>(resolve => gates.push(resolve));
       started();

@@ -1,5 +1,5 @@
-import { APICallError } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
@@ -10,7 +10,7 @@ import { createMockWorkspace } from './test-utils';
 // must not be reported as `agent_end { reason: 'complete' }` — Factory's dispatcher maps
 // `complete` to a `succeeded` invokeSkill decision.
 function createTruncatedStreamModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -26,7 +26,7 @@ function createTruncatedStreamModel() {
 }
 
 function createFinishedStreamModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -43,7 +43,7 @@ function createFinishedStreamModel() {
 }
 
 function createOverloadedModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       throw new APICallError({
         message: 'Overloaded',
@@ -56,7 +56,7 @@ function createOverloadedModel() {
   });
 }
 
-async function runOnce(model: MockLanguageModelV2) {
+async function runOnce(model: MockLanguageModelV4) {
   const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'You are a test agent.', model });
   const controller = new AgentController({
     workspace: createMockWorkspace(),

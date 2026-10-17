@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { IMastraLogger } from '../../logger';
@@ -7,7 +7,7 @@ import { Agent } from '../agent';
 const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
 
 function mainModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -26,7 +26,7 @@ function mainModel() {
 // Streams JSON in pieces 40ms apart and calls onFirstDelta after the first piece is emitted.
 function slowStructuringModel(onFirstDelta: () => void, seenSignals: (AbortSignal | undefined)[]) {
   const pieces = ['{"summary":', '"There are', ' 3 files."', ',"filesFound":3}'];
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ abortSignal }) => {
       seenSignals.push(abortSignal);
       let timer: ReturnType<typeof setTimeout> | undefined;

@@ -1,7 +1,7 @@
 /**
  * Repro for https://github.com/mastra-ai/mastra/issues/22618 — DurableAgent path.
  *
- * A tool's `toModelOutput` returns a LanguageModelV3 `image-url` content part
+ * A tool's `toModelOutput` returns a LanguageModelV4 `image-url` content part
  * (with `providerOptions`). The V3 spec supports `image-url` in tool-result
  * content directly, so a v3 model should receive it untouched.
  *
@@ -15,8 +15,8 @@
 
 import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+  MockLanguageModelV4,
+} from '@internal/ai-v7/test';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -36,7 +36,7 @@ const usageV3 = {
 
 function createImageToolCallingModel(onPrompt: (prompt: unknown) => void) {
   let callCount = 0;
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       onPrompt(prompt);
       callCount++;
@@ -137,7 +137,7 @@ describe('DurableAgent toModelOutput image-url passthrough (issue #22618)', () =
     expect(toolResult).toBeDefined();
     expect(toolResult.output.type).toBe('content');
 
-    // LanguageModelV3 tool-result content supports image-url directly.
+    // LanguageModelV4 tool-result content supports image-url directly.
     // Currently fails: the part arrives as { type: 'image-data', data: <url>,
     // mediaType: 'image/jpeg' } — the URL in the Base64-only data field — and
     // providerOptions are gone.

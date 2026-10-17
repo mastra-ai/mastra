@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
@@ -6,7 +6,7 @@ import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 
 function createTextStreamModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

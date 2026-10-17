@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
@@ -52,7 +52,7 @@ const createMockAgent = (response: string = 'Dummy response'): Agent => {
 };
 
 const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
-  const dummyModel = new MockLanguageModelV2({
+  const dummyModel = new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [
         {
@@ -486,7 +486,7 @@ describe('runEvals', () => {
   describe('Observability integration', () => {
     it('should create tracing spans when observability is configured in Mastra', async () => {
       // Create agent with Mastra instance that has observability
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'Response from agent' }],
           finishReason: 'stop',
@@ -546,7 +546,7 @@ describe('runEvals', () => {
   describe('Score persistence', () => {
     it('should save scores to storage when runEvals is called', async () => {
       // Create agent
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'Response from agent' }],
           finishReason: 'stop',
@@ -875,7 +875,7 @@ describe('runEvals', () => {
     function createToolCallingAgent() {
       let callCount = 0;
 
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -1465,7 +1465,7 @@ describe('runEvals', () => {
   describe('multi-turn (inputs array)', () => {
     it('should execute multiple turns sequentially and accumulate outputs', async () => {
       let turnCount = 0;
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => {
           turnCount++;
           return {
@@ -1523,7 +1523,7 @@ describe('runEvals', () => {
 
     it('should use the same threadId across all turns', async () => {
       const receivedMemoryOptions: any[] = [];
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'response' }],
           finishReason: 'stop',
@@ -1591,7 +1591,7 @@ describe('runEvals', () => {
 
     it('should work with gates in multi-turn mode', async () => {
       let turnCount = 0;
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => {
           turnCount++;
           return {
@@ -1648,7 +1648,7 @@ describe('runEvals', () => {
 
   describe('multi-turn memory integration (real Memory + storage)', () => {
     const buildModel = (capturedPrompts: string[]) =>
-      new MockLanguageModelV2({
+      new MockLanguageModelV4({
         doGenerate: async (options: any) => {
           capturedPrompts.push(JSON.stringify(options.prompt));
           return {
@@ -1758,7 +1758,7 @@ describe('runEvals', () => {
 
   describe('turns (per-turn assertions)', () => {
     const createTurnAgent = (id: string, counter?: { count: number }): Agent => {
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => {
           if (counter) counter.count++;
           return {
@@ -2068,7 +2068,7 @@ describe('runEvals', () => {
     });
 
     it('persists per-turn scores to storage (one score per turn)', async () => {
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'turn response' }],
           finishReason: 'stop',
@@ -2143,7 +2143,7 @@ describe('runEvals', () => {
 
     it('preserves existing score metadata and links each turn to its own trace span', async () => {
       let callIndex = 0;
-      const dummyModel = new MockLanguageModelV2({
+      const dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'turn response' }],
           finishReason: 'stop',

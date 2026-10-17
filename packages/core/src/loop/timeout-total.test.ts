@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
 import type { ModelManagerModelConfig } from '../stream/types';
@@ -16,7 +16,7 @@ import { isMastraTimeoutError } from './timeout';
 const hangingModel = (id: string): ModelManagerModelConfig => ({
   id,
   maxRetries: 0,
-  model: new MockLanguageModelV2({
+  model: new MockLanguageModelV4({
     doStream: () => new Promise(() => {}),
     doGenerate: () => new Promise(() => {}),
   }),
@@ -25,7 +25,7 @@ const hangingModel = (id: string): ModelManagerModelConfig => ({
 const respondingModel = (id: string, text: string): ModelManagerModelConfig => ({
   id,
   maxRetries: 0,
-  model: new MockLanguageModelV2({
+  model: new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'text-start', id: 'text-1' },

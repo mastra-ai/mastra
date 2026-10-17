@@ -1,6 +1,6 @@
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import type { ToolChoice, ToolSet } from '@internal/ai-v7';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 import { serializeError } from '../../../../events/codec/error';
@@ -979,12 +979,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : currentModel.specificationVersion === 'v3'
                   ? messageList.get.all.aiV6.llmPrompt
                   : messageList.get.all.aiV5.llmPrompt;
-            let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV4Prompt;
             // Identify OM's prompt message by its source ID and position before request
             // processors run. Equal text in real user messages is not synthetic context.
             const dbMessages = messageList.get.all.db();
             const continuationIndex = dbMessages.findIndex(message => message.id === 'om-continuation');
-            let omContinuationPrompt: LanguageModelV2Prompt[number] | undefined;
+            let omContinuationPrompt: LanguageModelV4Prompt[number] | undefined;
             if (continuationIndex !== -1) {
               const precedingMessages = createRunMessageList({ mastra });
               precedingMessages.add(dbMessages.slice(0, continuationIndex), 'input');

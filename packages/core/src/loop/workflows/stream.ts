@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import { beginGoalActivity, stopGoalActivity } from '../../agent/goal';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';

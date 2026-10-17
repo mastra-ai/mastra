@@ -1,13 +1,13 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@ai-sdk/openai-compatible-v6', async () => {
+vi.mock('@ai-sdk/openai-compatible', async () => {
   return {
     createOpenAICompatible: vi.fn(),
   };
 });
 
-const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v6');
+const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
 const { Agent } = await import('../../agent');
 
 describe('Cloudflare Workers AI URL interpolation', () => {
@@ -18,7 +18,7 @@ describe('Cloudflare Workers AI URL interpolation', () => {
     vi.mocked(createOpenAICompatible).mockReturnValue({
       chatModel: vi.fn(
         () =>
-          new MockLanguageModelV2({
+          new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'stop',

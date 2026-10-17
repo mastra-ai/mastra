@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -63,7 +63,7 @@ describe('delegated resume request context (#25960)', () => {
       name: 'worker',
       description: 'Pings',
       instructions: 'Ping twice.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           const done = toolResultCount(prompt);
           if (done === 0) return reply(toolCall('ping-1', 'ping', { n: 1 }));
@@ -78,7 +78,7 @@ describe('delegated resume request context (#25960)', () => {
       id: 'supervisor',
       name: 'supervisor',
       instructions: 'Delegate to worker.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) =>
           toolResultCount(prompt) === 0
             ? reply(toolCall('delegate-1', 'agent-worker', { prompt: 'ping twice' }))
@@ -154,7 +154,7 @@ describe('delegated resume request context (#25960)', () => {
       id: 'with-processor',
       name: 'with-processor',
       instructions: 'Call added.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) =>
           toolResultCount(prompt) === 0 ? reply(toolCall('added-1', 'added', { n: 1 })) : reply(text('done')),
       }),
@@ -201,7 +201,7 @@ describe('delegated resume request context (#25960)', () => {
       id: 'with-replacing-processor',
       name: 'with-replacing-processor',
       instructions: 'Call ping.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) =>
           toolResultCount(prompt) === 0 ? reply(toolCall('ping-1', 'ping', { n: 1 })) : reply(text('done')),
       }),

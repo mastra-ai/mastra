@@ -29,7 +29,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
 import { MessageList } from '../message-list';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const TOOL_CALL_ID = 'call-1';
 const DECLINE_REASON = 'Tool call was not approved by the user';
@@ -60,7 +60,7 @@ function createFindUserTool() {
  */
 function createMockModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {

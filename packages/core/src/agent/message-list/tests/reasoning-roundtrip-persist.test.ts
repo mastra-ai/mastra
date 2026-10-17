@@ -1,4 +1,4 @@
-import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import { AIV5Adapter } from '../adapters';
 import type { MastraDBMessage } from '../index';

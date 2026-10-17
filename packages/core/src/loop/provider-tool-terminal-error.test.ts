@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
 import { loop } from './loop';

@@ -13,8 +13,8 @@
  * error — see workflows/evented/storage-capability-gate.test.ts.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../../../logger/noop-logger';
 import { Mastra } from '../../../mastra';
@@ -23,7 +23,7 @@ import { Agent } from '../../agent';
 import { createEventedAgent } from '../create-evented-agent';
 
 function createTextStreamModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -39,7 +39,7 @@ function createTextStreamModel(text: string) {
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 /**

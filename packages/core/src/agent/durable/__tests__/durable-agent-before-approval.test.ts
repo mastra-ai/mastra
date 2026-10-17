@@ -2,8 +2,8 @@
  * DurableAgent per-tool beforeApproval hook tests (#26772)
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -18,7 +18,7 @@ import type { AgentStreamEvent } from '../types';
 /** Creates a model that requests one tool call, then completes after the tool resumes. */
 function createToolCallThenTextModel(tool: { name: string; args: object }) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       return {
@@ -93,7 +93,7 @@ describe('DurableAgent beforeApproval hook (#26772)', () => {
       id: 'before-approval-agent',
       name: 'Before Approval Agent',
       instructions: 'Refund orders.',
-      model: createToolCallThenTextModel({ name: 'issueRefund', args: { orderId: 'missing' } }) as LanguageModelV2,
+      model: createToolCallThenTextModel({ name: 'issueRefund', args: { orderId: 'missing' } }) as LanguageModelV4,
       tools: { issueRefund },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

@@ -1,9 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../../error';
@@ -16,11 +12,11 @@ import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
 
 function saveAndErrorTests(version: 'v2') {
-  let dummyModel: MockLanguageModelV2;
+  let dummyModel: MockLanguageModelV4;
 
   beforeEach(() => {
     {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -63,13 +59,13 @@ function saveAndErrorTests(version: 'v2') {
 
   describe(`${version} - Agent save message parts`, () => {
     // Model that emits 10 parts
-    let dummyResponseModel: MockLanguageModelV2;
-    let emptyResponseModel: MockLanguageModelV2;
-    let errorResponseModel: MockLanguageModelV2;
+    let dummyResponseModel: MockLanguageModelV4;
+    let emptyResponseModel: MockLanguageModelV4;
+    let errorResponseModel: MockLanguageModelV4;
 
     beforeEach(() => {
       {
-        dummyResponseModel = new MockLanguageModelV2({
+        dummyResponseModel = new MockLanguageModelV4({
           doGenerate: async _options => ({
             text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
             finishReason: 'stop',
@@ -114,7 +110,7 @@ function saveAndErrorTests(version: 'v2') {
         });
 
         // Model never emits any parts
-        emptyResponseModel = new MockLanguageModelV2({
+        emptyResponseModel = new MockLanguageModelV4({
           doGenerate: async _options => ({
             text: undefined,
             finishReason: 'stop',
@@ -147,7 +143,7 @@ function saveAndErrorTests(version: 'v2') {
         });
 
         // Model throws immediately before emitting any part
-        errorResponseModel = new MockLanguageModelV2({
+        errorResponseModel = new MockLanguageModelV4({
           doGenerate: async _options => {
             throw new Error('Immediate interruption');
           },
@@ -290,9 +286,9 @@ function saveAndErrorTests(version: 'v2') {
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
-      let errorModel: MockLanguageModelV2;
+      let errorModel: MockLanguageModelV4;
       {
-        errorModel = new MockLanguageModelV2({
+        errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw new Error('Simulated error during response');
           },
@@ -342,7 +338,7 @@ function saveAndErrorTests(version: 'v2') {
       /** Streams one text part, then fails terminally with no recovery available. */
       function createPartialThenErrorModel(errorMessage: string) {
         const error = new Error(errorMessage);
-        return new MockLanguageModelV2({
+        return new MockLanguageModelV4({
           doGenerate: async () => {
             throw error;
           },
@@ -488,7 +484,7 @@ function saveAndErrorTests(version: 'v2') {
         const mockMemory = new MockMemory();
         let streamCalls = 0;
 
-        const recoveringModel = new MockLanguageModelV2({
+        const recoveringModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw new Error('first attempt failed');
           },
@@ -557,7 +553,7 @@ function saveAndErrorTests(version: 'v2') {
           responseBody: 'Test API error response',
         });
 
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw testAPICallError;
           },
@@ -612,7 +608,7 @@ function saveAndErrorTests(version: 'v2') {
         (testError as any).statusCode = testErrorStatusCode;
         (testError as any).requestId = testErrorRequestId;
 
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate() {
             throw testError;
           },
@@ -691,7 +687,7 @@ function saveAndErrorTests(version: 'v2') {
         (testError as any).statusCode = testErrorStatusCode;
         (testError as any).requestId = testErrorRequestId;
 
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate() {
             throw testError;
           },
@@ -767,7 +763,7 @@ function saveAndErrorTests(version: 'v2') {
           responseBody: 'Rate limit exceeded',
         });
 
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw rateLimitError;
           },
@@ -797,7 +793,7 @@ function saveAndErrorTests(version: 'v2') {
       });
 
       it('should throw correct error in generate when model throws', async () => {
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw new Error('Model generation failed');
           },
@@ -826,7 +822,7 @@ function saveAndErrorTests(version: 'v2') {
       });
 
       it('should have correct error in output.error and fullStream error chunk when model throws in stream', async () => {
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw new Error('Model stream failed');
           },
@@ -866,7 +862,7 @@ function saveAndErrorTests(version: 'v2') {
       });
 
       it('should call onError with correct error in generate when model throws', async () => {
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw new Error('Model generation failed');
           },
@@ -903,7 +899,7 @@ function saveAndErrorTests(version: 'v2') {
       });
 
       it('should call onError with correct error in stream when model throws', async () => {
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw new Error('Model stream failed');
           },
@@ -950,7 +946,7 @@ function saveAndErrorTests(version: 'v2') {
           it(`should throw in generate when error chunk is present but finishReason is '${reason}'`, async () => {
             const streamError = new Error(`Stream error with finishReason '${reason}'`);
 
-            const errorModel = new MockLanguageModelV2({
+            const errorModel = new MockLanguageModelV4({
               doGenerate: async () => {
                 throw streamError;
               },
@@ -992,7 +988,7 @@ function saveAndErrorTests(version: 'v2') {
         it('should expose error in stream output when error chunk has non-error finishReason', async () => {
           const streamError = new Error('Mid-stream error with stop finish');
 
-          const errorModel = new MockLanguageModelV2({
+          const errorModel = new MockLanguageModelV4({
             doGenerate: async () => {
               throw streamError;
             },
@@ -1082,7 +1078,7 @@ function saveAndErrorTests(version: 'v2') {
         it('should call onError in generate when error chunk has non-error finishReason', async () => {
           const streamError = new Error('Error with stop finish');
 
-          const errorModel = new MockLanguageModelV2({
+          const errorModel = new MockLanguageModelV4({
             doGenerate: async () => {
               throw streamError;
             },
@@ -1135,15 +1131,15 @@ function saveAndErrorTests(version: 'v2') {
         });
 
         // The error-chunk-with-mismatched-finishReason scenario requires bypassing the
-        // AISDKV5LanguageModel wrapper (which converts doGenerate results via
+        // AISDKV7LanguageModel wrapper (which converts doGenerate results via
         // createStreamFromGenerateResult and never inserts error chunks). We subclass
-        // AISDKV5LanguageModel so the model passes the instanceof check in resolveModel
+        // AISDKV7LanguageModel so the model passes the instanceof check in resolveModel
         // (avoiding re-wrapping), then override doGenerate to return a raw stream containing
         // an error chunk with finishReason 'stop' — the exact scenario this fix addresses.
         it('should throw in resumeGenerate when error chunk has non-error finishReason', async () => {
           const { Mastra } = await import('../../mastra');
           const { InMemoryStore } = await import('../../storage');
-          const { AISDKV5LanguageModel } = await import('../../llm/model/aisdk/v5/model');
+          const { AISDKV7LanguageModel } = await import('../../llm/model/aisdk/v7/model');
 
           const streamError = new Error('Resume model error with stop finish');
           let generateCallCount = 0;
@@ -1162,10 +1158,10 @@ function saveAndErrorTests(version: 'v2') {
             },
           });
 
-          const baseModel = new MockLanguageModelV2();
+          const baseModel = new MockLanguageModelV4();
 
           // Subclass to bypass resolveModel's instanceof check and return raw streams
-          class TestModel extends AISDKV5LanguageModel {
+          class TestModel extends AISDKV7LanguageModel {
             override async doGenerate(): Promise<any> {
               generateCallCount++;
               if (generateCallCount === 1) {
@@ -1273,7 +1269,7 @@ function saveAndErrorTests(version: 'v2') {
 
       // Helper to create a model that calls a tool which will throw during execution
       function createModelWithFailingToolCall() {
-        return new MockLanguageModelV2({
+        return new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             content: [{ type: 'tool-call', toolCallId: '123', toolName: 'failingTool', input: '{"input": "test"}' }],
@@ -1313,7 +1309,7 @@ function saveAndErrorTests(version: 'v2') {
       }
 
       // Helper to create an agent with a tool that throws during execution
-      function createAgentWithFailingTool(model: MockLanguageModelV2) {
+      function createAgentWithFailingTool(model: MockLanguageModelV4) {
         const failingTool = createTool({
           id: 'failingTool',
           description: 'A tool that throws during execution',
@@ -1397,7 +1393,7 @@ function saveAndErrorTests(version: 'v2') {
 
     describe('stream options', () => {
       it('should call options.onError when stream error occurs in stream', async () => {
-        const errorModel = new MockLanguageModelV2({
+        const errorModel = new MockLanguageModelV4({
           doGenerate() {
             throw new Error('Simulated stream error');
           },
@@ -1463,7 +1459,7 @@ function saveAndErrorTests(version: 'v2') {
         const abortController = new AbortController();
         let pullCalls = 0;
 
-        const abortModel = new MockLanguageModelV2({
+        const abortModel = new MockLanguageModelV4({
           // @ts-expect-error - error
           doGenerate: async () => {
             await new Promise(resolve => setImmediate(resolve));
@@ -1533,7 +1529,7 @@ function saveAndErrorTests(version: 'v2') {
         const abortController = new AbortController();
         const prompts: unknown[] = [];
         let streamCallCount = 0;
-        const model = new MockLanguageModelV2({
+        const model = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -1680,7 +1676,7 @@ function saveAndErrorTests(version: 'v2') {
         const providerFinished = new Promise<void>(resolve => {
           resolveProviderFinished = resolve;
         });
-        const model = new MockLanguageModelV2({
+        const model = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -1816,7 +1812,7 @@ describe('message persistence across completed steps', () => {
   it('should persist raw tool results separately from providerMetadata.mastra.modelOutput during savePerStep', async () => {
     let doStreamCallCount = 0;
 
-    const toolCallModel = new MockLanguageModelV2({
+    const toolCallModel = new MockLanguageModelV4({
       doStream: async () => {
         doStreamCallCount++;
         if (doStreamCallCount === 1) {
@@ -1943,7 +1939,7 @@ describe('message persistence across completed steps', () => {
     // Cancellation cannot erase submitted history or completed tool calls/results: they are
     // historical facts, and the tool may already have caused an irreversible external side effect.
     // Model that produces a tool call on first invocation, then text on second
-    const toolCallModel = new MockLanguageModelV2({
+    const toolCallModel = new MockLanguageModelV4({
       doStream: async () => {
         doStreamCallCount++;
         if (doStreamCallCount === 1) {
@@ -2085,7 +2081,7 @@ describe('message persistence across completed steps', () => {
 
   it('should preserve savePerStep persistence when aborting after a completed step', async () => {
     let doStreamCallCount = 0;
-    const toolCallModel = new MockLanguageModelV2({
+    const toolCallModel = new MockLanguageModelV4({
       doStream: async () => {
         doStreamCallCount++;
         if (doStreamCallCount === 1) {
@@ -2198,7 +2194,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
   // A provider that ends the stream with finishReason 'error' and never enqueues an
   // error part — the shape Google produces for MALFORMED_FUNCTION_CALL.
   function finishReasonErrorModelV3(finishReason: { unified: 'error'; raw?: string }) {
-    return new MockLanguageModelV3({
+    return new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [],
         finishReason,
@@ -2278,7 +2274,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
   }
 
   function simpleMockModel() {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('should not be called');
       },
@@ -2351,7 +2347,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
 
     try {
-      const errorModel = new MockLanguageModelV2({
+      const errorModel = new MockLanguageModelV4({
         doGenerate: async () => {
           throw new Error('LLM API call failed');
         },
@@ -2401,7 +2397,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       } satisfies IMastraLogger;
       const mastra = new Mastra({ logger });
 
-      const errorFinishModel = new MockLanguageModelV2({
+      const errorFinishModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [],
           finishReason: 'error',
@@ -2543,7 +2539,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     const agent = new Agent({
       id: 'test-no-spurious-error-chunk',
       name: 'Test No Spurious Error Chunk',
-      model: new MockLanguageModelV3({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'Hello there' }],
           finishReason: { unified: 'stop', raw: 'STOP' },
@@ -2580,7 +2576,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
     try {
       const streamError = new Error('LLM mid-stream error');
-      const errorMidStreamModel = new MockLanguageModelV2({
+      const errorMidStreamModel = new MockLanguageModelV4({
         doGenerate: async () => {
           throw streamError;
         },
@@ -2627,7 +2623,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
 
     try {
-      const successModel = new MockLanguageModelV2({
+      const successModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -2685,7 +2681,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         execute: async () => ({ name: 'Dero Israel', email: 'dero@mail.com' }),
       });
 
-      const approvalModel = new MockLanguageModelV2({
+      const approvalModel = new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -2752,7 +2748,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const abortController = new AbortController();
       let pullCalls = 0;
 
-      const abortMidStreamModel = new MockLanguageModelV2({
+      const abortMidStreamModel = new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -2855,7 +2851,7 @@ describe('default error processors retry Gemini MALFORMED_FUNCTION_CALL', () => 
 
   function createAgent(streams: Array<() => ReturnType<typeof convertArrayToReadableStreamV3>>) {
     let calls = 0;
-    const model = new MockLanguageModelV3({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         const next = streams[Math.min(calls, streams.length - 1)]!;
         calls++;

@@ -9,8 +9,8 @@
  * Closure-valued options and closure predicates must hard-fail at serialize
  * time — silent loss would ship broken workflows unnoticed.
  */
-import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
@@ -29,7 +29,7 @@ function fixedResponseAgent(id: string, response: string) {
     id,
     name: id,
     instructions: 'stub',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

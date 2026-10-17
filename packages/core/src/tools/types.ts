@@ -160,13 +160,7 @@ export interface ToolHooks<
 export type ToolPayloadTransformTarget = 'display' | 'transcript';
 
 export type ToolPayloadTransformPhase =
-  | 'input-delta'
-  | 'input-available'
-  | 'output-available'
-  | 'error'
-  | 'approval'
-  | 'suspend'
-  | 'resume';
+  'input-delta' | 'input-available' | 'output-available' | 'error' | 'approval' | 'suspend' | 'resume';
 
 export type ToolPayloadTransformContext<TInput = unknown, TOutput = unknown, TError = unknown> = {
   target: ToolPayloadTransformTarget;
@@ -567,7 +561,7 @@ export type CoreTool = {
       id?: string;
     }
   | {
-      type: 'provider-defined';
+      type: 'provider';
       id: `${string}.${string}`;
       args: Record<string, unknown>;
     }
@@ -626,7 +620,7 @@ export type InternalCoreTool = {
       id?: string;
     }
   | {
-      type: 'provider-defined';
+      type: 'provider';
       id: `${string}.${string}`;
       args: Record<string, unknown>;
     }

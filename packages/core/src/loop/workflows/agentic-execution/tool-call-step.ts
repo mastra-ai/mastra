@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import { stopGoalActivity } from '../../../agent/goal';
 import { MemoryMessageRefs } from '../../../agent/message-list/memory-message-refs';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
@@ -450,6 +450,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             input: inputData.args,
             messages: messageList.get.input.aiV5.model(),
             abortSignal,
+            context: undefined,
           });
         } catch (error) {
           logger?.error('Error calling onInputAvailable', error);
@@ -806,6 +807,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal,
+          context: undefined,
           toolCallId: inputData.toolCallId,
           // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
           // Regular tools retain the input-only context expected by the AI SDK tool contract.

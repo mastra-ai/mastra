@@ -8,7 +8,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
-import { MockLanguageModelV2 } from './mock-model';
+import { MockLanguageModelV4 } from './mock-model';
 import { LeasePubSub } from './thread-stream-test-utils';
 
 const threadId = 'signal-trim-thread';
@@ -38,7 +38,7 @@ describe('persisted idle signal trim', () => {
       id: 'signal-trim-agent',
       name: 'Signal Trim Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2(),
+      model: new MockLanguageModelV4(),
       memory: new MockMemory(),
     });
     const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false, pubsub });

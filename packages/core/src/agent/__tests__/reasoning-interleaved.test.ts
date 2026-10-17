@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import { simulateReadableStream } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 /**
  * Creates a mock model that simulates providers where text-start arrives before reasoning-end.
@@ -24,7 +24,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model'
  *   step-start → reasoning-start → reasoning-delta → text-start → reasoning-end → text-end
  */
 function createInterleavedReasoningMockModel(reasoningText: string, responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -204,7 +204,7 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
     ];
     const responseText = 'The answer is 42.';
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -302,7 +302,7 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
     const toolCallId = 'call_123';
     const toolName = 'get_weather';
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: simulateReadableStream({
           chunks: [

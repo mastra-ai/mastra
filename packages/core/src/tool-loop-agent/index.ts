@@ -1,4 +1,4 @@
-import { generateId } from '@internal/ai-sdk-v5';
+import { generateId } from '@internal/ai-v7';
 import { Agent } from '../agent';
 import { ToolLoopAgentProcessor } from './tool-loop-processor';
 import type { ToolLoopAgentLike } from './utils';

@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -15,8 +15,8 @@ import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../
 import type { RunRegistryEntry } from '../types';
 
 function model(prompts: string[]) {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }: { prompt: LanguageModelV2Prompt }) => {
+  return new MockLanguageModelV4({
+    doStream: async ({ prompt }: { prompt: LanguageModelV4Prompt }) => {
       prompts.push(JSON.stringify(prompt));
       const parts = prompt.some(m => m.role === 'tool')
         ? [

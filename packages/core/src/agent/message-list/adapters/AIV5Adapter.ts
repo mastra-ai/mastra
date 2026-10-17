@@ -1,4 +1,4 @@
-import * as AIV5 from '@internal/ai-sdk-v5';
+import * as AIV5 from '@internal/ai-v7';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';

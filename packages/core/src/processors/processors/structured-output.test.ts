@@ -1,5 +1,5 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
@@ -21,7 +21,7 @@ describe('StructuredOutputProcessor', () => {
   });
 
   let processor: StructuredOutputProcessor<z.infer<typeof testSchema>>;
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
 
   // Helper to create a mock controller that captures enqueued chunks
   function createMockController() {
@@ -63,7 +63,7 @@ describe('StructuredOutputProcessor', () => {
   }
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta' as const, id: 'text-1', delta: '{"color": "blue", "intensity": "bright"}' },

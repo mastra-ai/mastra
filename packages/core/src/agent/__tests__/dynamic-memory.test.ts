@@ -1,5 +1,5 @@
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
@@ -8,9 +8,9 @@ import { Agent } from '../agent';
 
 function dynamicMemoryTest(version: 'v2') {
   describe(`${version} - dynamic memory configuration`, () => {
-    let dummyModel: MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV4;
     {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -171,7 +171,7 @@ function dynamicMemoryTest(version: 'v2') {
 
       let model;
       {
-        model = new MockLanguageModelV2({
+        model = new MockLanguageModelV4({
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],
@@ -248,10 +248,10 @@ function dynamicMemoryTest(version: 'v2') {
 
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV4;
 
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
             return {
@@ -335,10 +335,10 @@ function dynamicMemoryTest(version: 'v2') {
       const storage = new InMemoryStore();
       const mockMemory = new MockMemory({ storage });
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV4;
 
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doStream: async ({ prompt }) => {
             capturedMessages = prompt;
             return {
@@ -413,10 +413,10 @@ function dynamicMemoryTest(version: 'v2') {
 
     it('should preserve system messages from user input without memory (stream)', async () => {
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV4;
 
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doStream: async ({ prompt }) => {
             capturedMessages = prompt;
             return {
@@ -487,10 +487,10 @@ function dynamicMemoryTest(version: 'v2') {
     it('should preserve system messages from user input without memory', async () => {
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let dummyModel: MockLanguageModelV2;
+      let dummyModel: MockLanguageModelV4;
 
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
             return {
@@ -568,10 +568,10 @@ function dynamicMemoryTest(version: 'v2') {
     it('should support system option in generate method', async () => {
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
             return {
@@ -636,10 +636,10 @@ function dynamicMemoryTest(version: 'v2') {
     it('should support system option in stream method', async () => {
       // Mock the LLM to capture what messages it receives
       let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doStream: async ({ prompt }) => {
             capturedMessages = prompt;
             return {
@@ -694,10 +694,10 @@ function dynamicMemoryTest(version: 'v2') {
 
     it('should work with both instructions override and system option', async () => {
       let capturedMessages: any[] = [];
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async ({ prompt }) => {
             capturedMessages = prompt;
             return {
@@ -760,7 +760,7 @@ function dynamicMemoryTest(version: 'v2') {
       // Skip this test for v1 as it only applies to VNext methods
 
       let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
+      const testModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           capturedMessages = prompt;
           return {
@@ -828,7 +828,7 @@ function dynamicMemoryTest(version: 'v2') {
       // Skip this test for v1 as it only applies to VNext methods
 
       let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
+      const testModel = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           capturedMessages = prompt;
           return {
@@ -892,7 +892,7 @@ function dynamicMemoryTest(version: 'v2') {
       // Skip this test for v1 as it only applies to VNext methods
 
       let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
+      const testModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           capturedMessages = prompt;
           return {
@@ -980,7 +980,7 @@ function dynamicMemoryTest(version: 'v2') {
       // Skip this test for v1 as it only applies to VNext methods
 
       let capturedMessages: any[] = [];
-      const testModel = new MockLanguageModelV2({
+      const testModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           capturedMessages = prompt;
           return {

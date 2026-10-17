@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -65,7 +65,7 @@ describe('DurableAgent — processLLMRequest cached response (Bug 8)', () => {
     const baseAgent = new Agent({
       id: 'cached-response-agent',
       name: 'cached-response-agent',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: doStreamSpy,
       }),
       instructions: 'You are a test agent.',
@@ -113,7 +113,7 @@ describe('DurableAgent — processLLMRequest cached response (Bug 8)', () => {
     const baseAgent = new Agent({
       id: 'no-cache-agent',
       name: 'no-cache-agent',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },

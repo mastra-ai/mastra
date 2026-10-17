@@ -11,8 +11,8 @@
  *  - generate → suspend (requireToolApproval) → resumeGenerate round-trip
  *  - cleanup happens (registry entry removed) on success and on error
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -24,7 +24,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -45,7 +45,7 @@ function createTextModel(text: string) {
 
 function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -106,7 +106,7 @@ describe('DurableAgent.generate()', () => {
       id: 'generate-text-agent',
       name: 'Generate Text Agent',
       instructions: 'Be brief.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -125,7 +125,7 @@ describe('DurableAgent.generate()', () => {
       id: 'generate-cleanup-agent',
       name: 'Generate Cleanup Agent',
       instructions: 'Be brief.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -137,7 +137,7 @@ describe('DurableAgent.generate()', () => {
   });
 
   it('rethrows MastraModelOutput errors instead of swallowing them on FullOutput.error', async () => {
-    const failingModel = new MockLanguageModelV2({
+    const failingModel = new MockLanguageModelV4({
       doStream: async () => {
         throw new Error('model exploded');
       },
@@ -146,7 +146,7 @@ describe('DurableAgent.generate()', () => {
       id: 'generate-error-agent',
       name: 'Generate Error Agent',
       instructions: 'Test errors',
-      model: failingModel as LanguageModelV2,
+      model: failingModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -178,7 +178,7 @@ describe('DurableAgent.resumeGenerate()', () => {
       id: 'generate-resume-agent',
       name: 'Generate Resume Agent',
       instructions: 'Use the search tool when asked.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { searchTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

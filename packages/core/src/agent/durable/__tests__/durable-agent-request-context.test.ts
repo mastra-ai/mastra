@@ -6,8 +6,8 @@
  * via reserved keys that take precedence over client-provided values.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -31,7 +31,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a simple text model
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -81,7 +81,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'request-context-agent',
         name: 'RequestContext Agent',
         instructions: 'Test requestContext',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -102,7 +102,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'stream-request-context-agent',
         name: 'Stream RequestContext Agent',
         instructions: 'Test requestContext',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -126,7 +126,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'reserved-keys-agent',
         name: 'Reserved Keys Agent',
         instructions: 'Test reserved keys',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -150,7 +150,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'context-memory-agent',
         name: 'Context Memory Agent',
         instructions: 'Test context with memory',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -179,7 +179,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
       // Model that calls a tool on first invocation, then returns text
       let callCount = 0;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => {
           callCount++;
           if (callCount === 1) {
@@ -239,7 +239,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'tool-context-agent',
         name: 'Tool Context Agent',
         instructions: 'Use tools with context',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { contextTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -270,7 +270,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'serialize-context-agent',
         name: 'Serialize Context Agent',
         instructions: 'Test serialization',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -309,7 +309,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'inherited-memory-snapshot-agent',
         name: 'Inherited Memory Snapshot Agent',
         instructions: 'Test inherited memory snapshot',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -336,7 +336,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
         id: 'auth-token-snapshot-agent',
         name: 'Auth Token Snapshot Agent',
         instructions: 'Test auth token snapshot',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -375,7 +375,7 @@ describe('DurableAgent RequestContext edge cases', () => {
       id: 'empty-context-agent',
       name: 'Empty Context Agent',
       instructions: 'Test empty context',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -396,7 +396,7 @@ describe('DurableAgent RequestContext edge cases', () => {
       id: 'complex-context-agent',
       name: 'Complex Context Agent',
       instructions: 'Test complex context',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -424,7 +424,7 @@ describe('DurableAgent RequestContext edge cases', () => {
       id: 'undefined-context-agent',
       name: 'Undefined Context Agent',
       instructions: 'Test undefined context',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -442,7 +442,7 @@ describe('DurableAgent RequestContext edge cases', () => {
       id: 'special-keys-agent',
       name: 'Special Keys Agent',
       instructions: 'Test special keys',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

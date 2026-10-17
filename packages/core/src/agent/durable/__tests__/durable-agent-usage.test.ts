@@ -5,8 +5,8 @@
  * including accumulated usage across multiple steps.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -19,7 +19,7 @@ import { createDurableAgent } from '../create-durable-agent';
 // ============================================================================
 
 function createModelWithUsage(usage: { inputTokens: number; outputTokens: number; totalTokens: number }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -54,7 +54,7 @@ type PartialUsage = {
 };
 
 function createToolThenReplyingModelWithUsage(firstUsage: PartialUsage, secondUsage: PartialUsage) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const sawToolResult = JSON.stringify(prompt).includes('usage-tool-result');
       return {
@@ -122,7 +122,7 @@ describe('DurableAgent usage tracking', () => {
         id: 'usage-test-agent',
         name: 'Usage Test Agent',
         instructions: 'You are a helpful assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -144,7 +144,7 @@ describe('DurableAgent usage tracking', () => {
         id: 'model-config-agent',
         name: 'Model Config Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -168,7 +168,7 @@ describe('DurableAgent usage tracking', () => {
         id: 'raw-chunks-agent',
         name: 'Raw Chunks Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -190,7 +190,7 @@ describe('DurableAgent usage tracking', () => {
         id: 'temperature-agent',
         name: 'Temperature Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -216,7 +216,7 @@ describe('DurableAgent usage tracking', () => {
         id: 'init-usage-agent',
         name: 'Init Usage Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -252,7 +252,7 @@ describe('DurableAgent usage accumulation', () => {
       id: 'partial-usage-agent',
       name: 'Partial Usage Agent',
       instructions: 'Use the tool, then answer.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { usageTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -290,7 +290,7 @@ describe('DurableAgent usage accumulation', () => {
       id: 'missing-usage-agent',
       name: 'Missing Usage Agent',
       instructions: 'Use the tool, then answer.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { usageTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -312,7 +312,7 @@ describe('DurableAgent usage accumulation', () => {
   });
 
   it('keeps usage unknown when the model errors before reporting usage', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -329,7 +329,7 @@ describe('DurableAgent usage accumulation', () => {
       id: 'error-usage-agent',
       name: 'Error Usage Agent',
       instructions: 'Test',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     const result = await durableAgent.stream('Fail before reporting usage', { maxSteps: 3 });
@@ -369,7 +369,7 @@ describe('DurableAgent usage accumulation', () => {
       id: 'accumulation-agent',
       name: 'Accumulation Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -395,7 +395,7 @@ describe('DurableAgent usage accumulation', () => {
       id: 'multi-prepare-agent',
       name: 'Multi Prepare Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -445,7 +445,7 @@ describe('DurableAgent model settings', () => {
       id: 'temp-setting-agent',
       name: 'Temp Setting Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -467,7 +467,7 @@ describe('DurableAgent model settings', () => {
       id: 'no-settings-agent',
       name: 'No Settings Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -488,7 +488,7 @@ describe('DurableAgent model settings', () => {
       id: 'serialize-config-agent',
       name: 'Serialize Config Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -529,7 +529,7 @@ describe('DurableAgent processor retry configuration', () => {
       id: 'retry-config-agent',
       name: 'Retry Config Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -551,7 +551,7 @@ describe('DurableAgent processor retry configuration', () => {
       id: 'default-retry-agent',
       name: 'Default Retry Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

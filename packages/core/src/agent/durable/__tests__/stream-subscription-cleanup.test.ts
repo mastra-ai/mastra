@@ -15,8 +15,8 @@
  * already-correct `observe()` cleanup path.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -26,8 +26,8 @@ import { AGENT_STREAM_TOPIC } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
 
-function createTextStreamModel(text: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+function createTextStreamModel(text: string): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -43,7 +43,7 @@ function createTextStreamModel(text: string): LanguageModelV2 {
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 const CLEANUP_MS = 50;

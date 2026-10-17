@@ -1,4 +1,4 @@
-import { convertToModelMessages } from '@internal/ai-sdk-v5';
+import { convertToModelMessages } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';

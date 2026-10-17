@@ -1,5 +1,5 @@
-import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, SharedV4Warning, LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 
 export const testUsage = {
   inputTokens: 3,
@@ -91,12 +91,12 @@ export function createTestModel({
   request = undefined,
   response = undefined,
 }: {
-  stream?: ReadableStream<LanguageModelV2StreamPart>;
+  stream?: ReadableStream<LanguageModelV4StreamPart>;
   request?: { body: string };
   response?: { headers: Record<string, string> };
-  warnings?: LanguageModelV2CallWarning[];
-} = {}): LanguageModelV2 {
-  return new MockLanguageModelV2({
+  warnings?: SharedV4Warning[];
+} = {}): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({ stream, request, response, warnings }),
   });
 }

@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Memory } from '../../../memory/src';
@@ -36,7 +36,7 @@ const SENSITIVE_MARKER = 'SENSITIVE_MARKER_9d4f1c';
 
 /** Model that always emits the sensitive marker, for both generate and stream. */
 const makeRedactionModel = () =>
-  new MockLanguageModelV2({
+  new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text' as const, text: SENSITIVE_MARKER }],
       finishReason: 'stop' as const,
@@ -96,10 +96,10 @@ function expectNoSensitiveMarker(value: unknown, path = 'result', seen = new Wea
 }
 
 describe('Input and Output Processors', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         // Extract text content from the prompt messages
         const messages = Array.isArray(prompt) ? prompt : [];
@@ -639,7 +639,7 @@ describe('Input and Output Processors', () => {
         id: 'generate-output-processor-test-agent',
         name: 'Generate Output Processor Test Agent',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               {
@@ -697,7 +697,7 @@ describe('Input and Output Processors', () => {
         id: 'result-text-processor-test-agent',
         name: 'Result Text Processor Test Agent',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               {
@@ -798,7 +798,7 @@ describe('Input and Output Processors', () => {
         id: 'multi-processor-generate-test-agent',
         name: 'Multi Processor Generate Test Agent',
         instructions: 'Respond with: "hello world"',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               {
@@ -857,7 +857,7 @@ describe('Input and Output Processors', () => {
         id: 'aborting-generate-test-agent',
         name: 'Aborting Generate Test Agent',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               {
@@ -920,7 +920,7 @@ describe('Input and Output Processors', () => {
         id: 'mixed-processor-test-agent',
         name: 'Mixed Processor Test Agent',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               {
@@ -997,7 +997,7 @@ describe('Input and Output Processors', () => {
         id: 'provider-error-processor-agent',
         name: 'Provider Error Processor Agent',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => {
             throw new Error('provider exploded');
           },
@@ -1264,7 +1264,7 @@ describe('Input and Output Processors', () => {
         id: 'stream-structured-processor-test-agent',
         name: 'Stream Structured Processor Test Agent',
         instructions: 'You know about US elections.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               {
@@ -1352,7 +1352,7 @@ describe('Input and Output Processors', () => {
           id: 'output-tripwire-test-agent',
           name: 'Output Tripwire Test Agent',
           instructions: 'You are a helpful assistant.',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doGenerate: async () => ({
               content: [
                 {
@@ -1461,7 +1461,7 @@ describe('Input and Output Processors', () => {
 describe('New Processor Features', () => {
   describe('TripWire with retry option', () => {
     it('should include retry flag in stream tripwire chunk for input processor', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -1506,7 +1506,7 @@ describe('New Processor Features', () => {
     });
 
     it('should include retry flag in stream tripwire chunk for output stream processor', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -1555,7 +1555,7 @@ describe('New Processor Features', () => {
 
   describe('TripWire with typed metadata', () => {
     it('should include metadata in stream tripwire chunk for input processor', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -1613,7 +1613,7 @@ describe('New Processor Features', () => {
     });
 
     it('should include both retry and metadata in stream tripwire chunk', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -1691,7 +1691,7 @@ describe('New Processor Features', () => {
         id: 'retry-count-test-agent',
         name: 'Retry Count Test Agent',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [{ type: 'text', text: 'test response' }],
             finishReason: 'stop',
@@ -1724,7 +1724,7 @@ describe('New Processor Features', () => {
         id: 'retry-count-output-test-agent',
         name: 'Retry Count Output Test Agent',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [{ type: 'text', text: 'test response' }],
             finishReason: 'stop',
@@ -1744,7 +1744,7 @@ describe('New Processor Features', () => {
     it('should pass retryCount to stream processor', async () => {
       let receivedRetryCount = -1;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -1800,7 +1800,7 @@ describe('New Processor Features', () => {
         get callCount() {
           return calls;
         },
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [{ type: 'text' as const, text: nextText() }],
             finishReason: 'stop' as const,
@@ -1923,7 +1923,7 @@ describe('New Processor Features', () => {
       let callCount = 0;
       const receivedMessages: any[][] = [];
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           callCount++;
           receivedMessages.push([...prompt]);
@@ -1999,7 +1999,7 @@ describe('New Processor Features', () => {
     });
 
     it('should only append to the prompt on retries so the provider prompt cache is reused', async () => {
-      const prompts: LanguageModelV2Prompt[] = [];
+      const prompts: LanguageModelV4Prompt[] = [];
       const turns = [
         { tool: 'a' },
         { text: 'bad response' },
@@ -2007,7 +2007,7 @@ describe('New Processor Features', () => {
         { text: 'bad response' },
         { text: 'good response' },
       ];
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           prompts.push(prompt);
           const turn = turns[prompts.length - 1]!;
@@ -2065,7 +2065,7 @@ describe('New Processor Features', () => {
       expect(prompts).toHaveLength(5);
 
       // Mastra stamps `providerOptions.mastra` on prompt parts; providers don't send it.
-      const wire = (prompt: LanguageModelV2Prompt) =>
+      const wire = (prompt: LanguageModelV4Prompt) =>
         JSON.parse(JSON.stringify(prompt), (key, value) => (key === 'mastra' ? undefined : value));
 
       // Each request extends the previous one, including across two retries with the same feedback.
@@ -2077,7 +2077,7 @@ describe('New Processor Features', () => {
       // The abort reason is sent verbatim as the last message.
       const feedbackText = '<system-reminder>Response quality too low, please improve</system-reminder>';
       const feedback = { role: 'user', content: [expect.objectContaining({ type: 'text', text: feedbackText })] };
-      const feedbackCount = (prompt: LanguageModelV2Prompt) =>
+      const feedbackCount = (prompt: LanguageModelV4Prompt) =>
         prompt.filter(
           msg => msg.role === 'user' && msg.content.some(part => part.type === 'text' && part.text === feedbackText),
         ).length;
@@ -2091,7 +2091,7 @@ describe('New Processor Features', () => {
       const receivedRetryCounts: number[] = [];
       let callCount = 0;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           return {
@@ -2136,7 +2136,7 @@ describe('New Processor Features', () => {
     it('should stop retrying and return tripwire when maxProcessorRetries is reached', async () => {
       let callCount = 0;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           return {
@@ -2180,9 +2180,9 @@ describe('New Processor Features', () => {
 
     it('should not include rejected assistant response in messages sent to LLM on retry', async () => {
       let callCount = 0;
-      const receivedPrompts: LanguageModelV2Prompt[] = [];
+      const receivedPrompts: LanguageModelV4Prompt[] = [];
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           callCount++;
           receivedPrompts.push([...prompt]);
@@ -2259,9 +2259,9 @@ describe('New Processor Features', () => {
 
     it('should not include rejected assistant response in messages on retry when streaming', async () => {
       let callCount = 0;
-      const receivedPrompts: LanguageModelV2Prompt[] = [];
+      const receivedPrompts: LanguageModelV4Prompt[] = [];
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           callCount++;
           receivedPrompts.push([...prompt]);
@@ -2334,7 +2334,7 @@ describe('New Processor Features', () => {
 
   describe('processorId in tripwire output', () => {
     it('should include processorId in stream tripwire chunk for input processor', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -2378,7 +2378,7 @@ describe('New Processor Features', () => {
     });
 
     it('should include processorId in stream tripwire chunk for output stream processor', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -2438,7 +2438,7 @@ describe('Workflow as Processor', () => {
       id: 'logger-propagation-test-agent',
       name: 'Logger Propagation Test Agent',
       instructions: 'You are a helpful assistant.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'should not get here' }],
           finishReason: 'stop',
@@ -2494,7 +2494,7 @@ describe('Workflow as Processor', () => {
         .then(createStep(inputProcessor))
         .commit();
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           // Extract the transformed text from the prompt
           const messages = Array.isArray(prompt) ? prompt : [];
@@ -2556,7 +2556,7 @@ describe('Workflow as Processor', () => {
         .then(createStep(tripwireProcessor))
         .commit();
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -2629,7 +2629,7 @@ describe('Workflow as Processor', () => {
         .then(createStep(outputProcessor))
         .commit();
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'Hello from the agent' }],
           finishReason: 'stop',
@@ -2682,7 +2682,7 @@ describe('Workflow as Processor', () => {
         .then(createStep(outputTripwireProcessor))
         .commit();
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'This is inappropriate content' }],
           finishReason: 'stop',
@@ -2737,7 +2737,7 @@ describe('Workflow as Processor', () => {
         .then(createStep(multiTransformProcessor))
         .commit();
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           const messages = Array.isArray(prompt) ? prompt : [];
           const userMessage = messages.find(m => m.role === 'user');
@@ -2776,7 +2776,7 @@ describe('Workflow as Processor', () => {
 
   describe('TripWire in processInputStep', () => {
     it('should emit tripwire chunk when processor aborts in processInputStep', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -2824,7 +2824,7 @@ describe('Workflow as Processor', () => {
     });
 
     it('should emit tripwire chunk with retry option when processor aborts in processInputStep', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -2871,7 +2871,7 @@ describe('Workflow as Processor', () => {
 
   describe('TripWire in processOutputStep', () => {
     it('should emit tripwire chunk when processor aborts in processOutputStep', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -2918,7 +2918,7 @@ describe('Workflow as Processor', () => {
     });
 
     it('should emit tripwire chunk with metadata when processor aborts in processOutputStep', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: 'harmful content' }],
           finishReason: 'stop',
@@ -2978,7 +2978,7 @@ describe('Workflow as Processor', () => {
 
   describe('TripWire in prepareStep option', () => {
     it('should emit tripwire chunk when prepareStep calls abort', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -3021,7 +3021,7 @@ describe('Workflow as Processor', () => {
     });
 
     it('should emit tripwire chunk with retry option when prepareStep calls abort with retry', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -3062,7 +3062,7 @@ describe('Workflow as Processor', () => {
   });
 
   describe('listConfiguredInputProcessors and listConfiguredOutputProcessors', () => {
-    const testModel = new MockLanguageModelV2({
+    const testModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text' as const, text: 'ok' }],
         finishReason: 'stop' as const,
@@ -3240,7 +3240,7 @@ describe('Workflow as Processor', () => {
       });
 
       let callCount = 0;
-      const multiStepModel = new MockLanguageModelV2({
+      const multiStepModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -3343,7 +3343,7 @@ describe('output tripwire text disclosure (#24443)', () => {
   const usage = { inputTokens: 4, outputTokens: 10, totalTokens: 14 };
 
   const makeModel = () =>
-    new MockLanguageModelV2({
+    new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text' as const, text: ANSWER }],
         finishReason: 'stop' as const,
@@ -3429,7 +3429,7 @@ describe('processOutputStep tripwire that ends the run drops the rejected reply 
   const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
   const makeModel = () =>
-    new MockLanguageModelV2({
+    new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text' as const, text: REJECTED }],
         finishReason: 'stop' as const,
@@ -3509,7 +3509,7 @@ describe('processOutputStep tripwire that ends the run drops the rejected reply 
 
   it('keeps an accepted tool step when a later text step is rejected', async () => {
     let call = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => {
         call++;
         if (call === 1) {
@@ -3575,7 +3575,7 @@ describe('processOutputStep tripwire that ends the run drops the rejected reply 
 });
 
 describe('error processors — shared stability defaults', () => {
-  const testModel = new MockLanguageModelV2({
+  const testModel = new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text' as const, text: 'ok' }],
       finishReason: 'stop' as const,
@@ -3780,7 +3780,7 @@ describe('error processors — shared stability defaults', () => {
 });
 
 describe('LLM request lane — error-phase processors', () => {
-  const promptTexts = (prompt: LanguageModelV2Prompt): string[] =>
+  const promptTexts = (prompt: LanguageModelV4Prompt): string[] =>
     prompt.flatMap(message =>
       typeof message.content === 'string'
         ? [message.content]
@@ -3792,7 +3792,7 @@ describe('LLM request lane — error-phase processors', () => {
    * that it ran and that its rewrite reached the model.
    */
   const makePromptRewritingErrorProcessor = () => {
-    const seenPrompts: LanguageModelV2Prompt[] = [];
+    const seenPrompts: LanguageModelV4Prompt[] = [];
     const calls = { processLLMRequest: 0, processInput: 0, processInputStep: 0, processAPIError: 0 };
     const processor: Processor & { id: string } = {
       id: 'prompt-rewriting-error-processor',
@@ -3825,8 +3825,8 @@ describe('LLM request lane — error-phase processors', () => {
 
   it('runs processLLMRequest for an error-lane processor and shows it the model prompt', async () => {
     const { processor, seenPrompts, calls } = makePromptRewritingErrorProcessor();
-    const capturedPrompts: LanguageModelV2Prompt[] = [];
-    const model = new MockLanguageModelV2({
+    const capturedPrompts: LanguageModelV4Prompt[] = [];
+    const model = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         capturedPrompts.push(prompt);
         return {
@@ -3862,7 +3862,7 @@ describe('LLM request lane — error-phase processors', () => {
       id: 'llm-request-lane-agent',
       name: 'LLM Request Lane Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text' as const, text: 'ok' }],
           finishReason: 'stop' as const,
@@ -3888,7 +3888,7 @@ describe('LLM request lane — error-phase processors', () => {
       id: 'llm-request-lane-agent',
       name: 'LLM Request Lane Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text' as const, text: 'ok' }],
           finishReason: 'stop' as const,
@@ -3910,7 +3910,7 @@ describe('LLM request lane — error-phase processors', () => {
       id: 'llm-request-lane-agent',
       name: 'LLM Request Lane Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text' as const, text: 'ok' }],
           finishReason: 'stop' as const,
@@ -3937,12 +3937,12 @@ describe('LLM request lane — error-phase processors', () => {
 
   it('applies a call-time errorProcessors override to the request lane', async () => {
     const { processor, calls } = makePromptRewritingErrorProcessor();
-    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const capturedPrompts: LanguageModelV4Prompt[] = [];
     const agent = new Agent({
       id: 'llm-request-lane-override-agent',
       name: 'LLM Request Lane Override Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           capturedPrompts.push(prompt);
           return {
@@ -3970,7 +3970,7 @@ describe('LLM request lane — error-phase processors', () => {
       id: 'llm-request-lane-empty-override-agent',
       name: 'LLM Request Lane Empty Override Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text' as const, text: 'ok' }],
           finishReason: 'stop' as const,
@@ -3994,7 +3994,7 @@ describe('anthropic tool id repair — prompt-scoped through the agent', () => {
   const ANTHROPIC_MODEL = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
 
   /** Formats the tool ids carried by a converted v2 prompt, in order. */
-  const promptToolIds = (prompt: LanguageModelV2Prompt): string[] =>
+  const promptToolIds = (prompt: LanguageModelV4Prompt): string[] =>
     prompt
       .flatMap(message => (Array.isArray(message.content) ? message.content : []))
       .map(part => (part as { toolCallId?: string }).toolCallId)
@@ -4037,16 +4037,16 @@ describe('anthropic tool id repair — prompt-scoped through the agent', () => {
     JSON.stringify(messages).match(/call[._][A-Za-z0-9_:.]+/g) ?? [];
 
   it('repairs the outbound prompt on a bare Anthropic agent, leaving persisted history alone', async () => {
-    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const capturedPrompts: LanguageModelV4Prompt[] = [];
     const agent = new Agent({
       id: 'tool-id-repair-agent',
       name: 'Tool Id Repair Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         provider: ANTHROPIC_MODEL.provider,
         modelId: ANTHROPIC_MODEL.modelId,
         doGenerate: async ({ prompt }) => {
-          capturedPrompts.push(prompt as LanguageModelV2Prompt);
+          capturedPrompts.push(prompt as LanguageModelV4Prompt);
           return {
             content: [{ type: 'text' as const, text: 'ok' }],
             finishReason: 'stop' as const,
@@ -4078,16 +4078,16 @@ describe('anthropic tool id repair — prompt-scoped through the agent', () => {
   it('keeps the original ids in stored history when the agent has memory', async () => {
     const storage = new InMemoryStore();
     const memory = new Memory({ storage, options: { lastMessages: 100, generateTitle: false } });
-    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const capturedPrompts: LanguageModelV4Prompt[] = [];
     const agent = new Agent({
       id: 'tool-id-repair-memory-agent',
       name: 'Tool Id Repair Memory Agent',
       instructions: 'test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         provider: ANTHROPIC_MODEL.provider,
         modelId: ANTHROPIC_MODEL.modelId,
         doGenerate: async ({ prompt }) => {
-          capturedPrompts.push(prompt as LanguageModelV2Prompt);
+          capturedPrompts.push(prompt as LanguageModelV4Prompt);
           return {
             content: [{ type: 'text' as const, text: 'ok' }],
             finishReason: 'stop' as const,

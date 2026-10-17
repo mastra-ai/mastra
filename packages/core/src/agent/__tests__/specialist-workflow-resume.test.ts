@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -91,7 +91,7 @@ function buildSpecialist(
   intakeWorkflow: ReturnType<typeof buildIntakeWorkflow>['intakeWorkflow'],
   memoryMode: SpecialistMemoryMode,
 ) {
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasToolResult = JSON.stringify(prompt).includes('"type":"tool-result"');
       return streamOf(
@@ -146,7 +146,7 @@ type SpecialistMemoryMode = 'none' | 'own-memory' | 'own-memory-with-defaults';
 
 function buildSupervisor(specialist: Agent) {
   let step = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       step += 1;
       return streamOf(

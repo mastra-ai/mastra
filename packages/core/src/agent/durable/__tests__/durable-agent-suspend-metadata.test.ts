@@ -8,8 +8,8 @@
  *
  * Without it a refreshed page shows no pending approval even though the run is parked and resumable.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -19,8 +19,8 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-function createToolCallModel(toolName: string, toolArgs: object): LanguageModelV2 {
-  return new MockLanguageModelV2({
+function createToolCallModel(toolName: string, toolArgs: object): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -38,7 +38,7 @@ function createToolCallModel(toolName: string, toolArgs: object): LanguageModelV
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 describe('DurableAgent suspend metadata persistence', () => {

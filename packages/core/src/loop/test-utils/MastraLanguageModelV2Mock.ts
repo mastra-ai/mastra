@@ -1,48 +1,48 @@
-import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import type { MastraLanguageModelV2 } from '../../llm/model/shared.types';
-import { AISDKV5LanguageModel } from '../../llm/model/aisdk/v5/model';
+import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
+import type { MastraLanguageModelV4 } from '../../llm/model/shared.types';
+import { AISDKV7LanguageModel } from '../../llm/model/aisdk/v7/model';
 
-export class MastraLanguageModelV2Mock implements MastraLanguageModelV2 {
+export class MastraLanguageModelV2Mock implements MastraLanguageModelV4 {
   readonly specificationVersion = 'v2' as const;
-  readonly provider: LanguageModelV2['provider'];
-  readonly modelId: LanguageModelV2['modelId'];
-  readonly supportedUrls: LanguageModelV2['supportedUrls'];
-  #model: MockLanguageModelV2;
+  readonly provider: LanguageModelV4['provider'];
+  readonly modelId: LanguageModelV4['modelId'];
+  readonly supportedUrls: LanguageModelV4['supportedUrls'];
+  #model: MockLanguageModelV4;
 
   constructor(config: {
-    provider?: LanguageModelV2['provider'];
-    modelId?: LanguageModelV2['modelId'];
-    supportedUrls?: LanguageModelV2['supportedUrls'] | (() => LanguageModelV2['supportedUrls']);
+    provider?: LanguageModelV4['provider'];
+    modelId?: LanguageModelV4['modelId'];
+    supportedUrls?: LanguageModelV4['supportedUrls'] | (() => LanguageModelV4['supportedUrls']);
     doGenerate?:
-      | LanguageModelV2['doGenerate']
-      | Awaited<ReturnType<LanguageModelV2['doGenerate']>>
-      | Awaited<ReturnType<LanguageModelV2['doGenerate']>>[];
+      | LanguageModelV4['doGenerate']
+      | Awaited<ReturnType<LanguageModelV4['doGenerate']>>
+      | Awaited<ReturnType<LanguageModelV4['doGenerate']>>[];
     doStream?:
-      | LanguageModelV2['doStream']
-      | Awaited<ReturnType<LanguageModelV2['doStream']>>
-      | Awaited<ReturnType<LanguageModelV2['doStream']>>[];
+      | LanguageModelV4['doStream']
+      | Awaited<ReturnType<LanguageModelV4['doStream']>>
+      | Awaited<ReturnType<LanguageModelV4['doStream']>>[];
   }) {
-    this.#model = new MockLanguageModelV2(config);
+    this.#model = new MockLanguageModelV4(config);
     this.provider = this.#model.provider;
     this.modelId = this.#model.modelId;
     this.supportedUrls = this.#model.supportedUrls;
   }
 
-  doGenerate(options: LanguageModelV2CallOptions) {
-    const aiSDKModel = new AISDKV5LanguageModel(this.#model);
+  doGenerate(options: LanguageModelV4CallOptions) {
+    const aiSDKModel = new AISDKV7LanguageModel(this.#model);
     return aiSDKModel.doGenerate(options);
   }
 
-  doStream(options: LanguageModelV2CallOptions) {
-    const aiSDKModel = new AISDKV5LanguageModel(this.#model);
+  doStream(options: LanguageModelV4CallOptions) {
+    const aiSDKModel = new AISDKV7LanguageModel(this.#model);
     return aiSDKModel.doStream(options);
   }
 
-  get doGenerateCalls(): LanguageModelV2CallOptions[] {
+  get doGenerateCalls(): LanguageModelV4CallOptions[] {
     return this.#model.doGenerateCalls;
   }
-  get doStreamCalls(): LanguageModelV2CallOptions[] {
+  get doStreamCalls(): LanguageModelV4CallOptions[] {
     return this.#model.doStreamCalls;
   }
 }

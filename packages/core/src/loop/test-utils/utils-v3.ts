@@ -1,7 +1,7 @@
-import type { LanguageModelV3StreamPart, SharedV3Warning } from '@ai-sdk/provider-v6';
-import { convertArrayToReadableStream, mockId } from '@internal/ai-v6/test';
+import type { LanguageModelV4StreamPart, SharedV4Warning } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-v7/test';
 import type { ModelManagerModelConfig } from '../../stream/types';
-import { MastraLanguageModelV3Mock as MockLanguageModelV3 } from './MastraLanguageModelV3Mock';
+import { MastraLanguageModelV3Mock as MockLanguageModelV4 } from './MastraLanguageModelV3Mock';
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 
@@ -58,12 +58,12 @@ export function createTestModelsV3({
   request = undefined,
   response = undefined,
 }: {
-  stream?: ReadableStream<LanguageModelV3StreamPart>;
+  stream?: ReadableStream<LanguageModelV4StreamPart>;
   request?: { body: string };
   response?: { headers: Record<string, string> };
-  warnings?: SharedV3Warning[];
+  warnings?: SharedV4Warning[];
 } = {}): ModelManagerModelConfig[] {
-  const model = new MockLanguageModelV3({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({ stream, request, response, warnings }),
     doGenerate: async () => ({
       content: [{ type: 'text' as const, text: 'Hello, world!' }],
@@ -88,7 +88,7 @@ export function createTestModelsV3({
   ];
 }
 
-export const modelWithSourcesV3 = new MockLanguageModelV3({
+export const modelWithSourcesV3 = new MockLanguageModelV4({
   doStream: async () => ({
     stream: convertArrayToReadableStream([
       {
@@ -143,7 +143,7 @@ export const modelWithSourcesV3 = new MockLanguageModelV3({
   }),
 });
 
-export const modelWithFilesV3 = new MockLanguageModelV3({
+export const modelWithFilesV3 = new MockLanguageModelV4({
   doStream: async () => ({
     stream: convertArrayToReadableStream([
       {
@@ -186,7 +186,7 @@ export const modelWithFilesV3 = new MockLanguageModelV3({
   }),
 });
 
-export const modelWithReasoningV3 = new MockLanguageModelV3({
+export const modelWithReasoningV3 = new MockLanguageModelV4({
   doStream: async () => ({
     stream: convertArrayToReadableStream([
       {

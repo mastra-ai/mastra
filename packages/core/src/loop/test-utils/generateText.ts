@@ -1,6 +1,6 @@
-import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
-import type { generateText as generateText5, ToolSet } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4StreamPart, SharedV4ProviderMetadata } from '@ai-sdk/provider';
+import type { generateText as generateText5, ToolSet } from '@internal/ai-v7';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-v7/test';
 import { assertType, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';
@@ -15,7 +15,7 @@ import {
   stripMastraCreatedAt,
   testUsage,
 } from './utils';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId' | 'methodType'>): ReturnType<typeof generateText5> => {
@@ -49,7 +49,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: createTestModels({
-            stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
               { type: 'text-start', id: 'text-1' },
               { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
               { type: 'text-end', id: 'text-1' },
@@ -212,9 +212,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     });
 
     describe('result.steps', () => {
-      const modelWithReasoning = new MockLanguageModelV2({
+      const modelWithReasoning = new MockLanguageModelV4({
         doStream: async () => ({
-          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+          stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
             {
               type: 'response-metadata',
               id: 'id-0',
@@ -238,7 +238,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               delta: '',
               providerMetadata: {
                 testProvider: { signature: '1234567890' },
-              } as SharedV2ProviderMetadata,
+              } as SharedV4ProviderMetadata,
             },
             { type: 'reasoning-end', id: '1' },
             {
@@ -262,9 +262,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         }),
       });
 
-      const modelWithSources = new MockLanguageModelV2({
+      const modelWithSources = new MockLanguageModelV4({
         doStream: async () => ({
-          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+          stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
             { type: 'text-start', id: 'text-1' },
             { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
             { type: 'text-end', id: 'text-1' },
@@ -347,7 +347,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             {
               maxRetries: 0,
               id: 'test-model',
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doGenerate: async ({ prompt, tools, toolChoice }) => {
                   expect(tools).toStrictEqual([
                     {
@@ -448,7 +448,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             {
               maxRetries: 0,
               id: 'test-model',
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doGenerate: async ({ prompt, tools, toolChoice }) => {
                   expect(tools).toStrictEqual([
                     {
@@ -535,7 +535,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             {
               maxRetries: 0,
               id: 'test-model',
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doGenerate: async () => ({
                   ...dummyResponseValues,
                   content: [],
@@ -571,10 +571,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             {
               maxRetries: 0,
               id: 'test-model',
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
-                  stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+                  stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
                     { type: 'text-start', id: 'text-1' },
                     { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
                     { type: 'text-end', id: 'text-1' },
@@ -598,7 +598,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             {
               maxRetries: 0,
               id: 'test-model',
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doGenerate: async () => ({
                   ...dummyResponseValues,
                   content: [
@@ -651,7 +651,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             {
               maxRetries: 0,
               id: 'test-model',
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doGenerate: async () => ({
                   ...dummyResponseValues,
                   content: [{ type: 'text', text: 'Hello, world!' }],
@@ -661,7 +661,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
-                  stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+                  stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
                     { type: 'text-start', id: 'text-1' },
                     { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
                     { type: 'text-end', id: 'text-1' },
@@ -691,7 +691,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             {
               maxRetries: 0,
               id: 'test-model',
-              model: new MockLanguageModelV2({
+              model: new MockLanguageModelV4({
                 doGenerate: async () => ({
                   ...dummyResponseValues,
                   content: [{ type: 'text', text: 'Hello, world!' }],
@@ -709,7 +709,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
-                  stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+                  stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
                     { type: 'text-start', id: 'text-1' },
                     { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
                     { type: 'text-end', id: 'text-1' },
@@ -795,7 +795,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //       let responseCount = 0;
     //       result = await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async ({ prompt, tools, toolChoice }) => {
     //             switch (responseCount++) {
     //               case 0:
@@ -938,7 +938,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //   describe.todo('2 steps: initial, tool-result with prepareStep', () => {
     //     let result: GenerateTextResult<any, any>;
     //     let onStepFinishResults: StepResult<any>[];
-    //     let doGenerateCalls: Array<LanguageModelV2CallOptions>;
+    //     let doGenerateCalls: Array<LanguageModelV4CallOptions>;
     //     let prepareStepCalls: Array<{
     //       stepNumber: number;
     //       steps: Array<StepResult<any>>;
@@ -952,7 +952,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //       let responseCount = 0;
 
-    //       const trueModel = new MockLanguageModelV2({
+    //       const trueModel = new MockLanguageModelV4({
     //         doGenerate: async ({ prompt, tools, toolChoice }) => {
     //           doGenerateCalls.push({ prompt, tools, toolChoice });
 
@@ -1582,7 +1582,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //       let responseCount = 0;
     //       result = await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async () => {
     //             switch (responseCount++) {
     //               case 0:
@@ -1812,7 +1812,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     // describe.todo('options.headers', () => {
     //   it('should pass headers to model', async () => {
     //     const result = await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async ({ headers }) => {
     //           assert.deepStrictEqual(headers, {
     //             'custom-request-header': 'request-header-value',
@@ -1835,7 +1835,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     // describe.todo('options.providerOptions', () => {
     //   it('should pass provider options to model', async () => {
     //     const result = await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async ({ providerOptions }) => {
     //           expect(providerOptions).toStrictEqual({
     //             aProvider: { someKey: 'someValue' },
@@ -1863,7 +1863,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
 
     //     const generateTextPromise = generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async () => ({
     //           ...dummyResponseValues,
     //           content: [
@@ -1905,10 +1905,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     // describe.todo('options.activeTools', () => {
     //   it('should filter available tools to only the ones in activeTools', async () => {
-    //     let tools: (LanguageModelV2FunctionTool | LanguageModelV2ProviderDefinedTool)[] | undefined;
+    //     let tools: (LanguageModelV4FunctionTool | LanguageModelV4ProviderTool)[] | undefined;
 
     //     await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async ({ tools: toolsArg }) => {
     //           tools = toolsArg;
 
@@ -1961,7 +1961,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //   it('should record error on tool call', async () => {
     //     await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async ({}) => ({
     //           ...dummyResponseValues,
     //           content: [
@@ -2020,7 +2020,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     const recordedCalls: unknown[] = [];
 
     //     await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async () => {
     //           return {
     //             ...dummyResponseValues,
@@ -2085,7 +2085,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     // describe.todo('tools with custom schema', () => {
     //   it('should contain tool calls', async () => {
     //     const result = await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async ({ prompt, tools, toolChoice }) => {
     //           expect(tools).toStrictEqual([
     //             {
@@ -2193,7 +2193,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //     beforeEach(async () => {
     //       result = await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async () => ({
     //             ...dummyResponseValues,
     //             content: [
@@ -2301,7 +2301,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     // describe.todo('options.messages', () => {
     //   it('should support models that use "this" context in supportedUrls', async () => {
     //     let supportedUrlsCalled = false;
-    //     class MockLanguageModelWithImageSupport extends MockLanguageModelV2 {
+    //     class MockLanguageModelWithImageSupport extends MockLanguageModelV4 {
     //       constructor() {
     //         super({
     //           supportedUrls() {
@@ -2340,7 +2340,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //   describe.todo('no output', () => {
     //     it('should throw error when accessing output', async () => {
     //       const result = await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async () => ({
     //             ...dummyResponseValues,
     //             content: [{ type: 'text', text: `Hello, world!` }],
@@ -2358,7 +2358,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //   describe.todo('text output', () => {
     //     it('should forward text as output', async () => {
     //       const result = await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async () => ({
     //             ...dummyResponseValues,
     //             content: [{ type: 'text', text: `Hello, world!` }],
@@ -2372,10 +2372,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     });
 
     //     it('should set responseFormat to text and not change the prompt', async () => {
-    //       let callOptions: LanguageModelV2CallOptions;
+    //       let callOptions: LanguageModelV4CallOptions;
 
     //       await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async args => {
     //             callOptions = args;
     //             return {
@@ -2426,7 +2426,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //   describe.todo('object output', () => {
     //     it('should parse the output', async () => {
     //       const result = await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async () => ({
     //             ...dummyResponseValues,
     //             content: [{ type: 'text', text: `{ "value": "test-value" }` }],
@@ -2442,10 +2442,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     });
 
     //     it('should set responseFormat to json and send schema as part of the responseFormat', async () => {
-    //       let callOptions: LanguageModelV2CallOptions;
+    //       let callOptions: LanguageModelV4CallOptions;
 
     //       await generateText({
-    //         model: new MockLanguageModelV2({
+    //         model: new MockLanguageModelV4({
     //           doGenerate: async args => {
     //             callOptions = args;
     //             return {
@@ -2514,7 +2514,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     //   beforeEach(async () => {
     //     result = await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async () => ({
     //           ...dummyResponseValues,
     //           content: [
@@ -2609,7 +2609,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     let toolExecuted = false;
 
     //     const result = await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async () => ({
     //           ...dummyResponseValues,
     //           content: [
@@ -2702,7 +2702,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     let toolExecuted = false;
 
     //     const result = await generateText({
-    //       model: new MockLanguageModelV2({
+    //       model: new MockLanguageModelV4({
     //         doGenerate: async () => ({
     //           ...dummyResponseValues,
     //           content: [

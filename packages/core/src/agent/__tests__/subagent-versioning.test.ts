@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../logger';
 import { Mastra } from '../../mastra';
@@ -27,7 +27,7 @@ function createMockLogger() {
 }
 
 function makeMockModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
@@ -41,7 +41,7 @@ function makeMockModel(responseText: string) {
 
 function makeSupervisorModel(subAgentKey: string, prompt: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       if (callCount === 1) {

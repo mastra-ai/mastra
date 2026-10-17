@@ -1,8 +1,9 @@
 import { fail } from 'node:assert';
-import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@internal/ai-sdk-v5';
-import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+import type { SharedV4Warning, LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@internal/ai-v7';
+import type { FinishReason, LanguageModelResponseMetadata } from '@internal/ai-v7';
+import type { LanguageModelUsage } from '../../stream/types';
+import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';
@@ -45,16 +46,16 @@ function createTestModels({
   request = undefined,
   response = undefined,
 }: {
-  stream?: ReadableStream<LanguageModelV2StreamPart>;
+  stream?: ReadableStream<LanguageModelV4StreamPart>;
   request?: { body: string };
   response?: { headers: Record<string, string> };
-  warnings?: LanguageModelV2CallWarning[];
+  warnings?: SharedV4Warning[];
 } = {}) {
   return [
     {
       maxRetries: 0,
       id: 'test-model',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({ stream, request, response, warnings }),
       }),
     },
@@ -273,7 +274,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => {
                     throw new Error('test error');
                   },
@@ -304,7 +305,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => {
                     throw new Error('test error');
                   },
@@ -590,7 +591,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       {
@@ -637,7 +638,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       { type: 'text-start', id: 'text-1' },
@@ -679,7 +680,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       { type: 'text-start', id: 'text-1' },
@@ -719,7 +720,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       { type: 'text-start', id: 'text-1' },
@@ -760,7 +761,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       { type: 'text-start', id: 'text-1' },
@@ -800,7 +801,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       {
@@ -1126,7 +1127,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       {
@@ -1469,7 +1470,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       {
@@ -1813,7 +1814,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async ({ headers }) => {
                     expect(headers).toStrictEqual({
                       'custom-request-header': 'request-header-value',
@@ -1857,7 +1858,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 id: 'test-model',
                 maxRetries: 0,
                 headers: { 'x-model-header': 'from-config' },
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async ({ headers }) => {
                     expect(headers).toStrictEqual({
                       'x-model-header': 'from-config',
@@ -1904,7 +1905,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   'x-model-header': 'from-config',
                   'x-shared-header': 'from-config',
                 },
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async ({ headers }) => {
                     expect(headers).toStrictEqual({
                       'x-model-header': 'from-config',
@@ -1958,7 +1959,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 id: 'model-1',
                 maxRetries: 0,
                 headers: { 'x-model': 'model-1', 'x-provider': 'provider-a' },
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async ({ headers }) => {
                     attemptCount++;
                     expect(headers).toStrictEqual({
@@ -1975,7 +1976,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 id: 'model-2',
                 maxRetries: 0,
                 headers: { 'x-model': 'model-2', 'x-provider': 'provider-b' },
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async ({ headers }) => {
                     attemptCount++;
                     expect(headers).toStrictEqual({
@@ -2023,7 +2024,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 id: 'test-model',
                 maxRetries: 0,
                 // No headers field
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async ({ headers }) => {
                     expect(headers).toBeUndefined();
 
@@ -2068,7 +2069,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async ({ providerOptions }) => {
                     expect(providerOptions).toStrictEqual({
                       aProvider: { someKey: 'someValue' },
@@ -2169,7 +2170,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: 'test-model',
                 maxRetries: 0,
-                model: new MockLanguageModelV2({
+                model: new MockLanguageModelV4({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
                       { type: 'text-start', id: 'text-1' },
@@ -2733,7 +2734,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: {
                 stream: convertArrayToReadableStream([
                   { type: 'text-start', id: 'text-1' },

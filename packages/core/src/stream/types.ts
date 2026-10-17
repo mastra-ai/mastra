@@ -1,12 +1,11 @@
 import type { TransformStream } from 'node:stream/web';
 import type {
-  LanguageModelV2FinishReason,
-  LanguageModelV2Usage,
-  LanguageModelV2CallWarning,
-  LanguageModelV2Prompt,
-  LanguageModelV2ResponseMetadata,
-  LanguageModelV2StreamPart,
-} from '@ai-sdk/provider-v5';
+  SharedV4ProviderMetadata,
+  SharedV4Warning,
+  LanguageModelV4Prompt,
+  LanguageModelV4ResponseMetadata,
+  LanguageModelV4StreamPart,
+} from '@ai-sdk/provider';
 
 import type {
   CallSettings,
@@ -17,7 +16,7 @@ import type {
   ToolSet,
   TypedToolCall,
   UIMessage,
-} from '@internal/ai-sdk-v5';
+} from '@internal/ai-v7';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
@@ -44,7 +43,7 @@ export enum ChunkFrom {
  * Extended finish reason that includes Mastra-specific values.
  * 'tripwire' and 'retry' are used for processor scenarios.
  */
-export type MastraFinishReason = LanguageModelV2FinishReason | 'tripwire' | 'retry';
+export type MastraFinishReason = FinishReason | 'tripwire' | 'retry';
 
 /**
 A JSON value can be a string, number, boolean, object, array, or null.
@@ -61,7 +60,7 @@ export type JSONArray = JSONValue[];
  * The outer record is keyed by the provider name, and the inner
  * record is keyed by the provider-specific metadata key.
  */
-export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
+export type ProviderMetadata = SharedV4ProviderMetadata;
 
 export type StreamTransport = {
   type: 'openai-websocket';
@@ -264,10 +263,10 @@ interface ToolCallInputStreamingEndPayload {
 interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
-    reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    reason: MastraFinishReason;
     /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
     rawReason?: string;
-    warnings?: LanguageModelV2CallWarning[];
+    warnings?: SharedV4Warning[];
     isContinued?: boolean;
   };
   output: {
@@ -320,8 +319,8 @@ export interface StepStartPayload {
     body?: string;
     [key: string]: unknown;
   };
-  inputMessages?: LanguageModelV2Prompt;
-  warnings?: LanguageModelV2CallWarning[];
+  inputMessages?: LanguageModelV4Prompt;
+  warnings?: SharedV4Warning[];
   [key: string]: unknown;
 }
 
@@ -329,12 +328,12 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
   id?: string;
   providerMetadata?: ProviderMetadata;
   totalUsage?: LanguageModelUsage;
-  response?: LanguageModelV2ResponseMetadata;
+  response?: LanguageModelV4ResponseMetadata;
   messageId?: string;
   stepResult: {
     isContinued?: boolean;
-    warnings?: LanguageModelV2CallWarning[];
-    reason: LanguageModelV2FinishReason;
+    warnings?: SharedV4Warning[];
+    reason: FinishReason;
     /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
     rawReason?: string;
   };
@@ -859,16 +858,16 @@ export type TypedChunkType<OUTPUT = undefined> =
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
 export type StreamChunkType<OUTPUT = undefined> = ChunkType<OUTPUT> | DataChunkType;
 
-export interface LanguageModelV2StreamResult {
-  stream: ReadableStream<LanguageModelV2StreamPart>;
+export interface LanguageModelV4StreamResult {
+  stream: ReadableStream<LanguageModelV4StreamPart>;
   request: LLMStepResult['request'];
   response?: LLMStepResult['response'];
   rawResponse: LLMStepResult['response'] | Record<string, never>;
   warnings?: LLMStepResult['warnings'];
 }
 
-export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void | ChunkType | ChunkType[];
-export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
+export type OnResult = (result: Omit<LanguageModelV4StreamResult, 'stream'>) => void | ChunkType | ChunkType[];
+export type CreateStream = () => Promise<LanguageModelV4StreamResult>;
 
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
@@ -904,10 +903,13 @@ export type ModelManagerModelConfig = {
 };
 
 /**
- * Extended usage type that includes raw provider data.
- * Extends LanguageModelV2Usage with additional fields for V3 compatibility.
+ * Mastra's normalized (flat) token usage. Provider usage (nested V4 shape) is
+ * flattened into this by the stream transform; the original is kept in `raw`.
  */
-export type LanguageModelUsage = LanguageModelV2Usage & {
+export type LanguageModelUsage = {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  totalTokens: number | undefined;
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
@@ -915,7 +917,6 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   cacheCreationInputTokens1h?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
-   * For V3 models, contains the full nested structure:
    * { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
    */
   raw?: unknown;
@@ -1067,7 +1068,7 @@ export type LLMStepResult<OUTPUT = undefined> = {
   content: AIV5Type.StepResult<ToolSet>['content'];
   finishReason?: FinishReason | string;
   usage: LanguageModelUsage;
-  warnings: LanguageModelV2CallWarning[];
+  warnings: SharedV4Warning[];
   request: { body?: unknown };
   response: {
     headers?: Record<string, string>;

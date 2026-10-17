@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import { AgenticLoopBuilder } from '../../loop-builder';
 import type { OuterLLMRun } from '../../types';
 

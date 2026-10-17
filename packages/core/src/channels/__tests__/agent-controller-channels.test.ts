@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 
@@ -42,7 +42,7 @@ function createMockAdapter(name: string) {
 }
 
 function createTextStreamModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -65,7 +65,7 @@ function createTextStreamModel(responseText: string) {
  */
 function createApprovalFlowModel({ toolName = 'deployTool', finalText = 'Deployed successfully.' } = {}) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call += 1;
       const chunks: any[] =
@@ -141,7 +141,7 @@ async function createSetup({
   platform?: string;
   responseText?: string;
   instructions?: () => Promise<string>;
-  model?: MockLanguageModelV2;
+  model?: MockLanguageModelV4;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
   stateSchema?: z.ZodTypeAny;
@@ -1160,7 +1160,7 @@ describe('AgentControllerChannels thread history', () => {
 
   it('names a new Slack session from its earlier thread context and emits the title for the sidebar', async () => {
     const prompts: string[] = [];
-    const titleModel = new MockLanguageModelV2({
+    const titleModel = new MockLanguageModelV4({
       doGenerate: async options => {
         prompts.push(JSON.stringify(options.prompt));
         return {

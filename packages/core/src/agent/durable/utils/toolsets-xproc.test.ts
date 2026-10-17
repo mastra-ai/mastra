@@ -5,7 +5,7 @@
  * in another process cannot rebuild them. Their names ride on the workflow
  * options so the worker fails loudly instead of silently dropping them.
  */
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -36,7 +36,7 @@ function setup() {
     id: 'toolsets-agent',
     name: 'toolsets-agent',
     instructions: 'test',
-    model: new MockLanguageModelV2(),
+    model: new MockLanguageModelV4(),
     tools: { echo },
   });
   return new Mastra({ agents: { agent }, logger: false });

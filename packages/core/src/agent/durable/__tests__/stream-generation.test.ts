@@ -9,8 +9,8 @@
  * an `ownership-claimed` marker so consumers raise the bar before the new
  * execution publishes anything.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -187,7 +187,7 @@ async function observedAgent() {
     id: 'observed-agent',
     name: 'Observed Agent',
     instructions: 'You are a helpful agent.',
-    model: new MockLanguageModelV2({}) as LanguageModelV2,
+    model: new MockLanguageModelV4({}) as LanguageModelV4,
   });
   const transport = new EventEmitterPubSub();
   const durable = createDurableAgent({ agent, pubsub: transport });
@@ -423,7 +423,7 @@ describe.each(['durable', 'evented'] as const)('%s agent', kind => {
   it("tags everything it publishes for the run with the run's claim generation", async () => {
     const pubsub = new EventEmitterPubSub();
     const storage = new InMemoryStore();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -440,7 +440,7 @@ describe.each(['durable', 'evented'] as const)('%s agent', kind => {
       id: 'generation-agent',
       name: 'Generation Agent',
       instructions: 'You are a helpful agent.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       memory: new MockMemory({ storage }),
     });
     // The evented agent adopts mastra.pubsub; its steps publish from the engine's workers.

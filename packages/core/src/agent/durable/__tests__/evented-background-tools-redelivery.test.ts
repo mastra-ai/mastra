@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../../mastra';
@@ -27,7 +27,7 @@ describe('T4 background-tools redelivery', () => {
       let modelCalls = 0;
       const emittedArgs: unknown[] = [];
       const chunkTypes: string[] = [];
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           modelCalls++;
           const parts =
@@ -60,7 +60,7 @@ describe('T4 background-tools redelivery', () => {
             warnings: [],
           };
         },
-      }) as unknown as LanguageModelV2;
+      }) as unknown as LanguageModelV4;
 
       const received: Array<{ topic: string }> = [];
       const research = createTool({

@@ -1,14 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
-import type {
-  CallSettings,
-  IdGenerator,
-  ModelMessage,
-  StopCondition as StopConditionV5,
-  ToolChoice,
-  ToolSet,
-} from '@internal/ai-sdk-v5';
-import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
+import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider';
+import type { CallSettings, IdGenerator, ModelMessage, StopCondition as StopConditionV5, ToolChoice, ToolSet, StopCondition as StopConditionV6 } from '@internal/ai-v7';
 import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
@@ -20,7 +11,7 @@ import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManage
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraModelSettings } from '../llm/model/model-settings';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
+import type { MastraLanguageModelV4, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
@@ -173,7 +164,7 @@ export type StreamInternal = {
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
-  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
+  model?: LanguageModelV4 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV4;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   messages?: Array<MessageInput>;

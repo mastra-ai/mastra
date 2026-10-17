@@ -1,4 +1,4 @@
-import type { CallSettings } from '@internal/ai-sdk-v5';
+import type { CallSettings } from '@internal/ai-v7';
 import type { ReasoningLevel } from '../../loop/types';
 
 /**

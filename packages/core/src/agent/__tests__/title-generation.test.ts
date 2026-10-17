@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
@@ -7,11 +7,11 @@ import { Agent } from '../agent';
 import type { MastraDBMessage } from '../types';
 
 function titleGenerationTests(version: 'v2') {
-  let dummyModel: MockLanguageModelV2;
+  let dummyModel: MockLanguageModelV4;
 
   beforeEach(() => {
     {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -45,7 +45,7 @@ function titleGenerationTests(version: 'v2') {
       let titleModel;
 
       {
-        agentModel = new MockLanguageModelV2({
+        agentModel = new MockLanguageModelV4({
           doGenerate: async () => {
             agentModelUsed = true;
             return {
@@ -91,7 +91,7 @@ function titleGenerationTests(version: 'v2') {
           },
         });
 
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async () => {
             titleModelUsed = true;
             return {
@@ -190,11 +190,11 @@ function titleGenerationTests(version: 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV2;
-      let standardModel: MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV4;
+      let standardModel: MockLanguageModelV4;
 
       {
-        premiumModel = new MockLanguageModelV2({
+        premiumModel = new MockLanguageModelV4({
           doGenerate: async () => {
             usedModelName = 'premium';
             return {
@@ -240,7 +240,7 @@ function titleGenerationTests(version: 'v2') {
           },
         });
 
-        standardModel = new MockLanguageModelV2({
+        standardModel = new MockLanguageModelV4({
           doGenerate: async () => {
             usedModelName = 'standard';
             return {
@@ -355,11 +355,11 @@ function titleGenerationTests(version: 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV2;
-      let standardModel: MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV4;
+      let standardModel: MockLanguageModelV4;
 
       {
-        premiumModel = new MockLanguageModelV2({
+        premiumModel = new MockLanguageModelV4({
           doGenerate: async () => {
             usedModelName = 'premium';
             return {
@@ -405,7 +405,7 @@ function titleGenerationTests(version: 'v2') {
           },
         });
 
-        standardModel = new MockLanguageModelV2({
+        standardModel = new MockLanguageModelV4({
           doGenerate: async () => {
             usedModelName = 'standard';
             return {
@@ -490,10 +490,10 @@ function titleGenerationTests(version: 'v2') {
         };
       };
 
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async options => {
             // Check if this is for title generation based on the prompt
             const messages = options.prompt;
@@ -665,10 +665,10 @@ function titleGenerationTests(version: 'v2') {
         return originalUpdateThread(args);
       };
 
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
@@ -790,10 +790,10 @@ function titleGenerationTests(version: 'v2') {
         };
       };
 
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
@@ -882,10 +882,10 @@ function titleGenerationTests(version: 'v2') {
         };
       };
 
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
@@ -960,10 +960,10 @@ function titleGenerationTests(version: 'v2') {
         },
       });
 
-      let errorModel: MockLanguageModelV2;
+      let errorModel: MockLanguageModelV4;
 
       {
-        errorModel = new MockLanguageModelV2({
+        errorModel = new MockLanguageModelV4({
           doGenerate: async () => {
             throw new Error('Title generation failed');
           },
@@ -1022,10 +1022,10 @@ function titleGenerationTests(version: 'v2') {
         return {};
       };
 
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async options => {
             // Check if this is for title generation based on the prompt
             const messages = options.prompt;
@@ -1156,10 +1156,10 @@ function titleGenerationTests(version: 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const systemMessage = messages.find((msg: any) => msg.role === 'system');
@@ -1343,10 +1343,10 @@ function titleGenerationTests(version: 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             // Capture the prompt to verify custom instructions are used
             const messages = options.prompt;
@@ -1457,10 +1457,10 @@ function titleGenerationTests(version: 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const systemMessage = messages.find((msg: any) => msg.role === 'system');
@@ -1576,10 +1576,10 @@ function titleGenerationTests(version: 'v2') {
         },
       });
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async () => {
             return {
               rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1689,7 +1689,7 @@ function titleGenerationTests(version: 'v2') {
         return originalUpdateThread(args);
       });
 
-      const titleModel = new MockLanguageModelV2({
+      const titleModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -1767,11 +1767,11 @@ function titleGenerationTests(version: 'v2') {
 
       const mockMemory = new MockMemory();
 
-      let titleModel1: MockLanguageModelV2;
-      let titleModel2: MockLanguageModelV2;
+      let titleModel1: MockLanguageModelV4;
+      let titleModel2: MockLanguageModelV4;
 
       {
-        titleModel1 = new MockLanguageModelV2({
+        titleModel1 = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const systemMessage = messages.find((msg: any) => msg.role === 'system');
@@ -1831,7 +1831,7 @@ function titleGenerationTests(version: 'v2') {
           },
         });
 
-        titleModel2 = new MockLanguageModelV2({
+        titleModel2 = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const systemMessage = messages.find((msg: any) => msg.role === 'system');
@@ -1976,10 +1976,10 @@ function titleGenerationTests(version: 'v2') {
       // with the default lastMessages: 10. We need lastMessages: false to properly disable it.
       (mockMemory as any).threadConfig = { lastMessages: false, generateTitle: true };
 
-      let testModel: MockLanguageModelV2;
+      let testModel: MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
@@ -2151,10 +2151,10 @@ function titleGenerationTests(version: 'v2') {
       // would see those and produce titles referencing internal framework details.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const userMsg = messages.find((msg: any) => msg.role === 'user');
@@ -2203,10 +2203,10 @@ function titleGenerationTests(version: 'v2') {
       // reach the title model — not providerOptions, createdAt timestamps, etc.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const userMsg = messages.find((msg: any) => msg.role === 'user');
@@ -2264,10 +2264,10 @@ function titleGenerationTests(version: 'v2') {
       // including assistant responses, tool calls, and tool results.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const messages = options.prompt;
             const userMsg = messages.find((msg: any) => msg.role === 'user');
@@ -2354,10 +2354,10 @@ function titleGenerationTests(version: 'v2') {
       //   Assistant: Dummy response
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
             if (userMsg) {
@@ -2424,10 +2424,10 @@ function titleGenerationTests(version: 'v2') {
       // emitted (alongside the tool lines) — exactly once each.
       let capturedUserContent: any[] = [];
 
-      let titleModel: MockLanguageModelV2;
+      let titleModel: MockLanguageModelV4;
 
       {
-        titleModel = new MockLanguageModelV2({
+        titleModel = new MockLanguageModelV4({
           doGenerate: async options => {
             const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
             if (userMsg) {
@@ -2529,7 +2529,7 @@ describe('sub-agent title generation propagation (#18738)', () => {
       name: 'helper',
       description: 'A helper sub-agent.',
       instructions: 'Say hello.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -2548,7 +2548,7 @@ describe('sub-agent title generation propagation (#18738)', () => {
 
   function supervisorModel() {
     let call = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         call++;
         if (call === 1) {
@@ -2621,7 +2621,7 @@ describe('sub-agent title generation propagation (#18738)', () => {
 
 describe('onTitleGenerated callback', () => {
   function createMockModels() {
-    const agentModel = new MockLanguageModelV2({
+    const agentModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2647,7 +2647,7 @@ describe('onTitleGenerated callback', () => {
       }),
     });
 
-    const titleModel = new MockLanguageModelV2({
+    const titleModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2660,7 +2660,7 @@ describe('onTitleGenerated callback', () => {
     return { agentModel, titleModel };
   }
 
-  function createAgentWithTitleGen(agentModel: MockLanguageModelV2, titleModel: MockLanguageModelV2) {
+  function createAgentWithTitleGen(agentModel: MockLanguageModelV4, titleModel: MockLanguageModelV4) {
     const mockMemory = new MockMemory();
     mockMemory.getMergedThreadConfig = () => ({
       generateTitle: { model: titleModel },
@@ -2775,7 +2775,7 @@ describe('onTitleGenerated callback', () => {
     const titleStarted = new Promise<void>(resolve => {
       titleRequested = resolve;
     });
-    const slowTitleModel = new MockLanguageModelV2({
+    const slowTitleModel = new MockLanguageModelV4({
       doGenerate: async () => {
         titleRequested();
         await titleGate;
@@ -2877,7 +2877,7 @@ describe('title generation with resource-scoped memory recall', () => {
   it('derives the title only from the thread being titled, not from recalled messages of other threads', async () => {
     const capturedTitlePrompts: any[] = [];
 
-    const titleModel = new MockLanguageModelV2({
+    const titleModel = new MockLanguageModelV4({
       doGenerate: async options => {
         capturedTitlePrompts.push(options.prompt);
         return {
@@ -2909,7 +2909,7 @@ describe('title generation with resource-scoped memory recall', () => {
       },
     });
 
-    const agentModel = new MockLanguageModelV2({
+    const agentModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3010,7 +3010,7 @@ describe('generateTitle.emitEvent', () => {
       markTitleGenerationStarted = resolve;
     });
 
-    const agentModel = new MockLanguageModelV2({
+    const agentModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3036,7 +3036,7 @@ describe('generateTitle.emitEvent', () => {
       }),
     });
 
-    const titleModel = new MockLanguageModelV2({
+    const titleModel = new MockLanguageModelV4({
       doGenerate: async () => {
         markTitleGenerationStarted?.();
         if (delayTitleGeneration) {
@@ -3061,8 +3061,8 @@ describe('generateTitle.emitEvent', () => {
   }
 
   function createEmitEventAgent(
-    agentModel: MockLanguageModelV2,
-    titleModel: MockLanguageModelV2,
+    agentModel: MockLanguageModelV4,
+    titleModel: MockLanguageModelV4,
     generateTitle: unknown,
   ) {
     const mockMemory = new MockMemory();

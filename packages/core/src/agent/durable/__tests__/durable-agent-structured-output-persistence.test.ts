@@ -3,8 +3,8 @@
  * assistant message, as plain `Agent` does (issue #26432).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -21,7 +21,7 @@ const schema = z.object({ name: z.string(), age: z.number() });
 const expected = { name: 'Alice', age: 30 };
 
 function createJsonModel(text: string, finishReason: 'stop' | 'length' | 'content-filter' = 'stop') {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -50,7 +50,7 @@ async function runAndRecall(
     id: `so-persist-${engine}`,
     name: 'Structured Output Persistence Agent',
     instructions: 'Return the person',
-    model: createJsonModel(text, finishReason) as LanguageModelV2,
+    model: createJsonModel(text, finishReason) as LanguageModelV4,
     memory,
   });
   const wrapper =
@@ -184,14 +184,14 @@ describe('durable structuring model (#26431)', () => {
       id: 'so-strict-durable',
       name: 'Structured Output Strict Agent',
       instructions: 'Return the person',
-      model: createJsonModel('It is Alice, who is 30 years old.') as LanguageModelV2,
+      model: createJsonModel('It is Alice, who is 30 years old.') as LanguageModelV4,
       memory,
     });
     const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
     new Mastra({ agents: { [agent.id]: durable }, storage: new InMemoryStore(), logger: false });
 
     const result = await durable.stream('Who is it?', {
-      structuredOutput: { schema, model: createJsonModel('not json') as LanguageModelV2 },
+      structuredOutput: { schema, model: createJsonModel('not json') as LanguageModelV4 },
       memory: { thread: THREAD, resource: RESOURCE },
     });
     const outcome = await result.output.getFullOutput().then(
@@ -209,12 +209,12 @@ describe('durable structuring model (#26431)', () => {
       id: 'so-model-instance',
       name: 'Structured Output Model Instance Agent',
       instructions: 'Return the person',
-      model: createJsonModel('Alice') as LanguageModelV2,
+      model: createJsonModel('Alice') as LanguageModelV4,
     });
     const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
 
     const prepared = await durable.prepare('Who is it?', {
-      structuredOutput: { schema, model: createJsonModel('{}') as LanguageModelV2 },
+      structuredOutput: { schema, model: createJsonModel('{}') as LanguageModelV4 },
     });
 
     const so = (prepared.workflowInput as any).options.structuredOutput;

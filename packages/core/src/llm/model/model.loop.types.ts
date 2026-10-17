@@ -1,12 +1,14 @@
 import type {
   ToolSet,
+  Context,
+  OutputInterface,
   DeepPartial,
   streamText,
-  StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
-  StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
+  StreamTextOnEndCallback as OriginalStreamTextOnFinishCallback,
+  GenerateTextOnStepEndCallback as OriginalStreamTextOnStepFinishCallback,
   ModelMessage,
   UIMessage,
-} from '@internal/ai-sdk-v5';
+} from '@internal/ai-v7';
 import type { JSONSchema7 } from 'json-schema';
 import type { MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
@@ -19,7 +21,7 @@ import type { inferOutput } from './shared.types';
 export type OriginalStreamTextOptions<
   TOOLS extends ToolSet,
   Output extends StandardSchemaWithJSON | ZodSchema | JSONSchema7 | undefined = undefined,
-> = Parameters<typeof streamText<TOOLS, inferOutput<Output>, DeepPartial<inferOutput<Output>>>>[0];
+> = Parameters<typeof streamText<TOOLS, Context, OutputInterface>>[0];
 
 export type OriginalStreamTextOnFinishEventArg<Tools extends ToolSet> = Parameters<
   OriginalStreamTextOnFinishCallback<Tools>

@@ -1,7 +1,7 @@
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { AISDKV5LanguageModel } from '../../llm/model/aisdk/v5/model';
+import { AISDKV7LanguageModel } from '../../llm/model/aisdk/v7/model';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
@@ -13,7 +13,7 @@ const SHORT_TEXT = 'Short text';
 function createHaikuMockModel({ toolName, toolInput }: { toolName: string; toolInput: Record<string, unknown> }) {
   let callCount = 0;
 
-  return new AISDKV5LanguageModel({
+  return new AISDKV7LanguageModel({
     specificationVersion: 'v2',
     provider: 'anthropic',
     modelId: HAIKU_MODEL_ID,

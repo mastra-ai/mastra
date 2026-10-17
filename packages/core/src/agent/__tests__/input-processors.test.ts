@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
 import { MockMemory } from '../../memory/mock';
@@ -7,7 +7,7 @@ import { Agent } from '../agent';
 
 function inputProcessorTests(version: 'v2') {
   describe(`${version} - Input Processors`, () => {
-    let mockModel: MockLanguageModelV2;
+    let mockModel: MockLanguageModelV4;
 
     // Helper function to create a MastraDBMessage
     const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => ({
@@ -22,8 +22,8 @@ function inputProcessorTests(version: 'v2') {
 
     beforeEach(() => {
       {
-        mockModel = new MockLanguageModelV2({
-          doGenerate: async ({ prompt }: LanguageModelV2CallOptions) => {
+        mockModel = new MockLanguageModelV4({
+          doGenerate: async ({ prompt }: LanguageModelV4CallOptions) => {
             const messages = Array.isArray(prompt) ? prompt : [];
             const textContent = messages
               .map(msg => {
@@ -32,7 +32,7 @@ function inputProcessorTests(version: 'v2') {
                 } else if (Array.isArray(msg.content)) {
                   return msg.content
                     .filter(part => part.type === 'text')
-                    .map(part => (part as LanguageModelV2TextPart).text)
+                    .map(part => (part as LanguageModelV4TextPart).text)
                     .join(' ');
                 }
                 return '';
@@ -57,7 +57,7 @@ function inputProcessorTests(version: 'v2') {
                 } else if (Array.isArray(msg.content)) {
                   return msg.content
                     .filter(part => part.type === 'text')
-                    .map(part => (part as LanguageModelV2TextPart).text)
+                    .map(part => (part as LanguageModelV4TextPart).text)
                     .join(' ');
                 }
                 return '';
@@ -573,7 +573,7 @@ function inputProcessorTests(version: 'v2') {
 inputProcessorTests('v2');
 
 describe('v2 - TripWire exits do not persist terminal error parts', () => {
-  const successModel = new MockLanguageModelV2({
+  const successModel = new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,

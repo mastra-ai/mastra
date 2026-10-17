@@ -1,4 +1,4 @@
-import { convertBase64ToUint8Array } from '@ai-sdk/provider-utils-v6';
+import { convertBase64ToUint8Array } from '@ai-sdk/provider-utils';
 
 export const imageMediaTypeSignatures = [
   {

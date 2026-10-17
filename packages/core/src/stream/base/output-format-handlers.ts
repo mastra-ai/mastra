@@ -1,5 +1,5 @@
 import { TransformStream } from 'node:stream/web';
-import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
+import { isDeepEqualData, parsePartialJson } from '@internal/ai-v7';
 import { isZodType } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';

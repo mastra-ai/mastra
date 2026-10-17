@@ -7,7 +7,7 @@
  * cleanup callback invocation, size/runIds accounting, and the
  * override lifecycle in ExtendedRunRegistry.
  */
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -313,7 +313,7 @@ describe('globalRunRegistry missing-key lookups', () => {
         id: 'test-agent',
         name: 'test-agent',
         instructions: 'Test',
-        model: new MockLanguageModelV2({}),
+        model: new MockLanguageModelV4({}),
       }),
       pubsub,
     });

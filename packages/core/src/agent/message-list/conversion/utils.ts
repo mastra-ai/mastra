@@ -1,4 +1,4 @@
-import type { ModelMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage } from '@internal/ai-v7';
 
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { TypeDetector } from '../detection/TypeDetector';

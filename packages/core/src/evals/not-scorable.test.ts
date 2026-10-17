@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { SpanType } from '../observability';
@@ -29,7 +29,7 @@ function createJudgeModel(response: string) {
     ]),
   }));
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected non-streaming judge call');
     },

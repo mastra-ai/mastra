@@ -1,4 +1,4 @@
-import type { TextPart } from '@internal/ai-sdk-v5';
+import type { TextPart } from '@internal/ai-v7';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';

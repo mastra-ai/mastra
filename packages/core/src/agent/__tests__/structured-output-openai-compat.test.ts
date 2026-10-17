@@ -8,7 +8,7 @@
  *
  * These tests exercise the actual agent.ts #execute code path.
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -35,7 +35,7 @@ function createMockOpenAIModel(
     response?: unknown;
   } = {},
 ) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     provider: opts.provider ?? 'openai.responses',
     modelId: opts.modelId,
     doGenerate: async options => {

@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import type { ModelMessage as CoreMessageV4 } from '@internal/ai-v7';
 import { estimateTokenCount } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
@@ -76,7 +76,7 @@ const BYTES_PER_TOKEN = 4;
 
 type MediaPayload = { data: string; mediaType?: string; mimeType?: string };
 
-type PromptMessage = LanguageModelV2Prompt[number];
+type PromptMessage = LanguageModelV4Prompt[number];
 
 /**
  * Detects the `{ data, mediaType | mimeType }` shape that tools return for images
@@ -98,6 +98,11 @@ function estimateMediaTokens(data: unknown, mediaType?: string): number {
   if (mediaType?.startsWith('image/')) return TOKENS_PER_IMAGE;
 
   let byteLength: number | undefined;
+
+  // V4 prompt file data is tagged; only inline data has a locally knowable size.
+  if (data && typeof data === 'object' && !(data instanceof Uint8Array) && 'type' in data) {
+    data = data.type === 'data' && 'data' in data ? data.data : undefined;
+  }
 
   if (typeof data === 'string') {
     const { isDataUri, base64Content } = parseDataUri(data);
@@ -401,7 +406,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
    * has no matching result (and vice versa), so trimming must never split them.
    * Everything else is a single-message group.
    */
-  private groupPromptMessages(prompt: LanguageModelV2Prompt): PromptMessage[][] {
+  private groupPromptMessages(prompt: LanguageModelV4Prompt): PromptMessage[][] {
     const groups: PromptMessage[][] = [];
 
     for (let index = 0; index < prompt.length; index++) {
@@ -468,14 +473,18 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
         } else if (part.output.type === 'json' || part.output.type === 'error-json') {
           tokenString += JSON.stringify(part.output.value);
           overhead -= 12;
+        } else if (part.output.type === 'execution-denied') {
+          tokenString += part.output.reason ?? '';
         } else {
           for (const entry of part.output.value) {
             if (entry.type === 'text') {
               tokenString += entry.text;
-            } else {
+            } else if (entry.type === 'file') {
               const { data, ...rest } = entry;
               mediaTokens += estimateMediaTokens(data, entry.mediaType);
               tokenString += JSON.stringify(rest);
+            } else {
+              tokenString += JSON.stringify(entry);
             }
           }
           overhead -= 12;

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -20,7 +20,7 @@ const TOOL_NAMES = ['ask-1', 'ask-2', 'ask-3'];
 
 function supervisorModel(toolNames: string[] = TOOL_NAMES) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call += 1;
       const chunks =

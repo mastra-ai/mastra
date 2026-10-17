@@ -1,6 +1,6 @@
 import { fork } from 'node:child_process';
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -17,7 +17,7 @@ function createParkedModel() {
   });
   let observedAbort = false;
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ abortSignal }) => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -73,7 +73,7 @@ function createControllableModel() {
   });
   let runIndex = 0;
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ abortSignal }) => {
       const run = runs[runIndex++]!;
       return {
@@ -333,7 +333,7 @@ describe('Agent.abortRunStream without a thread', () => {
   }, 20_000);
 
   it('removes a thread-less prepared run after it finishes', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

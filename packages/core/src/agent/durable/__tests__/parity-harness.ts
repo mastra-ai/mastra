@@ -101,8 +101,8 @@
  * once here, under the same rule.
  */
 import { isDeepStrictEqual } from 'node:util';
-import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -552,7 +552,7 @@ export function chunksOfType(turn: ParitySnapshot, type: string): number {
 export type ModelTape = ReadonlyArray<Readonly<Record<string, unknown>>>;
 
 /** A model call's options as the engine sent them, minus the abort signal. */
-export type CapturedRequest = Omit<LanguageModelV2CallOptions, 'abortSignal'>;
+export type CapturedRequest = Omit<LanguageModelV4CallOptions, 'abortSignal'>;
 
 export type ModelScript =
   /** One tape per model call; once exhausted, the last tape repeats. */
@@ -561,7 +561,7 @@ export type ModelScript =
   | { respond: (request: CapturedRequest, callIndex: number) => ModelTape };
 
 export interface RecordingModel {
-  model: LanguageModelV2;
+  model: LanguageModelV4;
   /** One entry per model call, in call order. */
   requests: CapturedRequest[];
 }
@@ -573,7 +573,7 @@ export interface RecordingModel {
  * ends in an `error` part fails the streaming run, so it rejects this call too,
  * rather than reporting a success the stream never produced.
  */
-function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModelV2['doGenerate']>> {
+function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModelV4['doGenerate']>> {
   const failed = tape.find(part => part.type === 'error');
   if (failed) {
     const error = failed.error;
@@ -605,10 +605,10 @@ function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModel
   return {
     content: [...(text ? [{ type: 'text' as const, text }] : []), ...toolCalls],
     finishReason: (finish?.finishReason ?? 'stop') as Awaited<
-      ReturnType<LanguageModelV2['doGenerate']>
+      ReturnType<LanguageModelV4['doGenerate']>
     >['finishReason'],
     usage: (finish?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 }) as Awaited<
-      ReturnType<LanguageModelV2['doGenerate']>
+      ReturnType<LanguageModelV4['doGenerate']>
     >['usage'],
     warnings: [],
   };
@@ -617,7 +617,7 @@ function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModel
 /** Creates a fresh mock model that records every request it receives. */
 export function createRecordingModel(script: ModelScript): RecordingModel {
   const requests: CapturedRequest[] = [];
-  const record = (options: LanguageModelV2CallOptions): { request: CapturedRequest; tape: ModelTape } => {
+  const record = (options: LanguageModelV4CallOptions): { request: CapturedRequest; tape: ModelTape } => {
     const { abortSignal: _abortSignal, ...rest } = options;
     const request = structuredClone(rest);
     const callIndex = requests.length;
@@ -629,8 +629,8 @@ export function createRecordingModel(script: ModelScript): RecordingModel {
     return { request, tape };
   };
 
-  const model = new MockLanguageModelV2({
-    doStream: async (options: LanguageModelV2CallOptions) => {
+  const model = new MockLanguageModelV4({
+    doStream: async (options: LanguageModelV4CallOptions) => {
       const { tape } = record(options);
       return {
         stream: convertArrayToReadableStream(tape as any[]),
@@ -640,11 +640,11 @@ export function createRecordingModel(script: ModelScript): RecordingModel {
     // Plain's `generate()` calls `doGenerate`; the wrapped engines reach the
     // same scripted outcome through the workflow. Both record the request the
     // same way, so `requests` compares across engines either way.
-    doGenerate: async (options: LanguageModelV2CallOptions) => {
+    doGenerate: async (options: LanguageModelV4CallOptions) => {
       const { tape } = record(options);
       return tapeToGenerateResult(tape);
     },
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 
   return { model, requests };
 }
@@ -811,7 +811,7 @@ export interface EngineParityScenario {
   /** Scripted model. A fresh recording model is built for every engine. */
   model: ModelScript;
   /** Builds a fresh Agent for one engine. Must use the provided `model`. */
-  buildAgent: (ctx: { engine: ParityEngine; model: LanguageModelV2 }) => Agent<string, any, any>;
+  buildAgent: (ctx: { engine: ParityEngine; model: LanguageModelV4 }) => Agent<string, any, any>;
   /** Single-turn input. Ignored when `run` is given. */
   input?: MessageListInput;
   /** Single-turn stream options. Ignored when `run` is given. */

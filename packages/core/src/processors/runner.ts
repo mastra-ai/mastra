@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
-import type { StepResult } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4Prompt, SharedV4Warning } from '@ai-sdk/provider';
+import type { StepResult } from '@internal/ai-v7';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
@@ -1896,13 +1896,13 @@ export class ProcessorRunner {
   /**
    * Run processLLMRequest for all processors that implement it.
    *
-   * Called *after* `MessageList` has been converted to `LanguageModelV2Prompt`
+   * Called *after* `MessageList` has been converted to `LanguageModelV4Prompt`
    * and immediately *before* the prompt is forwarded to the provider.
    * Mutations are scoped to this single call — they do not affect the
    * persisted message list, memory, UI, or future model swaps.
    */
   async runProcessLLMRequest(args: {
-    prompt: LanguageModelV2Prompt;
+    prompt: LanguageModelV4Prompt;
     model: unknown;
     messageList?: MessageList;
     workspace?: AnyWorkspace;
@@ -1913,7 +1913,7 @@ export class ProcessorRunner {
     abortSignal?: AbortSignal;
     tracingContext?: TracingContext;
     writer?: ProcessorStreamWriter;
-  }): Promise<{ prompt: LanguageModelV2Prompt; response?: CachedLLMStepResponse }> {
+  }): Promise<{ prompt: LanguageModelV4Prompt; response?: CachedLLMStepResponse }> {
     const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
 
     let currentPrompt = args.prompt;
@@ -1979,7 +1979,7 @@ export class ProcessorRunner {
           // intentionally pass an empty prompt without it being silently
           // ignored.
           if (Object.prototype.hasOwnProperty.call(result, 'prompt')) {
-            currentPrompt = result.prompt as LanguageModelV2Prompt;
+            currentPrompt = result.prompt as LanguageModelV4Prompt;
           }
           if (result.response && !cachedResponse) {
             // First processor to short-circuit wins. Subsequent processors
@@ -2034,7 +2034,7 @@ export class ProcessorRunner {
     model: unknown;
     stepNumber: number;
     steps: Array<StepResult<any>>;
-    warnings?: LanguageModelV2CallWarning[];
+    warnings?: SharedV4Warning[];
     request?: unknown;
     rawResponse?: unknown;
     fromCache: boolean;

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import type { Processor, ProcessOutputStreamArgs } from '../../processors/index';
@@ -19,7 +19,7 @@ import { Agent } from '../agent';
  */
 
 function makeSubAgent() {
-  const subAgentModel = new MockLanguageModelV2({
+  const subAgentModel = new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -49,7 +49,7 @@ function makeSubAgent() {
 
 function makeSupervisorModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {

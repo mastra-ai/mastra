@@ -1,5 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { MockLanguageModelV3 } from '@internal/ai-v6/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
@@ -14,7 +13,7 @@ function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string 
     { type: 'text-end' as const, id: 'text' },
   ];
   {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => ({
         content: [{ type: 'text', text: await respond(prompt) }],
         finishReason: 'stop',
@@ -29,7 +28,7 @@ function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string 
       }),
     });
   }
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => ({
       content: [{ type: 'text', text: await respond(prompt) }],
       finishReason: { unified: 'stop', raw: 'stop' },

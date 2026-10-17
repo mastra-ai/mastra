@@ -1,11 +1,5 @@
-import type {
-  LanguageModelV2FinishReason,
-  LanguageModelV2StreamPart,
-  LanguageModelV2Usage,
-  SharedV2ProviderMetadata,
-} from '@ai-sdk/provider-v5';
-import type { LanguageModelV3FinishReason, LanguageModelV3Usage } from '@ai-sdk/provider-v6';
-import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4FinishReason, LanguageModelV4StreamPart, LanguageModelV4Usage, SharedV4ProviderMetadata } from '@ai-sdk/provider';
+import type { FinishReason, LanguageModelUsage as AISDKLanguageModelUsage, ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-v7';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
@@ -98,26 +92,33 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   }
 }
 
+// File data arrives flat (string | Uint8Array): AISDKV7LanguageModel untags V4 file data before the pipeline.
 export type StreamPart =
-  | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
+  | Exclude<LanguageModelV4StreamPart, { type: 'finish' | 'file' | 'reasoning-file' }>
+  | {
+      type: 'file';
+      data: string | Uint8Array;
+      mediaType: string;
+      providerMetadata?: SharedV4ProviderMetadata;
+    }
   // Present on newer AI SDK provider specs (V4 / AI SDK v7) but absent from the V2 union.
   | {
       type: 'reasoning-file';
       data: string | Uint8Array;
       mediaType: string;
-      providerMetadata?: SharedV2ProviderMetadata;
+      providerMetadata?: SharedV4ProviderMetadata;
     }
   | {
       type: 'custom';
       kind: string;
-      providerMetadata?: SharedV2ProviderMetadata;
+      providerMetadata?: SharedV4ProviderMetadata;
     }
   | {
       type: 'finish';
       /** Includes 'tripwire' and 'retry' for processor scenarios */
-      finishReason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
-      usage: LanguageModelV2Usage;
-      providerMetadata: SharedV2ProviderMetadata;
+      finishReason: LanguageModelV4FinishReason | FinishReason | 'tripwire' | 'retry';
+      usage: LanguageModelV4Usage | LanguageModelUsage;
+      providerMetadata: SharedV4ProviderMetadata;
       messages: {
         all: ModelMessage[];
         user: ModelMessage[];
@@ -273,7 +274,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           toolCallId: value.toolCallId,
           toolName: value.toolName,
           args: toolCallInput,
-          providerExecuted: value.providerExecuted,
+          providerExecuted: 'providerExecuted' in value ? (value.providerExecuted as boolean | undefined) : undefined,
           providerMetadata: value.providerMetadata,
           ...((value as { observability?: unknown }).observability
             ? { observability: (value as { observability?: unknown }).observability as any }
@@ -292,7 +293,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           toolName: value.toolName,
           result: value.result,
           isError: value.isError,
-          providerExecuted: value.providerExecuted,
+          providerExecuted: 'providerExecuted' in value ? (value.providerExecuted as boolean | undefined) : undefined,
           providerMetadata: value.providerMetadata,
         },
       };
@@ -305,7 +306,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         payload: {
           toolCallId: value.id,
           toolName: value.toolName,
-          providerExecuted: value.providerExecuted,
+          providerExecuted: 'providerExecuted' in value ? (value.providerExecuted as boolean | undefined) : undefined,
           providerMetadata: value.providerMetadata,
           dynamic: (value as { dynamic?: boolean }).dynamic,
           ...((value as { observability?: unknown }).observability
@@ -421,8 +422,12 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   }
 }
 
+type FinishStepPart = Extract<TextStreamPart<ToolSet>, { type: 'finish-step' }>;
+
+// Mastra does not time individual steps, so AI SDK `performance` metrics are not available.
 export type OutputChunkType<OUTPUT = undefined> =
-  | TextStreamPart<ToolSet>
+  | Exclude<TextStreamPart<ToolSet>, { type: 'finish-step' }>
+  | (Omit<FinishStepPart, 'performance'> & { performance?: FinishStepPart['performance'] })
   | ObjectStreamPart<Partial<OUTPUT>>
   | undefined;
 
@@ -455,9 +460,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
       return {
         type: 'finish',
         // Cast needed: Mastra extends reason with 'tripwire' | 'retry' for processor scenarios
-        finishReason: chunk.payload.stepResult.reason as LanguageModelV2FinishReason,
-        // Cast needed: Mastra's LanguageModelUsage has optional properties, V2 has required-but-nullable
-        totalUsage: chunk.payload.output.usage as LanguageModelV2Usage,
+        finishReason: chunk.payload.stepResult.reason as FinishReason,
+        rawFinishReason: chunk.payload.stepResult.rawReason,
+        totalUsage: toAISDKUsage(chunk.payload.output.usage),
       };
     }
     case 'reasoning-start':
@@ -576,8 +581,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           modelId: (rest.modelId as string) || '',
           ...rest,
         },
-        usage: chunk.payload.output.usage,
+        usage: toAISDKUsage(chunk.payload.output.usage),
         finishReason: chunk.payload.stepResult.reason,
+        rawFinishReason: chunk.payload.stepResult.rawReason,
         providerMetadata: metadataProviderMetadata ?? chunk.payload.providerMetadata,
       };
     }
@@ -652,7 +658,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
 /**
  * Type guard to check if usage is in V3 format (nested objects)
  */
-function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
+function isV3Usage(usage: unknown): usage is LanguageModelV4Usage {
   if (!usage || typeof usage !== 'object') return false;
   const u = usage as Record<string, unknown>;
   return (
@@ -691,8 +697,8 @@ function innermostTokens<T extends { total?: unknown }>(tokens: T): T {
  * The original usage data is preserved in the `raw` field for advanced use cases.
  */
 function getAnthropicCacheCreationUsage(
-  usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
-  providerMetadata?: SharedV2ProviderMetadata,
+  usage: LanguageModelV4Usage | LanguageModelUsage | undefined,
+  providerMetadata?: SharedV4ProviderMetadata,
 ): {
   cacheCreationInputTokens5m?: number;
   cacheCreationInputTokens1h?: number;
@@ -716,8 +722,8 @@ function getAnthropicCacheCreationUsage(
 }
 
 function normalizeUsage(
-  usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
-  providerMetadata?: SharedV2ProviderMetadata,
+  usage: LanguageModelV4Usage | LanguageModelUsage | undefined,
+  providerMetadata?: SharedV4ProviderMetadata,
 ): LanguageModelUsage {
   const cacheCreationUsage = getAnthropicCacheCreationUsage(usage, providerMetadata);
   if (!usage) {
@@ -752,7 +758,7 @@ function normalizeUsage(
   }
 
   // V2 format - already flat
-  const v2Usage = usage as LanguageModelV2Usage;
+  const v2Usage = usage as unknown as LanguageModelUsage;
   return {
     inputTokens: v2Usage.inputTokens,
     outputTokens: v2Usage.outputTokens,
@@ -769,12 +775,34 @@ function normalizeUsage(
   };
 }
 
+export function toAISDKUsage(usage: LanguageModelUsage): AISDKLanguageModelUsage {
+  const cacheRead = usage.cachedInputTokens;
+  const cacheWrite = usage.cacheCreationInputTokens;
+  const reasoning = usage.reasoningTokens;
+  return {
+    inputTokens: usage.inputTokens,
+    inputTokenDetails: {
+      noCacheTokens:
+        usage.inputTokens !== undefined ? usage.inputTokens - (cacheRead ?? 0) - (cacheWrite ?? 0) : undefined,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: cacheWrite,
+    },
+    outputTokens: usage.outputTokens,
+    outputTokenDetails: {
+      textTokens: usage.outputTokens !== undefined ? usage.outputTokens - (reasoning ?? 0) : undefined,
+      reasoningTokens: reasoning,
+    },
+    totalTokens: usage.totalTokens,
+    raw: usage.raw as AISDKLanguageModelUsage['raw'],
+  };
+}
+
 /**
  * Type guard to check if a finish reason is V3 format (object with unified/raw properties)
  */
 function isV3FinishReason(
-  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
-): finishReason is LanguageModelV3FinishReason {
+  finishReason: LanguageModelV4FinishReason | FinishReason | 'unknown' | 'tripwire' | 'retry' | undefined,
+): finishReason is LanguageModelV4FinishReason {
   return typeof finishReason === 'object' && finishReason !== null && 'unified' in finishReason;
 }
 
@@ -788,8 +816,8 @@ function isV3FinishReason(
  * Note: V6 removed 'unknown' and merged it into 'other'.
  */
 function normalizeFinishReason(
-  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
-): LanguageModelV2FinishReason | 'tripwire' | 'retry' {
+  finishReason: LanguageModelV4FinishReason | FinishReason | 'unknown' | 'tripwire' | 'retry' | undefined,
+): FinishReason | 'tripwire' | 'retry' {
   // V3/V6 format - extract unified value. Peel repeated envelopes: the AI SDK v7
   // 'v2' compatibility shim re-wraps an already-nested reason (see innermostTokens).
   let reason = finishReason;
@@ -821,7 +849,7 @@ function normalizeFinishReason(
  * V2/V5 providers only ever send a string, so there is no raw value to preserve.
  */
 function extractRawFinishReason(
-  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
+  finishReason: LanguageModelV4FinishReason | FinishReason | 'unknown' | 'tripwire' | 'retry' | undefined,
 ): string | undefined {
   // Walk nested envelopes: an outer compatibility wrapper carries `raw: undefined`,
   // the provider's own string sits on the innermost object.

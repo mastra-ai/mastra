@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -33,7 +33,7 @@ describe('DurableAgent', () => {
 
   describe('constructor', () => {
     it('should create a DurableAgent with required config', () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -47,7 +47,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -62,7 +62,7 @@ describe('DurableAgent', () => {
     });
 
     it('should provide agent instance after async initialization', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -76,7 +76,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -88,7 +88,7 @@ describe('DurableAgent', () => {
     });
 
     it('should use agent id as name when name is not provided', () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -101,7 +101,7 @@ describe('DurableAgent', () => {
       const baseAgent = new Agent({
         id: 'my-agent-id',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -112,7 +112,7 @@ describe('DurableAgent', () => {
 
   describe('prepare', () => {
     it('should prepare workflow input without starting execution', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -126,7 +126,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -147,7 +147,7 @@ describe('DurableAgent', () => {
     });
 
     it('should accept string messages', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -161,7 +161,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -174,7 +174,7 @@ describe('DurableAgent', () => {
     });
 
     it('should accept array of string messages', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -188,7 +188,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -200,7 +200,7 @@ describe('DurableAgent', () => {
     });
 
     it('should accept message objects', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -214,7 +214,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -230,7 +230,7 @@ describe('DurableAgent', () => {
     });
 
     it('should add dynamic workspace instructions once during durable preparation', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -250,7 +250,7 @@ describe('DurableAgent', () => {
       const baseAgent = new Agent({
         id: 'workspace-instructions-agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         workspace,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -266,7 +266,7 @@ describe('DurableAgent', () => {
 
   describe('getWorkflow', () => {
     it('should return the durable workflow', () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -280,7 +280,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -292,7 +292,7 @@ describe('DurableAgent', () => {
     });
 
     it('should return the same workflow instance on multiple calls', () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -306,7 +306,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -320,7 +320,7 @@ describe('DurableAgent', () => {
 
   describe('runRegistry', () => {
     it('should track active runs', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -334,7 +334,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -353,7 +353,7 @@ describe('DurableAgent', () => {
     });
 
     it('should track multiple concurrent runs', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -367,7 +367,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -391,7 +391,7 @@ describe('DurableAgent', () => {
 
   describe('globalRunRegistry', () => {
     it('stores in-process execution context in globalRunRegistry during prepare()', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-delta', textDelta: 'Hello' },
@@ -405,7 +405,7 @@ describe('DurableAgent', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -471,7 +471,7 @@ describe('DurableAgent preparation', () => {
   });
 
   it('should serialize tool metadata correctly', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -485,7 +485,7 @@ describe('DurableAgent preparation', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: {
         greet: {
           description: 'Greet a user',
@@ -515,7 +515,7 @@ describe('DurableAgent preparation', () => {
   });
 
   it('should handle memory options', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -529,7 +529,7 @@ describe('DurableAgent preparation', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -548,7 +548,7 @@ describe('DurableAgent preparation', () => {
   });
 
   it('should store model in registry', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -562,7 +562,7 @@ describe('DurableAgent preparation', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -575,7 +575,7 @@ describe('DurableAgent preparation', () => {
   });
 
   it('should handle multiple tools', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -603,7 +603,7 @@ describe('DurableAgent preparation', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { echo: echoTool, uppercase: uppercaseTool },
     });
 
@@ -1325,7 +1325,7 @@ describe('DurableAgent with tools', () => {
   });
 
   it('should store tools with execute functions in registry', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -1346,7 +1346,7 @@ describe('DurableAgent with tools', () => {
       id: 'tool-agent',
       name: 'Tool Agent',
       instructions: 'Use tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { test: testTool },
     });
 
@@ -1365,7 +1365,7 @@ describe('DurableAgent with tools', () => {
   });
 
   it('should handle tools defined with object syntax', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hello' },
@@ -1379,7 +1379,7 @@ describe('DurableAgent with tools', () => {
       id: 'tool-agent',
       name: 'Tool Agent',
       instructions: 'Use tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: {
         simpleTool: {
           description: 'A simple tool',
@@ -1497,7 +1497,7 @@ describe('DurableAgent resume model metadata', () => {
       cleanup: () => {},
     });
 
-    const mockLM = new MockLanguageModelV2({
+    const mockLM = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', textDelta: 'Hi' },
@@ -1510,7 +1510,7 @@ describe('DurableAgent resume model metadata', () => {
     const baseAgent = new Agent({
       id: 'test-agent',
       instructions: 'Test',
-      model: mockLM as LanguageModelV2,
+      model: mockLM as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, cache: false });

@@ -12,7 +12,7 @@ import { createTool } from '../../tools';
 import type { Agent } from '../agent';
 import { Agent as AgentClass } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -21,7 +21,7 @@ const resourceId = 'restart-user';
 const memory = { thread: threadId, resource: resourceId };
 
 function model() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const text = JSON.stringify(prompt);
       const callTool = text.includes('use the tool') && !text.includes('"type":"tool-result"');

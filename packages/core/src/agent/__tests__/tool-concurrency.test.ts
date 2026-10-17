@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -260,7 +260,7 @@ describe('Tool Concurrency', () => {
 
   // Helper to create a mock model that triggers two tools
   function createMockModel() {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         return {
           stream: convertArrayToReadableStream([

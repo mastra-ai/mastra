@@ -1,4 +1,4 @@
-import { APICallError, JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-sdk-v5';
+import { APICallError, JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-v7';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { Agent } from './agent';

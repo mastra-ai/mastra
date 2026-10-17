@@ -2,8 +2,8 @@
  * #24280: the durable tool-call step must emit the live `tool-call-resumed` ack
  * alongside the persisted `resumed: true` marker, like the base loop.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -21,7 +21,7 @@ import { globalRunRegistry } from '../run-registry';
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function makeModel(toolName: string, input: unknown) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasResult = JSON.stringify(prompt).includes('"type":"tool-result"');
       return {
@@ -143,7 +143,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
       'retains earlier calls after a second approval (cold resume: %s)',
       async cold => {
         let modelCalls = 0;
-        const model = new MockLanguageModelV2({
+        const model = new MockLanguageModelV4({
           doStream: async () => {
             modelCalls++;
             return {
@@ -221,7 +221,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
           id: 'output-asker',
           name: 'output-asker',
           instructions: 'ask',
-          model: makeModel('ask', { question: 'color?' }) as LanguageModelV2,
+          model: makeModel('ask', { question: 'color?' }) as LanguageModelV4,
           memory: new MockMemory(),
           tools: {
             ask: createTool({
@@ -286,7 +286,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
       id: 'asker',
       name: 'asker',
       instructions: 'ask',
-      model: makeModel('askUser', { question: 'color?' }) as LanguageModelV2,
+      model: makeModel('askUser', { question: 'color?' }) as LanguageModelV4,
       memory: new MockMemory(),
       tools: {
         askUser: createTool({
@@ -328,7 +328,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const memory = { thread: 'durable-cold-resume', resource: 'r' };
     const store = new InMemoryStore();
     const modelPrompts: unknown[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         modelPrompts.push(prompt);
         const hasResult = JSON.stringify(prompt).includes('User answered: Hilton');
@@ -364,7 +364,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
         id: 'cold-resume-asker',
         name: 'cold-resume-asker',
         instructions: 'ask',
-        model: model as LanguageModelV2,
+        model: model as LanguageModelV4,
         memory: new MockMemory(),
         tools: { ask_user: askUserTool },
       });
@@ -413,7 +413,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
       id: 'approver',
       name: 'approver',
       instructions: 'do',
-      model: makeModel('doThing', { value: 'x' }) as LanguageModelV2,
+      model: makeModel('doThing', { value: 'x' }) as LanguageModelV4,
       memory: new MockMemory(),
       tools: {
         doThing: createTool({
@@ -443,7 +443,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
       id: 'redacted-approver',
       name: 'redacted-approver',
       instructions: 'do',
-      model: makeModel('doThing', { value: 'hunter2' }) as LanguageModelV2,
+      model: makeModel('doThing', { value: 'hunter2' }) as LanguageModelV4,
       memory: new MockMemory(),
       tools: {
         doThing: createTool({

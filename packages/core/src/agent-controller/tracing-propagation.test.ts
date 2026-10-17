@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -8,7 +8,7 @@ import type { Session } from './session';
 import { createMockWorkspace } from './test-utils';
 
 function createTextStreamModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

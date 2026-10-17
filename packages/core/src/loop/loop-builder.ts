@@ -1,4 +1,5 @@
-import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolSet } from '@internal/ai-v7';
+import { toAISDKUsage } from '../stream/aisdk/v5/transform';
 import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
 import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability';
@@ -42,6 +43,10 @@ import { createToolCallStep } from './workflows/agentic-execution/tool-call-step
 import { pruneAgentLoopSnapshot } from './workflows/prune-snapshot';
 import { llmIterationOutputSchema } from './workflows/schema';
 import type { LLMIterationData } from './workflows/schema';
+
+
+type LoopStepResult<Tools extends ToolSet> = Omit<StepResult<Tools>, 'performance'> &
+  Partial<Pick<StepResult<Tools>, 'performance'>>;
 
 export const AGENTIC_EXECUTION_WORKFLOW_ID = 'executionWorkflow';
 export const AGENTIC_LOOP_WORKFLOW_ID = 'agentic-loop';
@@ -431,7 +436,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     // contract shape (the durable loop flows the same shape through workflow
     // input/output as serialized state; here it stays in memory, owned by
     // this predicate closure).
-    const state: MainLoopIterationState<StepResult<Tools>> = {
+    const state: MainLoopIterationState<LoopStepResult<Tools>> = {
       // Steps accumulated across iterations, passed to stopWhen
       accumulatedSteps: [],
       // Content length seen so far — determines what's new in each step
@@ -512,16 +517,24 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 
-      const currentStep: StepResult<Tools> = {
+      const modelId = typedInputData.metadata?.modelId || typedInputData.metadata?.model || '';
+      // Mastra does not time individual steps, so `performance` is not reported.
+      const currentStep: LoopStepResult<Tools> = {
+        callId: runId,
+        stepNumber: state.accumulatedSteps.length,
+        model: { provider: typedInputData.metadata?.modelMetadata?.modelProvider ?? '', modelId },
+        toolsContext: {} as StepResult<Tools>['toolsContext'],
+        runtimeContext: {},
+        rawFinishReason: typedInputData.stepResult?.reason,
         content: currentContent,
-        usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        usage: toAISDKUsage(typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
         // we need to cast this because we add 'tripwire' and 'retry' for processor scenarios
         finishReason: (typedInputData.stepResult?.reason || 'unknown') as StepResult<Tools>['finishReason'],
         warnings: typedInputData.stepResult?.warnings || [],
         request: typedInputData.metadata?.request || {},
         response: {
           ...typedInputData.metadata,
-          modelId: typedInputData.metadata?.modelId || typedInputData.metadata?.model || '',
+          modelId,
           messages: [],
         } as StepResult<Tools>['response'],
         text: typedInputData.output.text || '',

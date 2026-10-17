@@ -1,12 +1,12 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function createRecordingStreamModel(modelId: string, responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     modelId,
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -32,7 +32,7 @@ function createRecordingStreamModel(modelId: string, responseText: string) {
 }
 
 function createThrowingStreamModel(modelId: string, statusCode: number) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     modelId,
     doStream: async () => {
       throw new APICallError({

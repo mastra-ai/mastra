@@ -15,7 +15,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
 import type { MastraDBMessage } from '../message-list';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const SECRET = 'hunter2';
 
@@ -36,7 +36,7 @@ function createGuardrail(): Processor {
 }
 
 function textModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -55,7 +55,7 @@ function textModel(text: string) {
 // Step 1: text containing the secret plus a call to an approval-gated tool. Step 2: a short reply.
 function approvalModel() {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       if (calls === 1) {

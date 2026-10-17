@@ -10,7 +10,7 @@
  *      The execution-workflow is an internal implementation detail and is not resumable, so
  *      it must never write rows to the user's storage even after it can read storage.
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
@@ -18,7 +18,7 @@ import { Workflow } from '../../workflows/workflow';
 import { Agent } from '../agent';
 
 function createDummyModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',

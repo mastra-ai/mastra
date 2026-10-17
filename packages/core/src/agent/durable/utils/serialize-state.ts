@@ -247,11 +247,7 @@ export function serializeClientTools(
   const out: Record<string, SerializableClientTool> = {};
   for (const name of Object.keys(clientTools)) {
     const tool = tools[name];
-    if (
-      !tool ||
-      (tool as { type?: string }).type === 'provider-defined' ||
-      (tool as { type?: string }).type === 'provider'
-    ) {
+    if (!tool || (tool as { type?: string }).type === 'provider') {
       continue;
     }
     const meta = serializeToolMetadata(name, tool);

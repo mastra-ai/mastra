@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent/agent';
 import { mockTextModel } from '../../test-utils/llm-mock';
@@ -27,7 +27,7 @@ describe('PIIDetector in Agent.generate (#25553)', () => {
       id: 'pii-agent',
       name: 'PII agent',
       instructions: 'You are helpful.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           prompts.push(prompt);
           return {

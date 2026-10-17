@@ -5,8 +5,8 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -39,9 +39,9 @@ const uploadedPath = (extension: string, directory = MEMORY.thread) =>
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
 /** `holdFirstStream` keeps the first response open, so a signal can be sent while the run is active. */
-function createModel(holdFirstStream?: Promise<void>, supportedUrls?: LanguageModelV2['supportedUrls']) {
-  const prompts: LanguageModelV2Prompt[] = [];
-  const model = new MockLanguageModelV2({
+function createModel(holdFirstStream?: Promise<void>, supportedUrls?: LanguageModelV4['supportedUrls']) {
+  const prompts: LanguageModelV4Prompt[] = [];
+  const model = new MockLanguageModelV4({
     ...(supportedUrls ? { supportedUrls } : {}),
     doGenerate: async ({ prompt }) => {
       prompts.push(prompt);
@@ -122,7 +122,7 @@ function createHarness(
     withMemory?: boolean;
     dynamicProcessors?: boolean;
     holdFirstStream?: Promise<void>;
-    supportedUrls?: LanguageModelV2['supportedUrls'];
+    supportedUrls?: LanguageModelV4['supportedUrls'];
   } = {},
 ) {
   const { model, prompts } = createModel(holdFirstStream, supportedUrls);
@@ -155,14 +155,14 @@ const userMessage = (...content: Array<ReturnType<typeof text> | ReturnType<type
   content,
 });
 
-const userPartsIn = (prompt: LanguageModelV2Prompt | undefined) =>
+const userPartsIn = (prompt: LanguageModelV4Prompt | undefined) =>
   (prompt ?? []).flatMap(message => (message.role === 'user' ? message.content : []));
-const filePartsIn = (prompt: LanguageModelV2Prompt | undefined) =>
+const filePartsIn = (prompt: LanguageModelV4Prompt | undefined) =>
   userPartsIn(prompt).filter(part => part.type === 'file');
-const textsIn = (prompt: LanguageModelV2Prompt | undefined) =>
+const textsIn = (prompt: LanguageModelV4Prompt | undefined) =>
   userPartsIn(prompt).flatMap(part => (part.type === 'text' ? [part.text] : []));
 /** The `path:` line of the first upload note the model received. */
-const notedPathIn = (prompt: LanguageModelV2Prompt | undefined) =>
+const notedPathIn = (prompt: LanguageModelV4Prompt | undefined) =>
   textsIn(prompt)
     .join('\n')
     .match(/^path: (.+)$/m)?.[1];
@@ -494,9 +494,9 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
 
   it('writes a file once per request, even when the model is called again after a tool call', async () => {
     const { sandbox, writes, commands } = createFakeSandbox();
-    const prompts: LanguageModelV2Prompt[] = [];
+    const prompts: LanguageModelV4Prompt[] = [];
     const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         prompts.push(prompt);
         return prompts.length === 1
@@ -1540,7 +1540,7 @@ describe('FileUploadProcessor.processLLMRequest', () => {
       }),
       ...args,
     }) as unknown as Parameters<FileUploadProcessor['processLLMRequest']>[0];
-  const promptWith = (bytes: Buffer): LanguageModelV2Prompt => [
+  const promptWith = (bytes: Buffer): LanguageModelV4Prompt => [
     {
       role: 'user',
       content: [{ type: 'file', data: bytes.toString('base64'), mediaType: 'text/plain', filename: 'notes.txt' }],

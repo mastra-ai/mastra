@@ -5,8 +5,8 @@
  * thread management, and memory config serialization in durable execution.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -25,7 +25,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a simple text model
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -53,7 +53,7 @@ function createTextModel(text: string) {
 }
 
 function createTerminalErrorModel(errorMessage: string, partialText?: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -77,7 +77,7 @@ function createTerminalErrorModel(errorMessage: string, partialText?: string) {
  * Creates a model that returns a tool call
  */
 function createToolCallModel(toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -125,7 +125,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'thread-string-agent',
         name: 'Thread String Agent',
         instructions: 'Test thread string',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -149,7 +149,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'thread-object-agent',
         name: 'Thread Object Agent',
         instructions: 'Test thread object',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -168,7 +168,7 @@ describe('DurableAgent memory configuration', () => {
       let originalModelCalls = 0;
       let overrideModelCalls = 0;
       const createTrackingTextModel = (text: string, onStream: () => void) =>
-        new MockLanguageModelV2({
+        new MockLanguageModelV4({
           doStream: async () => {
             onStream();
             return {
@@ -193,7 +193,7 @@ describe('DurableAgent memory configuration', () => {
       const modelOverrideProcessor: InputProcessor = {
         id: 'model-override-processor',
         processInputStep: async () => ({
-          model: createTrackingTextModel('processed response', () => overrideModelCalls++) as LanguageModelV2,
+          model: createTrackingTextModel('processed response', () => overrideModelCalls++) as LanguageModelV4,
         }),
       };
 
@@ -201,7 +201,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'model-override-agent',
         name: 'Model Override Agent',
         instructions: 'Test processInputStep model override',
-        model: createTrackingTextModel('original response', () => originalModelCalls++) as LanguageModelV2,
+        model: createTrackingTextModel('original response', () => originalModelCalls++) as LanguageModelV4,
         inputProcessors: [modelOverrideProcessor],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -221,7 +221,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'no-memory-agent',
         name: 'No Memory Agent',
         instructions: 'Test without memory',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -237,7 +237,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'persist-response-agent',
         name: 'Persist Response Agent',
         instructions: 'Test response persistence',
-        model: createTextModel('assistant response') as LanguageModelV2,
+        model: createTextModel('assistant response') as LanguageModelV4,
         memory: mockMemory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -266,7 +266,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'persist-terminal-error-agent',
         name: 'Persist Terminal Error Agent',
         instructions: 'Test terminal error persistence',
-        model: createTerminalErrorModel('durable terminal failure') as LanguageModelV2,
+        model: createTerminalErrorModel('durable terminal failure') as LanguageModelV4,
         memory: mockMemory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -308,7 +308,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'persist-partial-terminal-error-agent',
         name: 'Persist Partial Terminal Error Agent',
         instructions: 'Test partial terminal error persistence',
-        model: createTerminalErrorModel('durable partial failure', 'partial response') as LanguageModelV2,
+        model: createTerminalErrorModel('durable partial failure', 'partial response') as LanguageModelV4,
         memory: mockMemory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -360,7 +360,7 @@ describe('DurableAgent memory configuration', () => {
           id: `${name}-input-processor-error-agent`,
           name: 'Input Processor Error Agent',
           instructions: 'Test input processor failure persistence',
-          model: createTextModel('unreachable') as LanguageModelV2,
+          model: createTextModel('unreachable') as LanguageModelV4,
           memory: mockMemory,
           inputProcessors: [failingProcessor],
         });
@@ -403,7 +403,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'durable-tripwire-agent',
         name: 'Durable TripWire Agent',
         instructions: 'Test TripWire persistence',
-        model: createTextModel('unreachable') as LanguageModelV2,
+        model: createTextModel('unreachable') as LanguageModelV4,
         memory: mockMemory,
         inputProcessors: [tripwireProcessor],
       });
@@ -429,7 +429,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'readonly-persist-agent',
         name: 'ReadOnly Persist Agent',
         instructions: 'Test readOnly persistence',
-        model: createTextModel('assistant response') as LanguageModelV2,
+        model: createTextModel('assistant response') as LanguageModelV4,
         memory: mockMemory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -463,7 +463,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'readonly-agent',
         name: 'ReadOnly Agent',
         instructions: 'Test readonly',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -487,7 +487,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'lastmessages-agent',
         name: 'LastMessages Agent',
         instructions: 'Test lastMessages',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -511,7 +511,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'semantic-agent',
         name: 'Semantic Agent',
         instructions: 'Test semantic recall',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -539,7 +539,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'combined-memory-agent',
         name: 'Combined Memory Agent',
         instructions: 'Test combined options',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -572,7 +572,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'serialization-agent',
         name: 'Serialization Agent',
         instructions: 'Test serialization',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -605,7 +605,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'undefined-config-agent',
         name: 'Undefined Config Agent',
         instructions: 'Test undefined values',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -634,7 +634,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'stream-memory-agent',
         name: 'Stream Memory Agent',
         instructions: 'Test stream memory',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -658,7 +658,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'readonly-stream-agent',
         name: 'ReadOnly Stream Agent',
         instructions: 'Test readonly stream',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -692,7 +692,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'tool-memory-agent',
         name: 'Tool Memory Agent',
         instructions: 'Search with memory',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { searchTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -730,7 +730,7 @@ describe('DurableAgent memory configuration', () => {
         id: 'approval-memory-agent',
         name: 'Approval Memory Agent',
         instructions: 'Use approval tool with memory',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { approvalTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -767,7 +767,7 @@ describe('DurableAgent memory edge cases', () => {
       id: 'empty-thread-agent',
       name: 'Empty Thread Agent',
       instructions: 'Test empty thread',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -789,7 +789,7 @@ describe('DurableAgent memory edge cases', () => {
       id: 'special-chars-agent',
       name: 'Special Chars Agent',
       instructions: 'Test special characters',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -812,7 +812,7 @@ describe('DurableAgent memory edge cases', () => {
       id: 'long-id-agent',
       name: 'Long ID Agent',
       instructions: 'Test long IDs',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -838,7 +838,7 @@ describe('DurableAgent memory edge cases', () => {
       id: 'zero-values-agent',
       name: 'Zero Values Agent',
       instructions: 'Test zero values',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -867,7 +867,7 @@ describe('DurableAgent memory edge cases', () => {
         id: 'title-durable-agent',
         name: 'Title Durable Agent',
         instructions: 'Test durable title generation',
-        model: createTextModel('assistant response') as LanguageModelV2,
+        model: createTextModel('assistant response') as LanguageModelV4,
         memory: mockMemory,
       });
       let resolveTitle: (title: string) => void;
@@ -903,13 +903,13 @@ describe('DurableAgent memory edge cases', () => {
       });
 
       const titleModel = createTextModel('Should Not Be Used');
-      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV4 } });
 
       const baseAgent = new Agent({
         id: 'title-existing-agent',
         name: 'Title Existing Agent',
         instructions: 'Test durable title generation no-overwrite',
-        model: createTextModel('assistant response') as LanguageModelV2,
+        model: createTextModel('assistant response') as LanguageModelV4,
         memory: mockMemory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

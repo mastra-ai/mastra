@@ -6,14 +6,12 @@
  */
 
 // Import types from AI SDK packages
-import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v6';
-import type { DeepSeekLanguageModelChatOptions } from '@ai-sdk/deepseek-v7';
-import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v6';
-import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
-import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
-import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
-import type { XaiProviderOptions } from '@ai-sdk/xai-v6';
+import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
+import type { DeepSeekLanguageModelChatOptions } from '@ai-sdk/deepseek';
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
+import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider';
+import type { XaiLanguageModelResponsesOptions as XaiProviderOptions } from '@ai-sdk/xai';
 
 // Re-export the types
 export type {
@@ -89,7 +87,7 @@ export type DeepSeekProviderOptions = DeepSeekChatOptions;
  * Provider options for AI SDK models.
  *
  * Provider options are keyed by provider ID and contain provider-specific configuration.
- * This type extends SharedV2ProviderOptions to maintain compatibility with AI SDK.
+ * This type extends SharedV4ProviderOptions to maintain compatibility with AI SDK.
  *
  * Each provider's options can include both known typed options and unknown keys for
  * forward compatibility with new provider features.
@@ -106,7 +104,7 @@ export type DeepSeekProviderOptions = DeepSeekChatOptions;
  * });
  * ```
  */
-export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions) & {
+export type ProviderOptions = (SharedV4ProviderOptions | SharedV4ProviderOptions) & {
   anthropic?: AnthropicProviderOptions & Record<string, any>;
   deepseek?: DeepSeekProviderOptions & Record<string, any>;
   google?: GoogleProviderOptions & Record<string, any>;
@@ -122,7 +120,7 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
  * wins.
  */
 export function mergeProviderOptions<
-  T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions,
+  T extends ProviderOptions | SharedV4ProviderOptions | SharedV4ProviderOptions | SharedV4ProviderOptions,
 >(base: T | undefined, override: T | undefined): T | undefined {
   if (!base) return override;
   if (!override) return base;

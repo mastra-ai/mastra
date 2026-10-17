@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
@@ -9,7 +9,7 @@ import { createMockWorkspace } from './test-utils';
 import type { AgentControllerEvent } from './types';
 
 function createTextStreamModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     // The title path runs `methodType: 'generate'`; the answering run streams.
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -37,11 +37,11 @@ function createBrokenModel() {
   const refuse = async () => {
     throw new Error('Could not find API key process.env.ANTHROPIC_API_KEY');
   };
-  return new MockLanguageModelV2({ doGenerate: refuse, doStream: refuse });
+  return new MockLanguageModelV4({ doGenerate: refuse, doStream: refuse });
 }
 
 /** A controller that has taken its first turn, with `titleModel` naming the thread. */
-async function startThread(titleModel: MockLanguageModelV2) {
+async function startThread(titleModel: MockLanguageModelV4) {
   const storage = new InMemoryStore();
   const memory = new MockMemory({
     storage,

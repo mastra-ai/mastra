@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -52,7 +52,7 @@ function buildSubAgent() {
     },
   });
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const text = JSON.stringify(prompt);
       const order = text.includes(ORDER_B) ? ORDER_B : ORDER_A;
@@ -100,7 +100,7 @@ function buildSubAgent() {
 /** Supervisor: first turn emits two parallel delegations; later turns report done. */
 function buildSupervisor(subAgent: Agent) {
   let step = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       step += 1;
       const chunks =

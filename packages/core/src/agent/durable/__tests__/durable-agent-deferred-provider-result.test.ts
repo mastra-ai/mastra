@@ -15,8 +15,8 @@
  * 3. a processor tripwire blocks the raw result entirely and bails the run.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -38,7 +38,7 @@ const CLIENT_CALL_ID = 'tc-client-1';
  */
 function createDeferredProviderModel(deferredResult: Record<string, unknown>, isError?: boolean) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -147,7 +147,7 @@ function setup(pubsub: EventEmitterPubSub, { deferredResult, outputProcessors, i
     id: 'deferred-provider-agent',
     name: 'Deferred Provider Agent',
     instructions: 'You are a helpful agent.',
-    model: createDeferredProviderModel(deferredResult, isError) as LanguageModelV2,
+    model: createDeferredProviderModel(deferredResult, isError) as LanguageModelV4,
     memory: mockMemory,
     tools: { getWeather: weatherTool },
     ...(outputProcessors ? { outputProcessors } : {}),

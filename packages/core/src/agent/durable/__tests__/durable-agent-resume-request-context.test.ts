@@ -3,7 +3,7 @@
  * with the request context passed to approveToolCall, not the one the run
  * suspended with.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -18,7 +18,7 @@ import { globalRunRegistry } from '../run-registry';
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function createModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const answered = prompt.some(message => message.role === 'tool');
       const parts = answered

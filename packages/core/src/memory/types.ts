@@ -20,7 +20,7 @@ import type { VectorFilter } from '../vector/filter/base';
 import type { MemoryRunStateAccessor } from './run-state';
 import type { MemoryProcessor } from '.';
 
-export type { UIMessage as AiMessageType } from '@internal/ai-sdk-v5';
+export type { UIMessage as AiMessageType } from '@internal/ai-v7';
 export type { MastraLanguageModel };
 
 // Types for the memory system
@@ -1318,7 +1318,7 @@ export type SharedMemoryConfig = {
    *
    * Can be specified as:
    * - A string in the format "provider/model" (e.g., "openai/text-embedding-3-small")
-   * - An EmbeddingModel or EmbeddingModelV2 instance
+   * - An EmbeddingModel or EmbeddingModelV4 instance
    *
    * @example
    * ```typescript

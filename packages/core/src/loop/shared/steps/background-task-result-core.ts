@@ -1,4 +1,4 @@
-import type { JSONValue, ToolModelMessage } from '@internal/ai-sdk-v5';
+import type { JSONValue, ToolModelMessage } from '@internal/ai-v7';
 
 import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';

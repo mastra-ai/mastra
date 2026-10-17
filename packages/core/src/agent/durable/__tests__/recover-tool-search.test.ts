@@ -5,7 +5,7 @@
  * execution workflow persists under `snapshot.value.messageListState`.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -90,7 +90,7 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
         id: 'search-agent',
         name: 'search-agent',
         instructions: 'x',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => ({
             stream: convertArrayToReadableStream([]),
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -135,7 +135,7 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
         id: 'search-agent',
         name: 'search-agent',
         instructions: 'x',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => ({
             stream: convertArrayToReadableStream([]),
             rawCall: { rawPrompt: null, rawSettings: {} },

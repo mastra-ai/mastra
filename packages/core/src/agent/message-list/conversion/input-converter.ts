@@ -2,7 +2,7 @@ import { AIV5Adapter, AIV6Adapter, MastraV1Adapter } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { LegacyCoreMessage } from '../state/legacy-shapes';
 import type { MastraDBMessage, MastraMessageV1, MessageSource, MemoryInfo } from '../state/types';
-import type { MessageInput } from '../types';
+import type { AIV6Type, MessageInput } from '../types';
 import { stampMessageParts } from '../utils/stamp-part';
 
 /**
@@ -65,7 +65,7 @@ export function inputToMastraDBMessage(
   const id = hasOriginalId ? message.id : context.newMessageId();
 
   if (TypeDetector.isAIV6CoreMessage(message)) {
-    const dbMsg = AIV6Adapter.fromModelMessage(message, messageSource, context);
+    const dbMsg = AIV6Adapter.fromModelMessage(message as AIV6Type.ModelMessage, messageSource, context);
     const rawCreatedAt =
       'metadata' in message &&
       message.metadata &&
@@ -82,7 +82,7 @@ export function inputToMastraDBMessage(
     };
   }
   if (TypeDetector.isAIV6UIMessage(message)) {
-    const dbMsg = AIV6Adapter.fromUIMessage(message);
+    const dbMsg = AIV6Adapter.fromUIMessage(message as AIV6Type.UIMessage);
     const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
     return {
       ...dbMsg,

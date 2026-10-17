@@ -1,5 +1,5 @@
-import * as AIV6 from '@internal/ai-v6';
-import type { ModelMessage as ModelMessageV6, UIMessage as UIMessageV6 } from '@internal/ai-v6';
+import * as AIV6 from '@internal/ai-v7';
+import type { ModelMessage as ModelMessageV6, UIMessage as UIMessageV6 } from '@internal/ai-v7';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { convertMessages } from '../..';

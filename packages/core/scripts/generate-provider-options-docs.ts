@@ -173,11 +173,11 @@ export function generateProviderOptionsSection(providerId: string): string {
   const nodeModulesPath = path.join(__dirname, '..', 'node_modules');
 
   project.addSourceFilesAtPaths([
-    path.join(nodeModulesPath, '@ai-sdk/anthropic-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/deepseek-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/google-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/openai-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/xai-v5/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/anthropic/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/deepseek/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/google/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/openai/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/xai/dist/index.d.ts'),
   ]);
 
   // Find the type in the project
@@ -271,11 +271,11 @@ function main() {
   const nodeModulesPath = path.join(__dirname, '..', 'node_modules');
 
   project.addSourceFilesAtPaths([
-    path.join(nodeModulesPath, '@ai-sdk/anthropic-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/deepseek-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/google-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/openai-v5/dist/index.d.ts'),
-    path.join(nodeModulesPath, '@ai-sdk/xai-v5/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/anthropic/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/deepseek/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/google/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/openai/dist/index.d.ts'),
+    path.join(nodeModulesPath, '@ai-sdk/xai/dist/index.d.ts'),
   ]);
 
   // Generate docs for each provider

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../workspace/constants';
@@ -40,7 +40,7 @@ describe('subagent workspace tool integration', () => {
     const workspace = createWorkspace();
 
     let callCount = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -125,7 +125,7 @@ describe('subagent workspace tool integration', () => {
     let receivedToolNames: string[] = [];
 
     let callCount = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async (options: any) => {
         callCount++;
         // Capture tool names from the prepared tools

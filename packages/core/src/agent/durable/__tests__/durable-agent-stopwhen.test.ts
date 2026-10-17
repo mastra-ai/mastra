@@ -5,8 +5,8 @@
  * Validates that stopWhen can be used to stop execution based on step results.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -22,7 +22,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a mock model that returns a tool call
  */
 function createToolCallModel(toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -51,7 +51,7 @@ function createToolCallModel(toolName: string, toolArgs: object) {
  * Creates a simple text model
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -75,7 +75,7 @@ function createTextModel(text: string) {
  * Creates a mock model that returns text then a tool call
  */
 function createTextThenToolModel(text: string, toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -110,7 +110,7 @@ function createRepeatedToolThenTextModel(
   finalText: string,
 ) {
   let callCount = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       callCount += 1;
       const stream: ReadableStream<any> =
@@ -200,7 +200,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stopwhen-agent',
         name: 'StopWhen Agent',
         instructions: 'Get weather information.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { weatherTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -224,7 +224,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stopwhen-prepare-agent',
         name: 'StopWhen Prepare Agent',
         instructions: 'Respond to questions.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -252,7 +252,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stopwhen-tool-agent',
         name: 'StopWhen Tool Agent',
         instructions: 'Get data.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { dataTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -286,7 +286,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stopwhen-text-tool-agent',
         name: 'StopWhen Text Tool Agent',
         instructions: 'Search for information.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { searchTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -312,7 +312,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stopwhen-maxsteps-agent',
         name: 'StopWhen MaxSteps Agent',
         instructions: 'Respond.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -347,7 +347,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stream-maxsteps-agent',
         name: 'Stream MaxSteps Agent',
         instructions: 'Use tools until done.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { loopTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -368,7 +368,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stopwhen-immediate-agent',
         name: 'StopWhen Immediate Agent',
         instructions: 'Respond.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -393,7 +393,7 @@ describe('DurableAgent stopWhen callback', () => {
         id: 'stopwhen-serialize-agent',
         name: 'StopWhen Serialize Agent',
         instructions: 'Respond.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -429,7 +429,7 @@ describe('DurableAgent stopWhen edge cases', () => {
       id: 'stopwhen-empty-steps-agent',
       name: 'StopWhen Empty Steps Agent',
       instructions: 'Respond.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -457,7 +457,7 @@ describe('DurableAgent stopWhen edge cases', () => {
       id: 'stopwhen-error-agent',
       name: 'StopWhen Error Agent',
       instructions: 'Respond.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -479,7 +479,7 @@ describe('DurableAgent stopWhen edge cases', () => {
       id: 'stopwhen-async-agent',
       name: 'StopWhen Async Agent',
       instructions: 'Respond.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -531,7 +531,7 @@ describe('DurableAgent stopWhen behavior', () => {
       id: 'stopwhen-behavior-agent',
       name: 'StopWhen Behavior Agent',
       instructions: 'Use tools until done.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { loopTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -573,7 +573,7 @@ describe('DurableAgent stopWhen behavior', () => {
       id: 'stopwhen-continue-agent',
       name: 'StopWhen Continue Agent',
       instructions: 'Use tools until done.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { loopTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

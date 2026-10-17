@@ -1,5 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import type { CoreMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage as CoreMessage } from '@internal/ai-v7';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent/agent';

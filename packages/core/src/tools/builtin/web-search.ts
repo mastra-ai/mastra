@@ -5,10 +5,7 @@ const WEB_SEARCH_TOOL_MARKER = Symbol.for('mastra.tools.webSearchTool');
 
 export type WebSearchProvider = 'openai' | 'anthropic' | 'google' | 'xai';
 export type WebSearchProviderToolId =
-  | 'openai.web_search'
-  | 'anthropic.web_search_20250305'
-  | 'google.google_search'
-  | 'xai.web_search';
+  'openai.web_search' | 'anthropic.web_search_20250305' | 'google.google_search' | 'xai.web_search';
 
 export type WebSearchToolPlaceholder = {
   readonly [WEB_SEARCH_TOOL_MARKER]: true;
@@ -52,7 +49,7 @@ export function normalizeWebSearchProvider(providerOrModel: unknown): WebSearchP
 export function createWebSearchProviderTool(provider: WebSearchProvider): ProviderDefinedTool {
   const tool = getWebSearchProviderTool(provider);
   return {
-    type: 'provider-defined',
+    type: 'provider',
     id: tool.id,
     name: tool.name,
     args: {},

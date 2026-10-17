@@ -1,4 +1,4 @@
-import { AISDKError } from '@internal/ai-sdk-v5';
+import { AISDKError } from '@internal/ai-v7';
 
 const name = 'AI_InvalidDataContentError';
 const marker = `vercel.ai.error.${name}`;

@@ -5,7 +5,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * Cross-engine port of the maxRetries precedence rules from
  * packages/core/src/agent/__tests__/model-retry-after.test.ts (#19885).
  *
- * The source suite drives a MockLanguageModelV2 with fake timers to also pin
+ * The source suite drives a MockLanguageModelV4 with fake timers to also pin
  * the Retry-After *timing* contract. Fake timers cannot cross the AIMock HTTP
  * boundary, so this port pins the engine-sensitive half: how many model calls
  * are made under each maxRetries configuration. That is exactly the part that

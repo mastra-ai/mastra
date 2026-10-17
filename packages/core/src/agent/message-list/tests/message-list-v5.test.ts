@@ -1,5 +1,5 @@
-import { isToolUIPart } from '@internal/ai-sdk-v5';
-import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
+import { isToolUIPart } from '@internal/ai-v7';
+import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import { AIV5Adapter } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
@@ -494,7 +494,7 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it('llmPrompt() should return proper LanguageModelV2Prompt format', async () => {
+      it('llmPrompt() should return proper LanguageModelV4Prompt format', async () => {
         const list = new MessageList({ threadId, resourceId });
         list.addSystem('System message');
         list.add('User input', 'input');

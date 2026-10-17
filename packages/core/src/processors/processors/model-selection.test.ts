@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -470,7 +470,7 @@ describe('ModelSelectionProcessor', () => {
 
 describe('agent fallbacks', () => {
   function textModel(text: string) {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -497,7 +497,7 @@ describe('agent fallbacks', () => {
     const doStream = vi.fn(async () => {
       throw error;
     });
-    return { model: new MockLanguageModelV2({ doStream }), doStream };
+    return { model: new MockLanguageModelV4({ doStream }), doStream };
   }
 
   it('lets the configured fallback serve the request when the selected model fails', async () => {

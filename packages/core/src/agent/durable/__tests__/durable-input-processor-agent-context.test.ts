@@ -7,15 +7,15 @@
  * durable agent was woken by a signal or schedule and re-ran preparation.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect } from 'vitest';
 import type { Processor } from '../../../processors';
 import { Agent } from '../../agent';
 import { prepareForDurableExecution } from '../preparation';
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -50,7 +50,7 @@ describe('DurableAgent input processor agent context (#20161)', () => {
       id: 'durable-ctx-agent',
       name: 'Durable Ctx Agent',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('ok') as LanguageModelV2,
+      model: createTextModel('ok') as LanguageModelV4,
       inputProcessors: [captureProcessor as any],
     });
 

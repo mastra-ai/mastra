@@ -1,4 +1,4 @@
-import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { Classifier } from '../../classifier';
 import type { ClassifierAnswers, ClassifierQuestions, ClassifierResult } from '../../classifier';
@@ -142,9 +142,7 @@ export interface ModelSelectionRegisteredOptions<
 }
 
 export type ModelSelectionProcessorOptions<Q extends ClassifierQuestions = ClassifierQuestions> =
-  | ModelSelectionChoicesOptions
-  | ModelSelectionInstanceOptions<Q>
-  | ModelSelectionRegisteredOptions<Q>;
+  ModelSelectionChoicesOptions | ModelSelectionInstanceOptions<Q> | ModelSelectionRegisteredOptions<Q>;
 
 /** The question name used by the classifier built from `choices`. */
 const CHOICES_QUESTION = 'model';

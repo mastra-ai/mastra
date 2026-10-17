@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { mockTextModel } from '../../../test-utils/llm-mock';
@@ -30,7 +30,7 @@ async function buildAgentTools({
     id: 'test-agent',
     name: 'test-agent',
     instructions: 'test agent',
-    model: new MockLanguageModelV2({}) as unknown as LanguageModelV2,
+    model: new MockLanguageModelV4({}) as unknown as LanguageModelV4,
     tools: serverTools,
   });
   return agent.getToolsForExecution({ clientTools: clientTools as ToolsInput | undefined, toolsets });
@@ -508,7 +508,7 @@ describe('fireClientToolOutputHooks', () => {
 
 describe('client tool onOutput through agent.generate (production path)', () => {
   function textModel() {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -528,7 +528,7 @@ describe('client tool onOutput through agent.generate (production path)', () => 
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       }),
-    }) as unknown as LanguageModelV2;
+    }) as unknown as LanguageModelV4;
   }
 
   const followUpMessages = [toolCallMessage('call-1'), toolResultMessage('call-1', { ok: true })] satisfies Parameters<
@@ -966,7 +966,7 @@ describe('applyClientToolModelOutput', () => {
 describe('client tool toModelOutput through agent.generate (production path)', () => {
   it('sends the mapped output to the model for a client-supplied tool result', async () => {
     const prompts: any[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         prompts.push(prompt);
         return {
@@ -977,7 +977,7 @@ describe('client tool toModelOutput through agent.generate (production path)', (
           warnings: [],
         };
       },
-    }) as unknown as LanguageModelV2;
+    }) as unknown as LanguageModelV4;
 
     const agent = new Agent({
       id: 'test-agent',

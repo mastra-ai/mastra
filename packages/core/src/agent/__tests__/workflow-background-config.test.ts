@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createStep, createWorkflow } from '../../workflows';
@@ -28,7 +28,7 @@ describe('workflow background config', () => {
       id: 'workflow-agent',
       name: 'Workflow Agent',
       instructions: 'Run the workflow.',
-      model: new MockLanguageModelV2(),
+      model: new MockLanguageModelV4(),
       workflows: { echo: createTestWorkflow() },
       backgroundTasks: { tools: { echo: true } },
     });

@@ -6,8 +6,8 @@
  * non-durable Agent's behavior.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -17,7 +17,7 @@ import { createDurableAgent } from '../create-durable-agent';
 
 function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -86,7 +86,7 @@ describe('DurableAgent callback bridge', () => {
         id: 'iteration-agent',
         name: 'Iteration Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { echo: echoTool },
       });
 
@@ -128,7 +128,7 @@ describe('DurableAgent callback bridge', () => {
     // run's stream topic should invoke the user callback regardless of how
     // the abort was triggered.
     it('invokes the user callback when an ABORT event is published', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -146,7 +146,7 @@ describe('DurableAgent callback bridge', () => {
         id: 'abort-agent',
         name: 'Abort Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

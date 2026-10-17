@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent/agent';
@@ -439,7 +439,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     const agent = new Agent({
       id: 'instruction-memory-reclassification',
       name: 'Instruction memory reclassification',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           prompts.push(prompt.map(extractPromptText).join('\n'));
           return {

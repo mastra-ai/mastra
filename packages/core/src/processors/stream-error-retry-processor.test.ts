@@ -1,4 +1,4 @@
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageList } from '../agent/message-list';

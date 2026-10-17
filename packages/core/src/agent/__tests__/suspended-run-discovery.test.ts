@@ -17,7 +17,7 @@ import { Agent } from '../agent';
 import { DurableStepIds } from '../durable/constants';
 import { createDurableAgent } from '../durable/create-durable-agent';
 import { globalRunRegistry } from '../durable/run-registry';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
   return { name: data.name, email: 'dero@mail.com' };
@@ -41,7 +41,7 @@ function createMockModel({
   toolName = 'findUserTool',
 }: { toolCallOnFirstCall?: boolean; toolCallId?: string; toolName?: string } = {}) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (toolCallOnFirstCall && callCount === 1) {
@@ -93,7 +93,7 @@ function createMockModel({
  */
 function createParallelToolCallsModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -157,7 +157,7 @@ function createApprovalTool(id: string) {
  * delegating agent re-suspends its own loop when the agent it called suspends.
  */
 function createDelegationModel({ toolName, toolCallId }: { toolName: string; toolCallId: string }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -826,7 +826,7 @@ describe('suspended-run discovery', () => {
         model: createMockModel(),
         tools: { findUserTool: createFindUserTool() },
       });
-      const supervisorModel = new MockLanguageModelV2({
+      const supervisorModel = new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],

@@ -1,10 +1,7 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
-import type { EmbeddingModel } from '@internal/ai-sdk-v5';
-import type { EmbeddingModelV3 } from '@internal/ai-v6';
-
-type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createOpenAI } from '@ai-sdk/openai';
+import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 
 import { MASTRA_USER_AGENT } from './gateways/constants.js';
 import { GatewayRegistry } from './provider-registry.js';
@@ -111,16 +108,14 @@ export function getEmbeddingModelInfo(modelId: string): EmbeddingModelInfo | und
  * const result = await embedder.doEmbed({ values: ['hello world'] });
  * ```
  */
-export class ModelRouterEmbeddingModel<VALUE extends string = string> implements EmbeddingModelV2<VALUE> {
-  readonly specificationVersion = 'v2' as const;
+export class ModelRouterEmbeddingModel<VALUE extends string = string> implements EmbeddingModelV4 {
+  readonly specificationVersion = 'v4' as const;
   readonly modelId: string;
   readonly provider: string;
   maxEmbeddingsPerCall: number | PromiseLike<number | undefined> = 2048;
   supportsParallelCalls: boolean | PromiseLike<boolean> = true;
 
-  // The underlying provider SDKs are on the AI SDK v6 track (V3 embedding
-  // spec). This wrapper keeps exposing the V2 interface; doEmbed adapts.
-  private providerModel: EmbeddingModelV3;
+  private providerModel: EmbeddingModelV4;
 
   constructor(config: string | OpenAICompatibleConfig) {
     // Normalize config to always have provider and model IDs
@@ -271,8 +266,8 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
   }
 
   async doEmbed(
-    args: Parameters<EmbeddingModelV2<VALUE>['doEmbed']>[0],
-  ): Promise<Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>> {
+    args: Parameters<EmbeddingModelV4['doEmbed']>[0],
+  ): Promise<Awaited<ReturnType<EmbeddingModelV4['doEmbed']>>> {
     // V3 call options require header values to be defined strings.
     let headers: Record<string, string> | undefined;
     if (args.headers) {
@@ -284,6 +279,6 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     // Ensure warnings is always an array — AI SDK v6's embedMany spreads
     // result.warnings and crashes if it's undefined.
     const warnings = result.warnings ?? [];
-    return { ...result, warnings } as Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>;
+    return { ...result, warnings } as Awaited<ReturnType<EmbeddingModelV4['doEmbed']>>;
   }
 }

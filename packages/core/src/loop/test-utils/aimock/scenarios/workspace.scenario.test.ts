@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { stepCountIs } from '@internal/ai-v7';
 import { it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';

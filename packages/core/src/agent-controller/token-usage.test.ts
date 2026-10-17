@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -94,7 +94,7 @@ describe('step-finish token usage extraction', () => {
           },
         },
       ],
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           calls++;
           if (calls === 2)

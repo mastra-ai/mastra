@@ -6,8 +6,8 @@
  * queue (memoryless agent + `memory.thread`) or because the model asked for an
  * unknown tool.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -18,7 +18,7 @@ import { createDurableAgent } from '../create-durable-agent';
 
 function toolCallThenText(toolName: string) {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       const meta = { type: 'response-metadata', id: `id-${calls}`, modelId: 'mock', timestamp: new Date(0) } as const;
@@ -62,7 +62,7 @@ async function run(toolName: string, agentId: string) {
     id: agentId,
     name: agentId,
     instructions: 'test',
-    model: toolCallThenText(toolName) as LanguageModelV2,
+    model: toolCallThenText(toolName) as LanguageModelV4,
   });
   const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: new EventEmitterPubSub() });
   void new Mastra({ agents: { [agentId]: durableAgent }, logger: false });

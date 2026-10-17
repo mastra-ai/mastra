@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -62,7 +62,7 @@ function buildAgentCallingTool(id: string, toolCallId: string, toolName: string,
     name: id,
     description: 'Asks the user things.',
     instructions: 'Use your tools.',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doStream: async () => {
         step += 1;
         return streamOf(
@@ -302,7 +302,7 @@ describe('tool-call-resumed chunk (#24280)', () => {
       id: 'supervisor',
       name: 'supervisor',
       instructions: 'Delegate.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           step += 1;
           if (step === 1) {

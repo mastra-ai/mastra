@@ -1,4 +1,4 @@
-import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
+import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider';
 import { describe, expectTypeOf, it } from 'vitest';
 import { Classifier } from '../classifier';
 import { Mastra } from './index';

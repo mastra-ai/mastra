@@ -5,7 +5,7 @@
  * (issue #20646) must still apply on top of whatever the caller returns.
  */
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { InMemoryServerCache } from '../../cache';
 import { CachingPubSub } from '../../events/caching-pubsub';
@@ -19,7 +19,7 @@ const makeAgent = () =>
     id: 'inner',
     name: 'inner',
     instructions: 'x',
-    model: new MockLanguageModelV2({}),
+    model: new MockLanguageModelV4({}),
   });
 
 const cacheKeyFor = (topic: string) => `pubsub:${topic}`;

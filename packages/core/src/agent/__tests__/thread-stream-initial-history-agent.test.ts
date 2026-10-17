@@ -12,7 +12,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -20,7 +20,7 @@ const threadId = 'history-agent-thread';
 const resourceId = 'history-agent-user';
 
 function model() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const text = JSON.stringify(prompt);
       const callTool = text.includes('use the tool') && !text.includes('"type":"tool-result"');

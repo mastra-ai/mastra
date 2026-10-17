@@ -10,7 +10,7 @@ import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { MockLanguageModelV2 } from './mock-model';
+import { MockLanguageModelV4 } from './mock-model';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -42,7 +42,7 @@ afterEach(() => {
 
 it('parts saved while history is being recalled are not sent again', async () => {
   const midStream = deferred();
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

@@ -3,8 +3,8 @@
  * steps are separated by step-start parts, not one message per iteration (#26332).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -16,7 +16,7 @@ import { createDurableAgent } from '../create-durable-agent';
 
 function createToolThenTextModel(toolName: string, toolArgs: object, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount += 1;
       const stream: ReadableStream<any> =
@@ -82,7 +82,7 @@ describe('DurableAgent multi-step turn storage (#26332)', () => {
         id: `turn-${engine}`,
         name: `Turn ${engine}`,
         instructions: 'Get weather information.',
-        model: createToolThenTextModel('weatherTool', { location: 'Toronto' }, 'It is sunny.') as LanguageModelV2,
+        model: createToolThenTextModel('weatherTool', { location: 'Toronto' }, 'It is sunny.') as LanguageModelV4,
         tools: { weatherTool },
         memory,
       });

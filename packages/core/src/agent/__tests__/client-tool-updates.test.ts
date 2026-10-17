@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 /**
  * A client tool leaves the stored assistant turn with a pending call. The client then sends the
@@ -16,7 +16,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model'
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function createModel(prompts: any[], firstTurn: 'client-call' | 'text') {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       prompts.push(prompt);
       const callsTool = firstTurn === 'client-call' && prompts.length === 1;

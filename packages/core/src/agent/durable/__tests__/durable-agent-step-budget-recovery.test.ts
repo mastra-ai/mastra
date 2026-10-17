@@ -21,7 +21,7 @@
  * from the snapshot, not from memory.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../../evals';
@@ -42,7 +42,7 @@ type Probe = { modelCalls: number; started: number[] };
 // A pure function of the prompt, like the harness's script model. `block` parks the
 // given model call (1-based) on a test-controlled promise.
 function createStepModel(count: number, probe: Probe, block?: { call: number; gate: Gate }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       probe.modelCalls++;
       if (block && probe.modelCalls === block.call) await block.gate.wait();

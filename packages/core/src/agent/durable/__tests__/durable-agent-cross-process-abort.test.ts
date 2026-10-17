@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -17,7 +17,7 @@ import type { RunRegistryEntry } from '../types';
  * before the abort lands and the test passes for the wrong reason.
  */
 function createHangingModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
       stream: new ReadableStream({
         start(controller) {
@@ -165,7 +165,7 @@ describe('DurableAgent cross-process abort', () => {
       id: 'cross-process-abort-agent',
       name: 'cross-process-abort-agent',
       instructions: 'test',
-      model: createHangingModel() as unknown as LanguageModelV2,
+      model: createHangingModel() as unknown as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent, pubsub });
     new Mastra({ agents: { 'cross-process-abort-agent': durableAgent as any }, storage, logger: false });

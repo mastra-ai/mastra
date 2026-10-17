@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -13,7 +13,7 @@ import { Agent } from '../agent';
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function textModel(text = 'ok') {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -38,7 +38,7 @@ function textModel(text = 'ok') {
 /** First call asks for `toolName`, later calls answer with text. */
 function toolCallingModel(toolName: string, input: Record<string, unknown> = {}) {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       const parts =

@@ -7,8 +7,8 @@
  */
 import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+  MockLanguageModelV4,
+} from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -61,7 +61,7 @@ describe('DurableAgent default error processors retry Gemini MALFORMED_FUNCTION_
 
   function createAgent(streams: Array<() => ReturnType<typeof convertArrayToReadableStreamV3>>) {
     let calls = 0;
-    const model = new MockLanguageModelV3({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         const next = streams[Math.min(calls, streams.length - 1)]!;
         calls++;

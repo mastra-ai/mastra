@@ -1,4 +1,5 @@
-import type { FilePart, TextPart, UserModelMessage } from '@internal/ai-sdk-v5';
+import { flattenFileData } from '../stream/aisdk/v5/compat/content';
+import type { FilePart, TextPart, UserModelMessage } from '@internal/ai-v7';
 
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from './message-list/state/types';
@@ -380,7 +381,8 @@ function contentsToSignalParts(contents: AgentSignalContents): SignalPart[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
   return contents.map(part => {
     if (part.type === 'file') {
-      const data = part.data instanceof URL ? part.data.toString() : convertDataContentToBase64String(part.data);
+      const flat = flattenFileData(part.data);
+      const data = flat === undefined ? '' : flat instanceof URL ? flat.toString() : convertDataContentToBase64String(flat);
       return {
         type: 'file',
         data,

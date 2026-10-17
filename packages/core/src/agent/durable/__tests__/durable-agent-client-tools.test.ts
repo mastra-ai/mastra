@@ -14,7 +14,7 @@
  * while a client call is outstanding (the run has ended).
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -150,7 +150,7 @@ describe('T33 client tools (plain, durable, evented)', () => {
  */
 function createClientToolModel() {
   const call = toolCallTape('askClient', { question: 'colour?' });
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream(call as any[]),
       rawCall: { rawPrompt: null, rawSettings: {} },

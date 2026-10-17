@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 it('does not persist mastra__authToken while an evented agent waits for approval', async () => {
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -56,7 +56,7 @@ it('does not persist mastra__authToken while an evented agent waits for approval
       id: 'evented-token-agent',
       name: 'evented token agent',
       instructions: 'Delete the file.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { deleteFile },
     }),
     pubsub,

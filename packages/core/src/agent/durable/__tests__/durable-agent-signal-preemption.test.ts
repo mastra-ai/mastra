@@ -1,5 +1,5 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../../evals';
@@ -15,7 +15,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
 
-function answer(): LanguageModelV2StreamPart[] {
+function answer(): LanguageModelV4StreamPart[] {
   return [
     { type: 'stream-start', warnings: [] },
     { type: 'text-start', id: 'answer' },
@@ -131,7 +131,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       const onAbort = vi.fn();
       const onError = vi.fn();
       const onStepFinish = vi.fn();
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           if (!abortSignal) throw new Error('Expected model abort signal');
@@ -151,7 +151,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           }
           return {
             warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'stream-start', warnings: [] });
                 controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
@@ -269,7 +269,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         name: 'Delayed delivery',
         instructions: 'Test',
         memory,
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async ({ prompt, abortSignal }) => {
             prompts.push(prompt);
             if (prompts.length > 1) {
@@ -278,7 +278,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
             }
             return {
               warnings: [],
-              stream: new ReadableStream<LanguageModelV2StreamPart>({
+              stream: new ReadableStream<LanguageModelV4StreamPart>({
                 start(controller) {
                   controller.enqueue({ type: 'stream-start', warnings: [] });
                   controller.enqueue({ type: 'reasoning-start', id: 'delayed' });
@@ -347,7 +347,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     const memory = new MockMemory();
     const structure = new StructuredOutputProcessor({
       schema: z.object({ answer: z.string() }),
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           structuringPrompts.push(prompt);
           return {
@@ -369,13 +369,13 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       instructions: 'Test',
       memory,
       outputProcessors: [structure],
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
           return {
             warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'stream-start', warnings: [] });
                 controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
@@ -453,14 +453,14 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           },
         },
       ],
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           calls++;
           if (calls === 2)
             return {
               warnings: [],
-              stream: new ReadableStream<LanguageModelV2StreamPart>({
+              stream: new ReadableStream<LanguageModelV4StreamPart>({
                 start(controller) {
                   controller.enqueue({ type: 'stream-start', warnings: [] });
                   controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
@@ -540,13 +540,13 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       name: 'Processor barrier',
       instructions: 'Test',
       memory,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           if (prompts.length > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
           return {
             warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'stream-start', warnings: [] });
                 controller.enqueue({ type: 'reasoning-start', id: 'held' });
@@ -627,7 +627,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       name: 'Input barrier',
       instructions: 'Test',
       memory,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           prompts.push(prompt);
           return { stream: convertArrayToReadableStream(answer()), warnings: [] };
@@ -697,12 +697,12 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       name: 'Between steps',
       instructions: 'Test',
       memory,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           prompts.push(prompt);
           if (prompts.length > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
           return {
-            stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
               { type: 'stream-start', warnings: [] },
               { type: 'tool-call', toolCallId: 'call-1', toolName: 'probe', input: '{}' },
               {
@@ -768,7 +768,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           },
         },
       ],
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           if (!abortSignal) throw new Error('Expected abort signal');
@@ -869,7 +869,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
             execute: async () => ({ calls: ++toolCalls }),
           }),
         },
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async ({ prompt, abortSignal }) => {
             prompts.push(prompt);
             requestSignal = abortSignal;
@@ -892,7 +892,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
             if (prompts.length > 2) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
             return {
               warnings: [],
-              stream: new ReadableStream<LanguageModelV2StreamPart>({
+              stream: new ReadableStream<LanguageModelV4StreamPart>({
                 start(controller) {
                   controller.enqueue({ type: 'stream-start', warnings: [] });
                   controller.enqueue({ type: 'reasoning-start', id: 'race' });
@@ -1003,12 +1003,12 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         name: 'Transformed reasoning',
         instructions: 'Test',
         memory: new MockMemory(),
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async ({ abortSignal }) => {
             if (++calls > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
             return {
               warnings: [],
-              stream: new ReadableStream<LanguageModelV2StreamPart>({
+              stream: new ReadableStream<LanguageModelV4StreamPart>({
                 start(controller) {
                   controller.enqueue({ type: 'stream-start', warnings: [] });
                   controller.enqueue({ type: 'reasoning-start', id: 'raw' });
@@ -1080,13 +1080,13 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       name: 'Queued timeout precedence',
       instructions: 'Test',
       memory,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ abortSignal }) => {
           if (++requests > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
           requestSignal = abortSignal;
           return {
             warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'stream-start', warnings: [] });
                 controller.enqueue({ type: 'reasoning-start', id: 'queued-timeout' });
@@ -1163,7 +1163,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     const initialFailure = barrier();
     const onStepFinish = vi.fn();
     const memory = new MockMemory();
-    const primary = new MockLanguageModelV2({
+    const primary = new MockLanguageModelV4({
       modelId: 'primary',
       doStream: async () => {
         primaryCalls++;
@@ -1177,14 +1177,14 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         };
       },
     });
-    const fallback = new MockLanguageModelV2({
+    const fallback = new MockLanguageModelV4({
       modelId: 'fallback',
       doStream: async ({ prompt, abortSignal }) => {
         prompts.push(prompt);
         if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
         return {
           warnings: [],
-          stream: new ReadableStream<LanguageModelV2StreamPart>({
+          stream: new ReadableStream<LanguageModelV4StreamPart>({
             start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
               controller.enqueue({ type: 'reasoning-start', id: 'fallback' });
@@ -1266,7 +1266,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         name: 'Accepted reasoning',
         instructions: 'Test',
         memory,
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async ({ prompt, abortSignal }) => {
             prompts.push(prompt);
             requestSignal ??= abortSignal;
@@ -1406,7 +1406,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
             },
           }),
         },
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async ({ prompt, abortSignal }) => {
             prompts.push(prompt);
             if (!abortSignal) throw new Error('Expected abort signal');
@@ -1414,7 +1414,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
             if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
             return {
               warnings: [],
-              stream: new ReadableStream<LanguageModelV2StreamPart>({
+              stream: new ReadableStream<LanguageModelV4StreamPart>({
                 start(controller) {
                   controller.enqueue({ type: 'stream-start', warnings: [] });
                   if (boundary === 'text') controller.enqueue({ type: 'text-start', id: 'protected' });

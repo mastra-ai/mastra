@@ -1,16 +1,6 @@
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { openai as openai_v6 } from '@ai-sdk/openai-v6';
-import { openai as openai_v7 } from '@ai-sdk/openai-v7';
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV4,
-  MockLanguageModelV4,
-} from '@internal/ai-v7/test';
+import { openai as openai_v5, openai as openai_v6, openai as openai_v7 } from '@ai-sdk/openai';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4, convertArrayToReadableStream as convertArrayToReadableStreamV3, convertArrayToReadableStream as convertArrayToReadableStreamV4 } from '@internal/ai-v7/test';
 
 export type MockModelSpecVersion = 'v2' | 'v3' | 'v4';
 
@@ -30,7 +20,7 @@ export function getOpenAIModel(
 
 export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
   if (version === 'v2') {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -69,7 +59,7 @@ export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
       }),
     });
   } else if (version === 'v3') {
-    return new MockLanguageModelV3({
+    return new MockLanguageModelV4({
       doGenerate: async () => ({
         finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
@@ -158,7 +148,7 @@ export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
 
 export function getDummyResponseModel(version: MockModelSpecVersion) {
   if (version === 'v2') {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async _options => ({
         text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
         finishReason: 'stop',
@@ -202,7 +192,7 @@ export function getDummyResponseModel(version: MockModelSpecVersion) {
       }),
     });
   } else if (version === 'v3') {
-    return new MockLanguageModelV3({
+    return new MockLanguageModelV4({
       doGenerate: async _options => ({
         finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
@@ -299,7 +289,7 @@ export function getDummyResponseModel(version: MockModelSpecVersion) {
 
 export function getEmptyResponseModel(version: MockModelSpecVersion) {
   if (version === 'v2') {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async _options => ({
         text: undefined,
         finishReason: 'stop',
@@ -331,7 +321,7 @@ export function getEmptyResponseModel(version: MockModelSpecVersion) {
       }),
     });
   } else if (version === 'v3') {
-    return new MockLanguageModelV3({
+    return new MockLanguageModelV4({
       doGenerate: async _options => ({
         finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
@@ -405,7 +395,7 @@ export function getEmptyResponseModel(version: MockModelSpecVersion) {
 export function getErrorResponseModel(version: MockModelSpecVersion) {
   if (version === 'v2') {
     // Model throws immediately before emitting any part
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async _options => {
         throw new Error('Immediate interruption');
       },
@@ -415,7 +405,7 @@ export function getErrorResponseModel(version: MockModelSpecVersion) {
     });
   } else if (version === 'v3') {
     // v3: Model throws immediately before emitting any part
-    return new MockLanguageModelV3({
+    return new MockLanguageModelV4({
       doGenerate: async _options => {
         throw new Error('Immediate interruption');
       },
@@ -437,5 +427,5 @@ export function getErrorResponseModel(version: MockModelSpecVersion) {
 }
 
 // Re-export mock classes for direct use in tests
-export { MockLanguageModelV2, MockLanguageModelV3, MockLanguageModelV4 };
+export { MockLanguageModelV4, MockLanguageModelV4, MockLanguageModelV4 };
 export { convertArrayToReadableStream, convertArrayToReadableStreamV3, convertArrayToReadableStreamV4 };

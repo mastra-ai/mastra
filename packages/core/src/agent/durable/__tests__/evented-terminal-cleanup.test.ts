@@ -14,8 +14,8 @@
  * `recoverActiveRuns()` stops re-executing it.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -26,7 +26,7 @@ import { createEventedAgent } from '../create-evented-agent';
 import type { EventedAgent } from '../evented-agent';
 
 function createTextStreamModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -42,18 +42,18 @@ function createTextStreamModel(text: string) {
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 function createFailingModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       throw new Error('model exploded');
     },
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
-function createSetup(model: LanguageModelV2, pubsub: EventEmitterPubSub) {
+function createSetup(model: LanguageModelV4, pubsub: EventEmitterPubSub) {
   const baseAgent = new Agent({
     id: 'evented-cleanup-agent',
     name: 'Evented Cleanup Agent',
