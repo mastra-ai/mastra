@@ -2,6 +2,7 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
+import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
 
 function createInMemoryStorage(): InMemoryMemory {
@@ -115,5 +116,49 @@ describe('ObservationalMemory.settled', () => {
 
     await expect(settled).resolves.toBeUndefined();
     expect((om as any).pendingBackgroundWork.size).toBe(0);
+  });
+
+  it('joins a buffered reflection', async () => {
+    const gate = deferred();
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      observation: { model: createNoopModel('mock-observer'), messageTokens: 1000 },
+      reflection: {
+        model: new MockLanguageModelV2({
+          modelId: 'gated-reflector',
+          doStream: async () => {
+            await gate.promise;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({ type: 'text-start', id: '1' });
+                  controller.enqueue({ type: 'text-delta', id: '1', delta: '<observations>* r</observations>' });
+                  controller.enqueue({ type: 'text-end', id: '1' });
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  });
+                  controller.close();
+                },
+              }),
+            };
+          },
+        }),
+        observationTokens: 1000,
+        bufferActivation: 0.5,
+      },
+    });
+    const record = await om.getOrCreateRecord('t1', 'r1');
+    // Above the activation point, below the threshold: the step path starts a background reflection.
+    await om.reflector.maybeReflect({ record: { ...record, activeObservations: '* a fact' }, observationTokens: 800 });
+    expect(BufferingCoordinator.asyncBufferingOps.size).toBe(1);
+
+    const settled = om.settled();
+    expect(await isPending(settled)).toBe(true);
+    gate.resolve();
+    await settled;
   });
 });

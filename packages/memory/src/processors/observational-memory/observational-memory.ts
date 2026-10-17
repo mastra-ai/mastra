@@ -857,6 +857,7 @@ export class ObservationalMemory {
       memory: this.memory,
       onReflectionCommitted: config.onReflectionCommitted,
       hooks: this.hooks,
+      trackBackgroundWork: work => this.trackBackgroundWork(work),
     });
 
     // Validate buffer configuration
