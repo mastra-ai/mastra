@@ -8015,23 +8015,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      it('should not call onError for abort errors', async () => {
-        await result.consumeStream();
-        expect(onErrorCalls).toMatchInlineSnapshot(`[]`);
-      });
-
-      it('should call onAbort when the abort signal is triggered', async () => {
-        await result.consumeStream();
-        expect(onAbortCalls).toMatchInlineSnapshot(`
-          [
-            {
-              "steps": [],
-              "text": "Hello",
-            },
-          ]
-        `);
-      });
-
       it('should only stream initial chunks in full stream', async () => {
         expect(await convertAsyncIterableToArray(result.fullStream)).toMatchInlineSnapshot(`
           [
@@ -8266,95 +8249,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
           },
         });
-      });
-
-      it('should not call onError for abort errors', async () => {
-        await result.consumeStream();
-        expect(onErrorCalls).toMatchInlineSnapshot(`[]`);
-      });
-
-      it('should call onAbort when the abort signal is triggered', async () => {
-        await result.consumeStream();
-        expect(onAbortCalls).toMatchInlineSnapshot(`
-          [
-            {
-              "steps": [
-                DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "output": {
-                        "type": "text",
-                        "value": "result1",
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                  ],
-                  "finishReason": undefined,
-                  "providerMetadata": undefined,
-                  "request": {},
-                  "response": {
-                    "headers": undefined,
-                    "id": "id-0",
-                    "messages": [
-                      {
-                        "content": [
-                          {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "providerOptions": {
-                              "mastra": {
-                                "createdAt": 1704067200000,
-                              },
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                    ],
-                    "modelId": "mock-model-id",
-                    "modelProvider": "mock-provider",
-                    "modelVersion": "v4",
-                    "timestamp": 1970-01-01T00:00:00.000Z,
-                  },
-                  "tripwire": undefined,
-                  "usage": {
-                    "inputTokens": 3,
-                    "outputTokens": 10,
-                    "raw": {
-                      "cachedInputTokens": undefined,
-                      "inputTokens": 3,
-                      "outputTokens": 10,
-                      "reasoningTokens": undefined,
-                      "totalTokens": 13,
-                    },
-                    "totalTokens": 13,
-                  },
-                  "warnings": [],
-                },
-              ],
-              "text": "Hello",
-            },
-          ]
-        `);
       });
 
       it('should only stream initial chunks in full stream', async () => {
