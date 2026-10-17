@@ -365,6 +365,7 @@ describe('suspended run in-memory TTL', () => {
     it('forwards to the swept run once another instance registers its resume', async () => {
       const watcher = await watchThread(pubsub, 'thread-1');
       await registerSuspendedRun('run-1', 'thread-1', watcher);
+      const sweptAt = Date.now() + SUSPENDED_RUN_TTL_MS + 1;
       await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
       const { agent, stream } = createWakeableAgent('run-2');
       const registration = watcher.find('run-registered', 'run-1')!;
@@ -375,7 +376,9 @@ describe('suspended run in-memory TTL', () => {
         pubsub,
       );
       try {
-        // Another instance resumed run-1 under the kept lease and announced it.
+        // Another instance resumed run-1 under the kept lease after the sweep and announced it.
+        vi.useFakeTimers({ shouldAdvanceTime: true, now: sweptAt + 1_000 });
+        await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
         await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
           type: registration.type,
           runId: registration.runId,
@@ -455,6 +458,74 @@ describe('suspended run in-memory TTL', () => {
         runId: 'run-1',
       });
       expect(stream).not.toHaveBeenCalled();
+    });
+    it('keeps reporting blocked while a renewal from before the sweep is still pending a lease TTL later', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+
+      // The lease backend applied this renewal but its response has not arrived yet.
+      let landRenewal!: (renewed: boolean) => void;
+      renewLease.mockImplementationOnce(
+        () =>
+          new Promise<boolean>(resolve => {
+            landRenewal = resolve;
+          }),
+      );
+      await vi.waitFor(() => expect(landRenewal).toBeTypeOf('function'));
+
+      const sweptAt = Date.now() + SUSPENDED_RUN_TTL_MS + 1;
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const { agent, stream } = createWakeableAgent('run-2');
+
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: sweptAt + 20_000 });
+      await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+      // A later sweep must not prune the marker while that renewal is outstanding.
+      await registerSuspendedRun('run-3', 'thread-3', await watchThread(pubsub, 'thread-3'));
+
+      await expect(sendToThread(agent)).resolves.toEqual({
+        action: 'blocked',
+        reason: 'thread-blocked',
+        runId: 'run-1',
+      });
+      expect(stream).not.toHaveBeenCalled();
+      landRenewal(true);
+    });
+
+    it('keeps reporting blocked when another instance registration predates the sweep', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      const sweptAt = Date.now() + SUSPENDED_RUN_TTL_MS + 1;
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const { agent, stream } = createWakeableAgent('run-2');
+      const registration = watcher.find('run-registered', 'run-1')!;
+
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      try {
+        // A retained registration from another instance, published before this sweep.
+        vi.useFakeTimers({ shouldAdvanceTime: true, now: sweptAt - 1_000 });
+        await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: registration.type,
+          runId: registration.runId,
+          data: { ...registration.data, sourceId: 'other-instance', streamId: 'run-1-old' },
+        });
+        vi.setSystemTime(sweptAt + 1_000);
+        await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+        await vi.advanceTimersByTimeAsync(10);
+
+        await expect(sendToThread(agent)).resolves.toEqual({
+          action: 'blocked',
+          reason: 'thread-blocked',
+          runId: 'run-1',
+        });
+        expect(watcher.find('signal-enqueued', 'run-1')).toBeUndefined();
+        expect(stream).not.toHaveBeenCalled();
+      } finally {
+        subscription.unsubscribe();
+      }
     });
   });
 

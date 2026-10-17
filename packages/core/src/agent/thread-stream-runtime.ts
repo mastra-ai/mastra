@@ -498,6 +498,8 @@ type AgentThreadRuntimeState = {
    * send loses the lease to a run that no longer exists here.
    */
   sweptLeasedRunIds: Map<string, number>;
+  /** Lease renewals still awaiting a result, by runId. */
+  pendingLeaseRenewals: Map<string, number>;
   /** A dequeued idle message retains its cancellation identity until execution begins. */
   drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
   drainingPendingSignalsByThread: Map<string, { signal: CreatedAgentSignal; cancelled: boolean; handedOff: boolean }>;
@@ -707,6 +709,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     lostRunsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     sweptLeasedRunIds: new Map(),
+    pendingLeaseRenewals: new Map(),
     drainingIdleSignalsByThread: new Map(),
     drainingPendingSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
@@ -817,9 +820,9 @@ export class AgentThreadStreamRuntime {
    */
   #isSweptLeaseOwner(state: AgentThreadRuntimeState, runId: string): boolean {
     const sweptAt = state.sweptLeasedRunIds.get(runId);
-    return (
-      sweptAt !== undefined && !state.threadRunsById.has(runId) && Date.now() - sweptAt <= AGENT_THREAD_LEASE_TTL_MS
-    );
+    if (sweptAt === undefined || state.threadRunsById.has(runId)) return false;
+    // A renewal still in flight may yet extend the kept lease, however old the marker is.
+    return Date.now() - sweptAt <= AGENT_THREAD_LEASE_TTL_MS || state.pendingLeaseRenewals.has(runId);
   }
 
   /**
@@ -852,8 +855,14 @@ export class AgentThreadStreamRuntime {
     if (state.leaseRenewalTimers.has(runId)) return;
     const leaseProvider = this.#getLeaseProvider(pubsub);
     const timer = setInterval(() => {
+      state.pendingLeaseRenewals.set(runId, (state.pendingLeaseRenewals.get(runId) ?? 0) + 1);
       void leaseProvider
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
+        .finally(() => {
+          const pending = (state.pendingLeaseRenewals.get(runId) ?? 1) - 1;
+          if (pending > 0) state.pendingLeaseRenewals.set(runId, pending);
+          else state.pendingLeaseRenewals.delete(runId);
+        })
         .then(renewed => {
           if (!renewed) {
             // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
@@ -2911,6 +2920,7 @@ export class AgentThreadStreamRuntime {
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.sweptLeasedRunIds.clear();
+    state.pendingLeaseRenewals.clear();
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
@@ -3117,7 +3127,9 @@ export class AgentThreadStreamRuntime {
   #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
     const now = Date.now();
     for (const [runId, sweptAt] of state.sweptLeasedRunIds) {
-      if (now - sweptAt > AGENT_THREAD_LEASE_TTL_MS) state.sweptLeasedRunIds.delete(runId);
+      if (now - sweptAt > AGENT_THREAD_LEASE_TTL_MS && !state.pendingLeaseRenewals.has(runId)) {
+        state.sweptLeasedRunIds.delete(runId);
+      }
     }
     for (const [streamId, record] of state.threadRunsByStreamId) {
       if (record.lifecycle !== 'suspended' || record.suspendedAt === undefined) continue;
@@ -4891,15 +4903,18 @@ export class AgentThreadStreamRuntime {
         // redelivery of the dead execution, however held its kept lease looks.
         // Restoring it as active would route sends to a run nothing consumes.
         // Another instance resuming the run registers under its own source id.
+        const registeredAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
         if (!localRecord && this.#isSweptLeaseOwner(state, data.runId)) {
           if (data.sourceId === this.#getSourceId()) {
             discardDeferredRun(data.streamId);
             wake();
             return;
           }
-          state.sweptLeasedRunIds.delete(data.runId);
+          // Only a registration published after the sweep proves a live resume elsewhere;
+          // an older or undated one may be a replay of an execution that has since ended.
+          const sweptAt = state.sweptLeasedRunIds.get(data.runId)!;
+          if (registeredAt !== undefined && registeredAt > sweptAt) state.sweptLeasedRunIds.delete(data.runId);
         }
-        const registeredAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
         // A history subscriber reads registrations published before its
         // history load as backlog: only a held lease makes those runs live.
         const backlog = historyReadAt !== undefined && registeredAt !== undefined && registeredAt <= historyReadAt;
