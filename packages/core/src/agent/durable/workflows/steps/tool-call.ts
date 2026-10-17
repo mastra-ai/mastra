@@ -344,7 +344,7 @@ export function createDurableToolCallStep() {
         requestContext,
         actor,
         getInitData,
-        getStepResult,
+        getStepResultAsync,
       } = params;
 
       // Access pubsub via symbol
@@ -686,7 +686,7 @@ export function createDurableToolCallStep() {
       // Replayed step transcripts supply context only, not messages to persist.
       let contextMessageList = messageList;
       if (!contextMessageList) {
-        const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
         const messageListState = await readMessageListState(params, llmOutput ?? {});
         if (messageListState) {
           contextMessageList = createRunMessageList({

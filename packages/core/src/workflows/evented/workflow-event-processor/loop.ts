@@ -59,7 +59,9 @@ export async function processWorkflowLoop(
     workflowId,
     condition: step.condition,
     runId,
-    stepResults,
+    // The body's latest result only arrives as stepResult, so expose it to the condition's
+    // getStepResult(body) the way the default engine does (handlers/control-flow.ts).
+    stepResults: { ...stepResults, [getEntryId(step.step)]: stepResult },
     state: currentState,
     requestContext: reqContext,
     actor,
