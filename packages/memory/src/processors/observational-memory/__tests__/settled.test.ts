@@ -120,8 +120,9 @@ describe('ObservationalMemory.settled', () => {
 
   it('joins a buffered reflection', async () => {
     const gate = deferred();
+    const storage = createInMemoryStorage();
     const om = new ObservationalMemory({
-      storage: createInMemoryStorage(),
+      storage,
       scope: 'thread',
       observation: { model: createNoopModel('mock-observer'), messageTokens: 1000 },
       reflection: {
@@ -151,14 +152,23 @@ describe('ObservationalMemory.settled', () => {
         bufferActivation: 0.5,
       },
     });
-    const record = await om.getOrCreateRecord('t1', 'r1');
+    const created = await om.getOrCreateRecord('t1', 'r1');
+    await storage.updateActiveObservations({
+      id: created.id,
+      observations: '* a fact',
+      tokenCount: 800,
+      lastObservedAt: new Date(),
+    });
+    const record = (await om.getRecord('t1', 'r1'))!;
     // Above the activation point, below the threshold: the step path starts a background reflection.
-    await om.reflector.maybeReflect({ record: { ...record, activeObservations: '* a fact' }, observationTokens: 800 });
+    await om.reflector.maybeReflect({ record, observationTokens: 800 });
     expect(BufferingCoordinator.asyncBufferingOps.size).toBe(1);
 
     const settled = om.settled();
     expect(await isPending(settled)).toBe(true);
     gate.resolve();
     await settled;
+    expect((await om.getRecord('t1', 'r1'))?.bufferedReflection).toContain('* r');
+    expect((await om.getRecord('t1', 'r1'))?.isBufferingReflection).toBe(false);
   });
 });

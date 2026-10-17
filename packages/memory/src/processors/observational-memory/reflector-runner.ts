@@ -721,11 +721,12 @@ export class ReflectorRunner {
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     registerOp(record.id, 'bufferingReflection');
-    this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
+    const flagSet = this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
     const asyncOp = (async () => {
+      await flagSet;
       let outcome:
         | {
             usage?: ObserveHookUsage;
@@ -788,7 +789,7 @@ export class ReflectorRunner {
 
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
-        this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
+        await this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
       }
