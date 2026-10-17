@@ -75,6 +75,98 @@ const browser = new AgentBrowser({
 
 AgentBrowser uses accessibility tree refs to identify elements. When an agent calls `browser_snapshot`, it receives a text representation of the page with refs like `@e1`, `@e2`, etc. The agent then uses these refs with other tools to interact with elements.
 
+## WebMCP
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+AgentBrowser can call tools that web pages expose through WebMCP, so a site can offer first-class actions (checkout, create order, assign ticket) directly to an agent instead of making it work through the DOM.
+
+WebMCP is opt-in. With `enabled: true`, AgentBrowser injects a small in-page bridge before any page script runs. Attach the browser to an agent with `new Agent({ browser })` and page tools surface automatically — the Agent pulls the tools and the step hook from the browser itself:
+
+```typescript
+const browser = new AgentBrowser({ webmcp: { enabled: true } })
+
+const agent = new Agent({
+  name: 'shop',
+  instructions: '…',
+  model,
+  browser,
+})
+
+await agent.generate('Add 2 of sku-9 to the cart')
+```
+
+Page tools surface as first-class agent tools named `page_<tool_name>`. The wrapper calls through the host-side `callWebMcpTool`, so page execution, origin checks, and TOCTOU protection stay in place. Base `browser_*` tools win on name collision.
+
+The browser contributes this step hook as an input processor, so it composes with your own options. A user-supplied `prepareStep` runs after the browser's processor, sees the merged toolset, and can override anything. If you prefer to compose things yourself, `browser.prepareStep` is also a stable property you can pass to `agent.generate` / `agent.stream` or set in `defaultOptions.prepareStep`.
+
+### Discovery modes
+
+`webmcp.toolDiscovery` chooses when page tools appear in the agent's toolset.
+
+- `'auto'` (default): every tool the current page exposes is merged into the toolset each step. The agent can call `page_<tool>` immediately after `browser_goto` resolves.
+- `'manual'`: no page tools are attached until the agent calls the `browser_webmcp_discover` tool. Pass no arguments to attach every tool, or pass `names` to attach a subset:
+
+  ```typescript
+  const browser = new AgentBrowser({
+    webmcp: { enabled: true, toolDiscovery: 'manual' },
+  })
+  ```
+
+  ```json oxfmt:false
+  { }
+  { "names": ["add_to_cart", "get_cart"] }
+  ```
+
+  The attached tools show up on the next step. Manual mode keeps the prompt small on pages with many tools or when the agent only needs a few.
+
+  Attached tools are dropped on navigation. When the page URL changes the attached set is cleared, matching auto mode's behavior of only ever surfacing tools the current page exposes. The agent re-attaches by calling `browser_webmcp_discover` again on the new page.
+
+Each step the tool list is memoized by the current page URL, so repeat steps on the same page produce the same tool list bytes. Prompt caches are prefix-based: changing the tool list invalidates everything from that point on, so navigation (not every step) is what busts the cache.
+
+### Protocols
+
+Two WebMCP surfaces exist today, and both are listened for when WebMCP is enabled:
+
+- **W3C `navigator.modelContext`** draft (`'w3c'`): pages call `navigator.modelContext.registerTool({...})` or `unregisterTool(name)`. The bridge provides a polyfill with the draft's semantics (duplicate names throw, call arguments are validated against the tool's `inputSchema`) and mirrors registrations into a native implementation when the browser ships one. Pages built on the `@mcp-b/webmcp-polyfill` package register through this same API.
+- **MCP-B Tab transport** (`'mcpb'`): pages that run an MCP server in-page with `McpServer` + `TabServerTransport` from `@mcp-b/transports`. The bridge connects as a real MCP client over `window.postMessage` — handshake, `initialize`, `tools/list`, and `tools/call` — so the page's own server executes the tool and validates its arguments.
+
+Pass `webmcp.protocols` to restrict which surfaces the in-page bridge installs. Omitting it (or passing an empty array) enables all protocols:
+
+```typescript
+new AgentBrowser({ webmcp: { enabled: true, protocols: ['mcpb'] } }) // MCP-B Tab transport only
+new AgentBrowser({ webmcp: { enabled: true, protocols: ['w3c'] } }) // W3C draft only
+```
+
+When a page exposes the same tool name under both surfaces, the W3C registration takes precedence. Tool results from MCP-B servers are unwrapped for the agent: `structuredContent` is returned when present, and a single text content block is parsed as JSON when possible.
+
+### Allowed origins
+
+Pass `webmcp.allowedOrigins` to restrict which page origins the agent can call tools on. When the array is omitted, tools from any origin are allowed. When an allowlist is configured, entries must match the page's origin exactly (scheme + host + port); `file://` pages match a `file://` entry, and `about:blank` and `data:` URLs never match.
+
+```typescript
+new AgentBrowser({
+  webmcp: {
+    enabled: true,
+    allowedOrigins: ['https://shop.example.com', 'https://admin.example.com'],
+  },
+})
+```
+
+If the active page's origin is not in the list, both discovery and tool calls return an error without evaluating anything in the page.
+
+### Tool name prefix
+
+Each page tool is namespaced with `page_` by default. Pass `webmcp.toolPrefix` to change or drop the prefix. Base `browser_*` tools still win on collision.
+
+```typescript
+new AgentBrowser({ webmcp: { enabled: true, toolPrefix: 'shop_' } })
+```
+
 ## Recording
 
 AgentBrowser can opt into Beta browser recording tools:

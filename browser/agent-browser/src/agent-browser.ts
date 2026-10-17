@@ -3,6 +3,7 @@ import {
   ScreencastStreamImpl,
   DEFAULT_THREAD_ID,
   createBrowserRecordingTools,
+  createError,
   resolveLaunchViewport,
 } from '@mastra/core/browser';
 import type {
@@ -40,9 +41,18 @@ import type {
 } from './schemas';
 import { AgentBrowserThreadManager } from './thread-manager';
 import type { CreateAgentBrowserThreadManager } from './thread-manager';
-import { createAgentBrowserTools } from './tools';
-import type { BrowserConfig } from './types';
+import { createAgentBrowserTools, BROWSER_TOOLS } from './tools';
+import { createWebmcpDiscoverTool } from './tools/webmcp-discover';
+import type { BrowserConfig, WebmcpOptions, WebmcpProtocol, WebmcpToolDiscovery } from './types';
 import { getBrowserPid } from './utils';
+import { buildWebMcpInitScript } from './webmcp-bridge';
+import {
+  buildWebMcpPrepareStep,
+  toolIdFor,
+  WebMcpPrepareStepProcessor,
+  WEBMCP_PREPARE_STEP_PROCESSOR_ID,
+} from './webmcp-prepare-step';
+import type { AttachedPageTool, PerThreadCache, WebMcpPrepareStepFn } from './webmcp-prepare-step';
 
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
 export type AgentBrowserConfig = BrowserConfig & {
@@ -66,6 +76,41 @@ export class AgentBrowser extends MastraBrowser {
   private pidLookups = new Set<Promise<void>>();
   private readonly pendingCloseReasons = new Map<string, 'agent' | 'user' | 'process_restart' | 'error'>();
   private readonly activeUrlChangeSources = new Map<string, { url: string; source: 'agent' | 'user' }>();
+  /** Contexts that already have the WebMCP init script installed. */
+  private readonly webMcpInstalledContexts = new WeakSet<object>();
+  /** Resolved WebMCP settings — null when the feature is disabled. */
+  private readonly webMcpSettings: {
+    protocols: WebmcpProtocol[];
+    allowedOrigins: string[] | null;
+    toolDiscovery: WebmcpToolDiscovery;
+    toolPrefix: string;
+  } | null;
+  /**
+   * Per-thread set of manually-attached WebMCP tools (`toolDiscovery: 'manual'`).
+   * Each entry records the page URL the tools were attached from, so a prepare
+   * step can tell "attached for the current page" apart from "stale from a
+   * previous page" without wiping fresh attachments.
+   */
+  private readonly manualAttached = new Map<string, { url: string | null; tools: Map<string, AttachedPageTool> }>();
+  /**
+   * Per-thread memo for the WebMCP prepare-step (tool list memoized by URL
+   * and attached-set). Owned here so `closeThreadSession` can evict a
+   * thread's entry when its session ends. The map stays empty when WebMCP
+   * is disabled.
+   */
+  private readonly webMcpPrepareStepCache = new Map<string, PerThreadCache>();
+  /**
+   * The step hook that makes page WebMCP tools visible to the agent. In `auto`
+   * mode it merges all page tools; in `manual` mode it merges only the tools
+   * the agent attached via `browser_webmcp_discover`. When WebMCP is disabled
+   * it's a no-op.
+   *
+   * You rarely need this directly: `new Agent({ browser })` auto-wires it as
+   * an input processor via {@link getInputProcessors}. Pass it to
+   * `agent.generate(..., { prepareStep })` only if you want to compose it
+   * with other logic yourself.
+   */
+  readonly prepareStep: WebMcpPrepareStepFn;
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
@@ -74,6 +119,17 @@ export class AgentBrowser extends MastraBrowser {
   constructor(config: AgentBrowserConfig = {}) {
     super(config);
     this.browserConfig = config;
+    this.webMcpSettings = resolveWebMcpSettings(config.webmcp);
+    this.prepareStep = this.webMcpSettings
+      ? buildWebMcpPrepareStep(
+          this,
+          {
+            mode: this.webMcpSettings.toolDiscovery,
+            prefix: this.webMcpSettings.toolPrefix,
+          },
+          this.webMcpPrepareStepCache,
+        )
+      : noopPrepareStep;
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
@@ -103,6 +159,9 @@ export class AgentBrowser extends MastraBrowser {
         // `isRemoteThreadBrowser`.
         this.setupCloseListenerForThread(manager, threadId, this.isRemoteThreadBrowser());
       },
+      // Awaited before any page navigates (including restored tabs) so the
+      // WebMCP init script applies to every document in the context.
+      onBrowserLaunched: (manager: BrowserManager) => this.installWebMcpBridge(manager),
     };
     const createTm =
       config.createThreadManager ??
@@ -209,6 +268,9 @@ export class AgentBrowser extends MastraBrowser {
     // Register the shared manager with ThreadManager
     this.threadManager.setSharedManager(this.sharedManager);
 
+    // Install the WebMCP bridge on the shared context, before any page scripts run.
+    await this.installWebMcpBridge(this.sharedManager);
+
     // Set up close listeners to detect external browser closure.
     // A resolved `cdpUrl` means we connected to an existing (remote/container)
     // browser we do not own — don't capture its PID (issue #23588).
@@ -292,6 +354,14 @@ export class AgentBrowser extends MastraBrowser {
       await this.sharedManager.close();
     }
     this.sharedManager = null;
+
+    // Drop all WebMCP state. closeThreadSession evicts per-thread, but a
+    // caller that only ever calls `browser.close()` would otherwise leave
+    // stale caches and attached-tool records around; and if the AgentBrowser
+    // is relaunched to the same URL, those records would reappear from a
+    // completely different browser session.
+    this.webMcpPrepareStepCache.clear();
+    this.manualAttached.clear();
   }
 
   override async closeThreadSession(threadId: string): Promise<void> {
@@ -300,6 +370,11 @@ export class AgentBrowser extends MastraBrowser {
       const state = this.getBrowserStateForManager(manager, threadId);
       if (state) this.threadManager.updateBrowserState(threadId, state);
     }
+    // Evict per-thread WebMCP state so a long-lived server doesn't retain
+    // one PerThreadCache (plus its generated tool closures) and one
+    // attached-tool record for every thread it ever saw.
+    this.webMcpPrepareStepCache.delete(threadId);
+    this.manualAttached.delete(threadId);
     await super.closeThreadSession(threadId);
   }
 
@@ -346,12 +421,22 @@ export class AgentBrowser extends MastraBrowser {
 
   /**
    * Get the browser tools for this provider.
-   * Returns 16 flat tools for browser automation.
+   *
+   * Returns 16 flat tools for browser automation, plus `browser_webmcp_discover`
+   * when WebMCP is enabled with `toolDiscovery: 'manual'`, plus the recording
+   * tools when configured.
+   *
+   * In `toolDiscovery: 'auto'` mode no WebMCP tool is added — the agent sees
+   * page tools directly via {@link prepareStep}, which the caller must pass to
+   * `agent.generate(...)`.
    */
   getTools(): Record<string, Tool<any, any>> {
     const tools = createAgentBrowserTools(this);
     if (this.browserConfig.recording) {
       Object.assign(tools, createBrowserRecordingTools(this, this.browserConfig.recording));
+    }
+    if (this.webMcpSettings?.toolDiscovery === 'manual') {
+      Object.assign(tools, { [BROWSER_TOOLS.WEBMCP_DISCOVER]: createWebmcpDiscoverTool(this) });
     }
 
     const exclude = this.browserConfig.excludeTools;
@@ -361,6 +446,26 @@ export class AgentBrowser extends MastraBrowser {
       }
     }
     return tools;
+  }
+
+  /**
+   * Browser input processors. Extends the base set (browser context) with the
+   * WebMCP prepare-step processor when WebMCP is enabled, so page tools
+   * surface each step for `new Agent({ browser })` without the user wiring
+   * `prepareStep` themselves. Skipped when the user already configured a
+   * processor with the same id.
+   */
+  getInputProcessors(
+    configuredProcessors: Parameters<MastraBrowser['getInputProcessors']>[0] = [],
+    options: Parameters<MastraBrowser['getInputProcessors']>[1] = {},
+  ): ReturnType<MastraBrowser['getInputProcessors']> {
+    const processors = super.getInputProcessors(configuredProcessors, options);
+    if (!this.webMcpSettings) return processors;
+    const hasProcessor = configuredProcessors.some(
+      p => typeof p === 'object' && p != null && 'id' in p && p.id === WEBMCP_PREPARE_STEP_PROCESSOR_ID,
+    );
+    if (hasProcessor) return processors;
+    return [...processors, new WebMcpPrepareStepProcessor(this.prepareStep)];
   }
 
   // ---------------------------------------------------------------------------
@@ -1514,7 +1619,321 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // 17. browser_close - Close browser
+  // 17. browser_webmcp - WebMCP tool discovery and invocation
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Install the WebMCP in-page bridge on a browser context, once per context.
+   * Called (and awaited) from onBrowserLaunched / doLaunch so the bridge is in
+   * place before any document loads, including restored tabs.
+   */
+  private async installWebMcpBridge(manager: BrowserManager): Promise<void> {
+    if (!this.webMcpSettings) return;
+    try {
+      const context = manager.getContext();
+      if (!context) return;
+      if (this.webMcpInstalledContexts.has(context as unknown as object)) return;
+      this.webMcpInstalledContexts.add(context as unknown as object);
+      await context.addInitScript({ content: buildWebMcpInitScript(this.webMcpSettings.protocols) });
+    } catch (error) {
+      this.logger?.warn('[AgentBrowser] Failed to install WebMCP bridge', { error });
+    }
+  }
+
+  private originIsAllowed(url: string): boolean {
+    // Feature disabled entirely — callers must check `webMcpSettings` first,
+    // but return false here as a safety net.
+    if (!this.webMcpSettings) return false;
+    const allowed = this.webMcpSettings.allowedOrigins;
+    if (!allowed || allowed.length === 0) return true;
+    const origin = normalizedOrigin(url);
+    if (origin === null) return false;
+    // `about:blank` and `data:` URLs have no origin an allowlist entry could match.
+    if (origin === 'null' || origin === 'about:blank') return false;
+    return allowed.includes(origin);
+  }
+
+  /**
+   * Origin the in-page bridge must still be on when the evaluate callback runs.
+   *
+   * The host-side `originIsAllowed(page.url())` check races with navigation
+   * (TOCTOU): the page can navigate itself — or another caller can run
+   * `browser_goto` — between reading the URL and the `evaluate` executing in
+   * the (new) document. When an allowlist is configured, we pass the origin we
+   * validated into the page and re-check it against `location.origin` before
+   * touching the bridge, so the race fails closed. Returns `null` when no
+   * allowlist is configured (every origin is permitted, so there is nothing to
+   * enforce).
+   */
+  private expectedWebMcpOrigin(url: string): string | null {
+    const allowed = this.webMcpSettings?.allowedOrigins;
+    if (!allowed || allowed.length === 0) return null;
+    return normalizedOrigin(url);
+  }
+
+  async listWebMcpTools(threadId?: string): Promise<
+    | {
+        success: true;
+        origin: string;
+        tools: Array<{
+          name: string;
+          source: 'w3c' | 'mcpb';
+          description: string | null;
+          inputSchema: unknown;
+        }>;
+        hint: string;
+      }
+    | BrowserToolError
+  > {
+    if (!this.webMcpSettings) {
+      return createError(
+        'browser_error',
+        'WebMCP is not enabled on this AgentBrowser.',
+        'Pass `webmcp: { enabled: true }` in the AgentBrowser config to enable WebMCP tool discovery.',
+      );
+    }
+    try {
+      const page = await this.getPage(threadId);
+      const url = page.url();
+      if (!this.originIsAllowed(url)) {
+        return createError(
+          'browser_error',
+          `WebMCP tools from "${safeOrigin(url)}" are not allowed by configuration.`,
+          'Navigate to an allowed origin, or add this origin to webmcp.allowedOrigins.',
+        );
+      }
+      const tools = await page.evaluate(
+        async ({ expectedOrigin }) => {
+          // Re-check the origin in-page: the host-side allowlist check raced
+          // with any navigation that happened after `page.url()` was read.
+          if (expectedOrigin !== null) {
+            const loc = (globalThis as unknown as { location: { protocol: string; origin: string } }).location;
+            const pageOrigin = loc.protocol === 'file:' ? 'file://' : loc.origin;
+            if (pageOrigin !== expectedOrigin) {
+              throw new Error(
+                `WebMCP blocked: the page navigated to "${pageOrigin}" after the origin allowlist check for "${expectedOrigin}"`,
+              );
+            }
+          }
+          const bridge = (globalThis as unknown as { __mastraWebMcp?: { list: () => Promise<unknown> } })
+            .__mastraWebMcp;
+          return bridge ? await bridge.list() : [];
+        },
+        { expectedOrigin: this.expectedWebMcpOrigin(url) },
+      );
+      const list = Array.isArray(tools)
+        ? (tools as Array<{ name: string; source: 'w3c' | 'mcpb'; description: string | null; inputSchema: unknown }>)
+        : [];
+      return {
+        success: true,
+        origin: safeOrigin(url),
+        tools: list,
+        hint:
+          list.length === 0
+            ? 'No WebMCP tools are registered on the current page. Navigate to a page that exposes them, or use the standard browser tools.'
+            : 'Call these tools indirectly via browser_webmcp_discover (manual mode) or wire `browser.prepareStep` and let them appear as first-class page_* tools.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'WebMCP list');
+    }
+  }
+
+  async callWebMcpTool(
+    input: { toolName: string; args?: unknown },
+    threadId?: string,
+  ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
+    if (!this.webMcpSettings) {
+      return createError(
+        'browser_error',
+        'WebMCP is not enabled on this AgentBrowser.',
+        'Pass `webmcp: { enabled: true }` in the AgentBrowser config to enable WebMCP tool discovery.',
+      );
+    }
+    try {
+      const page = await this.getPage(threadId);
+      const url = page.url();
+      if (!this.originIsAllowed(url)) {
+        return createError(
+          'browser_error',
+          `WebMCP tools from "${safeOrigin(url)}" are not allowed by configuration.`,
+          'Navigate to an allowed origin, or add this origin to webmcp.allowedOrigins.',
+        );
+      }
+      const result = await page.evaluate(
+        async ({ name, args, expectedOrigin }) => {
+          // Re-check the origin in-page: the host-side allowlist check raced
+          // with any navigation that happened after `page.url()` was read.
+          if (expectedOrigin !== null) {
+            const loc = (globalThis as unknown as { location: { protocol: string; origin: string } }).location;
+            const pageOrigin = loc.protocol === 'file:' ? 'file://' : loc.origin;
+            if (pageOrigin !== expectedOrigin) {
+              throw new Error(
+                `WebMCP blocked: the page navigated to "${pageOrigin}" after the origin allowlist check for "${expectedOrigin}"`,
+              );
+            }
+          }
+          const bridge = (
+            globalThis as unknown as { __mastraWebMcp?: { call: (name: string, args: unknown) => Promise<unknown> } }
+          ).__mastraWebMcp;
+          if (!bridge) throw new Error('WebMCP bridge is not installed on this page');
+          return await bridge.call(name, args);
+        },
+        { name: input.toolName, args: input.args, expectedOrigin: this.expectedWebMcpOrigin(url) },
+      );
+      return {
+        success: true,
+        result,
+        hint: 'WebMCP tool executed. Call browser_snapshot if the page may have changed.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'WebMCP call');
+    }
+  }
+
+  /**
+   * Return the tools the agent has manually attached for the given thread
+   * via `browser_webmcp_discover`. Used by {@link prepareStep} in
+   * `toolDiscovery: 'manual'` mode.
+   */
+  getAttachedWebMcpTools(threadId?: string): AttachedPageTool[] {
+    const key = threadId ?? DEFAULT_THREAD_ID;
+    const record = this.manualAttached.get(key);
+    return record ? [...record.tools.values()] : [];
+  }
+
+  /**
+   * The page URL the tools in {@link getAttachedWebMcpTools} were attached
+   * from, or `null` if the thread has no attached tools. {@link prepareStep}
+   * compares this against the current URL to tell "attached on this page"
+   * apart from "stale from a previous page".
+   */
+  getAttachedWebMcpToolsOrigin(threadId?: string): string | null {
+    const key = threadId ?? DEFAULT_THREAD_ID;
+    return this.manualAttached.get(key)?.url ?? null;
+  }
+
+  /**
+   * Drop every manually attached WebMCP tool for the given thread. Called
+   * automatically by {@link prepareStep} in `toolDiscovery: 'manual'` mode
+   * when the attached set is stale (the page URL has changed since attach),
+   * so tools from a prior page don't survive onto a new one. Public so
+   * callers driving the browser outside an agent run can reset the attached
+   * set themselves.
+   */
+  clearAttachedWebMcpTools(threadId?: string): void {
+    const key = threadId ?? DEFAULT_THREAD_ID;
+    this.manualAttached.delete(key);
+  }
+
+  /**
+   * Attach WebMCP tools from the current page to the agent's toolset.
+   *
+   * Lists the tools the current page exposes, filters to `input.names` when
+   * provided (otherwise attaches every tool), stores them on the browser
+   * instance under the thread, and returns a summary so the agent can see
+   * what became available. The tools surface on the next step via
+   * {@link prepareStep}.
+   */
+  async attachWebMcpTools(
+    input: { names?: string[] } = {},
+    threadId?: string,
+  ): Promise<
+    | {
+        success: true;
+        attached: Array<{ rawName: string; id: string; description: string }>;
+        notFound: string[];
+        hint: string;
+      }
+    | BrowserToolError
+  > {
+    if (!this.webMcpSettings) {
+      return createError(
+        'browser_error',
+        'WebMCP is not enabled on this AgentBrowser.',
+        'Pass `webmcp: { enabled: true, toolDiscovery: "manual" }` in the AgentBrowser config.',
+      );
+    }
+    // Capture the page URL *before* listing so the attached record is bound
+    // to the page that actually supplied the tools. If navigation changes the
+    // page between list and store, the old tools don't get stamped with the
+    // new URL (and vice-versa).
+    const urlBeforeList = await this.getCurrentUrl(threadId);
+    const listed = await this.listWebMcpTools(threadId);
+    if (!('success' in listed) || listed.success !== true) {
+      return listed;
+    }
+    const urlAfterList = await this.getCurrentUrl(threadId);
+    if (urlBeforeList !== urlAfterList) {
+      return createError(
+        'browser_error',
+        'The page navigated while listing WebMCP tools; the attachment was rejected to avoid associating tools with the wrong page.',
+        'Retry browser_webmcp_discover now that the page has settled.',
+      );
+    }
+
+    const prefix = this.webMcpSettings.toolPrefix;
+    const key = threadId ?? DEFAULT_THREAD_ID;
+    const url = urlBeforeList;
+    const existing = this.manualAttached.get(key);
+    const record = existing && existing.url === url ? existing : { url, tools: new Map<string, AttachedPageTool>() };
+
+    const wanted = input.names && input.names.length > 0 ? new Set(input.names) : null;
+    const notFound: string[] = [];
+    if (wanted) {
+      const available = new Set(listed.tools.map(t => t.name));
+      for (const name of wanted) {
+        if (!available.has(name)) notFound.push(name);
+      }
+    }
+
+    // Track whether the attached set changed: a new tool id appeared, or an
+    // existing tool's description or schema differs. If anything changed we
+    // evict the thread's prepare-step cache so the next step sees the updated
+    // tool definitions (the cache key only covers URL + tool ids, so a schema
+    // or description edit under the same name would otherwise go unseen).
+    let attachedSetChanged = false;
+    const attached: Array<{ rawName: string; id: string; description: string }> = [];
+    for (const pageTool of listed.tools) {
+      if (wanted && !wanted.has(pageTool.name)) continue;
+      const id = toolIdFor(pageTool.name, prefix);
+      if (!id) continue;
+      const description =
+        pageTool.description ?? `WebMCP tool "${pageTool.name}" from ${listed.origin} (source: ${pageTool.source}).`;
+      const prev = record.tools.get(pageTool.name);
+      if (
+        !prev ||
+        prev.id !== id ||
+        prev.description !== description ||
+        !deepEqualJson(prev.inputSchema, pageTool.inputSchema)
+      ) {
+        attachedSetChanged = true;
+      }
+      record.tools.set(pageTool.name, {
+        rawName: pageTool.name,
+        id,
+        description,
+        inputSchema: pageTool.inputSchema,
+      });
+      attached.push({ rawName: pageTool.name, id, description });
+    }
+    this.manualAttached.set(key, record);
+    if (attachedSetChanged) {
+      this.webMcpPrepareStepCache.delete(key);
+    }
+
+    return {
+      success: true,
+      attached,
+      notFound,
+      hint:
+        attached.length === 0
+          ? 'No tools were attached. The page may not expose WebMCP tools, or the requested names do not match.'
+          : `Attached ${attached.length} tool(s). They are callable on the next step as e.g. ${attached[0]!.id}.`,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 18. browser_close - Close browser
   // ---------------------------------------------------------------------------
 
   async closeBrowser(): Promise<{ success: true; hint: string } | BrowserToolError> {
@@ -1715,6 +2134,83 @@ export class AgentBrowser extends MastraBrowser {
       windowsVirtualKeyCode: event.windowsVirtualKeyCode,
     });
   }
+}
+
+function safeOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Normalize a URL to the origin string used for WebMCP allowlist matching,
+ * or `null` when the URL cannot be parsed. Node's URL reports
+ * `origin: 'null'` for file: URLs, but pages see `file://` — normalize so
+ * allowlist entries documented as `file://` work.
+ */
+function normalizedOrigin(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'file:' ? 'file://' : parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the WebMCP configuration into a normalized settings object.
+ * WebMCP is opt-in (beta): it only runs with `webmcp: { enabled: true }`.
+ * When enabled, an omitted (or empty) `protocols` array enables every
+ * supported protocol, mirroring how `allowedOrigins` treats omitted/empty
+ * as "no restriction".
+ */
+function resolveWebMcpSettings(opts: WebmcpOptions | undefined): {
+  protocols: WebmcpProtocol[];
+  allowedOrigins: string[] | null;
+  toolDiscovery: WebmcpToolDiscovery;
+  toolPrefix: string;
+} | null {
+  if (opts?.enabled !== true) return null;
+  return {
+    protocols: opts.protocols?.length ? [...new Set(opts.protocols)] : ['mcpb', 'w3c'],
+    allowedOrigins: opts.allowedOrigins ?? null,
+    toolDiscovery: opts.toolDiscovery ?? 'auto',
+    toolPrefix: opts.toolPrefix ?? 'page_',
+  };
+}
+
+/** No-op prepareStep used when WebMCP is disabled, so `browser.prepareStep` is always safe to wire. */
+const noopPrepareStep: WebMcpPrepareStepFn = async () => undefined;
+
+/**
+ * Structural equality for JSON-ish values. Used to detect whether a tool's
+ * `inputSchema` has changed between successive attach calls, so the thread's
+ * prepare-step cache can be invalidated when the agent-visible schema would
+ * otherwise go stale.
+ */
+function deepEqualJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) if (!deepEqualJson(a[i], b[i])) return false;
+    return true;
+  }
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj);
+  const bKeys = Object.keys(bObj);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(bObj, k)) return false;
+    if (!deepEqualJson(aObj[k], bObj[k])) return false;
+  }
+  return true;
 }
 
 export default AgentBrowser;

@@ -30,6 +30,12 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
   resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   /** Callback when a new browser manager is created for a thread */
   onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
+  /**
+   * Callback awaited right after a thread browser launches, before any saved
+   * state is restored (i.e. before any page navigates). Use this for context
+   * setup that must precede the first document, like `addInitScript`.
+   */
+  onBrowserLaunched?: (manager: BrowserManager, threadId: string) => void | Promise<void>;
 }
 
 /**
@@ -49,12 +55,14 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   protected readonly browserConfig: BrowserConfig;
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   protected readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
+  protected readonly onBrowserLaunched?: (manager: BrowserManager, threadId: string) => void | Promise<void>;
 
   constructor(config: AgentBrowserThreadManagerConfig) {
     super(config);
     this.browserConfig = config.browserConfig;
     this.resolveCdpUrl = config.resolveCdpUrl;
     this.onBrowserCreated = config.onBrowserCreated;
+    this.onBrowserLaunched = config.onBrowserLaunched;
   }
 
   /**
@@ -113,6 +121,10 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       this.threadManagers.set(threadId, manager);
 
       try {
+        // Context-level setup that must land before any document loads
+        // (e.g. init scripts) — restoring state below navigates pages.
+        await this.onBrowserLaunched?.(manager, threadId);
+
         // Restore browser state if available (before notifying parent to avoid screencast race)
         if (savedState && savedState.tabs.length > 0) {
           this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);

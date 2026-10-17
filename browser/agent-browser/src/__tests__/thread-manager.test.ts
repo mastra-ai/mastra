@@ -299,6 +299,27 @@ describe('AgentBrowserThreadManager', () => {
 
       expect(onBrowserCreated).toHaveBeenCalledWith(expect.any(Object), 'thread-1');
     });
+
+    it('awaits onBrowserLaunched before onBrowserCreated', async () => {
+      const order: string[] = [];
+      const onBrowserLaunched = vi.fn(async () => {
+        // Yield so a non-awaited call would let onBrowserCreated run first.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        order.push('launched');
+      });
+      const onBrowserCreated = vi.fn(() => order.push('created'));
+      const threadManager = new AgentBrowserThreadManager({
+        scope: 'thread',
+        browserConfig: { headless: true },
+        onBrowserLaunched,
+        onBrowserCreated,
+      });
+
+      await threadManager.getManagerForThread('thread-1');
+
+      expect(onBrowserLaunched).toHaveBeenCalledWith(expect.any(Object), 'thread-1');
+      expect(order).toEqual(['launched', 'created']);
+    });
   });
 
   describe('clearAllSessions', () => {
