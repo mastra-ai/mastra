@@ -527,7 +527,7 @@ jobs:
         workspace-tests,
         memory-test,
       ]
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.full_suite == 'true'
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')
     runs-on: starsling-ubuntu-26.04
     permissions:
       actions: read
