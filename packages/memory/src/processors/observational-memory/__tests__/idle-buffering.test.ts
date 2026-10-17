@@ -160,7 +160,9 @@ describe('turn.end() idle buffering', () => {
     await turn.end(finalMessageList);
 
     expect(mockOM.persistMessages).toHaveBeenCalledTimes(1);
-    expect(mockOM.persistMessages).toHaveBeenCalledWith(finalMessageList.get.response.db(), threadId, resourceId);
+    expect(mockOM.persistMessages).toHaveBeenCalledWith(finalMessageList.get.response.db(), threadId, resourceId, {
+      threadExists: false,
+    });
     expect(mockOM.getUnobservedMessages).toHaveBeenCalledWith(finalMessageList.get.all.db(), mockOM._mockRecord);
     expect(mockOM.buffer).toHaveBeenCalledWith(
       expect.objectContaining({ messages: finalMessageList.get.response.db() }),
@@ -359,7 +361,9 @@ describe('turn.end() idle buffering', () => {
     await turn.end();
 
     expect(mockOM.persistMessages).toHaveBeenCalledTimes(1);
-    expect(mockOM.persistMessages).toHaveBeenCalledWith([...unsavedInput, ...unsavedOutput], threadId, resourceId);
+    expect(mockOM.persistMessages).toHaveBeenCalledWith([...unsavedInput, ...unsavedOutput], threadId, resourceId, {
+      threadExists: false,
+    });
     expect(mockOM.buffer).toHaveBeenCalledTimes(1);
   });
 
@@ -448,7 +452,9 @@ describe('22573 idle', () => {
       const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
       await turn.start();
       await turn.end();
-      expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined);
+      expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined, {
+        threadExists: false,
+      });
       if (expected) {
         expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
       } else {
@@ -486,6 +492,7 @@ describe('22573 idle', () => {
             list.get.all.db(),
             'idle-buffer-thread',
             'idle-buffer-resource',
+            { threadExists: false },
           );
         }
         expect(mockOM.buffer).not.toHaveBeenCalled();

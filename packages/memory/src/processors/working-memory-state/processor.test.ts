@@ -1,10 +1,15 @@
 import type { MastraMemory, MemoryConfigInternal, WorkingMemoryTemplate } from '@mastra/core/memory';
+import { MemoryRunState } from '@mastra/core/memory';
 import type {
   ComputeStateSignalArgs,
   ProcessorActiveStateSignal,
   ProcessorStateSignalTracking,
 } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
+
+import { Memory } from '../../index';
 
 import {
   stableWorkingMemoryCacheKey,
@@ -347,5 +352,67 @@ describe('WorkingMemoryStateProcessor', () => {
       expect(result?.mode).toBe('snapshot');
       expect(result?.contents).toBe(next);
     });
+  });
+});
+
+describe('WorkingMemoryStateProcessor storage reads within one run (#27319)', () => {
+  async function setup(scope: 'thread' | 'resource') {
+    const storage = new InMemoryStore();
+    const memory = new Memory({
+      storage,
+      options: { workingMemory: { enabled: true, scope, template: '# Notes\n- item:' } },
+    });
+    const thread = await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'WM',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      },
+    });
+    await memory.updateWorkingMemory({ threadId: 'thread-1', resourceId: 'resource-1', workingMemory: '# Notes\n- a' });
+
+    const runState = new MemoryRunState({ memory, threadId: 'thread-1', resourceId: 'resource-1', thread });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: 'thread-1' },
+      resourceId: 'resource-1',
+      runState: () => runState,
+    });
+
+    const memoryStore = await storage.getStore('memory');
+    const getResourceById = vi.spyOn(memoryStore!, 'getResourceById');
+    const getThreadById = vi.spyOn(memoryStore!, 'getThreadById');
+    const processor = new WorkingMemoryStateProcessor(memory);
+    const compute = () =>
+      processor.computeStateSignal(buildArgs({ requestContext } as Partial<ComputeStateSignalArgs>));
+    return { memory, processor, compute, getResourceById, getThreadById };
+  }
+
+  it('reads resource-scoped working memory once per run and re-reads after an update', async () => {
+    const { memory, compute, getResourceById } = await setup('resource');
+
+    await compute();
+    await compute();
+    expect(getResourceById).toHaveBeenCalledTimes(1);
+
+    await memory.updateWorkingMemory({ threadId: 'thread-1', resourceId: 'resource-1', workingMemory: '# Notes\n- b' });
+    getResourceById.mockClear();
+    const result = await compute();
+    expect(getResourceById).toHaveBeenCalledTimes(1);
+    expect(result?.cacheKey).toBe(stableWorkingMemoryCacheKey({ format: 'markdown', data: '# Notes\n- b' }));
+  });
+
+  it('keeps reading thread-scoped working memory from storage', async () => {
+    const { memory, compute, getThreadById } = await setup('thread');
+
+    await compute();
+    await memory.updateWorkingMemory({ threadId: 'thread-1', resourceId: 'resource-1', workingMemory: '# Notes\n- b' });
+    getThreadById.mockClear();
+    const result = await compute();
+    expect(getThreadById).toHaveBeenCalled();
+    expect(result?.cacheKey).toBe(stableWorkingMemoryCacheKey({ format: 'markdown', data: '# Notes\n- b' }));
   });
 });

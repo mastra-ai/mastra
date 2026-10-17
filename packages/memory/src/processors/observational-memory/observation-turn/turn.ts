@@ -1,4 +1,5 @@
-import type { MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { getThreadOMMetadata } from '@mastra/core/memory';
 import type { MemoryRunState } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
@@ -48,6 +49,15 @@ export class ObservationTurn {
 
   /** Generation count at turn start — used to detect if reflection happened during the turn. */
   private _generationCountAtStart = -1;
+
+  /** Whether the thread is known to exist in storage, so saves can skip the existence check. */
+  private _threadExists = false;
+
+  /** Thread OM cursor cached for the observation state it was read under. */
+  private _cursorCache?: {
+    key: string;
+    cursor: Promise<{ createdAt: string; id: string } | undefined>;
+  };
 
   /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
   memory?: MemoryContextProvider;
@@ -150,6 +160,7 @@ export class ObservationTurn {
     this._record = await this.om.getOrCreateRecord(this.threadId, this.resourceId);
     runState?.set(`observational-memory:record:${this.threadId}:${this.resourceId ?? ''}`, this._record);
     this._generationCountAtStart = this._record.generationCount;
+    this._threadExists = !!runState?.thread && runState.thread.id === this.threadId;
     this.memory = memory;
 
     if (memory) {
@@ -223,7 +234,7 @@ export class ObservationTurn {
     const unsavedOutput = messageList.get.response.db();
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+      await this.persistMessages(unsavedMessages);
     }
 
     // When the agent goes idle, start buffering any unobserved messages in the background.
@@ -271,6 +282,44 @@ export class ObservationTurn {
    */
   async refreshRecord(): Promise<void> {
     this.setRecord(await this.om.getOrCreateRecord(this.threadId, this.resourceId));
+  }
+
+  /**
+   * Save messages for this turn's thread. After the first save (or when the run
+   * already loaded the thread), the thread is known to exist, so later saves skip
+   * the existence check.
+   * @internal
+   */
+  async persistMessages(messages: MastraDBMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+    await this.om.persistMessages(messages, this.threadId, this.resourceId, { threadExists: this._threadExists });
+    this._threadExists = true;
+  }
+
+  /**
+   * The thread's last observed message cursor. Observations write it right after
+   * committing to the record, so it is cached per record observation state and only
+   * re-read from storage when the turn record reflects a new observation or reflection.
+   * @internal
+   */
+  getLastObservedMessageCursor(): Promise<{ createdAt: string; id: string } | undefined> {
+    const record = this.record;
+    const threadId = record.threadId;
+    if (!threadId) return Promise.resolve(undefined);
+
+    const lastObservedAt = record.lastObservedAt ? new Date(record.lastObservedAt).getTime() : '';
+    const key = [record.id, threadId, record.generationCount, lastObservedAt].join(':');
+    if (this._cursorCache?.key !== key) {
+      const cursor = this.om
+        .getStorage()
+        .getThreadById({ threadId })
+        .then(thread => getThreadOMMetadata(thread?.metadata)?.lastObservedMessageCursor);
+      cursor.catch(() => {
+        if (this._cursorCache?.cursor === cursor) this._cursorCache = undefined;
+      });
+      this._cursorCache = { key, cursor };
+    }
+    return this._cursorCache.cursor;
   }
 
   /**

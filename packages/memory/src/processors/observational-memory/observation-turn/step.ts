@@ -1,5 +1,4 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { isOmModelExecutionError } from '../error';
@@ -281,7 +280,7 @@ export class ObservationStep {
             messageList.add(msg, 'memory');
           }
           try {
-            await om.persistMessages(messagesToSave, threadId, resourceId);
+            await this.turn.persistMessages(messagesToSave);
           } catch (error) {
             restoreDrainedMessages(messageList, newInput, 'input');
             restoreDrainedMessages(messageList, newOutput, 'response');
@@ -298,7 +297,7 @@ export class ObservationStep {
         // these messages later is harmless.
         const pending = [...messageList.get.input.db(), ...messageList.get.response.db()];
         if (pending.length > 0) {
-          await om.persistMessages(pending, threadId, resourceId);
+          await this.turn.persistMessages(pending);
         }
         // The in-flight prompt was just observed, but the model still needs it to answer —
         // protect it (and everything else pending) from cleanup by identity rather than
@@ -394,10 +393,7 @@ export class ObservationStep {
 
     // ── Filter observed messages ──────────────────────────────
     if (!didThresholdCleanup) {
-      const fallbackCursor = this.turn.record.threadId
-        ? getThreadOMMetadata((await om.getStorage().getThreadById({ threadId: this.turn.record.threadId }))?.metadata)
-            ?.lastObservedMessageCursor
-        : undefined;
+      const fallbackCursor = await this.turn.getLastObservedMessageCursor();
 
       const pendingMessageIds = new Set(
         [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
@@ -652,7 +648,7 @@ export class ObservationStep {
       }
 
       if (messagesToSeal.length > 0) {
-        await om.persistMessages(messagesToSeal, threadId, resourceId);
+        await this.turn.persistMessages(messagesToSeal);
       }
     }
 

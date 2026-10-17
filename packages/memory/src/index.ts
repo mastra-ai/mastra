@@ -1087,6 +1087,7 @@ export class Memory extends MastraMemory {
           resourceId,
           workingMemory,
         });
+        this.noteResourceWorkingMemoryWrite(resourceId);
       }
       // For thread scope, the metadata is already saved with the thread
     }
@@ -1296,6 +1297,7 @@ export class Memory extends MastraMemory {
             resourceId,
             workingMemory,
           });
+          this.noteResourceWorkingMemoryWrite(resourceId);
         } else {
           const thread = await this.getThreadById({ threadId });
           if (!thread) {
@@ -1404,6 +1406,17 @@ export class Memory extends MastraMemory {
   }
 
   private updateWorkingMemoryMutexes = new Map<string, Mutex>();
+
+  /**
+   * Per-resource count of working memory writes made through this instance. It is part of
+   * the run-state cache key, so a write mid-run makes later reads in that run load fresh data.
+   */
+  private resourceWorkingMemoryWrites = new Map<string, number>();
+
+  private noteResourceWorkingMemoryWrite(resourceId: string): void {
+    this.resourceWorkingMemoryWrites.set(resourceId, (this.resourceWorkingMemoryWrites.get(resourceId) ?? 0) + 1);
+  }
+
   /**
    * @warning experimental! can be removed or changed at any time
    */
@@ -1524,6 +1537,7 @@ ${workingMemory}`;
           resourceId,
           workingMemory,
         });
+        this.noteResourceWorkingMemoryWrite(resourceId);
 
         if (reason) {
           return { success: true, reason };
@@ -1959,7 +1973,10 @@ ${workingMemory}`;
         return resource?.workingMemory || null;
       };
       workingMemoryData = runState
-        ? await runState.load(`working-memory:resource:${resourceId}`, loadWorkingMemory)
+        ? await runState.load(
+            `working-memory:resource:${resourceId}:${this.resourceWorkingMemoryWrites.get(resourceId) ?? 0}`,
+            loadWorkingMemory,
+          )
         : await loadWorkingMemory();
     } else {
       const thread = runState?.threadLoaded ? runState.thread : await this.getThreadById({ threadId });
@@ -3525,6 +3542,7 @@ Notes:
           resourceId: thread.resourceId,
           workingMemory: priorDestinationResourceWm ?? '',
         });
+        this.noteResourceWorkingMemoryWrite(thread.resourceId);
       } catch (rollbackError) {
         this.logger.error(`Failed to restore resource working memory after ${failedStep} failure`, rollbackError);
       }

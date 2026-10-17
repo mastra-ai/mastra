@@ -37,6 +37,7 @@ import {
   getMemoryTokenBoundary,
   normalizeMessageHistoryConfig,
 } from './message-history-config';
+import type { MemoryRunState } from './run-state';
 import { checkThreadFGA } from './thread-fga';
 import type { CheckThreadFGAOptions } from './thread-fga';
 
@@ -670,16 +671,19 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param threadId - The unique identifier of the thread
    * @param resourceId - The unique identifier of the resource
    * @param memoryConfig - Optional memory configuration
+   * @param runState - Optional run state used to reuse reads within one agent run
    * @returns Promise resolving to working memory data or null if not found
    */
   abstract getWorkingMemory({
     threadId,
     resourceId,
     memoryConfig,
+    runState,
   }: {
     threadId: string;
     resourceId?: string;
     memoryConfig?: MemoryConfigInternal;
+    runState?: MemoryRunState;
   }): Promise<string | null>;
 
   /**

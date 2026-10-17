@@ -348,10 +348,17 @@ export class MessageHistory implements Processor {
    * Also ensures the thread exists (creates if needed).
    *
    * This method can be called externally by other processors (e.g., ObservationalMemory)
-   * that need to save messages incrementally.
+   * that need to save messages incrementally. Callers that already know the thread
+   * exists (e.g. it was loaded or created for the current run) can pass
+   * `threadExists: true` to skip the existence check round trip.
    */
-  async persistMessages(args: { messages: MastraDBMessage[]; threadId: string; resourceId?: string }): Promise<void> {
-    const { messages, threadId, resourceId } = args;
+  async persistMessages(args: {
+    messages: MastraDBMessage[];
+    threadId: string;
+    resourceId?: string;
+    threadExists?: boolean;
+  }): Promise<void> {
+    const { messages, threadId, resourceId, threadExists } = args;
 
     if (messages.length === 0) {
       return;
@@ -368,7 +375,7 @@ export class MessageHistory implements Processor {
     // Ensure thread exists (create if needed) before saving messages.
     // Nothing to write when it already exists: re-writing the row we just read
     // would clobber a title generated concurrently with this save.
-    const thread = await this.storage.getThreadById({ threadId });
+    const thread = threadExists || (await this.storage.getThreadById({ threadId }));
     if (!thread) {
       // Auto-create thread if it doesn't exist
       await this.storage.saveThread({

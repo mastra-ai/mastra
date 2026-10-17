@@ -32,6 +32,7 @@
 
 import { createHash } from 'node:crypto';
 
+import { getMemoryRunState } from '@mastra/core/memory';
 import type { MastraMemory, MemoryConfigInternal, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type {
   ComputeStateSignalArgs,
@@ -57,10 +58,20 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
     const template = await this.memory.getWorkingMemoryTemplate({ memoryConfig: this.memoryConfig });
     if (!template) return;
 
+    const mergedConfig = this.memory.getMergedThreadConfig(this.memoryConfig);
+    const scope = mergedConfig.workingMemory?.scope ?? 'resource';
+
     const data = await this.memory.getWorkingMemory({
       threadId: args.threadId,
       resourceId: args.resourceId,
       memoryConfig: this.memoryConfig,
+      // Resource-scoped reads reuse the run's cached copy across steps; writes through this
+      // memory refresh it. Thread-scoped reads stay uncached because the run's thread
+      // snapshot does not see working memory updates made during the run.
+      runState:
+        scope === 'resource'
+          ? getMemoryRunState(args.requestContext, this.memory, args.threadId, args.resourceId)
+          : undefined,
     });
 
     // Nothing stored yet — no state to broadcast. The setWorkingMemory tool
@@ -71,9 +82,6 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
     const cacheKey = stableWorkingMemoryCacheKey({ format: template.format, data: contents });
     const shouldMakeSnapshot = !args.contextWindow.hasSnapshot;
     if (args.tracking?.currentCacheKey === cacheKey && !shouldMakeSnapshot) return;
-
-    const mergedConfig = this.memory.getMergedThreadConfig(this.memoryConfig);
-    const scope = mergedConfig.workingMemory?.scope ?? 'resource';
 
     const deltaCandidate =
       template.format === 'markdown' && !shouldMakeSnapshot

@@ -386,14 +386,20 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
         // ── Token persistence (processor-specific) ──────────
         // prepare() already counted the current unobserved window and resource context.
+        // The turn record is authoritative within the turn, so the storage write only
+        // needs to land eventually: it is queued behind other OM commits for this key
+        // instead of holding up the model call, and skipped when nothing changed.
         const finalTotalPending = ctx.status.pendingTokens;
-        try {
-          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
-            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
-          );
+        if (turnRecord.pendingMessageTokens !== finalTotalPending) {
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
-        } catch {
-          // Token persistence is intentionally non-fatal for streaming UX.
+          const recordId = turnRecord.id;
+          void this.engine.trackBackgroundWork(
+            runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
+              this.engine.getStorage().setPendingMessageTokens(recordId, finalTotalPending),
+            ).catch(() => {
+              // Token persistence is intentionally non-fatal for streaming UX.
+            }),
+          );
         }
 
         // ── Repro capture (processor-specific) ──────────────
