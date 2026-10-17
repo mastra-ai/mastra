@@ -69,6 +69,24 @@ describe('processOutputResult tripwire on stream()', () => {
     expect(onFinish).toHaveBeenCalledTimes(1);
   });
 
+  it('reports tripwire status as soon as finishReason resolves, before onFinish completes', async () => {
+    let statusWhileFinishing: string | undefined;
+    let finishReasonWhileFinishing: string | undefined;
+    const result = await createAgent().stream('hi', {
+      onFinish: async () => {
+        finishReasonWhileFinishing = await result.finishReason;
+        statusWhileFinishing = result.status;
+      },
+    });
+
+    for await (const _chunk of result.fullStream) {
+      // drain
+    }
+
+    expect(finishReasonWhileFinishing).toBe('other');
+    expect(statusWhileFinishing).toBe('tripwire');
+  });
+
   it('still ends with finish when no processor aborts', async () => {
     const result = await createAgent([]).stream('hi');
 

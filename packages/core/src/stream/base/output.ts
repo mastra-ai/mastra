@@ -1709,6 +1709,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     processorId: error.processorId,
                   };
                   outputResultTripwire = self.#tripwire;
+                  if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                    self.#status = 'tripwire';
+                  }
                   // A tripwire rejects the output without erasing it; keep `text` in sync with
                   // steps/response messages and report the rejection via `tripwire`.
                   self.resolvePromises({
@@ -1831,9 +1834,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // A `processOutputResult` tripwire rejects the run: end the stream with a
               // `tripwire` chunk instead of the `finish` chunk, matching every other tripwire.
               if (outputResultTripwire) {
-                if (self.#status !== 'failed' && self.#status !== 'canceled') {
-                  self.#status = 'tripwire';
-                }
                 const tripwireChunk = {
                   type: 'tripwire',
                   runId: chunk.runId,
