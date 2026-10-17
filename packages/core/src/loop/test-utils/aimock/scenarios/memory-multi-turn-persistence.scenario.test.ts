@@ -1,3 +1,4 @@
+import { jsonSchema } from '@internal/ai-v7';
 import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
@@ -210,13 +211,13 @@ describeForAllEngines('AIMock loop scenario: multi-turn memory persistence', eng
       resourceId,
       tools: {
         get_weather: {
-          parameters: {
+          inputSchema: jsonSchema({
             type: 'object',
             properties: {
               city: { type: 'string' },
             },
             required: ['city'],
-          },
+          }),
           execute: async ({ city }: { city: string }) => {
             return { temperature: 22, condition: 'sunny', city };
           },

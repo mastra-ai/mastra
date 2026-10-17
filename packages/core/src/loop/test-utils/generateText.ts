@@ -15,7 +15,7 @@ import {
   stripMastraCreatedAt,
   testUsage,
 } from './utils';
-import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from './MastraLanguageModelV4Mock';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId' | 'methodType'>): ReturnType<typeof generateText5> => {

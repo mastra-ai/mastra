@@ -3,7 +3,7 @@ import type { SharedV4Warning, LanguageModelV4StreamPart } from '@ai-sdk/provide
 import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@internal/ai-v7';
 import type { FinishReason, LanguageModelResponseMetadata } from '@internal/ai-v7';
 import type { LanguageModelUsage } from '../../stream/types';
-import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from './MastraLanguageModelV4Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';

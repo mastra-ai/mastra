@@ -2,7 +2,7 @@ import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
 import { loop } from './loop';
-import { MastraLanguageModelV2Mock } from './test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from './test-utils/MastraLanguageModelV4Mock';
 import { convertAsyncIterableToArray } from './test-utils/stream-helpers';
 import {
   createMessageListWithUserMessage,
@@ -40,7 +40,7 @@ describe('provider-executed tool call + terminal error', () => {
   const runLoop = async (streams: any | any[]) => {
     const streamQueue = Array.isArray(streams) ? [...streams] : [streams];
     const messageList = createMessageListWithUserMessage();
-    const model = new MastraLanguageModelV2Mock({
+    const model = new MastraLanguageModelV4Mock({
       doStream: async () => ({ stream: streamQueue.shift() ?? streamQueue[0], warnings: [] }),
     } as any);
 
@@ -183,12 +183,12 @@ describe('provider-executed tool call + terminal error', () => {
     // The first model fails before emitting any calls; this does not exercise a
     // retry with an already-pending provider call.
     const messageList = createMessageListWithUserMessage();
-    const failing = new MastraLanguageModelV2Mock({
+    const failing = new MastraLanguageModelV4Mock({
       doStream: async () => {
         throw new Error('provider blew up');
       },
     } as any);
-    const succeeding = new MastraLanguageModelV2Mock({
+    const succeeding = new MastraLanguageModelV4Mock({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id-2', timestamp: new Date(0) },

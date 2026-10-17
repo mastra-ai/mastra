@@ -1,7 +1,7 @@
 import type { LanguageModelV4StreamPart, SharedV4Warning } from '@ai-sdk/provider';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-v7/test';
 import type { ModelManagerModelConfig } from '../../stream/types';
-import { MastraLanguageModelV3Mock as MockLanguageModelV4 } from './MastraLanguageModelV3Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from './MastraLanguageModelV4Mock';
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 

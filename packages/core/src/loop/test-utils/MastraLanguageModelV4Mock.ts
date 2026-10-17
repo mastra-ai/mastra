@@ -3,8 +3,8 @@ import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import type { MastraLanguageModelV4 } from '../../llm/model/shared.types';
 import { AISDKV7LanguageModel } from '../../llm/model/aisdk/v7/model';
 
-export class MastraLanguageModelV3Mock implements MastraLanguageModelV4 {
-  readonly specificationVersion = 'v3' as const;
+export class MastraLanguageModelV4Mock implements MastraLanguageModelV4 {
+  readonly specificationVersion = 'v4' as const;
   readonly provider: LanguageModelV4['provider'];
   readonly modelId: LanguageModelV4['modelId'];
   readonly supportedUrls: LanguageModelV4['supportedUrls'];

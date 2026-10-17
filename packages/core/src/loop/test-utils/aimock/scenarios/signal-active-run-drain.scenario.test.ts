@@ -71,16 +71,18 @@ describeForAllEngines('AIMock scenario: signal delivery into an active run', eng
       resourceId,
       stopWhen: stepCountIs(5),
       fixtures: llm => {
+        // Matched first: the interjection is a user message after the tool result,
+        // so the current turn has no tool result and would otherwise re-trigger the tool call.
+        // Any request that has seen the interjection answers it.
+        llm.on(
+          { endpoint: 'chat', predicate: req => JSON.stringify(req).includes(INTERJECTION) },
+          { content: 'drained response' },
+        );
         // Turn 1: call the tool (the interjection cannot be in this request —
         // it is sent during the tool execution that this turn triggers).
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           { toolCalls: [{ id: 'call_work', name: 'do_work', arguments: {} }] },
-        );
-        // Any request that has seen the interjection answers it.
-        llm.on(
-          { endpoint: 'chat', predicate: req => JSON.stringify(req).includes(INTERJECTION) },
-          { content: 'drained response' },
         );
         // Post-tool request that has NOT yet seen the interjection.
         llm.on(
@@ -147,13 +149,15 @@ describeForAllEngines('AIMock scenario: signal delivery into an active run', eng
       resourceId,
       stopWhen: stepCountIs(5),
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          { toolCalls: [{ id: 'call_work', name: 'do_work', arguments: {} }] },
-        );
+        // Matched first: the interjection is a user message after the tool result,
+        // so the current turn has no tool result and would otherwise re-trigger the tool call.
         llm.on(
           { endpoint: 'chat', predicate: req => JSON.stringify(req).includes(SECOND_INTERJECTION) },
           { content: 'drained both' },
+        );
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_work', name: 'do_work', arguments: {} }] },
         );
         llm.on(
           {

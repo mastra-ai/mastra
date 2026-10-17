@@ -1,6 +1,11 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { tool } from '@internal/ai-v7';
-import { convertArrayToReadableStream as convertArrayToReadableStreamV2, mockValues, mockId, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV2,
+  mockValues,
+  mockId,
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+} from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
@@ -16,8 +21,7 @@ import {
 } from './utils';
 import { testUsageV3, testUsageV3_2 } from './utils-v3';
 import { convertAsyncIterableToArray } from './stream-helpers';
-import { MastraLanguageModelV2Mock } from './MastraLanguageModelV2Mock';
-import { MastraLanguageModelV3Mock } from './MastraLanguageModelV3Mock';
+import { MastraLanguageModelV4Mock } from './MastraLanguageModelV4Mock';
 
 export function fullStreamTests({
   loopFn,
@@ -28,7 +32,7 @@ export function fullStreamTests({
   runId: string;
   modelVersion?: 'v2' | 'v3';
 }) {
-  const MockModel = modelVersion === 'v2' ? MastraLanguageModelV2Mock : MastraLanguageModelV3Mock;
+  const MockModel = modelVersion === 'v2' ? MastraLanguageModelV4Mock : MastraLanguageModelV4Mock;
   const convertArrayToReadableStream =
     modelVersion === 'v2' ? convertArrayToReadableStreamV2 : convertArrayToReadableStreamV3;
   const testUsageForVersion = modelVersion === 'v2' ? testUsage : testUsageV3;

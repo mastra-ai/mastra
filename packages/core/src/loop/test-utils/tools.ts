@@ -12,7 +12,7 @@ import {
   testUsage,
 } from './utils';
 import { convertAsyncIterableToArray } from './stream-helpers';
-import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from './MastraLanguageModelV4Mock';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {

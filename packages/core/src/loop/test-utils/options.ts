@@ -5,7 +5,7 @@ import type {
 } from '@ai-sdk/provider';
 import { stepCountIs, tool } from '@internal/ai-v7';
 import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-v7/test';
-import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from './MastraLanguageModelV4Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';

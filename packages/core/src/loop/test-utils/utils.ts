@@ -1,8 +1,4 @@
-import type {
-  SharedV4Warning,
-  LanguageModelV4StreamPart,
-  SharedV4ProviderMetadata,
-} from '@ai-sdk/provider';
+import type { SharedV4Warning, LanguageModelV4StreamPart, SharedV4ProviderMetadata } from '@ai-sdk/provider';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-v7/test';
 import { expect } from 'vitest';
 import type { ModelManagerModelConfig } from '../../stream/types';
@@ -10,7 +6,7 @@ import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from './MastraLanguageModelV4Mock';
 
 export function stripMastraCreatedAt<T>(value: T): T {
   if (Array.isArray(value)) {

@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { stepCountIs } from '@internal/ai-v7';
+import { jsonSchema, stepCountIs } from '@internal/ai-v7';
 import { it, expect } from 'vitest';
 import { Agent } from '../../../../agent';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
@@ -151,13 +151,13 @@ describeForAllEngines('AIMock loop scenario: nested/recursive tool calls', engin
 
     const fetchData = {
       description: 'Fetches raw data',
-      parameters: {
+      inputSchema: jsonSchema({
         type: 'object' as const,
         properties: {
           source: { type: 'string' },
         },
         required: ['source'],
-      },
+      }),
       execute: async ({ source }: { source: string }) => {
         fetchCalled = true;
         return { raw: `RAW_DATA_FROM_${source}`, timestamp: 12345 };
@@ -166,13 +166,13 @@ describeForAllEngines('AIMock loop scenario: nested/recursive tool calls', engin
 
     const transformData = {
       description: 'Transforms raw data',
-      parameters: {
+      inputSchema: jsonSchema({
         type: 'object' as const,
         properties: {
           data: { type: 'string' },
         },
         required: ['data'],
-      },
+      }),
       execute: async ({ data }: { data: string }) => {
         transformCalled = true;
         return { transformed: `TRANSFORMED_${data}`, version: 2 };
@@ -181,13 +181,13 @@ describeForAllEngines('AIMock loop scenario: nested/recursive tool calls', engin
 
     const formatOutput = {
       description: 'Formats the final output',
-      parameters: {
+      inputSchema: jsonSchema({
         type: 'object' as const,
         properties: {
           content: { type: 'string' },
         },
         required: ['content'],
-      },
+      }),
       execute: async ({ content }: { content: string }) => {
         formatCalled = true;
         return { formatted: `=== ${content} ===` };
