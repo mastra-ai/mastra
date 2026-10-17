@@ -1,4 +1,4 @@
-import { openai, openai as openai_v5, openai as openai_v6, openai as openai_v7 } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -29,7 +29,7 @@ function runStreamE2ETest(version: 'v2' | 'v3' | 'v4') {
   let openaiModel: LanguageModelV4 | LanguageModelV4 | LanguageModelV4;
 
   {
-    openaiModel = openai_v5('gpt-4o-mini');
+    openaiModel = openai('gpt-4o-mini');
   }
 
   describe(`${version} - stream`, () => {

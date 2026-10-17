@@ -1,4 +1,4 @@
-import { createOpenAI, createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -18,14 +18,13 @@ beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
 function saveAndErrorE2ETests(version: 'v2') {
   let openaiModel: LanguageModelV4;
 
   beforeEach(() => {
     {
-      openaiModel = openai_v5('gpt-4o');
+      openaiModel = openai('gpt-4o');
     }
   });
 
@@ -264,7 +263,7 @@ describe('stream destructuring support', () => {
     const agent = new Agent({
       id: 'test-destructuring',
       name: 'Test Destructuring',
-      model: openai_v5('gpt-4o'),
+      model: openai('gpt-4o'),
       instructions: 'You are a helpful assistant.',
     });
 

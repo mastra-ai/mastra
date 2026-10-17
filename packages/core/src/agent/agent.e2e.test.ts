@@ -1,4 +1,4 @@
-import { createOpenAI, createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { stepCountIs, tool } from '@internal/ai-v7';
 import { getLLMTestMode } from '@internal/llm-recorder';
@@ -36,7 +36,6 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 });
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
 const mock = createGatewayMock({
   transformRequest: ({ url, body }) => {
@@ -64,7 +63,7 @@ function agentE2ETests({ version }: { version: 'v2' }) {
 
   beforeEach(() => {
     {
-      openaiModel = openai_v5('gpt-4o');
+      openaiModel = openai('gpt-4o');
     }
   });
 
@@ -371,7 +370,7 @@ function agentE2ETests({ version }: { version: 'v2' }) {
           name: 'retry-agent',
           instructions:
             'Call the flakey tool with input "test data". If the tool returns an error, you MUST retry it with the same input. Keep retrying until it succeeds. Do not give up.',
-          model: openai_v5('gpt-4.1'),
+          model: openai('gpt-4.1'),
           tools: { flakeyTool },
         });
         agent.__setLogger(noopLogger);

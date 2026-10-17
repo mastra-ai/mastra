@@ -1,4 +1,4 @@
-import { openai, createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
+import { openai, createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { canonicalizeRequestJsonSchema, createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -22,7 +22,7 @@ afterAll(() => mock.saveAndStop());
 export const isOpenAIModel = (model: LanguageModelV4) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
 
-const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
 
 type Result = {
@@ -316,8 +316,8 @@ const modelsToTestV2 = [
   openrouter_v5('openai/gpt-4o-mini'),
   openrouter_v5('openai/gpt-4.1-mini'),
   openrouter_v5('openai/o3-mini'),
-  openai_v5('o3-mini'),
-  openai_v5('o4-mini'),
+  openai('o3-mini'),
+  openai('o4-mini'),
   openrouter_v5('google/gemini-2.5-pro'),
   openrouter_v5('google/gemini-2.5-flash'),
   openrouter_v5('google/gemini-3.1-flash-lite'),

@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { serve } from '@hono/node-server';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Hono } from 'hono';
 import getPort from 'get-port';
 
@@ -12,7 +12,7 @@ import getPort from 'get-port';
  * in CI without live LLM API keys.
  */
 function createMockModel(mockText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',

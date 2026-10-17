@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
-import { stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
+import { stepCountIs } from '@mastra/core/ai';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';

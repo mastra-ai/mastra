@@ -1,21 +1,24 @@
-import { openai as openai_v5, openai as openai_v6, openai as openai_v7 } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai';
 import { simulateReadableStream } from '@internal/ai-v7';
-import { convertArrayToReadableStream, MockLanguageModelV4, convertArrayToReadableStream as convertArrayToReadableStreamV3, convertArrayToReadableStream as convertArrayToReadableStreamV4 } from '@internal/ai-v7/test';
+import {
+  convertArrayToReadableStream,
+  MockLanguageModelV4,
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+  convertArrayToReadableStream as convertArrayToReadableStreamV4,
+} from '@internal/ai-v7/test';
 
 export type MockModelSpecVersion = 'v2' | 'v3' | 'v4';
 
 // Return type is a union of AI SDK provider return types - we use a generic return to avoid type portability issues
-export function getOpenAIModel(
-  version: MockModelSpecVersion,
-): ReturnType<typeof openai_v5> | ReturnType<typeof openai_v6> | ReturnType<typeof openai_v7> {
+export function getOpenAIModel(version: MockModelSpecVersion): ReturnType<typeof openai> {
   if (version === 'v2') {
-    return openai_v5('gpt-4o-mini');
+    return openai('gpt-4o-mini');
   }
   if (version === 'v3') {
-    return openai_v6('gpt-4o-mini');
+    return openai('gpt-4o-mini');
   }
   // v4
-  return openai_v7('gpt-4o-mini');
+  return openai('gpt-4o-mini');
 }
 
 export function getSingleDummyResponseModel(version: MockModelSpecVersion) {
