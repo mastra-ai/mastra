@@ -19,6 +19,7 @@ import { jiraProvider } from './jira/index.js';
 import { linearProvider } from './linear/index.js';
 import { microsoftTeamsProvider } from './microsoft-teams/index.js';
 import { notionProvider } from './notion/index.js';
+import { oneDriveProvider } from './one-drive/index.js';
 import { openaiProvider } from './openai/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
@@ -47,6 +48,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   linearProvider,
   microsoftTeamsProvider,
   notionProvider,
+  oneDriveProvider,
   openaiProvider,
   posthogProvider,
   resendProvider,
