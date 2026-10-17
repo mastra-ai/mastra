@@ -507,13 +507,13 @@
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-omni-flash",
     "reflection/beam-1.0-501b-a23b",
+    "reflection/beam-free",
     "rekaai/reka-edge",
     "rekaai/reka-flash-3",
     "relace/relace-search",
     "sao10k/l3-lunaris-8b",
     "sao10k/l3.1-euryale-70b",
     "sao10k/l3.3-euryale-70b",
-    "stealth/cat-jam",
     "stealth/claude-opus-4.6",
     "stealth/claude-opus-4.7",
     "stealth/claude-opus-4.8",
@@ -554,6 +554,7 @@
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
     "xiaomi/mimo-v2.6-pro-ultraspeed",
+    "xingchen-agi/xing4.0-29b-a4b:free",
     "z-ai/glm-4.5",
     "z-ai/glm-4.5-air",
     "z-ai/glm-4.5v",
@@ -862,6 +863,7 @@
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
     "xiaomi/mimo-v2.6-pro-ultraspeed",
+    "xingchen-agi/xing4.0-29b-a4b:free",
     "z-ai/glm-4.6",
     "z-ai/glm-4.7",
     "z-ai/glm-4.7-flash",
@@ -912,12 +914,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "stealth/cat-jam": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "stealth/claude-sonnet-4.6": [
@@ -1335,6 +1331,12 @@
       }
     ],
     "reflection/beam-1.0-501b-a23b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reflection/beam-free": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2232,6 +2234,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "xingchen-agi/xing4.0-29b-a4b:free": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "openai/gpt-5.4": [
