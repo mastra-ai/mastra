@@ -245,6 +245,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         model: { get: () => controllerModelMock },
         subagents: { model: { get: () => undefined } },
         getWorkspace: () => undefined,
+        getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
         state: {
           get: () => controllerStateMock,

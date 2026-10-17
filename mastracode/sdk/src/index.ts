@@ -149,6 +149,7 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { FOREIGN_THREAD, findWakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
 const CODE_AGENT_ID = 'code-agent';
@@ -939,15 +940,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // thread has no model to run with ("No model selected"). New wake paths must
   // build their options here so `prepareWakeRequestContext` runs for them.
   const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
-    // Run the woken notification as the session that owns the target
-    // resource so it uses that session's model/mode/state/workspace. Never
-    // borrow another session: every Mastra Code process shares one database,
-    // so the target thread may belong to another project, and running it with
-    // this session's workspace would act on the wrong project.
-    const session = await controller.getSessionByResource(resourceId);
-    // No session here owns the resource. Return undefined so the dispatcher
+    // Run the woken notification as the session that owns the target thread
+    // so it uses that session's model/mode/state/workspace. Never borrow
+    // another session: every Mastra Code process shares one database, so the
+    // target thread may belong to another project, and running it with this
+    // session's workspace would act on the wrong project.
+    const session = await findWakeSession(controller, liveSessions, { resourceId, threadId });
+    // No session here owns the thread. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
-    if (!session) return undefined;
+    if (!session || session === FOREIGN_THREAD) return undefined;
     // A long-running system must be able to drive work unattended, so migrate
     // and restore the thread's persisted model before falling back to a real
     // mode or live-session default rather than failing the run.
@@ -1283,6 +1284,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // don't fall through to the active session and wake it under an
           // empty resource binding.
           if (!input.record.resourceId) return decision;
+          // A session here serves the resource but not the thread's project:
+          // another process sharing the resource runs it. Leave it pending for
+          // that process rather than running it with this one's workspace.
+          const owner = await findWakeSession(controller, liveSessions, {
+            resourceId: input.record.resourceId,
+            threadId: input.record.threadId,
+          });
+          if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
           const streamOptions = await getWakeStreamOptions({
             resourceId: input.record.resourceId,
             threadId: input.record.threadId,
