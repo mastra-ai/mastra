@@ -127,6 +127,7 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     };
   }
   const controller = {
+    queryThreadById: vi.fn(async () => null),
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });
@@ -264,7 +265,8 @@ describe('factory_start_session in side mode', () => {
     expect(created[0]!.options).toMatchObject({
       id: result.sessionId,
       ownerId: 'user-1',
-      resourceId: result.sessionId,
+      // A side session shares its Factory's memory resource.
+      resourceId: scope.factoryProjectId,
       threadId: result.sessionId,
     });
     const session = created[0]!.session;
@@ -638,7 +640,7 @@ describe('factory_start_session in work-item mode', () => {
       originSessionId: null,
       factoryProjectId: scope.factoryProjectId,
     });
-    const session = created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+    const session = created.find(entry => entry.options.id === result.sessionId)!.session;
     expect(session.state.get()).toMatchObject({ factoryOwnerUserId: 'user-1' });
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ type: 'user', contents: 'Profile the build.' });
@@ -726,7 +728,7 @@ describe('factory_start_session in work-item mode', () => {
       vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
       const { start, item, seed, created, scope } = await withItem();
       const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-      const session = created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+      const session = created.find(entry => entry.options.id === result.sessionId)!.session;
 
       const page = await seed.audit.list({ orgId: 'org-1', factoryProjectId: scope.factoryProjectId });
       const started = page.events.filter(event => event.action === 'factory.run.started');
@@ -894,7 +896,7 @@ describe('factory_start_session in work-item mode', () => {
   it('tells everyone following the item when the run finishes without a report', async () => {
     const { start, item, created, reports, scope } = await withItem();
     const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
-    const session = created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+    const session = created.find(entry => entry.options.id === result.sessionId)!.session;
 
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
 
@@ -932,7 +934,7 @@ describe('factory_start_session in work-item mode', () => {
       resourceId: 'reviewer',
       attributes: { 'from-session': result.sessionId },
     });
-    const session = env.created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+    const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
 
     session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
 

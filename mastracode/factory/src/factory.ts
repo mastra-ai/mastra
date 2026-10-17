@@ -115,6 +115,7 @@ import { FactoryReplyCredentialProcessor } from './session/reply-credential-proc
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
+import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -1687,6 +1688,7 @@ export class MastraFactory {
             }),
         },
       );
+      observeSessionThreadStamp(session);
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation

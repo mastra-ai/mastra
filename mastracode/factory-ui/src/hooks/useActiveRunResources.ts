@@ -10,7 +10,7 @@ interface ActiveRunResourcesOptions {
   resourceIds: string[];
 }
 
-/** `/active-runs` is the controller's whole registry, so every caller shares one poll, keyed by sessionId as resourceId. */
+/** `/active-runs` is the controller's whole registry, so every caller shares one poll. */
 function activeRunsQuery(agentControllerId: string, baseUrl: string) {
   return queryOptions({
     queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl),
@@ -23,12 +23,19 @@ function activeRunsQuery(agentControllerId: string, baseUrl: string) {
   });
 }
 
-/** Every resource the controller has a run on, whether or not this tab has listed its session yet. */
+/**
+ * Every Factory session the controller has a run on, whether or not this tab has listed it yet.
+ * A Factory session's thread id is its session id; sessions from before sessions shared a
+ * resource also ran under their own id as resource.
+ */
 export function useActiveRunResourceIds(agentControllerId: string): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
   const { data } = useQuery(activeRunsQuery(agentControllerId, baseUrl));
   return useMemo(
-    () => new Set((data ?? []).flatMap(run => (run.resourceId === undefined ? [] : [run.resourceId]))),
+    () =>
+      new Set(
+        (data ?? []).flatMap(run => (run.resourceId === undefined ? [run.threadId] : [run.threadId, run.resourceId])),
+      ),
     [data],
   );
 }

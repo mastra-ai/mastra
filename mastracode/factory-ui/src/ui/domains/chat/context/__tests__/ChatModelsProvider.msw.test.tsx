@@ -12,13 +12,13 @@ import type { ChatSessionContextApi } from '../ChatSessionContext';
 import { useChatModels } from '../useChatModels';
 
 const draftSession: ChatSessionContextApi = {
-  resourceId: 'draft-1',
+  sessionId: 'draft-1',
+  resourceId: 'user-1',
   sessionEnabled: false,
   resourceReady: false,
   sandboxReady: false,
   sandboxPreparing: false,
   resourceEnabled: false,
-  projectPath: undefined,
   baseUrl: TEST_BASE_URL,
   kind: 'user',
   draftSessionId: 'draft-1',

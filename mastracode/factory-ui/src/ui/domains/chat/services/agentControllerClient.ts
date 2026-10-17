@@ -6,11 +6,10 @@ export type AgentControllerSession = ReturnType<AgentController['session']>;
 export interface CreateAgentControllerClientArgs {
   agentControllerId: string;
   /**
-   * The session to talk to, addressed by its session id. Factory sessions are
-   * still created under their own id as resource. Omit for controller-level
-   * reads; without it there is no session to talk to.
+   * The session to talk to, addressed by its session id. Omit for
+   * controller-level reads; without it there is no session to talk to.
    */
-  resourceId?: string;
+  sessionId?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -38,20 +37,20 @@ export function requireAgentController(controller: AgentController | null) {
 
 export function createAgentControllerClient({
   agentControllerId,
-  resourceId,
+  sessionId,
   baseUrl = '',
   enabled = true,
 }: CreateAgentControllerClientArgs) {
   if (!enabled) return { client: null, controller: null, session: null };
 
-  const key = cacheKey(agentControllerId, resourceId, baseUrl);
+  const key = cacheKey(agentControllerId, sessionId, baseUrl);
   const cached = clientCache.get(key);
   if (cached) return cached;
 
   // query-client.ts owns retry policy; silently re-POSTing non-idempotent sends duplicates messages
   const client = new MastraClient({ baseUrl, credentials: 'include', retries: 0 });
   const controller = client.getAgentController(agentControllerId);
-  const session = resourceId ? controller.session(resourceId) : null;
+  const session = sessionId ? controller.session(sessionId) : null;
   const entry = { client, controller, session };
   clientCache.set(key, entry);
   return entry;

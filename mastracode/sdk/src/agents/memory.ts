@@ -306,7 +306,10 @@ export function getDynamicMemory(
 
     const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
-    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
+    // Factory sessions share memory across a Factory's runs and a user's
+    // sessions, so their scope is fixed: neither session state, the env var,
+    // nor a repository's database.json can switch it.
+    const omScope = isFactory ? 'resource' : (state?.omScope ?? getOmScope(state?.projectPath));
 
     // The Factory row is authoritative and read per invocation, so a stored
     // threshold/attachment change reaches the running Memory without a session.

@@ -8,28 +8,26 @@ import {
 
 interface UseAgentControllerSettingsArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   baseUrl?: string;
   enabled?: boolean;
 }
 
 export function useAgentControllerSettings({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSettingsArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
+    sessionId,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, scope),
+    queryKey: queryKeys.agentControllerSettings(agentControllerId, sessionId),
     queryFn: async () => {
       const state = await requireAgentControllerSession(session).state();
       if (!state.settings) throw new Error('Session settings are unavailable');

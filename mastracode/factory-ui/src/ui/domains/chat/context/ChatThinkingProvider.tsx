@@ -46,13 +46,12 @@ function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 }
 
 function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { catalogTarget } = useChatModelScope();
   const { activeModelId } = useChatModels();
   const sessionArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };

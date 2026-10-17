@@ -21,6 +21,11 @@ export interface FactoryUserSession {
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  /**
+   * Memory resource the session runs under (the Factory for runs and Slack
+   * sessions, the owner for user sessions). Only the single-session read reports it.
+   */
+  resourceId?: string;
   owner?: FactoryUserSessionOwner;
   visibility: 'org' | 'private';
   title?: string;

@@ -15,13 +15,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const { closeSearch } = useGlobalSearchControls();
   const abortMutation = useAbortAgentControllerMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   });

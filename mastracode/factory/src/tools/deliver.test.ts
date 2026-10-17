@@ -26,7 +26,12 @@ function fakeSession(currentThreadId: string) {
 }
 
 function setup({
-  thread = { id: 'thread-stored', resourceId: 'session-b' } as { id: string; resourceId: string } | null,
+  // Sessions share their Factory's resource; the stamp ties the thread to its session.
+  thread = { id: 'thread-stored', resourceId: 'project-1', metadata: { factorySessionId: 'session-b' } } as {
+    id: string;
+    resourceId: string;
+    metadata?: Record<string, unknown>;
+  } | null,
   offline = false,
   row = ROW as SourceControlSession | null,
   action = 'deliver',
@@ -78,7 +83,7 @@ describe('deliverFactorySessionNotification', () => {
     expect(agent.sendNotificationSignal).toHaveBeenCalledTimes(1);
     expect(agent.sendNotificationSignal).toHaveBeenCalledWith(
       { ...MESSAGE, source: 'factory-session' },
-      { resourceId: 'session-b', threadId: 'thread-stored' },
+      { resourceId: 'project-1', threadId: 'thread-stored' },
     );
     expect(live?.sendNotificationSignal).not.toHaveBeenCalled();
     expect(live?.thread.switch).not.toHaveBeenCalled();
@@ -96,6 +101,16 @@ describe('deliverFactorySessionNotification', () => {
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
 
+  it("refuses another session's thread in the same Factory resource", async () => {
+    const { agent, controller, deliver } = setup({
+      offline: true,
+      thread: { id: 'thread-stored', resourceId: 'project-1', metadata: { factorySessionId: 'session-victim' } },
+    });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
   it('creates an offline target as its row owner on the stored thread before sending', async () => {
     const { calls, controller, created, agent, deliver } = setup({ offline: true });
 
@@ -106,7 +121,7 @@ describe('deliverFactorySessionNotification', () => {
       expect.objectContaining({
         id: 'session-b',
         ownerId: 'user-b',
-        resourceId: 'session-b',
+        resourceId: 'project-1',
         threadId: 'thread-stored',
         tags: { factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' },
       }),
@@ -116,7 +131,7 @@ describe('deliverFactorySessionNotification', () => {
     expect(created.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
     expect(controller.getCurrentAgent).toHaveBeenCalledWith(created);
     expect(agent.sendNotificationSignal).toHaveBeenCalledWith(expect.anything(), {
-      resourceId: 'session-b',
+      resourceId: 'project-1',
       threadId: 'thread-stored',
     });
   });
@@ -174,7 +189,11 @@ describe('deliverFactorySessionNotification', () => {
     new Mastra({ agents: { agent }, storage, logger: false });
     const live = fakeSession('thread-other');
     const controller = {
-      queryThreadById: vi.fn(async () => ({ id: 'thread-stored', resourceId: 'session-b' })),
+      queryThreadById: vi.fn(async () => ({
+        id: 'thread-stored',
+        resourceId: 'project-1',
+        metadata: { factorySessionId: 'session-b' },
+      })),
       queryThreads: vi.fn(),
       getSession: vi.fn(async () => live),
       createSession: vi.fn(),
@@ -196,7 +215,7 @@ describe('deliverFactorySessionNotification', () => {
     expect(records[0]).toMatchObject({
       id: result.notificationId,
       threadId: 'thread-stored',
-      resourceId: 'session-b',
+      resourceId: 'project-1',
       source: 'factory-session',
       kind: 'message',
       attributes: { 'from-session': 'session-a' },
@@ -214,6 +233,7 @@ describe('resolveSessionThread', () => {
     return resolveSessionThread({
       controller: {
         getSession: vi.fn(async () => (current ? fakeSession(current) : undefined)),
+        queryThreadById: vi.fn(async () => null),
         queryThreads: vi.fn(async () => threads),
       } as unknown as FactoryDeliveryController,
       sessions: { getBySessionId: vi.fn(async () => ROW) },

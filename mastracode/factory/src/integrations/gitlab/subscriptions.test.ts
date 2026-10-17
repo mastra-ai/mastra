@@ -70,6 +70,25 @@ describe('GitLab merge-request subscription store', () => {
     expect(await listMergeRequestSubscriptionsForThread(baseInput, storage)).toHaveLength(1);
   });
 
+  it('finds a thread\'s subscriptions by its session, not by the resource sessions share', async () => {
+    await subscribeToMergeRequest(
+      { ...baseInput, resourceId: 'factory-project', sessionId: 'run-a', threadId: 'run-a' },
+      storage,
+    );
+    await subscribeToMergeRequest(
+      { ...baseInput, changeRequestId: '43', resourceId: 'factory-project', sessionId: 'run-b', threadId: 'run-b' },
+      storage,
+    );
+    const rows = await listMergeRequestSubscriptionsForThread(
+      { orgId: 'org-a', sessionId: 'run-a', threadId: 'run-a' },
+      storage,
+    );
+    expect(rows.map(row => row.data.changeRequestId)).toEqual(['17']);
+    expect(
+      await listMergeRequestSubscriptionsForThread({ orgId: 'org-b', sessionId: 'run-a', threadId: 'run-a' }, storage),
+    ).toEqual([]);
+  });
+
   it('answers a user session that addresses itself by its own id', async () => {
     await subscribeToMergeRequest(
       {
