@@ -22,17 +22,13 @@ describeForAllEngines('AIMock loop scenario: raw chunks', engine => {
       },
     });
 
-  // Durable and evented engines currently drop raw chunks on the way to the client.
-  it.runIf(engine === 'normal' || engine === 'fs')(
-    'forwards provider raw chunks when includeRawChunks is enabled',
-    async () => {
-      const { chunks, output } = await run(true);
-      const raw = chunks.filter((c: any) => c.type === 'raw');
-      expect(raw.length).toBeGreaterThan(0);
-      expect(JSON.stringify(raw.map((c: any) => c.payload))).toContain('chatcmpl-raw');
-      expect(await output.text).toBe('Hello, world!');
-    },
-  );
+  it('forwards provider raw chunks when includeRawChunks is enabled', async () => {
+    const { chunks, output } = await run(true);
+    const raw = chunks.filter((c: any) => c.type === 'raw');
+    expect(raw.length).toBeGreaterThan(0);
+    expect(JSON.stringify(raw.map((c: any) => c.payload))).toContain('chatcmpl-raw');
+    expect(await output.text).toBe('Hello, world!');
+  });
 
   it('emits no raw chunks when includeRawChunks is disabled', async () => {
     const { chunks, output } = await run(false);
