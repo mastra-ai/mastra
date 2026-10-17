@@ -464,7 +464,7 @@ describe('MessageList AI SDK v6 support', () => {
     ]);
   });
 
-  it('supports AIV6.UI in convertMessages()', () => {
+  it('supports the AI SDK UI format in convertMessages()', () => {
     const messages: UIMessageV6[] = [
       {
         id: 'assistant-1',
@@ -473,7 +473,7 @@ describe('MessageList AI SDK v6 support', () => {
       },
     ];
 
-    const result = convertMessages(messages).to('AIV6.UI');
+    const result = convertMessages(messages).to('AIV5.UI');
 
     expectTypeOf(result).toEqualTypeOf<UIMessageV6[]>();
     expect(result[0]).toMatchObject({

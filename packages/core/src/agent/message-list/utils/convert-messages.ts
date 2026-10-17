@@ -58,8 +58,6 @@ class MessageConverter {
         return this.messageList.get.all.aiSdk.ui();
       case 'AIV5.Model':
         return this.messageList.get.all.aiSdk.model();
-      case 'AIV5.UI':
-        return this.messageList.get.all.aiSdk.ui();
       default:
         throw new Error(`Unsupported output format: ${format}`);
     }
