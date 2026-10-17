@@ -20,8 +20,9 @@ import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
-import { ExecutionFence } from '../execution-fence';
+import { ExecutionFence, executionLeaseKey } from '../execution-fence';
 import { runInRunFenceScope } from '../run-fence-scope';
+import { getRunRegistryEntry } from '../run-registry';
 import {
   createDurableAgentStream,
   emitChunkEvent,
@@ -319,6 +320,155 @@ describe('observe() from an offset', () => {
     expect(reader.chunks.filter(c => c.type === 'finish')).toHaveLength(1);
     observed.cleanup();
     await transport.close();
+  });
+});
+
+describe('__subscribeToRunStream() lifecycle', () => {
+  it('completes an unknown run without inserting a registry entry or clearing shared history', async () => {
+    const { durable, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    const onComplete = vi.fn();
+    const onEvent = vi.fn();
+    const clearTopic = vi.spyOn(durable.pubsub, 'clearTopic');
+    const started = performance.now();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, onEvent);
+    try {
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onEvent).not.toHaveBeenCalled();
+      expect(getRunRegistryEntry(runId)).toBeUndefined();
+      expect(clearTopic).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps an empty topic observable while a remote storage claim is live', async () => {
+    const { durable, transport, workflows } = await observedAgent();
+    const runId = 'quiet-remote-claim';
+    await workflows.claimRunOwnership({ runId, ownerId: 'remote', leaseMs: 30_000 });
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('checks the agent transport for a quiet remote lease, not the separate Mastra bus', async () => {
+    const { durable, transport } = await observedAgent();
+    const runId = 'quiet-remote-lease';
+    await transport.acquireLease(executionLeaseKey(durable.id, runId), 'remote', 30_000);
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('does not complete from a stale terminal event when a newer remote execution is active', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'old-terminal-new-owner';
+    const { stale } = await takeOver(workflows, runId);
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
+    const onComplete = vi.fn();
+    const onEvent = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 100, onComplete }, onEvent);
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(onEvent).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps a newer nonterminal segment observable during an ownership outage', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'mixed-history-outage';
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('current')));
+    vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 100, onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('does not close over a live event arriving during the final absence check', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'activity-during-reconciliation';
+    const original = workflows.getWorkflowRunById.bind(workflows);
+    let reads = 0;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async params => {
+      const record = await original(params);
+      if (++reads === 4) await emitChunkEvent(pubsub, runId, textChunk('just started'));
+      return record;
+    });
+    const onComplete = vi.fn();
+    const onEvent = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, onEvent);
+    try {
+      expect(onEvent).toHaveBeenCalled();
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps public observation attached when a hidden takeover marker races the final absence check', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'public-takeover-during-reconciliation';
+    const original = workflows.getWorkflowRunById.bind(workflows);
+    let reads = 0;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async params => {
+      const record = await original(params);
+      if (++reads === 6) await emitOwnershipClaimedEvent(pubsub, runId, 2);
+      return record;
+    });
+    const observation = await durable.observe(runId);
+    const reader = readFullStream(observation.fullStream as ReadableStream<any>);
+    try {
+      expect(reads).toBe(6);
+      await runInRunFenceScope(scopeAt(runId, 2), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('after takeover'));
+        await emitFinishEvent(pubsub, runId, finishData);
+      });
+      await reader.done;
+      expect(texts(reader.chunks)).toEqual(['after takeover']);
+      expect(reader.chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+    } finally {
+      observation.detach();
+      await transport.close();
+    }
+  });
+
+  it('propagates an unavailable ownership store and unsubscribes instead of declaring a run unknown', async () => {
+    const { durable, transport, workflows } = await observedAgent();
+    const runId = 'unknown-with-store-outage';
+    vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
+    const unsubscribe = vi.spyOn(durable.pubsub, 'unsubscribe');
+    const onComplete = vi.fn();
+    try {
+      await expect(durable.__subscribeToRunStream(runId, { onComplete }, vi.fn())).rejects.toThrow(
+        'storage unavailable',
+      );
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(unsubscribe.mock.calls.filter(([topic]) => topic === AGENT_STREAM_TOPIC(runId))).toHaveLength(1);
+    } finally {
+      await transport.close();
+    }
   });
 });
 
