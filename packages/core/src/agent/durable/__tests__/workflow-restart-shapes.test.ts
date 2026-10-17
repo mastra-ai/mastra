@@ -2,9 +2,9 @@
 // part of its work already committed, restarted from a copy of its rows in a fresh module graph, and
 // must finish correctly without re-running what was already saved.
 //
-// Two harness conditions are represented. `wf-evented-restart` parks a step and restarts:
-// `sequential`, `parallel`, `conditional`, `foreach`, `empty-path`. `wf-default` is the harness's
-// in-process reference on the default engine, and contributes the shapes whose default-engine
+// Two harness conditions are represented. `wf-evented-restart` parks a step or write and restarts:
+// `sequential`, `parallel`, `conditional`, `foreach`, `foreach-gap`, `empty-path`. `wf-default` is the
+// harness's in-process reference on the default engine, and contributes the shapes whose default-engine
 // restart is also green: `sequential`, `parallel`, `conditional`, `state`, `finished`,
 // `nested-done`, `nested-pending`. `empty-path` is evented-only — the default engine never saves a
 // `running` snapshot with no active step, so the harness leaves that shape out of `wf-default` too.
@@ -13,8 +13,8 @@
 // `.mastracode/plans/cor-1382-restart-helper.proof/sigkill-only-repro.scratch.test.ts`, to land with
 // their owning fixes; none of them is skipped here. On the evented engine: `state` (COR-1352) parks
 // in a step like `sequential` but loses the finished step's mark, and
-// `finished`/`foreach-gap`/`nested-done`/`nested-pending` (COR-1333/1350/1351/1348) are interrupted
-// between two persisted states rather than inside a step. On the default engine `foreach` re-runs
+// `finished`/`nested-done`/`nested-pending` (COR-1333/1351/1348) are interrupted between two persisted
+// states rather than inside a step. On the default engine `foreach` re-runs
 // completed item 1 (COR-1350), and `foreach-gap` cannot be cut at all: the interruption point the
 // shape needs (`item`'s partial output array) is never written, so the harness does not exercise it
 // either. These cells assert current behaviour, so a shape the harness's `RESULTS.md` table records
@@ -107,7 +107,8 @@ function buildShape(
           [async ({ inputData }: any) => inputData.n < 3, step('small')],
         ] as any)
         .commit();
-    case 'foreach': {
+    case 'foreach':
+    case 'foreach-gap': {
       const item = createStep({
         id: 'item',
         inputSchema: N,
@@ -182,6 +183,7 @@ type ShapeName =
   | 'parallel'
   | 'conditional'
   | 'foreach'
+  | 'foreach-gap'
   | 'state'
   | 'finished'
   | 'nested-done'
@@ -222,6 +224,13 @@ const SHAPES: Record<ShapeName, ShapeSpec> = {
     rerunItems: [1],
     blockStep: 'item',
   },
+  'foreach-gap': {
+    input: [{ n: 1 }, { n: 2 }, { n: 3 }],
+    expect: (r: any) => r?.n === 60,
+    rerunItems: [1],
+    // COR-1350: item 1 was saved, but item 2 was only a null placeholder and never started.
+    hold: { when: (s: any) => ctxOf(s, 'item')?.output?.[0] != null && ctxOf(s, 'item')?.output?.[1] === null },
+  },
   state: {
     input: { n: 1 },
     expect: (r: any) => r?.n === 3 && JSON.stringify(r?.marks) === JSON.stringify(['first', 'block']),
@@ -260,7 +269,7 @@ const SHAPES: Record<ShapeName, ShapeSpec> = {
 /** Which shapes restart cleanly on each engine (see the file header for the red ones). */
 const GREEN: Record<Engine, ShapeName[]> = {
   default: ['sequential', 'parallel', 'conditional', 'state', 'finished', 'nested-done', 'nested-pending'],
-  evented: ['sequential', 'parallel', 'conditional', 'foreach', 'empty-path'],
+  evented: ['sequential', 'parallel', 'conditional', 'foreach', 'foreach-gap', 'empty-path'],
 };
 
 describe('T65 wf-restart-shapes in a fresh module graph', () => {
@@ -347,7 +356,73 @@ describe('T65 wf-restart-shapes in a fresh module graph', () => {
             0,
           );
         }
+        if (shapeName === 'foreach-gap') {
+          expect(
+            starts('item')
+              .map(entry => entry.input?.n)
+              .sort(),
+          ).toEqual([2, 3]);
+        }
       }, 60_000);
     }
   }
 });
+
+it('evented foreach restarts the recorded child run without replaying its completed steps', async () => {
+  const id = 'foreach-child-restart';
+  const runId = 'foreach-child-restart-run';
+  const log: Entry[] = [];
+  const gate = createGate();
+  gates.push(gate);
+  const scenario = createRestartScenario({
+    kind: 'workflow',
+    runId,
+    build: ({ core, generation }) => {
+      const { createStep, createWorkflow } = factories(core, 'evented');
+      const first = createStep({
+        id: 'child-first',
+        inputSchema: N,
+        outputSchema: N,
+        execute: async ({ inputData }: any) => {
+          log.push({ generation, step: 'child-first', event: 'start', input: inputData });
+          return { n: inputData.n + 1 };
+        },
+      });
+      const last = createStep({
+        id: 'child-last',
+        inputSchema: N,
+        outputSchema: N,
+        execute: async ({ inputData }: any) => {
+          log.push({ generation, step: 'child-last', event: 'start', input: inputData });
+          if (generation === 1 && inputData.n === 3) await gate.wait();
+          return { n: inputData.n + 1 };
+        },
+      });
+      const child = createWorkflow({ id: `${id}-child`, inputSchema: N, outputSchema: N })
+        .then(first)
+        .then(last)
+        .commit();
+      return createWorkflow({ id, inputSchema: z.array(N), outputSchema: z.array(N) })
+        .foreach(child, { concurrency: 1 })
+        .commit();
+    },
+  });
+  scenarios.push(scenario);
+  const original = await scenario.start(async ({ workflow }) => {
+    const run = await workflow.createRun({ runId });
+    return run.start({ inputData: [{ n: 1 }, { n: 2 }] });
+  });
+  expect(await Promise.race([gate.reached.then(() => true), original.settled.then(() => false)])).toBe(true);
+  const checkpoint = await original.checkpoint();
+  const parent = findRow(checkpoint, id, runId)!.snapshot;
+  expect(parent.activeStepsPath[`${id}-child`]).toEqual([0, 1]);
+  expect(ctxOf(parent, `${id}-child`).output).toEqual([{ n: 3 }, null]);
+  const childRunId = ctxOf(parent, `${id}-child`).metadata.nestedRunId;
+  expect(childRunId).toBeTruthy();
+  expect(ctxOf(findRow(checkpoint, `${id}-child`, childRunId)!.snapshot, 'child-first').status).toBe('success');
+  const { result } = await scenario.restart(checkpoint);
+  expect(result.status).toBe('success');
+  expect(result.result).toEqual([{ n: 3 }, { n: 4 }]);
+  expect(log.filter(e => e.generation === 2 && e.step === 'child-first')).toEqual([]);
+  expect(log.filter(e => e.generation === 2 && e.step === 'child-last').map(e => e.input)).toEqual([{ n: 3 }]);
+}, 60_000);
