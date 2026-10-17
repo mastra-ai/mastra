@@ -18,6 +18,7 @@ import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
+import { globalRunRegistry } from '../run-registry';
 import type { AgentStreamEvent } from '../types';
 
 // ============================================================================
@@ -167,21 +168,26 @@ describe('DurableAgent streaming execution', () => {
 
   describe('basic streaming', () => {
     it('should pass activeTools through to the LLM request', async () => {
-      const doStream = vi.fn(async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: 'Done' },
-          { type: 'text-end', id: 'text-1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }));
+      const runId = 'stream-effective-owner';
+      let liveOwners: (string | undefined)[] = [];
+      const doStream = vi.fn(async () => {
+        liveOwners = [durableAgent.runRegistry.get(runId)?.agentId, globalRunRegistry.get(runId)?.agentId];
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
 
       const mockModel = new MockLanguageModelV2({ doStream });
       const allowedTool = createTool({
@@ -204,14 +210,17 @@ describe('DurableAgent streaming execution', () => {
         model: mockModel as LanguageModelV2,
         tools: { allowedTool, hiddenTool },
       });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, id: 'public-stream-agent' });
 
       const { output, cleanup } = await durableAgent.stream('Use the allowed tool', {
+        runId,
         activeTools: ['allowedTool'],
       });
 
       await output.consumeStream();
 
+      expect(durableAgent.id).not.toBe(baseAgent.id);
+      expect(liveOwners).toEqual([durableAgent.id, durableAgent.id]);
       expect(doStream).toHaveBeenCalledTimes(1);
       expect(doStream.mock.calls[0]?.[0].tools.map((tool: { name: string }) => tool.name)).toEqual(['allowedTool']);
 
