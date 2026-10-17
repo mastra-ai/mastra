@@ -1469,7 +1469,7 @@ export class KnowledgePG extends KnowledgeStorage {
         if (!existing) throw new KnowledgeNotFoundError('node', String(binding.rows[0].nodeId));
         return existing;
       }
-      const node = await this.#createNode(tx, input.node);
+      const node = await this.#createNode(tx, input.node, { coalesceByName: false });
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" (source,address,nodeId) VALUES (?,?,?)`,
         args: [input.source, input.address, node.id],
@@ -1536,6 +1536,7 @@ export class KnowledgePG extends KnowledgeStorage {
   async deleteNodeByAddress(input: {
     source: string;
     address: string;
+    scopeId: string;
     importRunId?: string;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     return this.#transaction(async tx => {
@@ -1553,8 +1554,8 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [input.source, input.address, node.id],
       });
       const owned = await tx.execute({
-        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND source=?`,
-        args: [node.id, input.source],
+        sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r WHERE r.nodeId=? AND r.source=? AND (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id)=1 AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId=?)`,
+        args: [node.id, input.source, input.scopeId],
       });
       for (const row of owned.rows) await this.#deleteRecordPermanently(tx, String(row.id), input.importRunId);
       const remaining = await tx.execute({
@@ -1572,24 +1573,39 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
-  async deleteRecordBySource(input: { id: string; source: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async deleteRecordBySource(input: {
+    id: string;
+    source: string;
+    version: number;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
-      await this.#deleteRecordPermanently(tx, record.id, input.importRunId);
+      await this.#deleteRecordPermanently(tx, record.id, input.importRunId, input.version);
       return record;
     });
   }
 
-  async #deleteRecordPermanently(tx: Executor, id: string, importRunId?: string): Promise<void> {
+  async #deleteRecordPermanently(
+    tx: Executor,
+    id: string,
+    importRunId?: string,
+    expectedVersion?: number,
+  ): Promise<void> {
     const record = await this.#getRecord(tx, id, true);
     if (!record) return;
+    if (expectedVersion !== undefined && record.version !== expectedVersion) throw new KnowledgeConflictError(id);
     const scopeIds = await this.#getRecordScopeIds(tx, id);
     await this.#activity(tx, 'delete', 'record', id, undefined, importRunId);
     await this.#outbox(tx, 'record', id, 'delete', record.version + 1, scopeIds);
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`, args: [id] });
-    await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?`, args: [id] });
+    const result = await tx.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${expectedVersion === undefined ? '' : ' AND version=?'}`,
+      args: expectedVersion === undefined ? [id] : [id, expectedVersion],
+    });
+    if (expectedVersion !== undefined && result.rowsAffected === 0) throw new KnowledgeConflictError(id);
   }
 
   async getImportState(input: {
@@ -1747,6 +1763,26 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
+  async recordImportSkip(input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+    contextScopeId: string;
+    importRunId: string;
+    details: Record<string, unknown>;
+  }): Promise<void> {
+    await this.#transaction(tx =>
+      this.#activity(
+        tx,
+        'skip',
+        input.targetType,
+        input.targetId,
+        input.contextScopeId,
+        input.importRunId,
+        input.details,
+      ),
+    );
+  }
+
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
@@ -1870,12 +1906,19 @@ export class KnowledgePG extends KnowledgeStorage {
   async #transaction<T>(operation: (tx: Executor) => Promise<T>): Promise<T> {
     return this.#client.tx(tx => operation(createExecutor(tx, this.#schemaName)));
   }
-  async #createNode(executor: Executor, input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+  async #createNode(
+    executor: Executor,
+    input: CreateKnowledgeNodeInput,
+    { coalesceByName = true } = {},
+  ): Promise<KnowledgeNode> {
     if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     await this.#lockSiblingName(executor, input.name, scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds);
-    if (existing) return existing;
+    if (existing) {
+      if (!coalesceByName) throw new KnowledgeConflictError(existing.id);
+      return existing;
+    }
     await this.#assertNoSiblingNameCollision(executor, input.name, scopeIds);
     const now = new Date();
     const node: KnowledgeNode = {

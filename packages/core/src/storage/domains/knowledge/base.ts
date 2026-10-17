@@ -177,7 +177,8 @@ export type KnowledgeActivityAction =
   | 'promote'
   | 'demote'
   | 'stamp'
-  | 'rebind';
+  | 'rebind'
+  | 'skip';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
@@ -593,11 +594,17 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async deleteNodeByAddress(_input: {
     source: string;
     address: string;
+    scopeId: string;
     importRunId?: string;
   }): Promise<DeleteKnowledgeNodeAddressResult> {
     throw new KnowledgeUnsupportedError();
   }
-  async deleteRecordBySource(_input: { id: string; source: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async deleteRecordBySource(_input: {
+    id: string;
+    source: string;
+    version: number;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
     throw new KnowledgeUnsupportedError();
   }
 
@@ -705,6 +712,15 @@ export abstract class KnowledgeStorage extends StorageDomain {
    * Leaves all non-Knowledge storage untouched. Use only after `init()` reports an incompatible Knowledge schema.
    */
   async dangerouslyReset(): Promise<void> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async recordImportSkip(_input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+    contextScopeId: string;
+    importRunId: string;
+    details: Record<string, unknown>;
+  }): Promise<void> {
     throw new KnowledgeUnsupportedError();
   }
   async listActivity(_input: {
