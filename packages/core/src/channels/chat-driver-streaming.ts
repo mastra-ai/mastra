@@ -3,7 +3,7 @@ import type { Adapter, StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
 import { chatModule } from './chat-lazy';
-import { formatToolApproval } from './formatting';
+import { formatTaskTitle, formatToolApproval } from './formatting';
 import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
@@ -15,6 +15,12 @@ import {
   renderBuiltInToolEvent,
 } from './stream-helpers';
 import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn, ToolDisplayResult } from './types';
+
+/**
+ * Header for the tool Plan widget. The rows carry the per-tool detail, so
+ * the header is a fixed label rather than an echo of the current row.
+ */
+const PLAN_TITLE = 'Working…';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
@@ -151,10 +157,10 @@ export async function runStreamingDriver({
     } | null;
   } = { current: null };
 
-  // Whether we have set a non-default plan title this session. The chat
-  // SDK falls back to "Thinking completed" when no `plan_update` ever fires
-  // — push a meaningful title with the first OM event so memory-only runs
-  // don't show the default.
+  // Whether we have set a plan title this session. The chat SDK falls back
+  // to "Thinking completed" when no `plan_update` ever fires, so the first
+  // tool or OM event pushes one. Also answers "does the session hold plan
+  // content yet?" — grouped mode uses that to post leading text on its own.
   const planTitleRef: { current: boolean } = { current: false };
 
   const openSession = (): StreamingSession => {
@@ -288,7 +294,7 @@ export async function runStreamingDriver({
   // to the approval card's stashed displayName + argsSummary.
   const lookupTaskTitle = (toolCallId: string, fallback: string): string => {
     const stash = getPendingApproval(toolCallId);
-    return stash ? `${stash.displayName} ${stash.argsSummary}` : fallback;
+    return stash ? formatTaskTitle(stash.displayName, stash.argsSummary, stash.args) : fallback;
   };
 
   /**
@@ -517,10 +523,17 @@ export async function runStreamingDriver({
       }
 
       // For Plan-widget modes, close any active text-only session before
-      // the first tool of a step in timeline mode so the preceding text
-      // posts as its own platform message. In grouped mode keep the
-      // session open so every task accumulates under one plan widget.
-      if (toolDisplay === 'timeline' && sessionRef.current && tracker.inFlightCount === 1) {
+      // the first tool so the preceding text posts as its own platform
+      // message (Slack renders tasks above text inside one post, so an
+      // "On it — checking X first" opener would otherwise land under the
+      // widget). Timeline does this per step; grouped only while the
+      // session has no plan yet, so once tasks exist every later step
+      // keeps accumulating under the one widget.
+      if (
+        sessionRef.current &&
+        ((toolDisplay === 'timeline' && tracker.inFlightCount === 1) ||
+          (toolDisplay === 'grouped' && !planTitleRef.current))
+      ) {
         await closeSession();
       }
 
@@ -555,12 +568,13 @@ export async function runStreamingDriver({
       }
 
       // 'timeline' | 'grouped' — push task_update into Plan widget.
-      const taskTitle = `${enr.displayName} ${enr.argsSummary}`;
-      if (toolDisplay === 'grouped') {
-        // Mirror the task title (with inline args) into the plan title so
-        // Slack's AI Assistant Thinking Steps widget shows the current
-        // tool instead of the default "Thinking…"/"completed" label.
-        pushToSession({ type: 'plan_update', title: taskTitle });
+      const taskTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
+      if (!planTitleRef.current) {
+        // One fixed header per session. Mirroring each row's title into the
+        // header made a single-tool run read the same line twice, so the
+        // rows carry the detail and the header just says we're busy.
+        pushToSession({ type: 'plan_update', title: PLAN_TITLE });
+        planTitleRef.current = true;
       }
       pushToSession({
         type: 'task_update',
@@ -631,9 +645,8 @@ export async function runStreamingDriver({
       }
 
       // 'timeline' | 'grouped' — push task_update into Plan widget.
-      const fallbackTitle = `${enr.displayName} ${enr.argsSummary}`;
+      const fallbackTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
-      pushToSession({ type: 'plan_update', title: taskTitle });
       pushToSession({
         type: 'task_update',
         id: enr.toolCallId,
@@ -703,7 +716,7 @@ export async function runStreamingDriver({
       }
 
       // 'timeline' | 'grouped' — push task_update into Plan widget.
-      const fallbackTitle = `${enr.displayName} ${enr.argsSummary}`;
+      const fallbackTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
       // Mark as `complete` rather than `error` so a single failing tool
       // doesn't flip the overall plan header to ⚠. The error text in
@@ -724,7 +737,7 @@ export async function runStreamingDriver({
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
       });
-      const taskTitle = `${enr.displayName} ${enr.argsSummary}`;
+      const taskTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       // Only park the plan row in modes where tool calls are already rendered
       // in the plan. Non-plan modes (`'cards'`/`'text'`/`'hidden'`) would
       // otherwise flash a one-row Plan widget that closes immediately after.

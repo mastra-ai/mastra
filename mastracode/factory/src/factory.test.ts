@@ -37,6 +37,7 @@ import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
+import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -319,9 +320,10 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(3);
-    expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(first[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first).toHaveLength(4);
+    expect(first[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
+    expect(first[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(first[2]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -350,9 +352,10 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(2);
-    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(3);
+    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
+    expect(processors[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[2]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -372,9 +375,10 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({}), emitEvent });
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(2);
-    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(3);
+    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
+    expect(processors[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[2]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',

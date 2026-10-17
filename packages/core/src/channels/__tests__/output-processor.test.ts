@@ -520,12 +520,63 @@ describe('ChatChannelOutputProcessor', () => {
       expect(new Set(taskUpdates.map(t => t.id))).toEqual(new Set(['t1', 't2']));
     });
 
+    it("'grouped': one fixed plan header; rows show the tool's description when it has one", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: {
+              toolCallId: 't1',
+              toolName: 'execute_command',
+              args: { description: 'Listing the repo root', command: 'ls -la' },
+            },
+          },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: {
+              toolCallId: 't1',
+              toolName: 'execute_command',
+              args: { description: 'Listing the repo root', command: 'ls -la' },
+              result: 'ok',
+            },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg as any);
+
+      const planUpdates = drained.filter(
+        (p): p is { type: 'plan_update'; title: string } => typeof p === 'object' && (p as any).type === 'plan_update',
+      );
+      // The header is set once and never echoes a row title.
+      expect(planUpdates.map(p => p.title)).toEqual(['Working…']);
+
+      const starts = drained.filter(
+        (p): p is { type: 'task_update'; id: string; title?: string; status: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update' && (p as any).status === 'in_progress',
+      );
+      expect(starts.map(t => t.title)).toEqual(['Listing the repo root', 'weather NYC']);
+    });
+
     it("'grouped': keeps one plan open across per-step finish chunks", async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(
         channels,
         [
-          { type: 'text-delta', payload: { text: 'first ' } },
           {
             type: 'tool-call',
             payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
@@ -534,6 +585,7 @@ describe('ChatChannelOutputProcessor', () => {
             type: 'tool-result',
             payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
           },
+          { type: 'text-delta', payload: { text: 'first ' } },
           { type: 'finish', payload: {} },
           { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
           { type: 'text-delta', payload: { text: 'second' } },
@@ -556,6 +608,65 @@ describe('ChatChannelOutputProcessor', () => {
       const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
       expect(drained.filter((piece): piece is string => typeof piece === 'string').join('')).toBe('first second');
       const taskUpdates = drained.filter(
+        (piece): piece is { type: 'task_update'; id: string } =>
+          typeof piece === 'object' && (piece as any).type === 'task_update',
+      );
+      expect(new Set(taskUpdates.map(update => update.id))).toEqual(new Set(['t1', 't2']));
+    });
+
+    it("'grouped': posts a text opener as its own message before the first tool", async () => {
+      // Slack renders plan tasks above the text inside one post, so an
+      // "On it — checking X first" opener streamed into the same session
+      // would land under the widget. Flush it as its own message, then let
+      // every later step accumulate under the one widget.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'On it — checking the weather first.' } },
+          { type: 'text-end', payload: {} },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
+          { type: 'text-delta', payload: { text: 'Rainy there, trying LA. ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
+          { type: 'text-delta', payload: { text: 'Sunny in LA.' } },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+
+      const opener = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(opener.filter((piece): piece is string => typeof piece === 'string').join('')).toBe(
+        'On it — checking the weather first.',
+      );
+      expect(opener.some(piece => typeof piece === 'object' && (piece as any).type === 'task_update')).toBe(false);
+
+      const rest = await drainStreamingPlan((posts[1] as Extract<Call, { kind: 'post' }>).arg);
+      expect(rest.filter((piece): piece is string => typeof piece === 'string').join('')).toBe(
+        'Rainy there, trying LA. Sunny in LA.',
+      );
+      const taskUpdates = rest.filter(
         (piece): piece is { type: 'task_update'; id: string } =>
           typeof piece === 'object' && (piece as any).type === 'task_update',
       );

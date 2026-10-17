@@ -840,8 +840,8 @@ export class SlackProvider implements ChannelProvider {
    * applied separately.
    */
   #forwardedAdapterOptions() {
-    const { logger } = this.#channelConfig;
-    return { logger };
+    const { logger, suggestedPrompts } = this.#channelConfig;
+    return { logger, suggestedPrompts };
   }
 
   /**

@@ -53,6 +53,22 @@ interface SlackAdapterChannelConfigBase {
    * @default true
    */
   typingStatus?: ChannelAdapterConfig['typingStatus'];
+
+  /**
+   * Suggested prompts pinned when a user opens a new thread in the Slack AI
+   * Assistant pane (`assistant_thread_started`). A static payload or a
+   * resolver that receives the thread context (user, channel) and returns the
+   * prompts for that thread. Slack shows at most four.
+   *
+   * @example
+   * ```ts
+   * suggestedPrompts: {
+   *   title: 'Try asking',
+   *   prompts: [{ title: 'Summarize this channel', message: 'Summarize the last day of this channel' }],
+   * }
+   * ```
+   */
+  suggestedPrompts?: SlackAdapterConfig['suggestedPrompts'];
 }
 
 /**

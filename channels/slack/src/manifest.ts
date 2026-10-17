@@ -50,6 +50,10 @@ export const DEFAULT_BOT_EVENTS = [
   'message.groups',
   'message.im',
   'message.mpim',
+  // Fires when a user opens a new thread in the AI Assistant pane. The adapter
+  // uses it to pin `suggestedPrompts`; without the subscription Slack never
+  // sends it and the prompts are silently never shown.
+  'assistant_thread_started',
 ] as const;
 
 export interface BuildManifestOptions {
