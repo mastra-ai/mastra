@@ -7,7 +7,7 @@ import { InMemoryServerCache } from '../../cache';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { askUserTool } from '../../tools/builtin/ask-user';
 import { AgentController } from '../agent-controller';
 import { SessionSuspensions } from '../session';
@@ -92,7 +92,7 @@ async function createSettingsController(
     id: `settings-agent-${id}`,
     name: `Settings agent ${id}`,
     instructions: 'Test thread settings.',
-    model: new MastraLanguageModelV2Mock({}),
+    model: new MastraLanguageModelV4Mock({}),
   });
   const controller = new AgentController<any>({
     workspace: createMockWorkspace(),
@@ -128,7 +128,7 @@ async function createDurableFixture() {
       id: 'durable-agent',
       name: 'Durable agent',
       instructions: 'Ask a question, then acknowledge the answer.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: async () => ({
           stream:
             ++modelCalls === 1
@@ -173,7 +173,7 @@ describe('AgentController thread-derived session state', () => {
         id: 'inactive-context',
         name: 'Inactive context',
         instructions: 'Test',
-        model: new MastraLanguageModelV2Mock({}),
+        model: new MastraLanguageModelV4Mock({}),
       });
       const controller = new AgentController<any>({
         id: 'inactive-context',
@@ -257,7 +257,7 @@ describe('AgentController thread-derived session state', () => {
       name: 'Failed startup',
       instructions: 'Reply.',
       memory: new MockMemory({ storage }),
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: async () => {
           modelEntered.resolve();
           await releaseModel.promise;
@@ -328,7 +328,7 @@ describe('AgentController thread-derived session state', () => {
         name: 'Navigation initiator',
         instructions: 'Keep streaming until stopped.',
         memory: new MockMemory({ storage }),
-        model: new MastraLanguageModelV2Mock({
+        model: new MastraLanguageModelV4Mock({
           doStream: async options => ({
             stream: new ReadableStream({
               start(output) {
@@ -794,7 +794,7 @@ describe('AgentController thread-derived session state', () => {
       id: 'startup-no-default',
       name: 'Startup',
       instructions: 'Test',
-      model: new MastraLanguageModelV2Mock({}),
+      model: new MastraLanguageModelV4Mock({}),
     });
     const controller = new AgentController({
       id: 'startup-no-default',
@@ -863,7 +863,7 @@ describe('AgentController thread-derived session state', () => {
       id: 'no-default-model-agent',
       name: 'No default model agent',
       instructions: 'Test model isolation.',
-      model: new MastraLanguageModelV2Mock({}),
+      model: new MastraLanguageModelV4Mock({}),
     });
     const controller = new AgentController({
       id: 'no-default-model-controller',

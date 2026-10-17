@@ -8,7 +8,7 @@ import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events';
 import { loop } from '../../loop/loop';
-import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import { toolCallFilterProvider } from '../../processor-provider/providers';
 import { InMemoryStore } from '../../storage';
 import type { Processor } from '../index';
@@ -548,7 +548,7 @@ describe('ToolCallFilter', () => {
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MastraLanguageModelV2Mock({
+            model: new MastraLanguageModelV4Mock({
               doStream: async ({ prompt }: { prompt: unknown }) => {
                 stepInputs.push(prompt);
 
@@ -711,7 +711,7 @@ describe('ToolCallFilter', () => {
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MastraLanguageModelV2Mock({
+            model: new MastraLanguageModelV4Mock({
               doStream: async ({ prompt }: { prompt: unknown }) => {
                 stepInputs.push(prompt);
                 const currentResponse = responseCount++;
@@ -850,7 +850,7 @@ describe('ToolCallFilter', () => {
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MastraLanguageModelV2Mock({
+            model: new MastraLanguageModelV4Mock({
               doStream: async ({ prompt }: { prompt: unknown }) => {
                 stepInputs.push(prompt);
 

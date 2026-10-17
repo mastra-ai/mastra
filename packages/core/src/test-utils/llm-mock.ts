@@ -1,10 +1,10 @@
 import { simulateReadableStream } from '@internal/ai-v7';
 import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 
-import { MastraLanguageModelV2Mock } from '../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from '../loop/test-utils/MastraLanguageModelV4Mock';
 
 // Re-export for external use
-export { simulateReadableStream, MastraLanguageModelV2Mock };
+export { simulateReadableStream, MastraLanguageModelV4Mock };
 
 export function createMockModel({
   objectGenerationMode,

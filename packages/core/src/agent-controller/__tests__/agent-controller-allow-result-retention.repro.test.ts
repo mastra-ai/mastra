@@ -12,7 +12,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 
 import { AgentController } from '../agent-controller';
@@ -95,7 +95,7 @@ describe('AgentController: sequential allow auto-approval retains tool results (
     });
 
     let callCount = 0;
-    const model = new MastraLanguageModelV2Mock({
+    const model = new MastraLanguageModelV4Mock({
       doStream: async () => {
         callCount += 1;
         if (callCount === 1) {

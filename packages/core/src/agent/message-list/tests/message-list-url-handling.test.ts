@@ -200,8 +200,7 @@ describe('MessageList - File URL Handling', () => {
       expect(filePart).toBeDefined();
       expect(filePart?.type).toBe('file');
       // URL should be preserved, not converted to base64
-      expect((filePart as any)?.data.toString()).toBe(imageUrl);
-      expect((filePart as any)?.data).not.toContain('data:image/png;base64,');
+      expect((filePart as any)?.data).toEqual({ type: 'url', url: new URL(imageUrl) });
     }
   });
 
@@ -248,8 +247,8 @@ describe('MessageList - File URL Handling', () => {
         expect(filePart).toBeDefined();
         expect(filePart?.type).toBe('file');
         // URL should be downloaded and converted to binary data
-        expect((filePart as any)?.data).toBeInstanceOf(Uint8Array);
-        expect((filePart as any)?.data).not.toBe(imageUrl);
+        expect((filePart as any)?.data.type).toBe('data');
+        expect((filePart as any)?.data.data).toBeInstanceOf(Uint8Array);
       }
     },
   );

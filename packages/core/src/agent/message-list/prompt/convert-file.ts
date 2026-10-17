@@ -1,7 +1,7 @@
 import type { LanguageModelV4FilePart, LanguageModelV4TextPart } from '@ai-sdk/provider';
 import type { DataContent, ImagePart, FilePart } from '@internal/ai-v7';
 import { convertToDataContent, detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat';
-import { toV4FileData } from '../../../stream/aisdk/v5/compat/content';
+import { anyToV4FileData, flattenFileData, toV4FileData } from '../../../stream/aisdk/v5/compat/content';
 
 export function convertImageFilePart(
   part: ImagePart | FilePart,
@@ -13,21 +13,19 @@ export function convertImageFilePart(
     throw new Error(`Unsupported part type: ${type}`);
   }
 
-  // v7 parts may already carry tagged file data or a provider reference.
-  if (typeof source === 'object' && !(source instanceof URL) && !(source instanceof Uint8Array) && !(source instanceof ArrayBuffer)) {
-    const tagged: LanguageModelV4FilePart['data'] =
-      'type' in source && typeof source.type === 'string'
-        ? (source as LanguageModelV4FilePart['data'])
-        : { type: 'reference', reference: source as Record<string, string> };
+  // v7 parts may carry tagged file data; inline data and URLs go through the normal path,
+  // provider references and inline text pass through untouched.
+  const flat = flattenFileData(source);
+  if (flat === undefined) {
     return {
       type: 'file',
       mediaType: part.mediaType ?? (type === 'image' ? 'image/*' : 'application/octet-stream'),
       filename: type === 'file' ? part.filename : undefined,
-      data: tagged,
+      data: anyToV4FileData(source),
       providerOptions: part.providerOptions,
     };
   }
-  const originalData: DataContent | URL = source;
+  const originalData: DataContent | URL = flat;
 
   const { data: convertedData, mediaType: convertedMediaType } = convertToDataContent(originalData);
 

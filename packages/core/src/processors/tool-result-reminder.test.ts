@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
-import { MastraLanguageModelV3Mock } from '../loop/test-utils/MastraLanguageModelV3Mock';
+import { MastraLanguageModelV4Mock } from '../loop/test-utils/MastraLanguageModelV4Mock';
 import type { RequestContext } from '../request-context';
 import { AgentsMDInjector } from './tool-result-reminder';
 import type { ProcessInputStepArgs, ProcessorStreamWriter, ToolCallInfo } from './index';
@@ -168,7 +168,7 @@ function createProcessInputStepArgs(
     abortSignal: new AbortController().signal,
     requestContext,
     retryCount: 0,
-    model: new MastraLanguageModelV3Mock({}),
+    model: new MastraLanguageModelV4Mock({}),
     writer,
     sendSignal: async signalInput => {
       const signal = createSignal(signalInput);

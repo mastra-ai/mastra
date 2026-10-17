@@ -526,6 +526,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "messages": [
                 {
                   "content": [
@@ -549,6 +550,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "inputTextDelta": "{"",
               "messages": [
                 {
@@ -573,6 +575,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "inputTextDelta": "value",
               "messages": [
                 {
@@ -597,6 +600,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "inputTextDelta": "":"",
               "messages": [
                 {
@@ -621,6 +625,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "inputTextDelta": "Spark",
               "messages": [
                 {
@@ -645,6 +650,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "inputTextDelta": "le",
               "messages": [
                 {
@@ -669,6 +675,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "inputTextDelta": " Day",
               "messages": [
                 {
@@ -693,6 +700,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "inputTextDelta": ""}",
               "messages": [
                 {
@@ -717,6 +725,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
           {
             "options": {
               "abortSignal": undefined,
+              "context": undefined,
               "input": {
                 "value": "Sparkle Day",
               },

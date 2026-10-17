@@ -12,7 +12,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
-import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from '../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from '../loop/test-utils/MastraLanguageModelV4Mock';
 import { Mastra } from '../mastra';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';

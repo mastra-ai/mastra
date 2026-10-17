@@ -18,7 +18,7 @@ import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
 import { SUSPENDED_RUN_MEMORY_KEY } from '../session';
@@ -94,7 +94,7 @@ async function createHarness(id: string, durable: boolean) {
     name: `${id} agent`,
     instructions: 'You look up users.',
     memory: new MockMemory({ storage }),
-    model: new MastraLanguageModelV2Mock({
+    model: new MastraLanguageModelV4Mock({
       doStream: async () => {
         callCount++;
         return { stream: callCount === 1 ? toolCallStream() : textStream() };

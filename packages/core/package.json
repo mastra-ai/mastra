@@ -939,7 +939,7 @@
     "@ai-sdk/xai": "5.0.23",
     "@ast-grep/napi": "^0.40.5",
     "@babel/core": "^8.0.1",
-    "@copilotkit/aimock": "^1.29.0",
+    "@copilotkit/aimock": "^1.45.1",
     "@internal/ai-v7": "workspace:*",
     "@internal/auth": "workspace:*",
     "@internal/core": "workspace:*",

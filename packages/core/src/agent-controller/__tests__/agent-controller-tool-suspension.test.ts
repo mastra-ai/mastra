@@ -12,7 +12,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 
 import { AgentController } from '../agent-controller';
@@ -76,7 +76,7 @@ describe('AgentController: tool suspension and resumption', () => {
       id: 'test-agent-default-model-settings',
       name: 'Test Agent Default Model Settings',
       instructions: 'You answer directly.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: async () => ({ stream: createTextStream() }),
       }),
     });
@@ -127,7 +127,7 @@ describe('AgentController: tool suspension and resumption', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You confirm actions.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: (() => {
           let callCount = 0;
           return async () => {
@@ -212,7 +212,7 @@ describe('AgentController: tool suspension and resumption', () => {
       id: 'test-agent-ds',
       name: 'Test Agent DS',
       instructions: 'You confirm actions.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: async () => ({ stream: createToolCallStream() }),
       }),
       tools: { confirmAction: confirmTool },
@@ -270,7 +270,7 @@ describe('AgentController: tool suspension and resumption', () => {
       id: 'test-agent-resume',
       name: 'Test Agent Resume',
       instructions: 'You confirm actions.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: (() => {
           let callCount = 0;
           return async () => {
@@ -356,7 +356,7 @@ describe('AgentController: tool suspension and resumption', () => {
       id: 'test-agent-yolo-resume',
       name: 'Test Agent Yolo Resume',
       instructions: 'You confirm actions.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: (() => {
           let callCount = 0;
           return async () => {
@@ -434,7 +434,7 @@ describe('AgentController: tool suspension and resumption', () => {
       id: 'test-agent-budget-resume',
       name: 'Test Agent Budget Resume',
       instructions: 'You confirm actions.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: (() => {
           let callCount = 0;
           return async () => {

@@ -17,8 +17,7 @@ type ToolPart = Extract<Part, { toolCallId: string }>;
 
 function toJSONValue(value: unknown): ToolResultPart['output'] {
   if (typeof value === 'string') return { type: 'text', value };
-  const serialized = value === undefined ? undefined : JSON.stringify(value);
-  return { type: 'json', value: serialized === undefined ? null : JSON.parse(serialized) };
+  return { type: 'json', value: (value ?? null) as Extract<ToolResultPart['output'], { type: 'json' }>['value'] };
 }
 
 function fileData(part: Extract<Part, { type: 'file' }>): FilePart['data'] {

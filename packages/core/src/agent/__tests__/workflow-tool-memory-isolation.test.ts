@@ -1,7 +1,7 @@
 import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { MastraLanguageModelV2Mock as MockLanguageModelV4 } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';

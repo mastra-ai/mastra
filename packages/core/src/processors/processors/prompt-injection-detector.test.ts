@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import { mockTextModel } from '../../test-utils/llm-mock';
 import { PromptInjectionDetector } from './prompt-injection-detector';
 import type { PromptInjectionResult } from './prompt-injection-detector';
@@ -706,7 +706,7 @@ describe('PromptInjectionDetector', () => {
       // Create a mock V2 model that captures the options passed to doGenerate
       const mockResult = createMockDetectionResult(false);
 
-      const mockModel = new MastraLanguageModelV2Mock({
+      const mockModel = new MastraLanguageModelV4Mock({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -747,7 +747,7 @@ describe('PromptInjectionDetector', () => {
   describe('structured output schema compatibility', () => {
     it('should not send number bounds to Anthropic in score schemas', async () => {
       const mockResult = createMockDetectionResult(false);
-      const mockModel = new MastraLanguageModelV2Mock({
+      const mockModel = new MastraLanguageModelV4Mock({
         provider: 'anthropic',
         modelId: 'claude-3-5-sonnet',
         doGenerate: async () => ({

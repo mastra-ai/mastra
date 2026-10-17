@@ -755,9 +755,8 @@ describe('MessageList V5 Support', () => {
       if (Array.isArray(v5ModelContent)) {
         const filePart = v5ModelContent.find((p: any) => p.type === 'file');
         if (filePart) {
-          expect((filePart as any).data).toBe(imageUrl);
-          // It should NOT be a malformed data URI
-          expect((filePart as any).data).not.toContain('data:image/png;base64,https://');
+          // A plain URL, not a malformed data URI
+          expect((filePart as any).data).toEqual({ type: 'url', url: new URL(imageUrl) });
         }
       }
     });

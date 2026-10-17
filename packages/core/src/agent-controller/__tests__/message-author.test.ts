@@ -4,7 +4,7 @@ import { getMessageAuthor } from '../../agent/signals';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
@@ -62,7 +62,7 @@ async function createHarness({ holdFirstRun = false }: { holdFirstRun?: boolean 
     name: 'message author agent',
     instructions: 'Reply briefly.',
     memory: new MockMemory({ storage }),
-    model: new MastraLanguageModelV2Mock({
+    model: new MastraLanguageModelV4Mock({
       doStream: async () => {
         callCount++;
         if (callCount === 1) signalFirstCall();

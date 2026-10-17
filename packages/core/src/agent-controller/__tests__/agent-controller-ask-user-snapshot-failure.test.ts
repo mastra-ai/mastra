@@ -12,7 +12,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { askUserTool } from '../../tools/builtin/ask-user';
 
 import { AgentController } from '../agent-controller';
@@ -65,7 +65,7 @@ async function buildController(id: string) {
     id: `agent-${id}`,
     name: `Agent ${id}`,
     instructions: 'You ask the user questions.',
-    model: new MastraLanguageModelV2Mock({
+    model: new MastraLanguageModelV4Mock({
       doStream: (() => {
         let callCount = 0;
         return async () => {

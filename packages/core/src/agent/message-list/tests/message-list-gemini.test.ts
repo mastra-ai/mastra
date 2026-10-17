@@ -289,7 +289,7 @@ describe('MessageList - Gemini Compatibility', () => {
       }
     });
 
-    it('AI SDK convertToModelMessages should filter out data-* parts', () => {
+    it('AI SDK convertToModelMessages should filter out data-* parts', async () => {
       // This test verifies the AI SDK behavior that we rely on
       const uiMessages = [
         {
@@ -307,7 +307,7 @@ describe('MessageList - Gemini Compatibility', () => {
         },
       ];
 
-      const modelMessages = convertToModelMessages(uiMessages);
+      const modelMessages = await convertToModelMessages(uiMessages);
 
       // Find the assistant message
       const assistantModel = modelMessages.find(m => m.role === 'assistant');
@@ -369,7 +369,7 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(prompt.filter(m => m.role === 'user').length).toBe(2);
     });
 
-    it('AI SDK convertToModelMessages produces empty content arrays for data-only messages (documents SDK behavior)', () => {
+    it('AI SDK convertToModelMessages drops data-only messages (documents SDK behavior)', async () => {
       // This test DOCUMENTS the AI SDK behavior that we work around.
       // The AI SDK's convertToModelMessages produces empty content arrays
       // for messages that have only data-* parts.
@@ -395,16 +395,10 @@ describe('MessageList - Gemini Compatibility', () => {
         },
       ];
 
-      const modelMessages = convertToModelMessages(uiMessages);
+      const modelMessages = await convertToModelMessages(uiMessages);
 
-      // Find the assistant message (which had only data-* parts)
-      const assistantMsg = modelMessages.find(m => m.role === 'assistant');
-      expect(assistantMsg).toBeDefined();
-
-      // The AI SDK produces an empty content array
-      // This is why we filter data-* parts in sanitizeV5UIMessages before conversion
-      expect(typeof assistantMsg!.content).not.toBe('string');
-      expect((assistantMsg!.content as any[]).length).toBe(0);
+      // AI SDK v7 drops a message whose parts are all data-* instead of emitting empty content.
+      expect(modelMessages.find(m => m.role === 'assistant')).toBeUndefined();
     });
 
     it('should preserve data-* parts in DB/UI but filter from model/prompt messages', () => {

@@ -369,8 +369,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           pipeTextStreamToResponse({
             response: mockResponse,
-            // @ts-expect-error
-            textStream: result.textStream,
+            stream: result.textStream,
           });
 
           await mockResponse.waitForEnd();
@@ -525,7 +524,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             modelMetadata: {
               modelId: 'mock-model-id',
               modelProvider: 'mock-provider',
-              modelVersion: 'v2',
+              modelVersion: 'v4',
             },
             headers: { call: '2' },
             messages: [
@@ -862,7 +861,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "model": {
                 "modelId": "mock-model-id",
                 "provider": "mock-provider",
-                "version": "v2",
+                "version": "v4",
               },
               "object": {
                 "content": "Hello, world!",
@@ -923,7 +922,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "modelMetadata": {
                   "modelId": "mock-model-id",
                   "modelProvider": "mock-provider",
-                  "modelVersion": "v2",
+                  "modelVersion": "v4",
                 },
                 "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
@@ -1028,7 +1027,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "modelMetadata": {
                       "modelId": "mock-model-id",
                       "modelProvider": "mock-provider",
-                      "modelVersion": "v2",
+                      "modelVersion": "v4",
                     },
                     "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
@@ -1195,7 +1194,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "model": {
                 "modelId": "mock-model-id",
                 "provider": "mock-provider",
-                "version": "v2",
+                "version": "v4",
               },
               "object": undefined,
               "providerMetadata": undefined,
@@ -1255,7 +1254,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "modelMetadata": {
                   "modelId": "mock-model-id",
                   "modelProvider": "mock-provider",
-                  "modelVersion": "v2",
+                  "modelVersion": "v4",
                 },
                 "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
@@ -1366,7 +1365,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "modelMetadata": {
                       "modelId": "mock-model-id",
                       "modelProvider": "mock-provider",
-                      "modelVersion": "v2",
+                      "modelVersion": "v4",
                     },
                     "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
@@ -1538,7 +1537,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "model": {
                 "modelId": "mock-model-id",
                 "provider": "mock-provider",
-                "version": "v2",
+                "version": "v4",
               },
               "object": undefined,
               "providerMetadata": undefined,
@@ -1598,7 +1597,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "modelMetadata": {
                   "modelId": "mock-model-id",
                   "modelProvider": "mock-provider",
-                  "modelVersion": "v2",
+                  "modelVersion": "v4",
                 },
                 "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
@@ -1709,7 +1708,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "modelMetadata": {
                       "modelId": "mock-model-id",
                       "modelProvider": "mock-provider",
-                      "modelVersion": "v2",
+                      "modelVersion": "v4",
                     },
                     "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [

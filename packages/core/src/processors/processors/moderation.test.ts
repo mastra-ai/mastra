@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import { mockTextModel } from '../../test-utils/llm-mock';
@@ -758,7 +758,7 @@ describe('ModerationProcessor', () => {
   describe('structured output schema compatibility', () => {
     it('should not send number bounds to Anthropic in score schemas', async () => {
       const mockResult = createMockModerationResult(false);
-      const mockModel = new MastraLanguageModelV2Mock({
+      const mockModel = new MastraLanguageModelV4Mock({
         provider: 'anthropic',
         modelId: 'claude-3-5-sonnet',
         doGenerate: async () => ({
