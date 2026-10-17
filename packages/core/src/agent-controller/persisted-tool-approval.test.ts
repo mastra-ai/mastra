@@ -105,6 +105,7 @@ function backend() {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   agentThreadStreamRuntime.resetForTests();
 });
 
@@ -150,4 +151,23 @@ describe('Session.respondToPersistedToolApproval', () => {
     expect(await env.suspendedRuns(session)).toHaveLength(1);
     expect(env.executed).toEqual([]);
   }, 30_000);
+
+  it.each([true, false])(
+    'leaves the session idle when the answer (approved: %s) fails to start',
+    async approved => {
+      const env = backend();
+      const session = await env.parkThenRestart();
+      vi.spyOn(Agent.prototype, 'sendToolApproval').mockRejectedValueOnce(new Error('dispatch failed'));
+
+      await expect(session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved })).rejects.toThrow(
+        'dispatch failed',
+      );
+
+      expect(session.run.isRunning()).toBe(false);
+      expect(session.run.getRunId()).toBeNull();
+      expect(await env.suspendedRuns(session)).toHaveLength(1);
+      expect(env.executed).toEqual([]);
+    },
+    30_000,
+  );
 });

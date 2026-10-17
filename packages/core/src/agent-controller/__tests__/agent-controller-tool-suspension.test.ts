@@ -479,3 +479,78 @@ describe('AgentController: tool suspension and resumption', () => {
     expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
   });
 });
+
+describe('AgentController: tool resume that fails before its run starts', () => {
+  async function suspendedSession(id: string) {
+    const confirmTool = createTool({
+      id: 'confirm-action',
+      description: 'Confirms an action with the user',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) return { result: `Action "${input.action}" confirmed` };
+        await context.agent.suspend({ action: input.action });
+        return { result: `Action "${input.action}" confirmed` };
+      },
+    });
+    let callCount = 0;
+    const agent = new Agent({
+      id,
+      name: id,
+      instructions: 'You confirm actions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: ++callCount === 1 ? createToolCallStream() : createTextStream() }),
+      }),
+      tools: { confirmAction: confirmTool },
+    });
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ agents: { [id]: agent }, logger: false, storage });
+    const registeredAgent = mastra.getAgent(id);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: `${id}-controller`,
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+      initialState: { yolo: true } as any,
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const events: any[] = [];
+    session.subscribe(event => events.push(event));
+    await session.thread.create();
+    await session.sendMessage({ content: 'Deploy to production' });
+    expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+    expect(session.run.isRunning()).toBe(false);
+    return { session, events, agent: registeredAgent };
+  }
+
+  it('leaves the session idle with the tool call still parked, so a retry resumes it', async () => {
+    const { session, events, agent } = await suspendedSession('test-agent-failed-resume');
+    vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('resume dispatch failed'));
+    events.length = 0;
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(events.some((e: any) => e.type === 'error')).toBe(true);
+    expect(session.run.isRunning()).toBe(false);
+    expect(session.run.getRunId()).toBeNull();
+    expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+
+    events.length = 0;
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete');
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+  });
+
+  it('keeps a run another caller armed when the resume fails to start', async () => {
+    const { session, agent } = await suspendedSession('test-agent-failed-resume-armed');
+    vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('resume dispatch failed'));
+    const armedSignal = session.run.ensureAbortController().signal;
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(session.run.isRunning()).toBe(true);
+    expect(session.run.getAbortSignal()).toBe(armedSignal);
+  });
+});
