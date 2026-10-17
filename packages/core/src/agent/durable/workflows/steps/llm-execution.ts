@@ -1858,9 +1858,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       ...clientChunk,
                       payload: {
                         ...clientChunk.payload,
+                        stepResult: {
+                          ...clientChunk.payload?.stepResult,
+                          warnings: clientChunk.payload?.stepResult?.warnings ?? warnings,
+                        },
                         metadata: {
                           ...clientChunk.payload?.metadata,
-                          modelId: clientChunk.payload?.metadata?.modelId || model.modelId,
+                          id: clientChunk.payload?.metadata?.id ?? responseMetadata.id,
+                          timestamp: clientChunk.payload?.metadata?.timestamp ?? responseMetadata.timestamp,
+                          modelId: clientChunk.payload?.metadata?.modelId || responseMetadata.modelId || model.modelId,
                         },
                       },
                     };

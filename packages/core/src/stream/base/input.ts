@@ -67,8 +67,32 @@ export abstract class MastraModelInput extends MastraBase {
           const stream = await createStream();
           attachModelStreamTransport(outputStream, readModelStreamTransport(stream));
 
+          // Spec-v4 providers report call warnings in the leading `stream-start` part,
+          // not on the doStream result, so read it before building the step result.
+          const reader = stream.stream.getReader();
+          const first = await reader.read();
+          const firstPart = first.done ? undefined : first.value;
+          const streamStartWarnings =
+            firstPart && (firstPart as { type?: unknown }).type === 'stream-start'
+              ? ((firstPart as { warnings?: unknown[] }).warnings ?? [])
+              : [];
+          const modelStream = new ReadableStream<LanguageModelV4StreamPart | Record<string, unknown>>({
+            start(c) {
+              if (first.done) c.close();
+              else c.enqueue(first.value);
+            },
+            async pull(c) {
+              const next = await reader.read();
+              if (next.done) c.close();
+              else c.enqueue(next.value);
+            },
+            cancel(reason) {
+              return reader.cancel(reason);
+            },
+          });
+
           const initialChunks = onResult({
-            warnings: stream.warnings,
+            warnings: streamStartWarnings.length ? streamStartWarnings : stream.warnings,
             request: stream.request,
             rawResponse: stream.rawResponse || stream.response || {},
           });
@@ -80,7 +104,7 @@ export abstract class MastraModelInput extends MastraBase {
 
           await self.transform({
             runId,
-            stream: stream.stream,
+            stream: modelStream,
             controller,
           });
 
