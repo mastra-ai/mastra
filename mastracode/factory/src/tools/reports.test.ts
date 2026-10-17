@@ -196,6 +196,27 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['failed']);
   });
 
+  it('reports a failure that keeps repeating once, until something else is reported', async () => {
+    const env = reporting();
+    const fail = (reason: string) =>
+      sendRunEndReport(env.reporting, {
+        sender: SENDER,
+        recipients: [PARENT],
+        since: new Date(),
+        outcome: { status: 'failed', reason },
+        subject: 'The work session for #7',
+      });
+    await fail('no authenticated user');
+    await fail('no authenticated user');
+    await fail('no authenticated user');
+    expect(env.deliveries).toHaveLength(1);
+    await fail('provider overloaded');
+    expect(env.deliveries).toHaveLength(2);
+    await env.agentReport('progress');
+    await fail('provider overloaded');
+    expect(env.deliveries).toHaveLength(3);
+  });
+
   it('names the failure code and the parked tool', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);
