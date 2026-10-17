@@ -204,6 +204,7 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { buildResumeSpanInput } from './resume-span-input';
+import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS, formatLeaseOwner } from './run-ownership';
 import { SaveQueueManager } from './save-queue';
 import {
   applyResolvedAgentScopes,
@@ -321,6 +322,15 @@ const inFlightUnclaimedResumes = new Set<string>();
  * treats it as abandoned by a process that died, and takes the suspension over.
  */
 export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
+
+/**
+ * Run-ownership key for the lease a started resume holds on an agentic-loop run. Namespaced so it
+ * cannot collide with other ownership records (DurableAgent, workflows) on the same runId.
+ */
+export const agentResumeLeaseRunId = (runId: string) => `agent-resume:${runId}`;
+
+/** Identifies this process in resume lease owner tokens (`<holderId>/<runId>`). */
+const resumeLeaseHolderId = globalThis.crypto.randomUUID();
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -7989,6 +7999,13 @@ export class Agent<
    * Once it is older than `AGENT_RESUME_CLAIM_STALE_MS`, a later resume hands the suspension back
    * and claims it again. A live claimant that loses the suspension this way fails in `start()`.
    *
+   * On stores with run fencing, `start()` also takes a run-ownership lease
+   * (`agentResumeLeaseRunId(runId)`, TTL `AGENT_LEASE_TTL_MS`) and renews it while the resumed
+   * run executes. A claim left `running` by a process that died after starting holds no live lease,
+   * so a later resume takes it over through a generation-pinned claim and runs the suspended tool
+   * again (at-least-once after a crash). Rows left `running` by versions without the lease have no
+   * lease record and are taken over the same way. A `running` claim with a live lease is rejected.
+   *
    * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
    * also call it on any failure before or after handing the claim to the loop. It hands the
    * suspension back to later callers only if the resumed run never started executing.
@@ -8026,6 +8043,42 @@ export class Agent<
       };
     }
 
+    const runFencing = await workflowsStore.supportsRunFencing();
+    const leaseRunId = agentResumeLeaseRunId(runId);
+    const leaseOwnerId = formatLeaseOwner(resumeLeaseHolderId, runId);
+    let lease: { generation: number; ownerId: string } | undefined;
+    let renewTimer: ReturnType<typeof setInterval> | undefined;
+
+    const releaseLease = async () => {
+      if (renewTimer) clearInterval(renewTimer);
+      renewTimer = undefined;
+      if (!lease) return;
+      const held = lease;
+      lease = undefined;
+      try {
+        await workflowsStore.releaseRunOwnership({ runId: leaseRunId, ...held });
+      } catch (error) {
+        this.logger.warn(`[Agent ${this.name}] Failed to release resume lease for run ${runId}`, { error });
+      }
+    };
+
+    // Acquires the lease unless another process holds it live. Pinning `expectedGeneration` to the
+    // record that was read lets exactly one of several racing callers win.
+    const acquireLease = async (): Promise<{ acquired: boolean; hadRecord: boolean }> => {
+      const record = await workflowsStore.getRunOwnership({ runId: leaseRunId });
+      if (record?.live) return { acquired: false, hadRecord: true };
+      const result = await workflowsStore.claimRunOwnership({
+        runId: leaseRunId,
+        ownerId: leaseOwnerId,
+        leaseMs: AGENT_LEASE_TTL_MS,
+        force: true,
+        expectedGeneration: record?.generation ?? 0,
+      });
+      if (!result.acquired) return { acquired: false, hadRecord: !!record };
+      lease = { generation: result.record.generation, ownerId: leaseOwnerId };
+      return { acquired: true, hadRecord: !!record };
+    };
+
     const claim = () =>
       workflowsStore.updateWorkflowState({
         workflowName: AGENTIC_LOOP_WORKFLOW_ID,
@@ -8036,26 +8089,42 @@ export class Agent<
     let claimed = await claim();
     if (!claimed) {
       const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
-      const abandoned =
-        current?.status === 'pending' &&
-        current.timestamp === snapshot.timestamp &&
-        typeof current.resumeClaimedAt === 'number' &&
-        Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
-      if (!abandoned) throwAlreadyClaimed();
+      if (current?.status === 'running' && current.timestamp === snapshot.timestamp) {
+        claimed = await this.#takeOverDeadResumeClaim({
+          runFencing,
+          acquireLease,
+          releaseLease,
+          takeOver: () =>
+            workflowsStore.updateWorkflowState({
+              workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+              runId,
+              opts: { status: 'pending', expectedStatus: 'running', resumeClaimedAt: Date.now() },
+            }),
+          runId,
+          throwAlreadyClaimed,
+        });
+      } else {
+        const abandoned =
+          current?.status === 'pending' &&
+          current.timestamp === snapshot.timestamp &&
+          typeof current.resumeClaimedAt === 'number' &&
+          Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
+        if (!abandoned) throwAlreadyClaimed();
 
-      // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
-      // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
-      // single `pending -> running` move still lets at most one resume execute.
-      this.logger.warn(
-        `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
-      );
-      await workflowsStore.updateWorkflowState({
-        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
-        runId,
-        opts: { status: 'suspended', expectedStatus: 'pending' },
-      });
-      claimed = await claim();
-      if (!claimed) throwAlreadyClaimed();
+        // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
+        // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
+        // single `pending -> running` move still lets at most one resume execute.
+        this.logger.warn(
+          `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
+        );
+        await workflowsStore.updateWorkflowState({
+          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+          runId,
+          opts: { status: 'suspended', expectedStatus: 'pending' },
+        });
+        claimed = await claim();
+        if (!claimed) throwAlreadyClaimed();
+      }
     }
 
     const claimedAt = claimed!.resumeClaimedAt;
@@ -8063,6 +8132,7 @@ export class Agent<
     let started = false;
     let released = false;
     const release = async () => {
+      await releaseLease();
       if (started || released) return;
       released = true;
       try {
@@ -8090,6 +8160,11 @@ export class Agent<
     return {
       snapshot,
       start: async () => {
+        if (runFencing && !lease && !(await acquireLease()).acquired) {
+          // Another process's start() holds the lease on this claim.
+          released = true;
+          throwAlreadyClaimed();
+        }
         const running = await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
@@ -8098,15 +8173,73 @@ export class Agent<
         if (!running) {
           // A later resume took this claim over as abandoned; it owns the suspension now.
           released = true;
+          await releaseLease();
           throwAlreadyClaimed();
         }
         claimStatus = 'running';
+        if (lease) {
+          const held = lease;
+          renewTimer = setInterval(() => {
+            workflowsStore
+              .renewRunOwnership({ runId: leaseRunId, ...held, leaseMs: AGENT_LEASE_TTL_MS })
+              .then(result => {
+                if (result.renewed) return;
+                if (renewTimer) clearInterval(renewTimer);
+                renewTimer = undefined;
+                this.logger.warn(
+                  `[Agent:${this.name}] - Lost the resume lease for run ${runId}; another resume may have taken it over.`,
+                );
+              })
+              .catch(error => {
+                this.logger.warn(`[Agent:${this.name}] - Failed to renew resume lease for run ${runId}`, { error });
+              });
+          }, AGENT_LEASE_RENEW_INTERVAL_MS);
+          renewTimer.unref?.();
+        }
       },
       onExecutionStarted: () => {
         started = true;
       },
       release,
     };
+  }
+
+  /**
+   * Takes over a resume claim left `running` with no live lease, which means the process that
+   * started it died. Returns the re-claimed (`pending`) row, or throws `AGENT_RESUME_ALREADY_CLAIMED`.
+   */
+  async #takeOverDeadResumeClaim({
+    runFencing,
+    acquireLease,
+    releaseLease,
+    takeOver,
+    runId,
+    throwAlreadyClaimed,
+  }: {
+    runFencing: boolean;
+    acquireLease: () => Promise<{ acquired: boolean; hadRecord: boolean }>;
+    releaseLease: () => Promise<void>;
+    takeOver: () => Promise<WorkflowRunState | undefined>;
+    runId: string;
+    throwAlreadyClaimed: () => never;
+  }): Promise<WorkflowRunState> {
+    if (!runFencing) {
+      this.logger.warn(
+        `[Agent:${this.name}] - The resume claim for run ${runId} is running. The configured workflow storage does not support run fencing, so a claim left running by a process that died cannot be taken over.`,
+      );
+      return throwAlreadyClaimed();
+    }
+    const { acquired, hadRecord } = await acquireLease();
+    if (!acquired) return throwAlreadyClaimed();
+    const claimed = await takeOver();
+    if (!claimed) {
+      await releaseLease();
+      return throwAlreadyClaimed();
+    }
+    this.logger.warn(
+      `[Agent:${this.name}] - Taking over resume claim for run ${runId} with no live lease${hadRecord ? '' : ' (no lease record, likely claimed by an earlier version)'}; the suspended tool may run again.`,
+    );
+    return claimed;
   }
 
   /**

@@ -580,6 +580,14 @@ Suspended runs only survive restarts when your Mastra instance is configured wit
 
 :::
 
+### Concurrent and interrupted resumes
+
+Only one resume of a suspended run executes the suspended tool. When several calls (`approveToolCall()`, `declineToolCall()`, `resumeStream()`, `resumeGenerate()` and their `generate` variants) race for the same run, one claims it and the others throw an error with the id `AGENT_RESUME_ALREADY_CLAIMED`.
+
+While a resume runs, its process holds a lease on the claim and renews it. If that process dies, for example on a crash or a redeploy, the lease expires and a later resume takes the run over. The lease lasts 15 seconds by default. Set the `MASTRA_AGENT_THREAD_LEASE_TTL_MS` environment variable to change it. This recovery needs a storage provider that supports run fencing, such as PostgreSQL or LibSQL.
+
+A takeover runs the suspended tool again, so after a crash the tool can run more than once. Make tools that run after approval idempotent. A tool that blocks the event loop for longer than the lease can also be taken over while it's still running.
+
 ## Tool approval: Supervisor agents
 
 A [supervisor agent](/docs/subagents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:

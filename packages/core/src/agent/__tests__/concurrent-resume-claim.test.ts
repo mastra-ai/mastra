@@ -8,7 +8,8 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
-import { Agent, AGENT_RESUME_CLAIM_STALE_MS } from '../agent';
+import { Agent, AGENT_RESUME_CLAIM_STALE_MS, agentResumeLeaseRunId } from '../agent';
+import { AGENT_LEASE_RENEW_INTERVAL_MS } from '../run-ownership';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 function createMockModel() {
@@ -68,8 +69,11 @@ function createMockModel() {
   });
 }
 
-async function setup({ atomicStore = true }: { atomicStore?: boolean } = {}) {
-  const execute = vi.fn(async ({ id }: { id: string }) => ({ archived: id }));
+async function setup({
+  atomicStore = true,
+  executeImpl = async ({ id }) => ({ archived: id }),
+}: { atomicStore?: boolean; executeImpl?: (input: { id: string }) => Promise<{ archived: string }> } = {}) {
+  const execute = vi.fn(executeImpl);
   const agent = new Agent({
     id: 'archive-agent',
     name: 'Archive Agent',
@@ -221,5 +225,142 @@ describe('concurrent resumes of a suspended agent run', () => {
       id: 'AGENT_RESUME_ALREADY_CLAIMED',
     });
     expect(execute).not.toHaveBeenCalled();
+  }, 30000);
+
+  // A process that dies after starting the resume leaves the claim `running`. `leaseMs` simulates
+  // the lease the dead claimant held; omit it for a row left by a version without the lease.
+  async function strandRunningClaim(workflowsStore: any, runId: string, { leaseMs }: { leaseMs?: number } = {}) {
+    await strandClaim(workflowsStore, runId, 0);
+    if (leaseMs !== undefined) {
+      const claimed = await workflowsStore.claimRunOwnership({
+        runId: agentResumeLeaseRunId(runId),
+        ownerId: `dead-source/${runId}`,
+        leaseMs,
+      });
+      expect(claimed.acquired).toBe(true);
+    }
+    const running = await workflowsStore.updateWorkflowState({
+      workflowName: 'agentic-loop',
+      runId,
+      opts: { status: 'running', expectedStatus: 'pending' },
+    });
+    expect(running?.status).toBe('running');
+  }
+
+  const expireLease = () => new Promise(resolve => setTimeout(resolve, 20));
+
+  it('lets a later approval take over a run whose resume died after it started', async () => {
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+    await strandRunningClaim(workflowsStore, runId, { leaseMs: 1 });
+    await expireLease();
+
+    await drain(await agent.approveToolCall({ runId, toolCallId }));
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
+    expect(snapshot?.status).not.toBe('running');
+    expect((await workflowsStore.getRunOwnership({ runId: agentResumeLeaseRunId(runId) }))?.live).toBe(false);
+  }, 30000);
+
+  it('lets a later approveToolCallGenerate take over a run whose resume died after it started', async () => {
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+    await strandRunningClaim(workflowsStore, runId, { leaseMs: 1 });
+    await expireLease();
+
+    const result = await agent.approveToolCallGenerate({ runId, toolCallId });
+
+    expect(result.text).toBe('Archived');
+    expect(execute).toHaveBeenCalledTimes(1);
+  }, 30000);
+
+  it('recovers a running claim left by an earlier version without a lease', async () => {
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+    await strandRunningClaim(workflowsStore, runId);
+    const warn = vi.spyOn(agent.__getLogger(), 'warn');
+
+    await drain(await agent.approveToolCall({ runId, toolCallId }));
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('no lease record'));
+  }, 30000);
+
+  it('rejects an approval while a started resume still holds its lease', async () => {
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+    await strandRunningClaim(workflowsStore, runId, { leaseMs: 60_000 });
+
+    await expect(agent.approveToolCall({ runId, toolCallId })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    });
+    expect(execute).not.toHaveBeenCalled();
+  }, 30000);
+
+  it.each([
+    ['an expired lease', { leaseMs: 1 }],
+    ['no lease record', {}],
+  ])(
+    'lets only one of two concurrent takeovers of a dead claim with %s win',
+    async (_label, lease) => {
+      const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+      await strandRunningClaim(workflowsStore, runId, lease);
+      await expireLease();
+
+      const results = await Promise.allSettled([
+        agent.approveToolCall({ runId, toolCallId }),
+        agent.approveToolCall({ runId, toolCallId }),
+      ]);
+      await drain(expectOneWinner(results));
+
+      expect(execute).toHaveBeenCalledTimes(1);
+    },
+    30000,
+  );
+
+  it('keeps running claims on stores without run fencing', async () => {
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+    vi.spyOn(workflowsStore, 'supportsRunFencing').mockReturnValue(false);
+    await strandRunningClaim(workflowsStore, runId);
+    const warn = vi.spyOn(agent.__getLogger(), 'warn');
+
+    await expect(agent.approveToolCall({ runId, toolCallId })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    });
+    expect(execute).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('does not support run fencing'));
+  }, 30000);
+
+  it('renews the lease while the resumed tool runs and releases it when the run ends', async () => {
+    let openGate!: () => void;
+    const gate = new Promise<void>(resolve => (openGate = resolve));
+    let toolStarted!: () => void;
+    const started = new Promise<void>(resolve => (toolStarted = resolve));
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup({
+      executeImpl: async ({ id }) => {
+        toolStarted();
+        await gate;
+        return { archived: id };
+      },
+    });
+    const renew = vi.spyOn(workflowsStore, 'renewRunOwnership');
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const output = await agent.approveToolCall({ runId, toolCallId });
+      const drained = drain(output);
+      await started;
+
+      const lease = await workflowsStore.getRunOwnership({ runId: agentResumeLeaseRunId(runId) });
+      expect(lease?.live).toBe(true);
+      expect(lease?.ownerId).toMatch(new RegExp(`^[0-9a-f-]{36}/${runId}$`));
+
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+      expect(renew).toHaveBeenCalledWith(expect.objectContaining({ runId: agentResumeLeaseRunId(runId) }));
+
+      openGate();
+      await drained;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect((await workflowsStore.getRunOwnership({ runId: agentResumeLeaseRunId(runId) }))?.live).toBe(false);
   }, 30000);
 });
