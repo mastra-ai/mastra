@@ -1,4 +1,4 @@
-import { CalendarClockIcon, HashIcon, TimerIcon, ZapIcon } from 'lucide-react';
+import { CalendarClockIcon, HashIcon, TimerIcon } from 'lucide-react';
 import { getSpanDurationMs } from '../utils/span-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { truncateString } from '@/lib/truncate-string';
@@ -10,7 +10,6 @@ export interface SpanSummaryDescriptionProps {
     startedAt: Date | string;
     endedAt?: Date | string | null;
     runId?: string | null;
-    attributes?: Record<string, unknown> | null;
   };
 }
 
@@ -19,12 +18,6 @@ export function SpanSummaryDescription({ span }: SpanSummaryDescriptionProps) {
   const startedAt = formatDate(span.startedAt, 'time');
   const exactStartedAt = formatTimestampPrecise(span.startedAt);
   const duration = formatDurationPrecise(getSpanDurationMs(span.startedAt, span.endedAt));
-  // Agent run and model spans record when the first chunk arrived; time to first chunk counts from the span start.
-  const completionStartTime = span.attributes?.completionStartTime;
-  const timeToFirstChunk =
-    completionStartTime instanceof Date || typeof completionStartTime === 'string'
-      ? formatDurationPrecise(getSpanDurationMs(span.startedAt, completionStartTime))
-      : undefined;
 
   return (
     <DataPanel.Metadata>
@@ -36,11 +29,6 @@ export function SpanSummaryDescription({ span }: SpanSummaryDescriptionProps) {
       {duration && (
         <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${duration}`}>
           {duration}
-        </DataPanel.Meta>
-      )}
-      {timeToFirstChunk && (
-        <DataPanel.Meta icon={<ZapIcon />} tooltip={`Time to first chunk ${timeToFirstChunk}`}>
-          {timeToFirstChunk}
         </DataPanel.Meta>
       )}
       {span.runId && (
