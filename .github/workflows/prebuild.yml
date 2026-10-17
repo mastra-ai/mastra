@@ -29,56 +29,20 @@ jobs:
       - name: Check for code changes
         id: filter
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          # The full suite runs for a workflow_call and for the Changesets release PR, which
-          # gates every release so regular PRs can stay on affected-test selection. A fork can
-          # pick any branch name, so the release PR head must also live in this repository.
+          # Only a workflow_call (e.g. the alpha cron) and the Changesets release PR run the
+          # build and tests. Regular PRs rely on the Changed Test Gate and lint checks. A fork
+          # can pick any branch name, so the release PR head must also live in this repository.
           FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
         run: |
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "full_suite=$FULL_SUITE" >> "$GITHUB_OUTPUT"
 
-          # The full suite runs even when the diff only touches paths excluded below.
           if [ "$FULL_SUITE" = "true" ]; then
             echo "Full suite requested; running Prebuild."
             echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          compare_json=$(mktemp)
-
-          if ! gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/$REPOSITORY/compare/$BASE_SHA...$HEAD_SHA" \
-            > "$compare_json"; then
-            echo "Compare API failed; running Prebuild fail-closed."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! file_count=$(jq -er \
-            'if (.files | type) == "array" then (.files | length) else error("missing files array") end' \
-            "$compare_json"); then
-            echo "Compare API result was invalid; running Prebuild fail-closed."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "$file_count" -ge 300 ]; then
-            echo "Compare API result reached its 300-file response limit; running Prebuild fail-closed."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          CHANGED=$(jq -r '.files[].filename' "$compare_json" \
-            | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
-          if [ -n "$CHANGED" ]; then
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
           else
+            echo "Regular PR; skipping Prebuild build and tests."
             echo "has_code=false" >> "$GITHUB_OUTPUT"
           fi
 
