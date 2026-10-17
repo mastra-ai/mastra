@@ -81,10 +81,11 @@ describe('server tool returning undefined (#27370)', () => {
 
     const memoryStore = (await storage.getStore('memory'))!;
     const { messages } = await memoryStore.listMessages({ threadId });
-    const toolStates = messages.flatMap(message =>
-      message.content.parts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.state] : [])),
+    const toolInvocations = messages.flatMap(message =>
+      message.content.parts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation] : [])),
     );
-    expect(toolStates).toEqual(['result']);
+    expect(toolInvocations.map(invocation => invocation.state)).toEqual(['result']);
+    expect(toolInvocations[0]).toHaveProperty('result', null);
 
     await (await agent.stream('Again.', memoryOptions)).consumeStream();
 
@@ -94,6 +95,10 @@ describe('server tool returning undefined (#27370)', () => {
     );
     expect(contentTypes).toContain('assistant:tool-call');
     expect(contentTypes).toContain('tool:tool-result');
+    const promptedResult = nextPrompt
+      .flatMap(message => (message.role === 'tool' ? message.content : []))
+      .find(part => part.type === 'tool-result' && part.toolCallId === 'call-1');
+    expect(promptedResult).toMatchObject({ output: { type: 'json', value: null } });
     expect(execute).toHaveBeenCalledTimes(1);
   });
 });
