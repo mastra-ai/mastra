@@ -525,6 +525,15 @@ type AgentThreadRuntimeState = {
    * if `activeThreadRunIds` is rotated by a follow-up signal.
    */
   leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
+  /**
+   * Runs the suspended-record TTL sweep evicted while this runtime held their
+   * lease renewal, mapped to the sweep time. The sweep deliberately leaves the
+   * thread lease to expire on its own (a cross-instance resume may own it), so
+   * until it does, a send that loses the lease to one of these runs must not
+   * claim `deliver` — nothing exists locally to receive it. Entries are pruned
+   * once the orphaned lease must have expired (sweep time + lease TTL).
+   */
+  sweptLeasedRunIds: Map<string, number>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
 };
@@ -714,6 +723,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     abortedRunIds: new Set(),
     startingQueuedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
+    sweptLeasedRunIds: new Map(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
   };
@@ -841,6 +851,15 @@ export class AgentThreadStreamRuntime {
             // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
             // but another process can now claim the thread until this run completes or errors.
             this.#stopLeaseRenewal(pubsub, runId, timer);
+            return;
+          }
+          // A renewal that was already in flight when the suspended-run sweep stopped this
+          // timer extends the lease past `sweptAt + AGENT_THREAD_LEASE_TTL_MS`. Re-stamp the
+          // swept-run marker so it outlives the lease it just extended; otherwise the marker
+          // can expire while the lease is still held and a send inside that gap would again
+          // be acknowledged as `deliver` to a run with no receiver (#26474).
+          if (state.sweptLeasedRunIds.has(runId)) {
+            state.sweptLeasedRunIds.set(runId, Date.now());
           }
         })
         .catch(() => {});
@@ -3087,6 +3106,12 @@ export class AgentThreadStreamRuntime {
    */
   #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
     const now = Date.now();
+    // Once a swept run's abandoned lease must have expired (we stopped renewing
+    // it at sweep time), a lease still held under that runId can only belong to
+    // a live owner elsewhere — forwarding to it is correct again, so forget it.
+    for (const [runId, sweptAt] of state.sweptLeasedRunIds) {
+      if (now - sweptAt > AGENT_THREAD_LEASE_TTL_MS) state.sweptLeasedRunIds.delete(runId);
+    }
     for (const [streamId, record] of state.threadRunsByStreamId) {
       if (record.lifecycle !== 'suspended' || record.suspendedAt === undefined) continue;
       if (now - record.suspendedAt <= AGENT_SUSPENDED_RUN_TTL_MS) continue;
@@ -3102,6 +3127,7 @@ export class AgentThreadStreamRuntime {
       state.threadKeysByRunId.delete(record.runId);
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+      state.sweptLeasedRunIds.set(record.runId, now);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -5986,11 +6012,29 @@ export class AgentThreadStreamRuntime {
         state.threadKeysByRunId.delete(reservedRunId);
         state.preRunSignalsByThread.delete(reservedKey);
 
+        const winnerRunId = lease.owner;
+
+        // The lease "winner" may be a run the suspended-record TTL sweep already
+        // evicted on this instance. Until that orphaned lease expires, nothing
+        // exists to receive a forwarded signal, so acknowledging `deliver` would
+        // silently drop the message (#26474). Report `blocked` instead so the
+        // caller can retry once the lease frees. If a cross-instance resume
+        // legitimately owns the lease under the same runId, it outlives this
+        // window by renewing, and sends after the window forward to it as before.
+        const sweptAt = winnerRunId ? state.sweptLeasedRunIds.get(winnerRunId) : undefined;
+        if (
+          winnerRunId &&
+          sweptAt !== undefined &&
+          !state.threadRunsById.has(winnerRunId) &&
+          Date.now() - sweptAt <= AGENT_THREAD_LEASE_TTL_MS
+        ) {
+          return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: winnerRunId };
+        }
+
         // Forward the user signal to the winning runId so the message is not dropped.
         // Await the publish so that callers using `accepted` resolution as their
         // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
         // via waitUntil) don't tear down before the enqueue lands on the broker.
-        const winnerRunId = lease.owner;
         if (winnerRunId) {
           await this.#publishAndWait(pubsub, reservedKey, {
             type: 'signal-enqueued',
