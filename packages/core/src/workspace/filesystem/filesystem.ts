@@ -227,6 +227,11 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    * When true, all write operations to this filesystem are blocked.
    * Read operations are still allowed.
    *
+   * Applies to the filesystem API and file tools. When the filesystem is
+   * mounted into a `LocalSandbox` with native isolation, the mount is also
+   * made read-only for commands; without isolation, commands are not
+   * restricted.
+   *
    * @default false
    */
   readonly readOnly?: boolean;
