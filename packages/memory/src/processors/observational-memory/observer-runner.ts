@@ -415,6 +415,7 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
+    assertNonEmptyObserverOutput(result.text);
     let parsed = parseObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 
@@ -423,6 +424,7 @@ export class ObserverRunner {
         `[OM:callObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
       );
       result = await doGenerate();
+      assertNonEmptyObserverOutput(result.text);
       parsed = parseObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
@@ -747,6 +749,7 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
+    assertNonEmptyObserverOutput(result.text);
     let parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 
@@ -755,6 +758,7 @@ export class ObserverRunner {
         `[OM:callMultiThreadObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
       );
       result = await doGenerate();
+      assertNonEmptyObserverOutput(result.text);
       parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
@@ -854,5 +858,15 @@ export class ObserverRunner {
         : undefined,
       providerMetadata: result.providerMetadata,
     };
+  }
+}
+
+/**
+ * An empty Observer response must fail like a model error. Committing it would
+ * advance `lastObservedAt` past messages that were never observed.
+ */
+function assertNonEmptyObserverOutput(text: string | undefined): void {
+  if (!text?.trim()) {
+    throw new OmModelExecutionError('observer-model', new Error('Observer returned empty output'));
   }
 }
