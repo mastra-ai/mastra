@@ -552,12 +552,15 @@ jobs:
           fi
 
           # A re-run keeps its run ID, so its previous state is the earlier attempt of this run.
+          # Cancelled attempts are skipped, so walk back to the newest one that finished.
           previous=''
-          if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then
-            previous=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$((GITHUB_RUN_ATTEMPT - 1))" \
+          attempt=$((GITHUB_RUN_ATTEMPT - 1))
+          while [ -z "$previous" ] && [ "$attempt" -ge 1 ]; do
+            previous=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$attempt" \
               --jq '.conclusion // ""' 2>/dev/null || true)
             [ "$previous" = "cancelled" ] && previous=''
-          fi
+            attempt=$((attempt - 1))
+          done
 
           # Otherwise this run is still in progress, so the newest completed run is the previous one.
           if [ -z "$previous" ] && ! previous=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
