@@ -16,6 +16,8 @@ export interface ExperimentsToolbarProps extends ExperimentsFilters {
   selection: ExperimentsBulkActionsProps;
   /** Dataset of the first selected experiment, explained by the legend. */
   comparableDatasetId?: string;
+  /** Name of that dataset, when known. */
+  comparableDatasetName?: string;
 }
 
 export function ExperimentsToolbar({
@@ -28,6 +30,7 @@ export function ExperimentsToolbar({
   onFiltersChange,
   selection,
   comparableDatasetId,
+  comparableDatasetName,
 }: ExperimentsToolbarProps) {
   return (
     <>
@@ -46,7 +49,7 @@ export function ExperimentsToolbar({
       </ActionRow>
       <ActionRow>
         <ActionRow.Start className="self-end">
-          <ExperimentsComparableLegend datasetId={comparableDatasetId} />
+          <ExperimentsComparableLegend datasetId={comparableDatasetId} datasetName={comparableDatasetName} />
         </ActionRow.Start>
         <ActionRow.End>
           <ExperimentsBulkActions {...selection} />

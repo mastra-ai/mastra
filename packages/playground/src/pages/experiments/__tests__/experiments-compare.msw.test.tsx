@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
+import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
   buildListExperimentsResponse,
@@ -50,6 +51,7 @@ function select(...ids: string[]) {
 
 beforeEach(() => {
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
@@ -186,11 +188,24 @@ describe('Experiments page — selection and compare', () => {
       expect(highlightedExperiments()).toEqual(['run a', 'run b']);
     });
 
-    it('explains the highlight above the list, giving the dataset id', async () => {
+    it('explains the highlight above the list, giving the dataset name', async () => {
       await renderLoadedPage();
       select('exp-a');
 
-      expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-1');
+      await waitFor(() => expect(getLegend().textContent).toBe('Comparable experiments share dataset Dataset One'));
+    });
+  });
+
+  describe('when the dataset of the selected experiment cannot be found', () => {
+    beforeEach(() => {
+      server.use(http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))));
+    });
+
+    it('gives the dataset id in the legend instead', async () => {
+      await renderLoadedPage();
+      select('exp-a');
+
+      await waitFor(() => expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-1'));
     });
   });
 
@@ -200,7 +215,7 @@ describe('Experiments page — selection and compare', () => {
       select('exp-a', 'exp-c', 'exp-a');
 
       expect(highlightedExperiments()).toEqual(['run c']);
-      expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-2');
+      expect(getLegend().textContent).toBe('Comparable experiments share dataset Dataset Two');
     });
   });
 
