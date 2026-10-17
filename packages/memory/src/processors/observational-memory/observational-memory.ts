@@ -1777,6 +1777,9 @@ export class ObservationalMemory {
     const observedMessageIds = new Set<string>(
       Array.isArray(record.observedMessageIds) ? record.observedMessageIds : [],
     );
+    // A message sharing the cursor millisecond is only known to be unobserved when observed ids are tracked;
+    // without them, keep the cursor exclusive so already-observed boundary messages are not re-observed.
+    const hasObservedIds = Array.isArray(record.observedMessageIds) && record.observedMessageIds.length > 0;
 
     // Only exclude buffered chunk message IDs when called from the buffering path.
     // The main agent context should still see buffered messages until activation.
@@ -1826,7 +1829,7 @@ export class ObservationalMemory {
           result.push(msg);
         } else {
           const msgDate = new Date(msg.createdAt);
-          if (msgDate > lastObservedAt) {
+          if (msgDate > lastObservedAt || (hasObservedIds && msgDate.getTime() === lastObservedAt.getTime())) {
             result.push(msg);
           } else {
           }
@@ -2206,9 +2209,9 @@ export class ObservationalMemory {
     resourceId: string | undefined,
     lastObservedAt?: Date,
   ): Promise<MastraDBMessage[]> {
-    // Add 1ms to lastObservedAt to make the filter exclusive (since dateRange.start is inclusive)
-    // This prevents re-loading the same messages that were already observed
-    const startDate = lastObservedAt ? new Date(lastObservedAt.getTime() + 1) : undefined;
+    // Inclusive start: messages sharing the cursor millisecond may be unobserved.
+    // Observed ones are filtered out downstream by observedMessageIds.
+    const startDate = lastObservedAt ? new Date(lastObservedAt.getTime()) : undefined;
 
     let result: { messages: MastraDBMessage[] };
 
@@ -4232,10 +4235,13 @@ ${formattedMessages}
 
         const unobservedMessages = messages
           ? this.getUnobservedMessages(messages, freshRecord)
-          : await this.loadMessagesFromStorage(
-              threadId,
-              resourceId,
-              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+          : this.getUnobservedMessages(
+              await this.loadMessagesFromStorage(
+                threadId,
+                resourceId,
+                freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+              ),
+              freshRecord,
             );
 
         if (opts.force) {
