@@ -79,6 +79,12 @@ export type FilterBarField = {
   /** Never offered in the input's field step; existing chips for it still render with the field label. */
   hidden?: boolean;
   /**
+   * Heading of the field-step section this field is listed under, e.g. to set apart fields that act on
+   * something other than the rows. Consecutive fields with the same section share one heading; fields
+   * without one are listed without a heading.
+   */
+  section?: string;
+  /**
    * Free-text entry point. The field stays offered in the input's field step whatever the
    * query, so typed text never dead-ends on "No matching field"; picking it with text typed
    * commits that text as the value under the field's first operator, skipping both steps.

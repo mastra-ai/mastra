@@ -43,7 +43,7 @@ const PRESET_MS: Partial<Record<TraceDatePreset, number>> = {
 
 /** Mutates `params` in place to drop the featured trace/span/tab/score selection.
  *  Used whenever a filter changes — selection no longer makes sense in the new result set. */
-function clearSelectionParams(params: URLSearchParams) {
+export function clearSelectionParams(params: URLSearchParams) {
   params.delete(TRACE_ID_PARAM);
   params.delete(SPAN_ID_PARAM);
   params.delete(TRACE_ANCHOR_SPAN_ID_PARAM);

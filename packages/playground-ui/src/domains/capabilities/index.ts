@@ -1,6 +1,7 @@
 export {
   useFeedbackAvailable,
   useObservabilityCapabilities,
+  useTraceAggregateAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,

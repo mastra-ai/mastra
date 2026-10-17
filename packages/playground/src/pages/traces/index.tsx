@@ -1,5 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
@@ -7,6 +8,7 @@ import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/c
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import {
   useFeedbackAvailable,
+  useTraceAggregateAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
@@ -18,6 +20,7 @@ import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
+import { TraceGroupColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-group-columns-menu';
 import {
   TRACE_TIME_RANGE_FIELD,
   TRACE_TIME_RANGE_FIELD_ID,
@@ -25,14 +28,18 @@ import {
   TraceTimeRangeChip,
 } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
+import { TracesGroupedView } from '@mastra/playground-ui/domains/traces/components/traces-grouped-view';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
+import { useTraceGroupBy } from '@mastra/playground-ui/domains/traces/hooks/use-trace-group-by';
+import { useTraceGroupColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-group-column-preferences';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
-import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
+import { clearSelectionParams, useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import {
+  applyTracePropertyFilterTokens,
   buildTraceListFilters,
   createTraceFilterBarFields,
   filterBarExpressionToTraceFilters,
@@ -42,6 +49,16 @@ import {
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
+import {
+  getOfferedTraceGroupByDimensions,
+  getOfferedTraceGroupColumns,
+  supportsTraceGroupEntityIdFallback,
+} from '@mastra/playground-ui/domains/traces/trace-group-by';
+import {
+  createTraceGroupByFilterBarFields,
+  splitTraceGroupingFromFilterBar,
+  traceGroupingToFilterBarItems,
+} from '@mastra/playground-ui/domains/traces/trace-group-by-filter-bar';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import {
   buildTraceQueryRequest,
@@ -62,6 +79,7 @@ import {
   useTraceOrBranchSpans,
   useTraceUsage,
 } from '@mastra/react/hooks/traces';
+import { RefreshCwIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -226,6 +244,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const {
     fields: metadataFields,
     canonicalFields: canonicalTraceFields,
+    aggregate: aggregateDiscovery,
     isLoading: isDiscoveryLoading,
   } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
@@ -238,10 +257,46 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     [client, discoveryTimeRange],
   );
 
-  const filterBarFields = useMemo(
-    () => [
-      TRACE_TIME_RANGE_FIELD,
-      ...createTraceFilterBarFields({
+  // The grouped view holds `now` until told otherwise; a preset computes its start from the current time,
+  // so a date change must move the grouped window's end too or the two drift apart.
+  const withGroupRefresh =
+    <Args extends unknown[]>(handler: (...args: Args) => void) =>
+    (...args: Args) => {
+      handler(...args);
+      groupView.refresh();
+    };
+
+  const buildListQuery = (now: Date) =>
+    buildTraceQueryRequest({
+      rootEntityType: url.selectedEntityOption?.entityType,
+      status: url.selectedStatus,
+      dateFrom: url.selectedDateFrom,
+      dateTo: url.selectedDateTo,
+      tokens: url.filterTokens,
+      groups: url.filterGroups,
+      excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
+      now,
+    });
+
+  // Grouping counts the same selection as the list. The scoped tabs (one agent or workflow) don't offer it.
+  const withGroupBy = useTraceAggregateAvailable().enabled && !isScoped;
+  const groupByDimensions = withGroupBy ? getOfferedTraceGroupByDimensions({ discovery: aggregateDiscovery }) : [];
+  const groupColumnPreferences = useTraceGroupColumnPreferences();
+  const offeredGroupColumns = getOfferedTraceGroupColumns(aggregateDiscovery);
+  const groupColumns = groupColumnPreferences.columns.filter(measure => offeredGroupColumns.includes(measure));
+  const groupView = useTraceGroupBy({
+    searchParams,
+    setSearchParams: setPersistedSearchParams,
+    dimensions: groupByDimensions,
+    query: buildListQuery,
+    enabled: withGroupBy,
+    entityIdFallback: supportsTraceGroupEntityIdFallback(aggregateDiscovery),
+    columns: groupColumns,
+  });
+
+  const traceFilterBarFields = useMemo(
+    () =>
+      createTraceFilterBarFields({
         availableRootEntityNames: rootEntityNameSuggestions,
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
@@ -251,7 +306,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         withQueryTrace,
         withRootDuration,
       }),
-    ],
     [
       withRootDuration,
       rootEntityNameSuggestions,
@@ -263,6 +317,18 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       withQueryTrace,
     ],
   );
+  // Group by sits first in the field list so it's easy to find; its group filters appear only while grouped.
+  const filterBarFields = [
+    TRACE_TIME_RANGE_FIELD,
+    ...createTraceGroupByFilterBarFields({
+      dimensions: groupByDimensions,
+      grouped: groupView.grouped,
+      // Filter on the visible columns, and keep the fields of group filters already applied.
+      measures: [...groupColumns, ...groupView.grouping.having.map(entry => entry.measure)],
+    }),
+    ...traceFilterBarFields,
+  ];
+  const groupingFilterBarItems = traceGroupingToFilterBarItems(groupView.grouping);
   // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
   const availableMetadataKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -280,39 +346,45 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens (its state lives in the date params).
   // Expression mode so root-level AND/OR groups render as "Advanced filter" chips.
-  const filterBarValue = useMemo<FilterBarExpression>(() => {
+  const traceFilterBarValue = useMemo<FilterBarExpression>(() => {
     const expression = traceFiltersToFilterBarExpression([], url.filterGroups);
     return { ...expression, nodes: [TRACE_TIME_RANGE_ITEM, ...filterBarItems, ...expression.nodes] };
   }, [filterBarItems, url.filterGroups]);
+  const filterBarValue: FilterBarExpression = {
+    ...traceFilterBarValue,
+    nodes: [...traceFilterBarValue.nodes, ...groupingFilterBarItems],
+  };
   // Re-inject the hidden scope items so the FilterBar clear button (which drops every removable item) and any other
   // edit can never drop the scope from the URL.
-  const handleFilterBarChange = useCallback(
-    (expression: FilterBarExpression) => {
-      const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
-      const { tokens, groups } = filterBarExpressionToTraceFilters({
-        ...expression,
-        nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
-      });
-      url.handleFilterTokensChange([...filterBarItemsToTraceTokens(scoped), ...tokens], groups);
-    },
-    [allFilterBarItems, scopedFieldIds, url],
-  );
+  // The Group by chips live in the same bar: split them out and write them in the same URL update as the filters.
+  const handleFilterBarChange = (expression: FilterBarExpression) => {
+    const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
+    const { grouping, nodes } = splitTraceGroupingFromFilterBar(expression.nodes, groupByDimensions);
+    const { tokens, groups } = filterBarExpressionToTraceFilters({
+      ...expression,
+      nodes: nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+    });
+    const nextTokens = [...filterBarItemsToTraceTokens(scoped), ...tokens];
+    if (!withGroupBy) {
+      url.handleFilterTokensChange(nextTokens, groups);
+      return;
+    }
+    groupView.setGrouping(grouping, next => {
+      applyTracePropertyFilterTokens(next, nextTokens, groups);
+      clearSelectionParams(next);
+    });
+  };
   // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs in flat mode, which never offers
   // "Advanced filter".
-  const flatFilterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
-  const handleFlatFilterBarChange = useCallback(
-    (items: FilterBarItem[]) => handleFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes: items }),
-    [handleFilterBarChange],
-  );
-  const handleFilterByField = useCallback(
-    (fieldId: string, value: string) => {
-      const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
-      const item: FilterBarItem = { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value };
-      const groups = filterBarValue.nodes.filter(isFilterBarGroup);
-      handleFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groups] });
-    },
-    [filterBarItems, filterBarValue, handleFilterBarChange],
-  );
+  const flatFilterBarValue = [TRACE_TIME_RANGE_ITEM, ...filterBarItems, ...groupingFilterBarItems];
+  const handleFlatFilterBarChange = (items: FilterBarItem[]) =>
+    handleFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes: items });
+  const handleFilterByField = (fieldId: string, value: string) => {
+    const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
+    const item: FilterBarItem = { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value };
+    const groups = filterBarValue.nodes.filter(isFilterBarGroup);
+    handleFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groups, ...groupingFilterBarItems] });
+  };
 
   const {
     rows: traces,
@@ -325,20 +397,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     setAutoRefetch: setAutoRefetchTraces,
   } = useTracesListSource({
     rolling: !url.selectedDateTo,
-    query: now =>
-      buildTraceQueryRequest({
-        rootEntityType: url.selectedEntityOption?.entityType,
-        status: url.selectedStatus,
-        dateFrom: url.selectedDateFrom,
-        dateTo: url.selectedDateTo,
-        tokens: url.filterTokens,
-        groups: url.filterGroups,
-        excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
-        now,
-      }),
+    query: buildListQuery,
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
-    enabled: !traceQuery.isLoading,
+    enabled: !traceQuery.isLoading && !groupView.grouped,
     legacyFilters: buildTraceListFilters({
       rootEntityType: url.selectedEntityOption?.entityType,
       status: url.selectedStatus,
@@ -420,11 +482,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
                 <TraceTimeRangeChip
                   preset={url.datePreset}
-                  onPresetChange={url.handleDatePresetChange}
+                  onPresetChange={withGroupRefresh(url.handleDatePresetChange)}
                   dateFrom={url.selectedDateFrom}
                   dateTo={url.selectedDateTo}
-                  onDateChange={url.handleDateChange}
-                  onDateRangeChange={url.handleDateRangeChange}
+                  onDateChange={withGroupRefresh(url.handleDateChange)}
+                  onDateRangeChange={withGroupRefresh(url.handleDateRangeChange)}
                   disabled={isTracesLoading}
                   presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
                 />
@@ -437,22 +499,44 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         </FilterBar>
       </ActionRow.Start>
       <ActionRow.End>
-        <TraceColumnsMenu
-          preferences={traceColumns.preferences}
-          availableMetadataKeys={availableMetadataKeys}
-          usageDisabledReason={usageDisabledReason}
-          withQueryTrace={withQueryTrace}
-          onToggleColumn={traceColumns.toggleColumn}
-          onAddCustomColumn={traceColumns.addCustomColumn}
-          onRemoveCustomColumn={traceColumns.removeCustomColumn}
-          onAddMetadataColumn={traceColumns.addMetadataColumn}
-          onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
-          onReset={traceColumns.resetColumns}
-        />
-        <Field orientation="horizontal" disabled={isTracesLoading}>
-          <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
-          <FieldLabel>Auto refresh</FieldLabel>
-        </Field>
+        {/* The grouped view picks its own measure columns and doesn't poll: Refresh moves its window to now. */}
+        {groupView.grouped && (
+          <Button size="sm" onClick={groupView.refresh} disabled={groupView.isFetching}>
+            <RefreshCwIcon />
+            Refresh
+          </Button>
+        )}
+        {groupView.grouped && (
+          <TraceGroupColumnsMenu
+            columns={groupColumns}
+            offered={offeredGroupColumns}
+            onToggleColumn={groupColumnPreferences.toggleColumn}
+            onReset={groupColumnPreferences.resetColumns}
+          />
+        )}
+        {!groupView.grouped && (
+          <>
+            <TraceColumnsMenu
+              preferences={traceColumns.preferences}
+              availableMetadataKeys={availableMetadataKeys}
+              usageDisabledReason={usageDisabledReason}
+              withQueryTrace={withQueryTrace}
+              onToggleColumn={traceColumns.toggleColumn}
+              onAddCustomColumn={traceColumns.addCustomColumn}
+              onRemoveCustomColumn={traceColumns.removeCustomColumn}
+              onAddMetadataColumn={traceColumns.addMetadataColumn}
+              onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
+              onReset={traceColumns.resetColumns}
+            />
+            <Field orientation="horizontal" disabled={isTracesLoading}>
+              <Checkbox
+                checked={autoRefetchTraces}
+                onCheckedChange={checked => setAutoRefetchTraces(checked === true)}
+              />
+              <FieldLabel>Auto refresh</FieldLabel>
+            </Field>
+          </>
+        )}
       </ActionRow.End>
     </ActionRow>
   );
@@ -467,6 +551,32 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
         </div>
+      </PageLayout>
+    );
+  }
+
+  if (groupView.grouped) {
+    return (
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        {groupView.error ? (
+          <div className="flex h-full items-center justify-center">
+            <TracesErrorContent error={groupView.error} resource="traces" errorTitle="Failed to group traces" />
+          </div>
+        ) : (
+          <TracesGroupedView
+            dimensions={groupView.grouping.groupBy}
+            columns={groupColumns}
+            rows={groupView.rows}
+            truncated={groupView.truncated}
+            isLoading={groupView.isLoading}
+            filtersApplied={filtersApplied || groupView.grouping.having.length > 0}
+            sort={groupView.sort}
+            onSortChange={groupView.setSort}
+            // Studio has no project dimension, so every drill-down is a set of filters.
+            onDrillDown={drillDown => groupView.applyFilterDrillDown(drillDown.filters)}
+          />
+        )}
       </PageLayout>
     );
   }
