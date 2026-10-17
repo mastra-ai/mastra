@@ -751,6 +751,24 @@ export class ModelSpanTracker {
   }
 
   /**
+   * A suspended step emits no step-finish; its suspension chunk carries the
+   * step usage instead. Close MODEL_INFERENCE and MODEL_STEP with that usage so
+   * the suspended call is not reported without tokens.
+   */
+  #endSuspendedStep<OUTPUT>(chunk: ChunkType<OUTPUT>) {
+    if (chunk.type !== 'tool-call-suspended' && chunk.type !== 'tool-call-approval') return;
+    const usage = chunk.payload.usage;
+    if (!usage) return;
+
+    this.#inModelResponse = false;
+    this.#endStepSpan({
+      output: { usage },
+      stepResult: { reason: 'suspended', isContinued: false, warnings: [] },
+      metadata: {},
+    } as unknown as StepFinishPayload<any, OUTPUT>);
+  }
+
+  /**
    * Returns the parent span for chunks. Chunks parent under MODEL_INFERENCE
    * (the provider call) when available, falling back to MODEL_STEP only if
    * startStep() was bypassed.
@@ -1017,6 +1035,15 @@ export class ModelSpanTracker {
             this.#captureCompletionStartTime();
           }
 
+          // Close the suspended step before forwarding: downstream handling of
+          // the suspension finishes the run and ends the span tree.
+          if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+            if (chunk.type === 'tool-call-approval') {
+              this.#handleToolApprovalChunk(chunk);
+            }
+            this.#endSuspendedStep(chunk);
+          }
+
           controller.enqueue(chunk);
 
           // Handle chunk span tracking based on chunk type
@@ -1092,15 +1119,14 @@ export class ModelSpanTracker {
             case 'tripwire': // Processor rejection
             case 'watch': // Internal watch event
             case 'tool-error': // Tool error handling
-            case 'tool-call-suspended': // Suspension (not content)
             case 'reasoning-signature': // Signature metadata
             case 'redacted-reasoning': // Redacted content metadata
             case 'step-output': // Step output wrapper (content is nested)
               // Don't create spans for these chunks
               break;
 
-            case 'tool-call-approval': // Approval request - create span for debugging
-              this.#handleToolApprovalChunk(chunk);
+            case 'tool-call-suspended': // Suspension (handled before enqueue)
+            case 'tool-call-approval': // Approval request (handled before enqueue)
               break;
 
             case 'tool-output':

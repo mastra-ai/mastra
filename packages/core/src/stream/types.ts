@@ -831,6 +831,8 @@ interface ToolCallApprovalPayload {
   resumeSchema: string;
   /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
   updatedAt?: number;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallSuspendedPayload {
@@ -839,6 +841,8 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallResumedPayload {

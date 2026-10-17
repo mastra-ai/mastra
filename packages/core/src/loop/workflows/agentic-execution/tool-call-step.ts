@@ -38,6 +38,7 @@ import {
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
+  STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
@@ -540,6 +541,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isFreshCall = suspendData === undefined;
         const approvalGated = !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && isFreshCall));
 
+        // A suspended step never reaches `step-finish`, so its model usage rides on the first
+        // suspension chunk of the step. Consume it so parallel suspended calls and later
+        // re-suspensions of the same step do not report it again.
+        const takeSuspendedStepUsage = () => {
+          const usage = readScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage');
+          if (usage) writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', undefined);
+          return usage;
+        };
+
         // The real suspension sequence, extracted so it has exactly one implementation with
         // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
         // eager attempt that suspended at runtime. Defined here because it closes over
@@ -572,6 +582,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: approvalArgs,
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
+                usage: takeSuspendedStepUsage(),
               },
             });
             if (outputWriter) {
@@ -632,6 +643,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 suspendPayload,
                 args: inputData.args,
                 resumeSchema: options?.resumeSchema,
+                usage: takeSuspendedStepUsage(),
               },
             });
             safeEnqueue(controller, suspensionChunk);
@@ -718,6 +730,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
+                usage: takeSuspendedStepUsage(),
               },
             });
             if (outputWriter) {
