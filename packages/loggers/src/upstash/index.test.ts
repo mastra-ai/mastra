@@ -619,4 +619,48 @@ describe('UpstashTransport', () => {
       expect(logs).toEqual({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false });
     });
   });
+
+  describe('process lifetime', () => {
+    const timerHasRef = (t: UpstashTransport) => t.flushIntervalId.hasRef();
+
+    it('does not keep the process alive while idle', () => {
+      expect(timerHasRef(transport)).toBe(false);
+    });
+
+    it('keeps the process alive while records are buffered', () => {
+      transport.write(JSON.stringify({ msg: 'pending' }));
+      expect(timerHasRef(transport)).toBe(true);
+    });
+
+    it('releases the process once a flush empties the buffer', async () => {
+      transport.write(JSON.stringify({ msg: 'sent' }));
+      await transport._flush();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(transport.logBuffer).toHaveLength(0);
+      expect(timerHasRef(transport)).toBe(false);
+    });
+
+    it('keeps the process alive while a flush is in flight', async () => {
+      let resolveFetch!: (value: unknown) => void;
+      fetchMock.mockImplementationOnce(() => new Promise(resolve => (resolveFetch = resolve)));
+      transport.write(JSON.stringify({ msg: 'in flight' }));
+      const flush = transport._flush();
+      expect(transport.logBuffer).toHaveLength(0);
+      expect(timerHasRef(transport)).toBe(true);
+
+      resolveFetch({ ok: true, json: () => Promise.resolve({ result: 'success' }) });
+      await flush;
+      expect(timerHasRef(transport)).toBe(false);
+    });
+
+    it('keeps the process alive when a failed flush puts records back in the buffer', async () => {
+      fetchMock.mockImplementationOnce(() => Promise.resolve({ ok: false, statusText: 'Unavailable' }));
+      transport.write(JSON.stringify({ msg: 'retry later' }));
+
+      await expect(transport._flush()).rejects.toThrow('Unavailable');
+      expect(transport.logBuffer).toHaveLength(1);
+      expect(timerHasRef(transport)).toBe(true);
+    });
+  });
 });

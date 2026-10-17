@@ -1002,4 +1002,55 @@ describe('HttpTransport', () => {
       expect(getSentLog()).toEqual({ msg: 'frozen', time: now });
     });
   });
+
+  describe('process lifetime', () => {
+    const timerHasRef = (t: HttpTransport) => (t['flushIntervalId'] as NodeJS.Timeout).hasRef();
+
+    it('does not keep the process alive while idle', () => {
+      expect(timerHasRef(transport)).toBe(false);
+    });
+
+    it('keeps the process alive while logs are buffered', () => {
+      transport.write(JSON.stringify({ msg: 'pending' }));
+      expect(timerHasRef(transport)).toBe(true);
+    });
+
+    it('releases the process once a flush empties the buffer', async () => {
+      transport.write(JSON.stringify({ msg: 'sent' }));
+      await transport._flush();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(transport.getBufferedLogs()).toHaveLength(0);
+      expect(timerHasRef(transport)).toBe(false);
+    });
+
+    it('keeps the process alive while a flush is in flight', async () => {
+      let resolveFetch!: (value: unknown) => void;
+      fetchMock.mockImplementationOnce(() => new Promise(resolve => (resolveFetch = resolve)));
+      transport.write(JSON.stringify({ msg: 'in flight' }));
+      const flush = transport._flush();
+      expect(transport.getBufferedLogs()).toHaveLength(0);
+      expect(timerHasRef(transport)).toBe(true);
+
+      resolveFetch({ ok: true, json: () => Promise.resolve({ success: true }) });
+      await flush;
+      expect(timerHasRef(transport)).toBe(false);
+    });
+
+    it('keeps the process alive when a failed flush puts logs back in the buffer', async () => {
+      const noRetryTransport = new HttpTransport({ ...defaultOptions, retryOptions: { maxRetries: 0 } });
+      fetchMock.mockImplementationOnce(() => Promise.resolve({ ok: false, status: 503, statusText: 'Unavailable' }));
+      noRetryTransport.write(JSON.stringify({ msg: 'retry later' }));
+
+      await expect(noRetryTransport._flush()).rejects.toThrow('HTTP 503');
+      expect(noRetryTransport.getBufferedLogs()).toHaveLength(1);
+      expect(timerHasRef(noRetryTransport)).toBe(true);
+    });
+
+    it('releases the process when the buffer is cleared', () => {
+      transport.write(JSON.stringify({ msg: 'discarded' }));
+      transport.clearBuffer();
+      expect(timerHasRef(transport)).toBe(false);
+    });
+  });
 });
