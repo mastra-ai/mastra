@@ -1314,7 +1314,7 @@ describe('Observe API', () => {
       const entry = globalRunRegistry.get(runId)!;
       entry.messageList!.add({ role: 'assistant', content: 'Private producer answer' }, 'response');
       const resolveProcessors = vi.spyOn(baseAgent, 'listOutputProcessors');
-      const subscribe = vi.spyOn(observer, '__subscribeToRunStream');
+      const subscribe = vi.spyOn(producer.pubsub, 'subscribeWithReplay');
       const attachment = observer.observe(runId);
       let unexpectedResult: Awaited<typeof attachment> | undefined;
 
@@ -1333,6 +1333,7 @@ describe('Observe API', () => {
 
         const ownerResult = await producer.observe(runId);
         try {
+          expect(subscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
           const fullOutput = ownerResult.output.getFullOutput();
           await emitFinishEvent(cachingPubsub, runId, {
             output: {
