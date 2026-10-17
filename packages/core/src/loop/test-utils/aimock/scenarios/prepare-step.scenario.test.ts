@@ -67,4 +67,41 @@ describeForAllEngines('AIMock loop scenario: prepareStep per-step overrides', en
     expect(toolNames(1)).toContain('tool_b');
     expect(toolNames(1)).not.toContain('tool_a');
   });
+
+  it('passes stepNumber, prior steps and messages to each prepareStep call', async () => {
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look something up.',
+      inputSchema: z.object({}),
+      execute: async () => ({ found: 'LOOKUP_RESULT' }),
+    });
+    const calls: Array<{ stepNumber: number; steps: number; messages: string }> = [];
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Look it up.',
+      tools: { lookup },
+      stopWhen: stepCountIs(3),
+      prepareStep: ({ stepNumber, steps, messages }: any) => {
+        calls.push({ stepNumber, steps: steps.length, messages: JSON.stringify(messages) });
+        return undefined;
+      },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_l', name: 'lookup', arguments: {} }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(calls.map(c => [c.stepNumber, c.steps])).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
+    expect(calls[0]!.messages).toContain('Look it up.');
+    expect(calls[0]!.messages).not.toContain('LOOKUP_RESULT');
+    expect(calls[1]!.messages).toContain('LOOKUP_RESULT');
+  });
 });
