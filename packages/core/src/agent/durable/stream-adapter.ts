@@ -274,6 +274,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   detach: () => void;
   /** Wait for pubsub events already delivered to this adapter to finish processing. */
   waitForEventDelivery: () => Promise<void>;
+  /** Accepted deliveries, including hidden ownership markers, for observation reconciliation. */
+  readonly activityVersion: number;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -474,6 +476,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
   let onChunkDelivery = Promise.resolve();
+  let activityVersion = 0;
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -492,6 +495,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       if (!controller || terminated) return;
     }
     if (!keep) return;
+    activityVersion++;
 
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();
@@ -891,6 +895,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     cleanup,
     detach,
     waitForEventDelivery,
+    get activityVersion() {
+      return activityVersion;
+    },
     ready,
   };
 }

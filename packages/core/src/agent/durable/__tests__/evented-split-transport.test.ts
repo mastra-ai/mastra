@@ -20,6 +20,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { InMemoryServerCache } from '../../../cache';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
@@ -123,6 +124,77 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     expect(chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === 'Hello!')).toBe(true);
 
     cleanup();
+  }, 30_000);
+
+  it('replays a completed evented run and closes even beyond its last frame', async () => {
+    const agent = createSetup(createTextStreamModel('Retained hello!'));
+    const { output, runId, cleanup } = await agent.stream('Hi');
+    await collectStreamChunks(output.fullStream);
+
+    const replay = await agent.observe(runId);
+    const replayed = await collectStreamChunks(replay.fullStream);
+    expect(replayed.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === 'Retained hello!')).toBe(true);
+    expect(replayed.map(chunk => chunk.type)).toContain('finish');
+
+    const beyond = await agent.observe(runId, { offset: 1_000_000 });
+    let timedOut = false;
+    const completed = collectStreamChunks(beyond.fullStream);
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      beyond.detach();
+    }, 500);
+    try {
+      expect(await completed).toEqual([]);
+      expect(timedOut).toBe(false);
+    } finally {
+      clearTimeout(timeout);
+      beyond.detach();
+      replay.detach();
+      cleanup();
+    }
+  }, 30_000);
+
+  it('replays a completed run in a separate Mastra with shared storage, cache, and transport', async () => {
+    const storage = new InMemoryStore();
+    const serverCache = new InMemoryServerCache();
+    const makeProcess = () => {
+      const agent = createEventedAgent({
+        agent: new Agent({
+          id: 'cross-process-observer',
+          name: 'Cross Process Observer',
+          instructions: 'test',
+          model: createTextStreamModel('Shared replay!'),
+        }),
+        pubsub: agentPubsub,
+        cleanupTimeoutMs: 0,
+      });
+      new Mastra({ agents: { agent }, logger: false, storage, cache: serverCache });
+      return agent;
+    };
+    const producer = makeProcess();
+    const running = await producer.stream('Hi');
+    await collectStreamChunks(running.output.fullStream);
+    const observer = makeProcess();
+    try {
+      const replay = await observer.observe(running.runId);
+      const chunks = await collectStreamChunks(replay.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === 'Shared replay!')).toBe(true);
+      expect(chunks.map(chunk => chunk.type)).toContain('finish');
+      replay.detach();
+
+      const onComplete = vi.fn();
+      const onEvent = vi.fn();
+      const unsubscribe = await observer.__subscribeToRunStream(
+        running.runId,
+        { offset: 1_000_000, onComplete },
+        onEvent,
+      );
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onEvent).not.toHaveBeenCalled();
+      await unsubscribe();
+    } finally {
+      running.cleanup();
+    }
   }, 30_000);
 
   it('delivers tool-approval suspension data across split buses', async () => {
