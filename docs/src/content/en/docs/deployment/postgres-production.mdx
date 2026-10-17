@@ -51,7 +51,7 @@ With a fixed `Memory` instance and `savePerStep: true`, checkpoints store refere
 
 ## Connections
 
-`PostgresStore` creates a `pg.Pool` with `max: 20` and `idleTimeoutMillis: 30000` unless you set them or pass your own `pool`. Each replica holds its own pool, and each `PostgresStore` instance in a process holds a separate pool. A `readPool` adds connections on the read replica.
+`PostgresStore` creates a `pg.Pool` with `max: 20` and `idleTimeoutMillis: 30000` unless you set them or pass your own `pool`. Each replica holds its own pool, and each `PostgresStore` instance in a process holds a separate pool. A `readPool` adds connections on the read replica. A domain store created on its own with a `connectionString`, such as one passed to `MastraCompositeStore`, opens a separate pool with `max: 10`.
 
 Budget connections across every replica:
 
