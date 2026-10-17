@@ -118,9 +118,23 @@ describe('ObservationalMemory.settled', () => {
     expect((om as any).pendingBackgroundWork.size).toBe(0);
   });
 
-  it('joins a buffered reflection', async () => {
-    const gate = deferred();
+  async function startBufferedReflection({
+    threadId,
+    reflectorGate,
+    flagGate,
+  }: {
+    threadId: string;
+    reflectorGate?: Promise<void>;
+    flagGate?: { value: boolean; gate: Promise<void> };
+  }) {
     const storage = createInMemoryStorage();
+    if (flagGate) {
+      const setFlag = storage.setBufferingReflectionFlag.bind(storage);
+      storage.setBufferingReflectionFlag = async (id, value, ...rest) => {
+        if (value === flagGate.value) await flagGate.gate;
+        return setFlag(id, value, ...rest);
+      };
+    }
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',
@@ -129,7 +143,7 @@ describe('ObservationalMemory.settled', () => {
         model: new MockLanguageModelV2({
           modelId: 'gated-reflector',
           doStream: async () => {
-            await gate.promise;
+            await reflectorGate;
             return {
               rawCall: { rawPrompt: null, rawSettings: {} },
               stream: new ReadableStream({
@@ -152,23 +166,43 @@ describe('ObservationalMemory.settled', () => {
         bufferActivation: 0.5,
       },
     });
-    const created = await om.getOrCreateRecord('t1', 'r1');
+    const created = await om.getOrCreateRecord(threadId, 'r1');
     await storage.updateActiveObservations({
       id: created.id,
       observations: '* a fact',
       tokenCount: 800,
       lastObservedAt: new Date(),
     });
-    const record = (await om.getRecord('t1', 'r1'))!;
+    const record = (await om.getRecord(threadId, 'r1'))!;
     // Above the activation point, below the threshold: the step path starts a background reflection.
     await om.reflector.maybeReflect({ record, observationTokens: 800 });
     expect(BufferingCoordinator.asyncBufferingOps.size).toBe(1);
+    return om;
+  }
+
+  it('joins a buffered reflection', async () => {
+    const gate = deferred();
+    const om = await startBufferedReflection({ threadId: 'reflect', reflectorGate: gate.promise });
 
     const settled = om.settled();
     expect(await isPending(settled)).toBe(true);
     gate.resolve();
     await settled;
-    expect((await om.getRecord('t1', 'r1'))?.bufferedReflection).toContain('* r');
-    expect((await om.getRecord('t1', 'r1'))?.isBufferingReflection).toBe(false);
+    expect((await om.getRecord('reflect', 'r1'))?.bufferedReflection).toContain('* r');
+    expect((await om.getRecord('reflect', 'r1'))?.isBufferingReflection).toBe(false);
+  });
+
+  it.each([
+    ['start', true],
+    ['clear', false],
+  ])('waits for the buffering-reflection %s flag write', async (_label, value) => {
+    const gate = deferred();
+    const om = await startBufferedReflection({ threadId: `flag-${value}`, flagGate: { value, gate: gate.promise } });
+
+    const settled = om.settled();
+    expect(await isPending(settled)).toBe(true);
+    gate.resolve();
+    await settled;
+    expect((await om.getRecord(`flag-${value}`, 'r1'))?.isBufferingReflection).toBe(false);
   });
 });
