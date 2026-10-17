@@ -1,5 +1,24 @@
 # @mastra/factory
 
+## 0.24.0-alpha.3
+
+### Minor Changes
+
+- Added a built-in MCP server to Factory at `/web/factory/projects/:projectId/mcp`. MCP clients such as ChatGPT can sign in with OAuth and use the Factory tools (work items, sessions, decisions, approvals, plus `search` and `fetch`) with the same permissions as the web UI. Factories on Mastra Platform auth sign users in through Platform automatically; other auth providers set `mcp.authorizationServers` (or `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`). Pass `mcp: false` to turn it off. ([#27228](https://github.com/mastra-ai/mastra/pull/27228))
+
+  ```ts
+  new MastraFactory({
+    // ...
+    mcp: { authorizationServers: ['https://your-tenant.authkit.app'] },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b), [`9cb6843`](https://github.com/mastra-ai/mastra/commit/9cb6843a8a39ab2e12498b0c08c9f4cdcefd9cea), [`9277d8e`](https://github.com/mastra-ai/mastra/commit/9277d8ef26ad2f08bfbae89d78d409fb91c95c8d), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`f1b04c7`](https://github.com/mastra-ai/mastra/commit/f1b04c77d40a9b8b423d947659754f7be21a68d5), [`680d914`](https://github.com/mastra-ai/mastra/commit/680d9141c851e8eb6fcd2d3c3fbadf05a0f1011d), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b)]:
+  - @mastra/core@1.79.0-alpha.3
+  - @mastra/code-sdk@1.15.0-alpha.3
+
 ## 0.24.0-alpha.2
 
 ### Minor Changes
