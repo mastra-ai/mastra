@@ -118,7 +118,14 @@ export async function repeatsLastFailure(
     source: FACTORY_SESSION_NOTIFICATION_SOURCE,
     limit: FINAL_REPORT_SCAN,
   });
-  const last = records.find(record => record.attributes?.['from-session'] === senderSessionId);
+  // Storage orders by `updatedAt`, which moves when a report is read; the
+  // newest report is the one created last.
+  const last = records
+    .filter(record => record.attributes?.['from-session'] === senderSessionId)
+    .reduce<(typeof records)[number] | undefined>(
+      (newest, record) => (!newest || record.createdAt > newest.createdAt ? record : newest),
+      undefined,
+    );
   return last?.kind === 'failed' && last.attributes?.backstop === 'true' && last.summary === summary;
 }
 
