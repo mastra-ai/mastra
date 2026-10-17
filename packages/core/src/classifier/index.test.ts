@@ -6,6 +6,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraBase } from '../base';
+import { EntityType, SpanType } from '../observability/types';
 import * as observabilityUtils from '../observability/utils';
 import { Classifier, MastraDecisionModel, MastraEvaluationModel } from './index';
 
@@ -566,5 +567,43 @@ describe('Classifier', () => {
     expect(childSpan.end).toHaveBeenCalledExactlyOnceWith({
       output: { answers: { unsafe: { type: 'boolean', probability: 0.8 } } },
     });
+  });
+
+  it('attributes the evaluation span to the classifier entity', async () => {
+    const childSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
+    const parentSpan = { createChildSpan: vi.fn(() => childSpan) };
+    vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(parentSpan as never);
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+
+    await classifier.decide({ state: 'content' });
+
+    expect(parentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLASSIFIER_EVALUATION,
+        entityType: EntityType.CLASSIFIER,
+        entityId: 'router',
+        entityName: 'router',
+      }),
+    );
+  });
+
+  it('attributes root evaluation spans started through Mastra to the classifier entity', async () => {
+    const rootSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
+    const startSpan = vi.fn(() => rootSpan);
+    const mastra = { observability: { getSelectedInstance: () => ({ startSpan }) } };
+    vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(undefined);
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+    classifier.__registerMastra(mastra as never);
+
+    await classifier.evaluate({ state: 'content' });
+
+    expect(startSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLASSIFIER_EVALUATION,
+        entityType: EntityType.CLASSIFIER,
+        entityId: 'router',
+        entityName: 'router',
+      }),
+    );
   });
 });

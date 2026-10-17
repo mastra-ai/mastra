@@ -238,6 +238,8 @@ export function getEntityTypeForSpan(span: {
     case SpanType.SCORER_RUN:
     case SpanType.SCORER_STEP:
       return EntityType.SCORER;
+    case SpanType.CLASSIFIER_EVALUATION:
+      return EntityType.CLASSIFIER;
     case SpanType.WORKFLOW_RUN:
       return EntityType.WORKFLOW_RUN;
     case SpanType.WORKFLOW_STEP:

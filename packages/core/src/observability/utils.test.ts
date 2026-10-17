@@ -17,6 +17,14 @@ describe('getEntityTypeForSpan', () => {
       }),
     ).toBe('rag_ingestion');
   });
+
+  it('maps classifier evaluation spans to the classifier entity type', () => {
+    expect(getEntityTypeForSpan({ spanType: SpanType.CLASSIFIER_EVALUATION })).toBe('classifier');
+  });
+
+  it('accepts an explicit classifier entity type', () => {
+    expect(getEntityTypeForSpan({ entityType: 'classifier', spanType: SpanType.GENERIC })).toBe('classifier');
+  });
 });
 
 describe('getStepAvailableToolNames', () => {
