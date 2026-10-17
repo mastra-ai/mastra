@@ -66,8 +66,14 @@ describe('DurableAgent processOutputResult abort', () => {
       reason: 'rejected by gate',
       processorId: 'gate',
     });
+    // Same terminal shape as the plain agent: exactly one tripwire chunk and no finish (#27170).
+    const types = chunks.map(c => c.type);
+    expect(types.filter(type => type === 'tripwire')).toHaveLength(1);
+    expect(types).not.toContain('finish');
+    expect(types.at(-1)).toBe('tripwire');
     expect(await output.finishReason).toBe('other');
     expect(output.tripwire).toMatchObject({ reason: 'rejected by gate', processorId: 'gate' });
+    expect(output.status).toBe('tripwire');
 
     const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1' });
     expect(messages.filter(m => m.role === 'assistant')).toHaveLength(0);
