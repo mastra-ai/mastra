@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed system messages added by input processors (such as the task-list instruction from `TaskSignalProvider`) going missing after a tool approval resume on the plain `Agent`. The resumed request now sends the same system prompt as the original, so the model keeps its context and provider prompt caching is not invalidated. Fixes #24844.
+Fixed system messages added by input processors (such as the `TaskSignalProvider` task-list instruction) going missing when an `Agent` resumes after tool approval. Fixes #24844.
+
+Resumed runs now reuse the system prompt from the suspended run, matching durable agents. Instructions or system messages passed only at resume time no longer replace it, and a parent agent's auto-resume instructions no longer leak into a resumed subagent.
