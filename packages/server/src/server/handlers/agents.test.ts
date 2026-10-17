@@ -2462,6 +2462,82 @@ describe('Agent Routes Authorization', () => {
         ['finish', undefined],
       ]);
     });
+
+    /** Drain a stream, failing instead of hanging if it never ends. */
+    async function drain(stream: ReadableStream<any>, timeoutMs = 5000) {
+      const events: any[] = [];
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`stream did not end within ${timeoutMs}ms`)), timeoutMs);
+      });
+      try {
+        await Promise.race([
+          (async () => {
+            for await (const event of stream as any) events.push(event);
+          })(),
+          timeout,
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      return events;
+    }
+
+    const observe = (runId: string, offset?: number) =>
+      OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        offset,
+        abortSignal: new AbortController().signal,
+      } as any) as Promise<ReadableStream<any>>;
+
+    const persistRun = async (runId: string, status: string) => {
+      const workflows = (await storage.getStore('workflows'))!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'durable-agentic-loop',
+        runId,
+        snapshot: { status } as any,
+      });
+    };
+
+    it('ends the stream for a run that already settled and has nothing left to replay', async () => {
+      const runId = 'observe-settled-run';
+      await persistRun(runId, 'success');
+
+      // Runs that finish have their replay history cleared, so nothing is left
+      // to deliver — and nothing will ever signal the end of the stream.
+      const events = await drain(await observe(runId));
+
+      expect(events).toEqual([]);
+    });
+
+    it('ends the stream for a run id that was never run', async () => {
+      const events = await drain(await observe('5f1f9d18-3b86-4b3f-9a5c-2a2c1a1e7c4b'));
+
+      expect(events).toEqual([]);
+    });
+
+    it('keeps observing a run that is still live', async () => {
+      const runId = 'observe-live-run';
+      await persistRun(runId, 'running');
+
+      const stream = await observe(runId);
+      const reader = stream.getReader();
+      const firstRead = reader.read();
+
+      const outcome = await Promise.race([
+        firstRead.then(() => 'ended' as const),
+        new Promise<'open'>(resolve => setTimeout(() => resolve('open'), 2500)),
+      ]);
+
+      // A run that is still going may be quiet for a long time (a slow tool
+      // call). Only a settled run is cut short.
+      expect(outcome).toBe('open');
+
+      await reader.cancel();
+      await firstRead.catch(() => {});
+    });
   });
 
   describe('SIGNAL_ROUTES', () => {

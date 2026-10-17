@@ -3,7 +3,7 @@ import { InMemoryServerCache } from '../cache/inmemory';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
 import { isLeaseProvider, PubSub } from './pubsub';
-import type { Event, EventCallback } from './types';
+import type { Event, EventCallback, SubscribeOptions } from './types';
 
 describe('CachingPubSub', () => {
   let cache: InMemoryServerCache;
@@ -1543,6 +1543,136 @@ describe('CachingPubSub', () => {
 
       expect(callback).not.toHaveBeenCalled();
       expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+  });
+
+  describe('retaining transport', () => {
+    const topic = 'agent.stream.run-1';
+    const flush = () => new Promise(resolve => setTimeout(resolve, 20));
+
+    /**
+     * Stand-in for a retaining backend (Redis Streams, …): it keeps every event
+     * it is handed and replays that retained history in full to each new
+     * subscription unless the subscriber asks to start at the latest.
+     * `EventEmitterPubSub` retains nothing, so an in-process bus never exposed
+     * this — which is why the duplication only showed up in a real deployment.
+     */
+    class RetainingPubSub extends EventEmitterPubSub {
+      readonly retained = new Map<string, Event[]>();
+      readonly subscribeOptions: Array<SubscribeOptions | undefined> = [];
+      /** Publishes at the exact moment a subscription goes live, before it resolves. */
+      onLiveAttach?: (topic: string) => void | Promise<void>;
+
+      async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
+        const retained = this.retained.get(topic) ?? [];
+        retained.push({ ...event, id: crypto.randomUUID(), createdAt: new Date(), deliveryAttempt: 1 });
+        this.retained.set(topic, retained);
+        await super.publish(topic, event, options);
+      }
+
+      async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions) {
+        this.subscribeOptions.push(options);
+        if (options?.startFrom !== 'latest') {
+          for (const event of this.retained.get(topic) ?? []) {
+            await cb(event);
+          }
+        }
+        await super.subscribe(topic, cb, options);
+        await this.onLiveAttach?.(topic);
+      }
+    }
+
+    /** A run whose events reached the shared transport and the shared cache. */
+    async function runWithFourEvents() {
+      const inner = new RetainingPubSub();
+      const caching = new CachingPubSub(inner, cache, { source: inner });
+      const stream = () => {};
+
+      // A subscriber is attached while the run publishes, so the follower caches
+      // the transport's events under indices (the real "observe a live run" setup).
+      await caching.subscribe(topic, stream);
+      for (let n = 0; n < 4; n++) {
+        await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
+      }
+      await flush();
+      await caching.unsubscribe(topic, stream);
+
+      return { inner, caching };
+    }
+
+    it('replays only the cache when resuming from an offset, not the retained transport history', async () => {
+      const { caching } = await runWithFourEvents();
+      const received: Event[] = [];
+
+      await caching.subscribeFromOffset(topic, 2, event => {
+        received.push(event);
+      });
+      await flush();
+
+      // The subscriber asked for frames 2..3. The transport's retained copy of
+      // frames 0..1 is not a second source of truth: it is unnumbered, so it
+      // neither triggers the offset filter nor matches anything the cache
+      // delivered from the offset — it used to arrive as bare duplicates.
+      expect(received.map(event => event.data.n)).toEqual([2, 3]);
+      expect(received.map(event => event.index)).toEqual([2, 3]);
+    });
+
+    it('subscribes to the transport live-only, since replay comes from the cache', async () => {
+      const { inner, caching } = await runWithFourEvents();
+      const before = inner.subscribeOptions.length;
+
+      await caching.subscribeFromOffset(topic, 0, () => {});
+      await flush();
+
+      expect(inner.subscribeOptions.slice(before)).not.toContain(undefined);
+      expect(inner.subscribeOptions.slice(before).every(options => options?.startFrom === 'latest')).toBe(true);
+    });
+
+    it('still delivers events published after the subscriber attaches', async () => {
+      const { inner, caching } = await runWithFourEvents();
+      const received: Event[] = [];
+
+      await caching.subscribeFromOffset(topic, 0, event => {
+        received.push(event);
+      });
+      await flush();
+      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
+      await flush();
+
+      expect(received.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('does not drop an event published between the live attach and the cache read', async () => {
+      const inner = new RetainingPubSub();
+      const caching = new CachingPubSub(inner, cache, { source: inner });
+      const keepAlive = () => {};
+
+      // Keep the follower attached, as an ongoing live stream would, so the only
+      // subscription `subscribeFromOffset` opens below is the observer's own.
+      await caching.subscribe(topic, keepAlive);
+      for (let n = 0; n < 4; n++) {
+        await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
+      }
+      await flush();
+
+      // Publish from inside the transport's subscribe: the observer's live
+      // listener exists, but `subscribeFromOffset` has not read the cache
+      // snapshot yet. This is the window `startFrom: 'latest'` could lose an
+      // event in — it cannot, because the live subscribe is awaited before the
+      // history fetch, so the event is buffered and then deduped against history
+      // by index/id.
+      inner.onLiveAttach = async attachedTopic => {
+        await inner.publish(attachedTopic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
+      };
+
+      const received: Event[] = [];
+      await caching.subscribeFromOffset(topic, 0, event => {
+        received.push(event);
+      });
+      await flush();
+      await caching.unsubscribe(topic, keepAlive);
+
+      expect(received.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
     });
   });
 });

@@ -192,6 +192,48 @@ function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
   return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
 }
 
+/**
+ * Statuses in which a durable run can still publish stream events: an execution
+ * is driving it now (here or in another process), or a resume will pick it up.
+ * Every other status — and a missing snapshot — means the run is over.
+ */
+const RUN_TERMINAL_STATUSES = new Set(['success', 'failed', 'tripwire', 'canceled', 'bailed', 'skipped']);
+
+/**
+ * Whether a durable run has settled, per its persisted snapshot.
+ *
+ * Returns `false` ("still publishing") whenever storage cannot answer — no
+ * storage, no snapshot read, an unparseable snapshot — so callers only ever cut
+ * a stream short on a positive "this run is over" reading.
+ */
+async function hasDurableRunSettled(mastra: any, durableAgent: DurableAgentLike, runId: string): Promise<boolean> {
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+  if (!workflowsStore?.getWorkflowRunById) return false;
+
+  const workflowRun = await workflowsStore.getWorkflowRunById({
+    workflowName: getDurableLoopWorkflowName(durableAgent),
+    runId,
+  });
+  // No snapshot for this run: it never existed, so nothing will ever publish.
+  if (!workflowRun) return true;
+
+  const rawSnapshot: unknown = workflowRun.snapshot;
+  let snapshot: Record<string, any> | undefined;
+  if (typeof rawSnapshot === 'string') {
+    try {
+      snapshot = JSON.parse(rawSnapshot);
+    } catch {
+      return false;
+    }
+  } else if (rawSnapshot && typeof rawSnapshot === 'object') {
+    snapshot = rawSnapshot as Record<string, any>;
+  }
+
+  const status = snapshot?.status;
+  if (typeof status !== 'string') return false;
+  return RUN_TERMINAL_STATUSES.has(status);
+}
+
 async function validateDurableToolCallAccess({
   mastra,
   agent,
@@ -2669,16 +2711,27 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       let closed = false;
       let unsubscribe: (() => Promise<void>) | undefined;
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
+      let settledProbeTimer: ReturnType<typeof setTimeout> | null = null;
+      let deliveredEvents = 0;
 
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+      // How long to let a run's snapshot show up before a missing one is read as
+      // "this run never existed". The executing process persists it just after
+      // the run starts, so a run that is merely young is not mistaken for dead.
+      const SETTLED_RUN_PROBE_DELAY_MS = 1000;
 
       function stop() {
         closed = true;
         if (idleTimer) {
           clearTimeout(idleTimer);
           idleTimer = null;
+        }
+        if (settledProbeTimer) {
+          clearTimeout(settledProbeTimer);
+          settledProbeTimer = null;
         }
         if (unsubscribe) {
           void unsubscribe();
@@ -2700,6 +2753,30 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         idleTimer = setTimeout(() => cleanup(controller), IDLE_TIMEOUT_MS);
       }
 
+      // A run that has already settled publishes no further events and, once its
+      // replay history is gone, delivers nothing at all — so there is no terminal
+      // event for this stream to close on and the client would sit out the idle
+      // timeout, unable to tell a dead run from a slow one. Replay is delivered
+      // before `subscribe()` resolves, so a run that can still publish has already
+      // produced frames by the time this runs.
+      function endStreamIfRunHasSettled(controller: ReadableStreamDefaultController) {
+        if (!durableAgent || closed || deliveredEvents > 0) return;
+        settledProbeTimer = setTimeout(() => {
+          settledProbeTimer = null;
+          void (async () => {
+            if (closed || deliveredEvents > 0) return;
+            try {
+              if (!(await hasDurableRunSettled(mastra, durableAgent, runId))) return;
+            } catch {
+              // Storage could not answer: keep the stream, as before.
+              return;
+            }
+            if (closed || deliveredEvents > 0) return;
+            cleanup(controller);
+          })();
+        }, SETTLED_RUN_PROBE_DELAY_MS);
+      }
+
       const stream = new ReadableStream({
         start(controller) {
           // Wire up abortSignal for cleanup on client disconnect
@@ -2715,6 +2792,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
           subscribe(event => {
             if (closed) return;
+            deliveredEvents++;
             const isTerminal = event.type === 'finish' || event.type === 'error';
             try {
               controller.enqueue(event);
@@ -2729,8 +2807,14 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           }).then(
             unsubscribeFromRun => {
               // The stream may have ended while subscribing.
-              if (closed) void unsubscribeFromRun();
-              else unsubscribe = unsubscribeFromRun;
+              if (closed) {
+                void unsubscribeFromRun();
+                return;
+              }
+              unsubscribe = unsubscribeFromRun;
+              // Replay has been delivered by now: if nothing arrived, the run may
+              // already be over with its replay history gone.
+              endStreamIfRunHasSettled(controller);
             },
             (error: any) => {
               console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
