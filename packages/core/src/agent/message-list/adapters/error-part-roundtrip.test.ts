@@ -103,9 +103,9 @@ describe('error part survives DB -> UI -> DB round-trip', () => {
     const messageList = makeList([...PARTIAL_PARTS, ERROR_PART]);
 
     for (const uiParts of [
-      messageList.get.all.aiV5.ui().at(-1)?.parts,
-      messageList.get.all.aiV6.ui().at(-1)?.parts,
-      messageList.get.all.aiV7.ui().at(-1)?.parts,
+      messageList.get.all.aiSdk.ui().at(-1)?.parts,
+      messageList.get.all.aiSdk.ui().at(-1)?.parts,
+      messageList.get.all.aiSdk.ui().at(-1)?.parts,
     ]) {
       const errorParts = errorPartsOf(uiParts);
       expect(errorParts).toHaveLength(1);
@@ -121,9 +121,9 @@ describe('provider prompts omit the error part', () => {
     const messageList = makeList([...PARTIAL_PARTS, ERROR_PART]);
 
     const prompts = [
-      messageList.get.all.aiV5.model(),
-      messageList.get.all.aiV5.prompt(),
-      await messageList.get.all.aiV5.llmPrompt({}),
+      messageList.get.all.aiSdk.model(),
+      messageList.get.all.aiSdk.prompt(),
+      await messageList.get.all.aiSdk.llmPrompt({}),
     ];
 
     for (const prompt of prompts) {
@@ -137,8 +137,8 @@ describe('provider prompts omit the error part', () => {
   it('AIV6 and AIV7 llmPrompt drop the error part but keep partial parts', async () => {
     const messageList = makeList([...PARTIAL_PARTS, ERROR_PART]);
 
-    const v6 = await messageList.get.all.aiV6.llmPrompt({});
-    const v7 = await messageList.get.all.aiV7.llmPrompt({});
+    const v6 = await messageList.get.all.aiSdk.llmPrompt({});
+    const v7 = await messageList.get.all.aiSdk.llmPrompt({});
 
     for (const prompt of [v6, v7]) {
       const text = promptText(prompt);
@@ -151,11 +151,11 @@ describe('provider prompts omit the error part', () => {
   it('drops an error-only assistant message from every provider prompt', async () => {
     const messageList = makeList([ERROR_PART]);
 
-    const v5Model = messageList.get.all.aiV5.model();
-    const v5Prompt = messageList.get.all.aiV5.prompt();
-    const v5LlmPrompt = await messageList.get.all.aiV5.llmPrompt({});
-    const v6LlmPrompt = await messageList.get.all.aiV6.llmPrompt({});
-    const v7LlmPrompt = await messageList.get.all.aiV7.llmPrompt({});
+    const v5Model = messageList.get.all.aiSdk.model();
+    const v5Prompt = messageList.get.all.aiSdk.prompt();
+    const v5LlmPrompt = await messageList.get.all.aiSdk.llmPrompt({});
+    const v6LlmPrompt = await messageList.get.all.aiSdk.llmPrompt({});
+    const v7LlmPrompt = await messageList.get.all.aiSdk.llmPrompt({});
 
     for (const prompt of [v5Model, v5Prompt, v5LlmPrompt, v6LlmPrompt, v7LlmPrompt]) {
       const text = promptText(prompt);
@@ -170,8 +170,8 @@ describe('provider prompts omit the error part', () => {
   it('never stringifies the error into model-visible text', async () => {
     const messageList = makeList([ERROR_PART]);
 
-    const v5Prompt = messageList.get.all.aiV5.prompt();
-    const v7Prompt = await messageList.get.all.aiV7.llmPrompt({});
+    const v5Prompt = messageList.get.all.aiSdk.prompt();
+    const v7Prompt = await messageList.get.all.aiSdk.llmPrompt({});
 
     for (const prompt of [v5Prompt, v7Prompt]) {
       const text = promptText(prompt);

@@ -1,5 +1,5 @@
-import { embedMany } from '@internal/ai-sdk-v5';
-import type { EmbeddingModel } from '@internal/ai-sdk-v5';
+import { embedMany } from '@mastra/core/ai';
+import type { EmbeddingModel } from '@mastra/core/ai';
 import { mockTextModel } from '@mastra/core/test-utils/llm-mock';
 import { describe, it, expect, vi } from 'vitest';
 

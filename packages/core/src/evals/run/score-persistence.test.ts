@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
@@ -10,7 +10,7 @@ import { runEvals } from '.';
 describe('runEvals - Score Persistence', () => {
   it('automatically saves scores to storage when Mastra instance is available', async () => {
     // Create a simple agent
-    const dummyModel = new MockLanguageModelV2({
+    const dummyModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text', text: 'Test response' }],
         finishReason: 'stop',
@@ -118,7 +118,7 @@ describe('runEvals - Score Persistence', () => {
   });
 
   it('persists a JSON-safe requestContext without the auth token', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text', text: 'ok' }],
         finishReason: 'stop',

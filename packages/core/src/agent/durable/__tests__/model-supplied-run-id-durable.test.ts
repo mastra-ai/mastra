@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -29,7 +29,7 @@ describe('durable delegation with unverified model-supplied suspendedToolRunId',
       name: 'Sub Agent',
       description: 'Does delegated work.',
       instructions: 'Do the work.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           subAgentCalls += 1;
           return {
@@ -53,7 +53,7 @@ describe('durable delegation with unverified model-supplied suspendedToolRunId',
       name: 'Supervisor',
       instructions: 'Delegate the work.',
       agents: { subAgent },
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           const hasToolResult = JSON.stringify(prompt).includes('work done');
           return {
@@ -143,7 +143,7 @@ describe('durable delegation with unverified model-supplied suspendedToolRunId',
       name: 'Workflow Supervisor',
       instructions: 'Run every ticket workflow.',
       workflows: { ticketWorkflow: workflow },
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           const hasToolResult = JSON.stringify(prompt).includes('tool-result');
           return {

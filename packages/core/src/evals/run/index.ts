@@ -1,4 +1,4 @@
-import type { CoreMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage as CoreMessage } from '@internal/ai-v7';
 import type { Agent, AgentExecutionOptions, AgentMemoryOption, AiMessageType } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';

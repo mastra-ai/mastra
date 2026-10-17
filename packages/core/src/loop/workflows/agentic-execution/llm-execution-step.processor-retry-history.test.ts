@@ -26,7 +26,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '../../../agent/__tests__/mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '../../../agent/__tests__/mock-model';
 import { Agent } from '../../../agent/agent';
 import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
@@ -57,7 +57,7 @@ const echoTool = createTool({
  */
 function createTurn1Model() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -114,7 +114,7 @@ function createTurn1Model() {
 
 /** Turn-2 model. Emits nothing interesting; it exists to capture the replayed prompt. */
 function createSpyModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

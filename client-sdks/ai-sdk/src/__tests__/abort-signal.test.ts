@@ -1,16 +1,16 @@
 /**
  * Tests for issue #13038: chatRoute should pass abort signal to enable request cancellation.
  */
-import type { UIMessage } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessage } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it, vi } from 'vitest';
 
 import { chatRoute, handleChatStream } from '../chat-route';
 
 function createMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

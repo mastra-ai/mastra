@@ -1,12 +1,8 @@
-import { readUIMessageStream } from '@internal/ai-v6';
+import { readUIMessageStream } from '@mastra/core/ai';
 import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
-import {
-  convertMastraChunkToAISDKv5,
-  convertMastraChunkToAISDKv6,
-  convertFullStreamChunkToUIMessageStream,
-} from './helpers';
+import { convertMastraChunkToAISDK, convertFullStreamChunkToUIMessageStream } from './helpers';
 
 describe('replay-safe text metadata', () => {
   for (const type of ['text-start', 'text-delta', 'text-end'] as const) {
@@ -70,7 +66,7 @@ describe('replay-safe text metadata', () => {
 
 describe('tool payload transform conversion', () => {
   it('uses display transforms for tool-call input', () => {
-    const result = convertMastraChunkToAISDKv5({
+    const result = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-call',
         runId: 'run-1',
@@ -96,7 +92,7 @@ describe('tool payload transform conversion', () => {
   });
 
   it('uses separate display transforms for tool-result input and output', () => {
-    const result = convertMastraChunkToAISDKv5({
+    const result = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-result',
         runId: 'run-1',
@@ -125,7 +121,7 @@ describe('tool payload transform conversion', () => {
   });
 
   it('preserves explicit null display transforms', () => {
-    const result = convertMastraChunkToAISDKv5({
+    const result = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-result',
         runId: 'run-1',
@@ -154,7 +150,7 @@ describe('tool payload transform conversion', () => {
   });
 
   it('suppresses transformed input deltas marked as unsafe', () => {
-    const result = convertMastraChunkToAISDKv5({
+    const result = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-call-delta',
         runId: 'run-1',
@@ -180,7 +176,7 @@ describe('tool payload transform conversion', () => {
   });
 
   it('uses transformed tool errors', () => {
-    const result = convertMastraChunkToAISDKv5({
+    const result = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-error',
         runId: 'run-1',
@@ -213,7 +209,7 @@ describe('client observability carrier propagation', () => {
   it('preserves observability on tool-call and tool-input-start conversion', () => {
     const carrier = { traceparent: '00-cccccccccccccccccccccccccccccccc-dddddddddddddddd-01' };
 
-    const toolCall = convertMastraChunkToAISDKv6({
+    const toolCall = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-call',
         runId: 'run-1',
@@ -228,7 +224,7 @@ describe('client observability carrier propagation', () => {
       } as any,
     }) as any;
 
-    const toolInputStart = convertMastraChunkToAISDKv6({
+    const toolInputStart = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-call-input-streaming-start',
         runId: 'run-1',
@@ -249,7 +245,7 @@ describe('client observability carrier propagation', () => {
   it('maps tool-call observability onto v6 toolMetadata.__mastraObservability', () => {
     const carrier = { traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01' };
 
-    const part = convertMastraChunkToAISDKv6({
+    const part = convertMastraChunkToAISDK({
       chunk: {
         type: 'tool-call',
         runId: 'run-1',
@@ -286,8 +282,8 @@ describe('durable step-start with missing payload', () => {
     // The converter must not throw when destructuring it (regression: only the
     // `start` frame reached the client and the stream tore down).
     const chunk = { type: 'step-start', runId: 'run-1', from: ChunkFrom.AGENT } as any;
-    expect(() => convertMastraChunkToAISDKv6({ chunk })).not.toThrow();
-    expect((convertMastraChunkToAISDKv6({ chunk }) as any).type).toBe('start-step');
+    expect(() => convertMastraChunkToAISDK({ chunk })).not.toThrow();
+    expect((convertMastraChunkToAISDK({ chunk }) as any).type).toBe('start-step');
   });
 });
 
@@ -302,7 +298,7 @@ describe('finish usage conversion', () => {
       payload: { stepResult: { reason: 'stop' }, output: { usage } },
     } as any;
 
-    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+    expect(convertMastraChunkToAISDK({ chunk })).toMatchObject({
       type: 'finish',
       finishReason: 'stop',
       totalUsage: usage,
@@ -317,7 +313,7 @@ describe('finish usage conversion', () => {
       payload: { stepResult: { reason: 'stop' }, usage },
     } as any;
 
-    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+    expect(convertMastraChunkToAISDK({ chunk })).toMatchObject({
       type: 'finish',
       finishReason: 'stop',
       totalUsage: usage,
@@ -339,7 +335,7 @@ describe('tool-output-denied chunk conversion (issue #20880)', () => {
   };
 
   it('converts the Mastra denial to an AI SDK v6 stream part', () => {
-    expect(convertMastraChunkToAISDKv6({ chunk, mode: 'stream' })).toEqual({
+    expect(convertMastraChunkToAISDK({ chunk, mode: 'stream' })).toEqual({
       type: 'tool-output-denied',
       toolCallId: 'tooluse_abc123',
       toolName: 'myTool',
@@ -376,7 +372,7 @@ describe('finish reason on UI message chunks (issue #20562)', () => {
     }) as any;
 
   it('keeps the v6 finish reason on the terminal UI chunk', () => {
-    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('content-filter') });
+    const part = convertMastraChunkToAISDK({ chunk: mastraFinishChunk('content-filter') });
 
     expect(
       convertFullStreamChunkToUIMessageStream({
@@ -388,7 +384,7 @@ describe('finish reason on UI message chunks (issue #20562)', () => {
   });
 
   it('reports the Mastra-only tripwire reason as other on the terminal UI chunk', () => {
-    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('tripwire') });
+    const part = convertMastraChunkToAISDK({ chunk: mastraFinishChunk('tripwire') });
 
     expect(
       convertFullStreamChunkToUIMessageStream({
@@ -400,7 +396,7 @@ describe('finish reason on UI message chunks (issue #20562)', () => {
   });
 
   it('keeps the v5 finish reason on the terminal UI chunk', () => {
-    const part = convertMastraChunkToAISDKv5({ chunk: mastraFinishChunk('length') });
+    const part = convertMastraChunkToAISDK({ chunk: mastraFinishChunk('length') });
 
     expect(
       convertFullStreamChunkToUIMessageStream({
@@ -434,21 +430,21 @@ describe('tool-result provider metadata forwarding (issue #22012)', () => {
     }) as any;
 
   it('keeps providerMetadata on the v6 tool-result stream part', () => {
-    const part = convertMastraChunkToAISDKv6({ chunk: mastraToolResultChunk() }) as any;
+    const part = convertMastraChunkToAISDK({ chunk: mastraToolResultChunk() }) as any;
 
     expect(part.type).toBe('tool-result');
     expect(part.providerMetadata).toEqual({ mastra: { modelOutput } });
   });
 
   it('keeps providerMetadata on the v5 tool-result stream part', () => {
-    const part = convertMastraChunkToAISDKv5({ chunk: mastraToolResultChunk() }) as any;
+    const part = convertMastraChunkToAISDK({ chunk: mastraToolResultChunk() }) as any;
 
     expect(part.type).toBe('tool-result');
     expect(part.providerMetadata).toEqual({ mastra: { modelOutput } });
   });
 
   it('forwards providerMetadata onto the tool-output-available ui chunk', () => {
-    const part = convertMastraChunkToAISDKv6({ chunk: mastraToolResultChunk() });
+    const part = convertMastraChunkToAISDK({ chunk: mastraToolResultChunk() });
 
     const uiChunk = convertFullStreamChunkToUIMessageStream({
       part: part as any,
@@ -466,7 +462,7 @@ describe('tool-result provider metadata forwarding (issue #22012)', () => {
     const chunk = mastraToolResultChunk();
     delete chunk.payload.providerMetadata;
 
-    const part = convertMastraChunkToAISDKv6({ chunk }) as any;
+    const part = convertMastraChunkToAISDK({ chunk }) as any;
     expect(part).not.toHaveProperty('providerMetadata');
 
     const uiChunk = convertFullStreamChunkToUIMessageStream({
@@ -510,7 +506,7 @@ describe('MCP App pointer', () => {
   const app = { resourceUri: 'ui://weather/view', serverId: 'weather', mimeType: 'text/html;profile=mcp-app' };
   const toUI = (chunk: any) =>
     convertFullStreamChunkToUIMessageStream({
-      part: convertMastraChunkToAISDKv6({
+      part: convertMastraChunkToAISDK({
         chunk: { runId: 'r', from: ChunkFrom.AGENT, metadata: {}, ...chunk },
       }) as any,
       onError: String,

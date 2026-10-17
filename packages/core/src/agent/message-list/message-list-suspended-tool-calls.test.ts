@@ -42,7 +42,7 @@ const buildPrompt = (filterIncompleteToolCalls?: boolean) => {
   const list = new MessageList({ threadId: 't', resourceId: 'r', filterIncompleteToolCalls });
   list.add(suspendedToolCall, 'memory');
   list.add(followUp, 'user');
-  return list.get.all.aiV5.prompt();
+  return list.get.all.aiSdk.prompt();
 };
 
 const partsOfType = (messages: ReturnType<typeof buildPrompt>, type: 'tool-call' | 'tool-result') =>
@@ -89,7 +89,7 @@ describe('MessageList suspended tool calls', () => {
     list.add(staleProviderCall, 'memory');
     list.add(followUp, 'user');
     list.add({ ...followUp, id: 'p2', createdAt: new Date() }, 'user');
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
 
     expect(partsOfType(prompt, 'tool-call')).toHaveLength(0);
   });

@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
 import { MockMemory } from '../../memory/mock';
@@ -16,7 +16,7 @@ import { Agent } from '../agent';
  */
 
 function createSuccessModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
@@ -50,7 +50,7 @@ function createAPICallErrorModel(statusCode: number, message: string, isRetryabl
     isRetryable,
   });
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw error;
     },
@@ -63,7 +63,7 @@ function createAPICallErrorModel(statusCode: number, message: string, isRetryabl
 function createCountingErrorModel(statusCode: number, message: string, isRetryable: boolean) {
   let callCount = 0;
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       throw new APICallError({

@@ -21,7 +21,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const executedCalls: string[] = [];
 
@@ -47,7 +47,7 @@ function createApprovalTool() {
  */
 function createTwoToolCallModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount <= 2) {
@@ -242,7 +242,7 @@ describe('agent-loop snapshot size', () => {
     // "Restart": a fresh Mastra + agent instance over the same storage. The
     // fresh mock model returns final text on its first call, which is the
     // call the resumed loop makes after executing the approved tool.
-    const finalTextModel = new MockLanguageModelV2({
+    const finalTextModel = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

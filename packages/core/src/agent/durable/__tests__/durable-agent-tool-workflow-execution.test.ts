@@ -6,8 +6,8 @@
  * Adapted from the base Agent's tool-suspension.test.ts for the durable agent.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -30,7 +30,7 @@ import type { AgentStreamEvent } from '../types';
  * Creates a mock model that returns a single tool call
  */
 function createToolCallModel(toolName: string, toolArgs: Record<string, unknown>) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -61,7 +61,7 @@ function createToolCallModel(toolName: string, toolArgs: Record<string, unknown>
  */
 function createToolCallThenTextModel(toolName: string, toolArgs: Record<string, unknown>, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -122,7 +122,7 @@ function createMultipleToolCallModel(tools: Array<{ name: string; args: Record<s
   }));
 
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -203,7 +203,7 @@ describe('DurableAgent tool approval workflow execution', () => {
       id: 'approval-workflow-agent',
       name: 'Approval Workflow Agent',
       instructions: 'You can search for information',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { searchTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -242,7 +242,7 @@ describe('DurableAgent tool approval workflow execution', () => {
       id: 'resume-approval-agent',
       name: 'Resume Approval Agent',
       instructions: 'You can search for information',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { searchTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -310,7 +310,7 @@ describe('DurableAgent tool approval workflow execution', () => {
       id: 'approval-then-suspension-agent',
       name: 'Approval Then Suspension Agent',
       instructions: 'Use the interactive approval tool',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { interactiveApprovalTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -376,7 +376,7 @@ describe('DurableAgent tool approval workflow execution', () => {
       id: 'deny-approval-agent',
       name: 'Deny Approval Agent',
       instructions: 'You can search for information',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { searchTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -436,7 +436,7 @@ describe('DurableAgent tool approval workflow execution', () => {
       id: 'pubsub-approval-agent',
       name: 'PubSub Approval Agent',
       instructions: 'Use the tool',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { approveTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -500,7 +500,7 @@ describe('DurableAgent in-execution tool suspension', () => {
       id: 'suspension-workflow-agent',
       name: 'Suspension Workflow Agent',
       instructions: 'Use the interactive tool',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { interactiveTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -540,7 +540,7 @@ describe('DurableAgent in-execution tool suspension', () => {
       id: 'in-execution-approval-goal-agent',
       name: 'In-Execution Approval Goal Agent',
       instructions: 'Use the interactive approval tool',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { interactiveApprovalTool },
       memory: new MockMemory(),
       goal: {},
@@ -594,7 +594,7 @@ describe('DurableAgent in-execution tool suspension', () => {
       id: 'resume-suspension-agent',
       name: 'Resume Suspension Agent',
       instructions: 'Use the interactive tool',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { interactiveTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -651,7 +651,7 @@ describe('DurableAgent in-execution tool suspension', () => {
       id: 'resume-ask-user-agent',
       name: 'Resume Ask User Agent',
       instructions: 'Ask the user a question',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { ask_user: askUserTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -706,7 +706,7 @@ describe('DurableAgent in-execution tool suspension', () => {
       id: 'emit-suspended-agent',
       name: 'Emit Suspended Agent',
       instructions: 'Use the tool',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { suspendingTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -764,7 +764,7 @@ describe('DurableAgent message persistence before suspension', () => {
       id: 'memory-approval-agent',
       name: 'Memory Approval Agent',
       instructions: 'You find jobs',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { findJobTool },
       memory: mockMemory,
     });
@@ -847,7 +847,7 @@ describe('DurableAgent message persistence before suspension', () => {
       id: 'memory-suspension-agent',
       name: 'Memory Suspension Agent',
       instructions: 'Process data when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { processDataTool },
       memory: mockMemory,
     });
@@ -931,7 +931,7 @@ describe('DurableAgent foreach tool execution', () => {
       id: 'single-tool-foreach-agent',
       name: 'Single Tool Foreach Agent',
       instructions: 'Echo messages',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { echoTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -983,7 +983,7 @@ describe('DurableAgent foreach tool execution', () => {
       id: 'multi-tool-foreach-agent',
       name: 'Multi Tool Foreach Agent',
       instructions: 'Calculate',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { addTool, multiplyTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1028,7 +1028,7 @@ describe('DurableAgent foreach tool execution', () => {
       id: 'error-tool-foreach-agent',
       name: 'Error Tool Foreach Agent',
       instructions: 'Use the tool',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { errorTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -1105,7 +1105,7 @@ describe('DurableAgent workflow-as-tool suspension and resume', () => {
       id: 'workflow-resume-agent',
       name: 'Workflow Resume Agent',
       instructions: 'Use the askUserWorkflow to ask the user questions',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       workflows: { askUserWorkflow },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { toAISdkV5Stream } from '../convert-streams';
+import { toAISdkStream } from '../convert-streams';
 
 describe('Custom Data Handling', () => {
   describe('agent structured output', () => {
@@ -44,7 +44,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -93,7 +93,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -147,7 +147,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -192,7 +192,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -279,7 +279,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -306,7 +306,7 @@ describe('Custom Data Handling', () => {
       // - A parent workflow with a branch
       // - The branch contains a nested workflow
       // - The nested workflow has a step that uses writer.custom() to write data-* chunks
-      // - When using toAISdkV5Stream with {from: 'workflow'}, the custom data should propagate
+      // - When using toAISdkStream with {from: 'workflow'}, the custom data should propagate
 
       const mockStream = new ReadableStream({
         async start(controller) {
@@ -444,7 +444,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as any, { from: 'workflow' });
+      const aiSdkStream = toAISdkStream(mockStream as any, { from: 'workflow' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -500,7 +500,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       await expect(async () => {
         for await (const _chunk of aiSdkStream) {
@@ -536,7 +536,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       try {
         for await (const _chunk of aiSdkStream) {
@@ -583,7 +583,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -638,7 +638,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {
@@ -699,7 +699,7 @@ describe('Custom Data Handling', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as any, { from: 'workflow' });
+      const aiSdkStream = toAISdkStream(mockStream as any, { from: 'workflow' });
 
       const chunks: any[] = [];
       for await (const chunk of aiSdkStream) {

@@ -10,7 +10,7 @@
  *   and keeps registering the workflow so one bad pre-existing row can't
  *   take down startup for every other workflow.
  */
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -31,7 +31,7 @@ function stubAgent(id: string) {
     id,
     name: id,
     instructions: 'stub',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

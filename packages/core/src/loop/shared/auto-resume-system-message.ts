@@ -11,7 +11,7 @@
  * is the fix.
  */
 
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import type { MastraDBMessage } from '../../agent/message-list';
 
 /**
@@ -141,9 +141,9 @@ export function buildAutoResumeSystemMessageSuffix(
  * there is no leading system message.
  */
 export function appendSuffixToLeadingSystemMessage(
-  inputMessages: LanguageModelV2Prompt,
+  inputMessages: LanguageModelV4Prompt,
   suffix: string | null,
-): LanguageModelV2Prompt {
+): LanguageModelV4Prompt {
   if (!suffix) return inputMessages;
   return inputMessages.map((message, index) => {
     if (message.role === 'system' && index === 0) {
@@ -164,9 +164,9 @@ export function applyAutoResumeSystemMessage({
   messages,
 }: {
   autoResume: boolean | undefined;
-  inputMessages: LanguageModelV2Prompt;
+  inputMessages: LanguageModelV4Prompt;
   messages: ReadonlyArray<MastraDBMessage>;
-}): LanguageModelV2Prompt {
+}): LanguageModelV4Prompt {
   if (!autoResume) return inputMessages;
   const suspendedTools = extractSuspendedToolsFromMessages(messages);
   const suffix = buildAutoResumeSystemMessageSuffix(suspendedTools);

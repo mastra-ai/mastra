@@ -7,7 +7,7 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/co
 import { MastraEditor } from './index';
 import { randomUUID } from 'node:crypto';
 import { LibSQLStore } from '@mastra/libsql';
-import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 
 // =============================================================================
@@ -22,7 +22,7 @@ const createTestStorage = () => {
 };
 
 /**
- * Create a MockLanguageModelV2 that returns specific responses in sequence.
+ * Create a MockLanguageModelV4 that returns specific responses in sequence.
  * For scorer execution, the pipeline calls doGenerate twice:
  *   1. generateScore → expects JSON text like '{"score": 0.85}'
  *   2. generateReason → expects plain text like 'Good response.'
@@ -34,7 +34,7 @@ const createScorerMockLLM = (score: number, reason: string) => {
   let callIndex = 0;
   const modelId = `scorer-model-${randomUUID()}`;
 
-  const mockLLM = new MockLanguageModelV2({
+  const mockLLM = new MockLanguageModelV4({
     doGenerate: async () => {
       const text = callIndex === 0 ? JSON.stringify({ score }) : reason;
       callIndex++;
@@ -69,7 +69,7 @@ const createScorerMockLLM = (score: number, reason: string) => {
 };
 
 /**
- * A MockGateway that resolves mock model IDs to MockLanguageModelV2 instances.
+ * A MockGateway that resolves mock model IDs to MockLanguageModelV4 instances.
  * Each test should use a unique modelId (via createScorerMockLLM) to avoid
  * ModelRouterLanguageModel's static instance cache causing cross-test pollution.
  */

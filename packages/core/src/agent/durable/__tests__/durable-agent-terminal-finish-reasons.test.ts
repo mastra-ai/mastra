@@ -9,8 +9,8 @@
  * spun until maxSteps.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -39,7 +39,7 @@ describe('DurableAgent terminal finish reasons', () => {
     'does not continue the loop when finishReason "%s" arrives alongside a tool call',
     async finishReason => {
       let doStreamCalls = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           doStreamCalls++;
           return {
@@ -84,7 +84,7 @@ describe('DurableAgent terminal finish reasons', () => {
         id: `terminal-${finishReason}-agent`,
         name: 'Terminal Finish Reason Agent',
         instructions: 'noop',
-        model: model as LanguageModelV2,
+        model: model as LanguageModelV4,
         tools: { echo: echoTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

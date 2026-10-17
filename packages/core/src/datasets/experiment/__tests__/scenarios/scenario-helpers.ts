@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { Mastra } from '../../../../mastra';
@@ -18,12 +18,12 @@ import type { ExperimentSummary, ItemWithScores } from '../../types';
 export type ScriptedTurn = { toolCalls: { id: string; toolName: string; args: unknown }[] } | { text: string };
 
 /**
- * Build a {@link MockLanguageModelV2} that plays the given turns in order, one
+ * Build a {@link MockLanguageModelV4} that plays the given turns in order, one
  * per loop step. The last turn should be a `{ text }` turn so the agentic loop
  * terminates. This is the single mocked seam — everything else (tool wrapping,
  * the experiment executor, the mock matcher) is the real system.
  */
-export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV2 {
+export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV4 {
   if (turns.length === 0) {
     throw new Error('scriptedModel requires at least one turn');
   }
@@ -38,7 +38,7 @@ export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV2 {
     return turn;
   };
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       const turn = nextTurn();
       if ('text' in turn) {

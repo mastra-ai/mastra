@@ -2,14 +2,14 @@
  * Integration tests for the regenerate functionality in handleChatStream.
  *
  * Tests the actual code path with a real Agent and Mastra instance,
- * using MockLanguageModelV2 to avoid external API calls.
+ * using MockLanguageModelV4 to avoid external API calls.
  *
  * Issue #11557: chatRoute() with AI SDK useChat regenerate() only returned
  * step-start chunks without text content.
  */
-import type { UIMessage } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessage } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it } from 'vitest';
 
@@ -27,7 +27,7 @@ import { handleChatStream } from '../chat-route';
  * This accurately reproduces issue #11557.
  */
 function createMockModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
       // Check if last message is assistant - if so, don't generate text
       const lastMessage = prompt[prompt.length - 1];

@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Memory } from './index';
 
 // Mock embedMany across AI SDK versions so embedMessageContent does no network I/O.
-vi.mock('@internal/ai-v6', () => ({
+vi.mock('@internal/ai-v7', () => ({
   embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
     values,
     embeddings: values.map(() => [0.1, 0.2]),
@@ -11,7 +11,7 @@ vi.mock('@internal/ai-v6', () => ({
     warnings: [],
   })),
 }));
-vi.mock('@internal/ai-sdk-v5', () => ({
+vi.mock('@internal/ai-v7', () => ({
   embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
     values,
     embeddings: values.map(() => [0.1, 0.2]),

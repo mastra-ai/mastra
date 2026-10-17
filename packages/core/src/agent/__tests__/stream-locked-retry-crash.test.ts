@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { Processor } from '../../processors';
@@ -22,7 +22,7 @@ const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
 
 function createMidStreamErrorModel() {
   let callCount = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       const preamble = [

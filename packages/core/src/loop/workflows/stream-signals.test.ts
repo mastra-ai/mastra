@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { createSignal } from '../../agent/signals';
@@ -14,7 +14,7 @@ describe.each(['initial', 'pre-run', 'drain-step', 'loop-predicate'] as const)(
       (['reactive', 'system-reminder'] as const).flatMap(type => [false, true].map(excluded => ({ type, excluded }))),
     )('emits $type without changing model delivery (excluded: $excluded)', async ({ type, excluded }) => {
       const signal = createSignal({ type, contents: 'producer reminder' });
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],

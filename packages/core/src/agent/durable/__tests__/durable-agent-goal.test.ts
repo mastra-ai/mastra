@@ -11,8 +11,8 @@
  * - Stops the loop when the evaluation budget is exhausted.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -24,7 +24,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
 function createErrorModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -40,7 +40,7 @@ function createErrorModel() {
 }
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -88,7 +88,7 @@ describe('DurableAgent goal step', () => {
       id: 'goal-wrapper-agent',
       name: 'Goal Wrapper Agent',
       instructions: 'noop',
-      model: createTextModel('done') as LanguageModelV2,
+      model: createTextModel('done') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',
@@ -115,7 +115,7 @@ describe('DurableAgent goal step', () => {
       id: 'goal-prep-agent',
       name: 'Goal Prep Agent',
       instructions: 'noop',
-      model: createTextModel('done') as LanguageModelV2,
+      model: createTextModel('done') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',
@@ -151,7 +151,7 @@ describe('DurableAgent goal step', () => {
       id: 'evented-signal-goal-agent',
       name: 'Evented Signal Goal Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('I have completed the goal.') as LanguageModelV2,
+      model: createTextModel('I have completed the goal.') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',
@@ -210,7 +210,7 @@ describe('DurableAgent goal step', () => {
       id: 'evented-goal-pass-agent',
       name: 'Evented Goal Pass Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('I have completed the goal.') as LanguageModelV2,
+      model: createTextModel('I have completed the goal.') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',
@@ -263,7 +263,7 @@ describe('DurableAgent goal step', () => {
       id: 'goal-pass-agent',
       name: 'Goal Pass Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('I have completed the goal.') as LanguageModelV2,
+      model: createTextModel('I have completed the goal.') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',
@@ -319,7 +319,7 @@ describe('DurableAgent goal step', () => {
       id: 'goal-error-agent',
       name: 'Goal Error Agent',
       instructions: 'You are a helpful agent.',
-      model: createErrorModel() as LanguageModelV2,
+      model: createErrorModel() as LanguageModelV4,
       memory,
       goal: {
         judge: 'mock-judge',
@@ -368,7 +368,7 @@ describe('DurableAgent goal step', () => {
   ] as const)('%s abort preserves the objective without judging partial work', async (kind, createAgent) => {
     const scorerRun = vi.fn().mockResolvedValue({ score: 1, reason: 'Goal achieved' });
     const threadId = `${kind}-goal-abort-thread`;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ abortSignal }) => ({
         stream: new ReadableStream({
           start(controller) {
@@ -436,7 +436,7 @@ describe('DurableAgent goal step', () => {
       id: 'no-goal-agent',
       name: 'No Goal Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('Hello!') as LanguageModelV2,
+      model: createTextModel('Hello!') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     const storage = new InMemoryStore();
@@ -477,7 +477,7 @@ describe('DurableAgent goal step', () => {
       id: 'goal-no-obj-agent',
       name: 'Goal No Obj Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('Hello!') as LanguageModelV2,
+      model: createTextModel('Hello!') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',
@@ -523,7 +523,7 @@ describe('DurableAgent goal step', () => {
       id: 'goal-budget-agent',
       name: 'Goal Budget Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('Working on it...') as LanguageModelV2,
+      model: createTextModel('Working on it...') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',
@@ -586,7 +586,7 @@ describe('DurableAgent goal step', () => {
       id: 'goal-budget-waiting-agent',
       name: 'Goal Budget Waiting Agent',
       instructions: 'You are a helpful agent.',
-      model: createTextModel('Working on it...') as LanguageModelV2,
+      model: createTextModel('Working on it...') as LanguageModelV4,
       memory: new MockMemory(),
       goal: {
         judge: 'mock-judge',

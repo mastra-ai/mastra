@@ -1,5 +1,5 @@
-import type { LanguageModelV2DataContent } from '@ai-sdk/provider-v5';
-import type { DataContent } from '@internal/ai-sdk-v5';
+import type { SharedV4FileData } from '@ai-sdk/provider';
+import type { DataContent } from '@internal/ai-v7';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 
 function splitDataUrl(dataUrl: string): {
@@ -41,7 +41,7 @@ export function isUrlString(data: string): boolean {
 }
 
 export function convertToDataContent(content: DataContent | URL): {
-  data: LanguageModelV2DataContent;
+  data: Uint8Array | string | URL;
   mediaType: string | undefined;
 } {
   // Buffer & Uint8Array:
@@ -81,4 +81,35 @@ export function convertToDataContent(content: DataContent | URL): {
   }
 
   return { data: content, mediaType: undefined };
+}
+
+/** Tags flat file data (bytes, base64 string or URL) as V4 file data. */
+export function toV4FileData(data: Uint8Array | string | URL): SharedV4FileData {
+  return data instanceof URL ? { type: 'url', url: data } : { type: 'data', data };
+}
+
+function isTaggedFileData(data: object): data is SharedV4FileData {
+  return 'type' in data && typeof (data as { type: unknown }).type === 'string';
+}
+
+/**
+ * Normalizes any v7 part data (bare data content, URL, tagged file data, or a
+ * provider reference) into V4 tagged file data.
+ */
+export function anyToV4FileData(data: DataContent | URL | object): SharedV4FileData {
+  if (data instanceof URL || typeof data === 'string' || data instanceof Uint8Array) return toV4FileData(data);
+  if (data instanceof ArrayBuffer) return { type: 'data', data: new Uint8Array(data) };
+  if (isTaggedFileData(data)) return data;
+  return { type: 'reference', reference: data as Record<string, string> };
+}
+
+/**
+ * Returns the flat form (bytes, base64/data-URL string, or URL) of any v7 part
+ * data. Provider references and inline text have no flat form and return undefined.
+ */
+export function flattenFileData(data: DataContent | URL | object): Uint8Array | string | URL | undefined {
+  const tagged = anyToV4FileData(data);
+  if (tagged.type === 'data') return tagged.data;
+  if (tagged.type === 'url') return tagged.url;
+  return undefined;
 }

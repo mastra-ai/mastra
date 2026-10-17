@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV3 } from '@internal/ai-v6/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { Processor } from '../../processors';
@@ -14,7 +14,7 @@ const usage = {
 
 function scriptedModel(steps: any[][]) {
   let call = 0;
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const parts = steps[Math.min(call++, steps.length - 1)]!;
       return {
@@ -51,7 +51,7 @@ const passThrough: Processor = {
 const stopOnAsk = ({ steps }: { steps: any[] }) =>
   steps.at(-1)?.toolCalls?.some((c: any) => (c.toolName ?? c.payload?.toolName) === 'ask') ?? false;
 
-function makeAgent(model: MockLanguageModelV3, withProcessor: boolean) {
+function makeAgent(model: MockLanguageModelV4, withProcessor: boolean) {
   return new Agent({
     id: 'a',
     name: 'a',

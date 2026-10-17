@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, expect, it } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createContextRecallScorer } from './index';
@@ -60,7 +60,7 @@ function mockJudge(responses: {
   const allGenerate = jsons.flatMap(j => [makeGenerateResult(j), makeGenerateResult(j), makeGenerateResult(j)]);
   const allStream = jsons.flatMap(j => [makeStreamResult(j), makeStreamResult(j), makeStreamResult(j)]);
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: allGenerate,
     doStream: allStream,
   });

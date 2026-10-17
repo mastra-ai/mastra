@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, it, expect } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -20,8 +20,8 @@ const mockLogger = {
  * ToolCallFilter rewrites the model prompt only, so these helpers build the real prompt
  * from a MessageList and run the filter over it.
  */
-async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): Promise<LanguageModelV2Prompt> {
-  const prompt = await messageList.get.all.aiV5.llmPrompt();
+async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): Promise<LanguageModelV4Prompt> {
+  const prompt = await messageList.get.all.aiSdk.llmPrompt();
   const result = await filter.processLLMRequest?.({
     prompt,
     model: 'test-model' as any,
@@ -36,7 +36,7 @@ async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): P
   return result?.prompt ?? prompt;
 }
 
-function toolPartsIn(prompt: LanguageModelV2Prompt, toolName?: string) {
+function toolPartsIn(prompt: LanguageModelV4Prompt, toolName?: string) {
   return prompt.flatMap(message =>
     typeof message.content === 'string'
       ? []
@@ -48,7 +48,7 @@ function toolPartsIn(prompt: LanguageModelV2Prompt, toolName?: string) {
   );
 }
 
-function textsIn(prompt: LanguageModelV2Prompt): string[] {
+function textsIn(prompt: LanguageModelV4Prompt): string[] {
   return prompt.flatMap(message =>
     typeof message.content === 'string'
       ? [message.content]
@@ -498,7 +498,7 @@ describe('Processors Integration Tests', () => {
     // Test 2: Apply token limiting with a low limit to force truncation
     // The limiter uses ~24 tokens for conversation overhead + ~3.8 per message
     const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const limited = await tokenLimiter.processLLMRequest({
       prompt,
@@ -609,7 +609,7 @@ describe('Processors Integration Tests', () => {
       'input',
     );
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const run = async (processors: any[]) =>
       new ProcessorRunner({

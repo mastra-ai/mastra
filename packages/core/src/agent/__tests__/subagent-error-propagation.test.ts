@@ -3,14 +3,14 @@
  * receive a generic error tool result — not an empty successful result.
  * The original cause remains available to the completion hook, not the parent model.
  */
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-v7';
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 import type { DelegationCompleteContext } from '../agent.types';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const CAUSE = 'Incorrect API key provided: sk-bad';
 const DEFAULT_ERROR = '[Agent:sup] - Failed agent tool execution for head';
@@ -26,7 +26,7 @@ function failingModel() {
       isRetryable: false,
     });
   };
-  return new MockLanguageModelV2({ doGenerate: fail, doStream: fail });
+  return new MockLanguageModelV4({ doGenerate: fail, doStream: fail });
 }
 
 /** First call delegates to `agent-head`; second call answers "done". Records every prompt it receives. */
@@ -38,7 +38,7 @@ function supervisorModel(receivedPrompts: any[]) {
     input: '{"prompt":"Reply with exactly the word: ALIVE."}',
   };
   const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       calls++;
       receivedPrompts.push(JSON.parse(JSON.stringify(prompt)));
@@ -216,7 +216,7 @@ describe('sub-agent error propagation to parent', () => {
   it('preserves partial child messages in memory and the failure hook', async () => {
     const memory = new MockMemory();
     const saveMessages = vi.spyOn(memory, 'saveMessages');
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         warnings: [],
         stream: convertArrayToReadableStream([
@@ -276,7 +276,7 @@ describe('sub-agent error propagation to parent', () => {
 
   it.each([0, 1])('respects %i configured background retries and invokes the hook per attempt', async maxRetries => {
     const attempt = vi.fn();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         attempt();
         return {

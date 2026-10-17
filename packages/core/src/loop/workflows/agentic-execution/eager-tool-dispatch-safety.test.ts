@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
@@ -50,7 +50,7 @@ function createToolCallModel(
   record: Recorder['record'],
   { finishReason = 'tool-calls', pauseMs = 100 }: { finishReason?: 'tool-calls' | 'length'; pauseMs?: number } = {},
 ) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -105,7 +105,7 @@ function createOneShotToolCallModel(
   let streams = 0;
   const withCalls = createToolCallModel(calls, record);
   const withoutCalls = createToolCallModel([], record);
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async (...doStreamArgs: any[]) => {
       streams += 1;
       const delegate: any = streams === 1 ? withCalls : withoutCalls;
@@ -376,7 +376,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
   it('does not eagerly execute a provider-executed call', async () => {
     // The provider already ran it; our own copy must never start, early or late.
     const { events, record } = createRecorder();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -634,7 +634,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
 describe('eager tool dispatch — entry points', () => {
   it('leaves regular generate() on the normal path when the option is set', async () => {
     const { events, record } = createRecorder();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => {
         record('generate');
         return {
@@ -898,7 +898,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
     const { events, record } = createRecorder();
     const effects: string[] = [];
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -1184,7 +1184,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
 
   /** A model that runs `scripts[n]` on its n-th stream (the last one repeats) and records each prompt. */
   function scriptedModel(modelId: string, scripts: Script[], prompts: any[][] = []) {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       modelId,
       doStream: async ({ prompt }) => {
         const script = scripts[Math.min(prompts.length, scripts.length - 1)]!;
@@ -1413,7 +1413,7 @@ describe('eager tool dispatch across steps', () => {
     const { events, record } = createRecorder();
     let step = 0;
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         step += 1;
         const call = step === 1 ? 'call-a' : 'call-b';
@@ -1869,7 +1869,7 @@ describe('eager tool dispatch — durable boundary', () => {
       id: 'eager-durable-agent',
       name: 'Eager durable agent',
       instructions: 'Call tool-a once.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           modelCalled = true;
           throw new Error('model should not be called');
@@ -1906,7 +1906,7 @@ describe('eager tool dispatch — durable boundary', () => {
       id: 'eager-durable-agent-off',
       name: 'Eager durable agent off',
       instructions: 'Say hi.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],

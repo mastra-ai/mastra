@@ -1,6 +1,6 @@
 import { formatDataStreamPart } from '@ai-sdk/ui-utils';
-import { APICallError } from '@internal/ai-sdk-v5';
 import type { ToolsInput } from '@mastra/core/agent';
+import { APICallError } from '@mastra/core/ai';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, expect, vi } from 'vitest';

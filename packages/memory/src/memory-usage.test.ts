@@ -4,16 +4,16 @@ import { describe, it, expect, vi } from 'vitest';
 import { Memory } from './index';
 
 // Mock embedMany for all AI SDK versions
-// v3 spec uses @internal/ai-v6
-vi.mock('@internal/ai-v6', () => ({
+// v3 spec uses @internal/ai-v7
+vi.mock('@internal/ai-v7', () => ({
   embedMany: vi.fn().mockResolvedValue({
     embeddings: [[0.1, 0.2]],
     usage: { tokens: 42 },
   }),
 }));
 
-// v2 spec uses @internal/ai-sdk-v5
-vi.mock('@internal/ai-sdk-v5', () => ({
+// v2 spec uses @internal/ai-v7
+vi.mock('@internal/ai-v7', () => ({
   embedMany: vi.fn().mockResolvedValue({
     embeddings: [[0.1, 0.2]],
     usage: { tokens: 55 },

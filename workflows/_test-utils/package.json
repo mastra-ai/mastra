@@ -19,11 +19,10 @@
     "vitest": "catalog:"
   },
   "devDependencies": {
-    "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",
-    "@internal/ai-sdk-v5": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "vitest": "catalog:",
     "zod": "^3.25.76",
-    "vitest": "catalog:"
+    "@ai-sdk/provider": "4.0.28"
   }
 }

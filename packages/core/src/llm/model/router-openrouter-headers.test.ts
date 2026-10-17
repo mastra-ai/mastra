@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
 
-// Mock the @openrouter/ai-sdk-provider-v6 module BEFORE importing it
-vi.mock('@openrouter/ai-sdk-provider-v6', async () => {
+// Mock the @openrouter/ai-sdk-provider module BEFORE importing it
+vi.mock('@openrouter/ai-sdk-provider', async () => {
   return {
     createOpenRouter: vi.fn(),
   };
 });
 
 // Now import the mocked module
-const { createOpenRouter } = await import('@openrouter/ai-sdk-provider-v6');
+const { createOpenRouter } = await import('@openrouter/ai-sdk-provider');
 
 describe('ModelRouter - OpenRouter Headers Support', () => {
   beforeEach(() => {
@@ -20,7 +20,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
     // Setup mock implementation to return a provider with chatModel
     vi.mocked(createOpenRouter).mockReturnValue(
       vi.fn((_modelId: string) => {
-        // Return a mock LanguageModelV2 instance
+        // Return a mock LanguageModelV4 instance
         return createMockModel({
           mockText: 'Hello from OpenRouter!',
         });

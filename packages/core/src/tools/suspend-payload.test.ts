@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '../agent/__tests__/mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '../agent/__tests__/mock-model';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
@@ -39,7 +39,7 @@ function createConfirmTool(seen: Array<{ suspendPayload: unknown; resumeData: un
 
 function createModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {

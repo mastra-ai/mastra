@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -12,7 +12,7 @@ import type { Processor, ProcessOutputResultArgs, ProcessOutputStreamArgs } from
  * then replies with "Done!" after seeing the tool result.
  */
 function createToolCallingModel(toolName: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasToolResults = prompt.some(
         (msg: any) =>
@@ -92,7 +92,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       }
     }
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },

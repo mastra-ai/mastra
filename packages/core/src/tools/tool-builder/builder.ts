@@ -1,4 +1,4 @@
-import type { Schema } from '@internal/ai-v6';
+import type { Schema } from '@internal/ai-v7';
 import type { ProviderDefinedTool, ToolExecutionOptions } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
@@ -54,6 +54,7 @@ import type {
   ToolAction,
   VercelTool,
   VercelToolV5,
+  ToolExecutionContext,
 } from '../types';
 import {
   createStandardSchemaIssuesError,
@@ -397,9 +398,7 @@ export class CoreToolBuilder extends MastraBase {
       // Handle both 'parameters' (v4) and 'inputSchema' (v5) properties
       // Also handle case where the schema is a function that returns a schema
       let schema =
-        this.originalTool.parameters ??
-        ('inputSchema' in this.originalTool ? (this.originalTool as any).inputSchema : undefined) ??
-        z.object({});
+        ('inputSchema' in this.originalTool ? (this.originalTool as any).inputSchema : undefined) ?? z.object({});
 
       // If schema is a function, call it to get the actual schema
       if (typeof schema === 'function') {
@@ -500,11 +499,10 @@ export class CoreToolBuilder extends MastraBase {
   };
 
   // For provider-defined tools, we need to include all required properties
-  // AI SDK v5 uses type: 'provider-defined', AI SDK v6 uses type: 'provider'
   private buildProviderTool(tool: ToolToConvert): (CoreTool & { id: `${string}.${string}` }) | undefined {
     if (
       'type' in tool &&
-      (tool.type === 'provider-defined' || tool.type === 'provider') &&
+      tool.type === 'provider' &&
       'id' in tool &&
       typeof tool.id === 'string' &&
       tool.id.includes('.')
@@ -571,7 +569,7 @@ export class CoreToolBuilder extends MastraBase {
 
       const builtTool = {
         ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
-        type: 'provider-defined' as const,
+        type: 'provider' as const,
         id: tool.id as `${string}.${string}`,
         // V5 SDK factories set a hardcoded `name` (e.g. "web_search" for
         // anthropic.web_search_20250305). Preserve it so that when this tool
@@ -584,7 +582,7 @@ export class CoreToolBuilder extends MastraBase {
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
-              { ...this.options, description: this.originalTool.description },
+              { ...this.options, description: resolveVercelToolDescription(this.originalTool.description) },
               this.logType,
             )
           : undefined,
@@ -867,7 +865,8 @@ export class CoreToolBuilder extends MastraBase {
                 // that second validation.
                 markBuilderValidatedInput(toolContext);
               }
-              return tool?.execute?.(executionArgs, toolContext);
+              // Primitives-only tools (memory, assigned, client tools) receive MastraPrimitives at runtime; see note above.
+              return tool?.execute?.(executionArgs, toolContext as ToolExecutionContext);
             },
           });
         }
@@ -1032,21 +1031,16 @@ export class CoreToolBuilder extends MastraBase {
       onOutput: 'onOutput' in this.originalTool ? this.originalTool.onOutput : undefined,
     };
 
-    // For provider-defined tools, exclude execute and add name as per v5 spec
-    if (builtTool.type === 'provider-defined') {
-      const { execute, parameters, ...rest } = base;
-      // Prefer the preserved provider name (e.g. "web_search" from V5 SDK
-      // factories) over the ID-derived name (e.g. "web_search_20250305").
-      const name =
-        ('name' in builtTool && typeof builtTool.name === 'string' ? builtTool.name : null) ||
-        builtTool.id.split('.')[1] ||
-        builtTool.id;
+    // Provider tools are executed by the provider, so they carry no execute function
+    if (builtTool.type === 'provider') {
+      const { execute: _execute, parameters: _parameters, description: _description, ...rest } = base;
       return {
         ...rest,
-        type: builtTool.type,
+        type: 'provider',
         id: builtTool.id,
-        name,
         args: builtTool.args,
+        isProviderExecuted:
+          'isProviderExecuted' in this.originalTool ? this.originalTool.isProviderExecuted !== false : true,
       } as VercelToolV5;
     }
 
@@ -1241,7 +1235,7 @@ export class CoreToolBuilder extends MastraBase {
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
-            { ...this.options, description: this.originalTool.description },
+            { ...this.options, description: resolveVercelToolDescription(this.originalTool.description) },
             this.logType,
             inputValidationSchema,
           )
@@ -1272,4 +1266,10 @@ export class CoreToolBuilder extends MastraBase {
     registerToolOutputValidationSchema(builtTool, outputSchema);
     return builtTool;
   }
+}
+
+function resolveVercelToolDescription(
+  description: string | ((options: { context: any }) => string) | undefined,
+): string | undefined {
+  return typeof description === 'function' ? description({ context: undefined }) : description;
 }

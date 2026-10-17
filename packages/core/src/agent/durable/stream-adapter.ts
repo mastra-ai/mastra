@@ -251,6 +251,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   tracingContext?: TracingContext;
   /** Experimental transforms applied whenever the returned full stream is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** Forward provider raw chunks to the client stream */
+  includeRawChunks?: boolean;
   /**
    * Optional external MessageList to use instead of creating a fresh empty one.
    * When provided (e.g. the registry's live MessageList), MastraModelOutput can
@@ -318,6 +320,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     requestContext,
     tracingContext,
     experimentalTransform,
+    includeRawChunks,
     hideSignals,
     messageList: externalMessageList,
   } = options;
@@ -604,7 +607,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               await onFinish({
                 runId,
                 ...(model.modelId && model.provider && model.version ? { model } : {}),
-                messages: messageList.get.response.aiV5.model(),
+                messages: messageList.get.response.aiSdk.model(),
                 object,
                 usedFallbackValue: output.usedFallbackValue,
                 error: output.error,
@@ -882,6 +885,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       requestContext,
       tracingContext,
       experimentalTransform,
+      includeRawChunks,
       hideSignals,
     },
   });

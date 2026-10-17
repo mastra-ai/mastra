@@ -30,7 +30,7 @@ const assistantWithSources = (): MastraDBMessage => ({
 
 describe('MessageList source-document parts', () => {
   it('returns stored document sources as source-document parts in AI SDK v5 UI messages', () => {
-    const [message] = new MessageList().add(assistantWithSources(), 'memory').get.all.aiV5.ui();
+    const [message] = new MessageList().add(assistantWithSources(), 'memory').get.all.aiSdk.ui();
 
     expect(message!.parts).toContainEqual(
       expect.objectContaining({
@@ -52,7 +52,7 @@ describe('MessageList source-document parts', () => {
   });
 
   it('returns exactly one source-document part in AI SDK v6 UI messages', () => {
-    const [message] = new MessageList().add(assistantWithSources(), 'memory').get.all.aiV6.ui();
+    const [message] = new MessageList().add(assistantWithSources(), 'memory').get.all.aiSdk.ui();
 
     const documents = message!.parts.filter(part => part.type === 'source-document');
     expect(documents).toEqual([
@@ -66,7 +66,7 @@ describe('MessageList source-document parts', () => {
   });
 
   it('round-trips AI SDK v5 UI source parts without losing sourceId, title or document metadata', () => {
-    const [uiMessage] = new MessageList().add(assistantWithSources(), 'memory').get.all.aiV5.ui();
+    const [uiMessage] = new MessageList().add(assistantWithSources(), 'memory').get.all.aiSdk.ui();
 
     const [dbMessage] = new MessageList().add(uiMessage!, 'memory').get.all.db();
 
@@ -95,7 +95,7 @@ describe('MessageList source-document parts', () => {
   it('keeps source parts out of model messages', () => {
     const list = new MessageList().add(assistantWithSources(), 'memory');
 
-    const modelMessages = list.get.all.aiV5.model();
+    const modelMessages = list.get.all.aiSdk.model();
 
     expect(modelMessages).toHaveLength(1);
     expect(JSON.stringify(modelMessages)).not.toContain('q3.pdf');

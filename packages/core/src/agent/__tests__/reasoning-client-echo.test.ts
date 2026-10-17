@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 /**
  * Regression for https://github.com/mastra-ai/mastra/issues/24052
@@ -18,7 +18,7 @@ const rs = { openai: { itemId: 'rs_1', reasoningEncryptedContent: null } };
 const msg = { openai: { itemId: 'msg_1' } };
 
 function createReasoningModel(captured: unknown[]) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       captured.push(prompt);
       return {

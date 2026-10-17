@@ -1,8 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+import { convertArrayToReadableStream, MockLanguageModelV4, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../../error';
@@ -163,10 +159,10 @@ function toolhandlingTests(version: 'v2' | 'v3' | 'v4') {
       const toolName1 = base + 'X'; // 64 chars
       const toolName2 = base + 'Y'; // 64 chars, but will be truncated to same as toolName1
 
-      let testModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let testModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -235,10 +231,10 @@ function toolhandlingTests(version: 'v2' | 'v3' | 'v4') {
     it('should sanitize tool names with invalid characters', async () => {
       const badName = 'bad!@#tool$name';
 
-      let testModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let testModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -301,10 +297,10 @@ function toolhandlingTests(version: 'v2' | 'v3' | 'v4') {
     it('should prefix tool names that do not start with a letter or underscore', async () => {
       const badStart = '1tool';
 
-      let testModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let testModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -367,10 +363,10 @@ function toolhandlingTests(version: 'v2' | 'v3' | 'v4') {
     it('should truncate tool names longer than 63 characters', async () => {
       const longName = 'a'.repeat(70);
 
-      let testModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let testModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        testModel = new MockLanguageModelV2({
+        testModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -693,7 +689,7 @@ describe('webSearchTool agent resolution', () => {
   it('uses the per-call model override once when resolving web search during generation', async () => {
     let capturedTools: Record<string, any> | undefined;
     const configuredModel = vi.fn(() => 'openai/gpt-5-mini' as const);
-    const overrideModel = new MockLanguageModelV2({
+    const overrideModel = new MockLanguageModelV4({
       provider: 'anthropic',
       modelId: 'claude-sonnet-4-20250514',
       doGenerate: async ({ tools }) => {
@@ -733,7 +729,7 @@ describe('webSearchTool agent resolution', () => {
   it('uses the per-call model override once when resolving web search during streaming', async () => {
     let capturedTools: Record<string, any> | undefined;
     const configuredModel = vi.fn(() => 'openai/gpt-5-mini' as const);
-    const overrideModel = new MockLanguageModelV2({
+    const overrideModel = new MockLanguageModelV4({
       provider: 'anthropic',
       modelId: 'claude-sonnet-4-20250514',
       doStream: async ({ tools }) => {
@@ -784,7 +780,7 @@ describe('webSearchTool agent resolution', () => {
 
   it('does not resolve web search during MCP guidance before applying a supported per-call model override', async () => {
     let capturedTools: Record<string, any> | undefined;
-    const overrideModel = new MockLanguageModelV2({
+    const overrideModel = new MockLanguageModelV4({
       provider: 'anthropic',
       modelId: 'claude-sonnet-4-20250514',
       doGenerate: async ({ tools }) => {

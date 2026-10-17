@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -21,7 +21,7 @@ function finishChunk(reason: 'stop' | 'tool-calls') {
 }
 
 function toolCallingModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -44,7 +44,7 @@ function toolCallingModel() {
 
 function textModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       const text = callCount === 1 ? 'first' : 'second';
@@ -71,7 +71,7 @@ function textModel() {
 
 async function run(
   engine: Engine,
-  model: LanguageModelV2,
+  model: LanguageModelV4,
   options: Record<string, unknown>,
   tools?: Record<string, unknown>,
   outputProcessors: any[] = [],
@@ -122,7 +122,7 @@ describe.each<Engine>(['durable', 'evented'])('%s step-finish continuation state
   });
 
   it('reports false when maxSteps stops a tool-calling iteration', async () => {
-    const stepFinishes = await run(engine, toolCallingModel() as LanguageModelV2, { maxSteps: 1 }, { step });
+    const stepFinishes = await run(engine, toolCallingModel() as LanguageModelV4, { maxSteps: 1 }, { step });
 
     expect(stepFinishes).toEqual([false]);
   });
@@ -131,7 +131,7 @@ describe.each<Engine>(['durable', 'evented'])('%s step-finish continuation state
     const abortController = new AbortController();
     const stepFinishes = await run(
       engine,
-      textModel() as LanguageModelV2,
+      textModel() as LanguageModelV4,
       { abortSignal: abortController.signal },
       undefined,
       [
@@ -151,7 +151,7 @@ describe.each<Engine>(['durable', 'evented'])('%s step-finish continuation state
   it('reports false when stopWhen stops a tool-calling iteration', async () => {
     const stepFinishes = await run(
       engine,
-      toolCallingModel() as LanguageModelV2,
+      toolCallingModel() as LanguageModelV4,
       { maxSteps: 3, stopWhen: () => true },
       { step },
     );
@@ -161,7 +161,7 @@ describe.each<Engine>(['durable', 'evented'])('%s step-finish continuation state
 
   it('reports true when iteration feedback continues a text-only iteration', async () => {
     let iteration = 0;
-    const stepFinishes = await run(engine, textModel() as LanguageModelV2, {
+    const stepFinishes = await run(engine, textModel() as LanguageModelV4, {
       maxSteps: 3,
       onIterationComplete: () => {
         iteration++;

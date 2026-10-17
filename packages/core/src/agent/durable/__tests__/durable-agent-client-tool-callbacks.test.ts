@@ -5,8 +5,8 @@
  * client-executed tool results.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -18,12 +18,12 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
 /**
- * Creates a MockLanguageModelV2 that streams tool-call input deltas
+ * Creates a MockLanguageModelV4 that streams tool-call input deltas
  * before the final tool-call chunk, then a text-only finish on the second call.
  */
 function createStreamingToolInputModel(toolName: string, argChunks: string[]) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -88,7 +88,7 @@ function createStreamingToolInputModel(toolName: string, argChunks: string[]) {
         warnings: [],
       };
     },
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 describe('DurableAgent client-tool callbacks (Bug 10)', () => {

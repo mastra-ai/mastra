@@ -1,4 +1,4 @@
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-v7';
 
 import { clampDelayMs, DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../utils/retry-after';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';

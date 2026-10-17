@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { stableStringify } from '../../agent/message-list/cache/stable-stringify';
 import type { MastraServerCache } from '../../cache';
 import { parseMemoryRequestContext } from '../../memory/types';
@@ -60,7 +60,7 @@ export type ResponseCacheKeyFn = (inputs: ResponseCacheKeyInputs) => string | Pr
  * Inputs that contribute to the auto-derived cache key.
  *
  * The key is derived inside the `processLLMRequest` processor hook, so the
- * `prompt` field is the exact `LanguageModelV2Prompt` the provider would
+ * `prompt` field is the exact `LanguageModelV4Prompt` the provider would
  * receive (post memory + input processors). This eliminates the cross-user
  * leak risk of hashing only the user's raw input — different users with
  * different memory contexts produce different prompts and therefore
@@ -78,7 +78,7 @@ export interface ResponseCacheKeyInputs {
    * any prompt-modifying input processors. Source of truth for what the
    * model would generate.
    */
-  prompt: LanguageModelV2Prompt;
+  prompt: LanguageModelV4Prompt;
   /** 0-indexed step number within the agentic loop (>0 for tool steps). */
   stepNumber: number;
 }
@@ -496,14 +496,14 @@ function normalizeForHash(value: unknown): unknown {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
   if (typeof value === 'bigint') return `bigint:${value.toString()}`;
   if (value instanceof Date) return value.toISOString();
-  // `LanguageModelV2DataContent` is `string | Uint8Array | URL`, so file and
+  // `SharedV4FileDataData` is `string | Uint8Array | URL`, so file and
   // image parts routinely carry both of the shapes below.
   if (value instanceof URL) return `url:${value.href}`;
   if (isBinary(value)) return `binary:${hashBinary(value)}`;
   if (Array.isArray(value)) return value.map(normalizeForHash);
   if (typeof value === 'object') {
     // A class instance with no enumerable own keys would otherwise serialize
-    // as `{}`, silently erasing whatever it identified. `LanguageModelV2Prompt`
+    // as `{}`, silently erasing whatever it identified. `LanguageModelV4Prompt`
     // doesn't permit instances beyond the ones handled above, so this is a
     // last-resort tag: it keeps such a value from colliding with an empty
     // object, but two distinct instances of the same class still collide.

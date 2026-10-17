@@ -21,8 +21,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Agent } from '@mastra/core/agent';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel, createToolCallThenTextModel } from '../mock-models';
@@ -34,7 +34,7 @@ function makeSubAgent(id: string, text: string): Agent {
     name: id,
     description: `Sub-agent ${id}`,
     instructions: 'You are a helpful sub-agent.',
-    model: createTextStreamModel(text) as LanguageModelV2,
+    model: createTextStreamModel(text) as LanguageModelV4,
   });
 }
 
@@ -43,9 +43,9 @@ function makeSubAgent(id: string, text: string): Agent {
  * actually stops the loop: without bail it would keep delegating until
  * maxSteps, so the post-bail call counts are unambiguous.
  */
-function createAlwaysDelegateModel(toolName: string, args: Record<string, unknown>): LanguageModelV2 {
+function createAlwaysDelegateModel(toolName: string, args: Record<string, unknown>): LanguageModelV4 {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       return {
@@ -61,8 +61,11 @@ function createAlwaysDelegateModel(toolName: string, args: Record<string, unknow
           },
           {
             type: 'finish',
-            finishReason: 'tool-calls',
-            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 10, text: 10, reasoning: undefined },
+            },
           },
         ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -87,14 +90,14 @@ export function createDelegationTests(context: DurableAgentTestContext) {
         name: 'research',
         description: 'Researches topics',
         instructions: 'You research.',
-        model: researchModel as LanguageModelV2,
+        model: researchModel as LanguageModelV4,
       });
       const writer = new Agent({
         id: 'writer',
         name: 'writer',
         description: 'Writes reports',
         instructions: 'You write.',
-        model: writerModel as LanguageModelV2,
+        model: writerModel as LanguageModelV4,
       });
 
       const supervisorModel = createToolCallThenTextModel('agent-research', { prompt: 'research dolphins' }, 'Done');
@@ -243,7 +246,7 @@ export function createDelegationTests(context: DurableAgentTestContext) {
           subAgentSawSpecialty = requestContext.get('specialty');
           return 'You are a helpful sub-agent.';
         },
-        model: createTextStreamModel('Task done.') as LanguageModelV2,
+        model: createTextStreamModel('Task done.') as LanguageModelV4,
       });
 
       const agent = await createAgent({
@@ -276,7 +279,7 @@ export function createDelegationTests(context: DurableAgentTestContext) {
         name: 'research',
         description: 'Researches topics',
         instructions: 'You research.',
-        model: researchModel as LanguageModelV2,
+        model: researchModel as LanguageModelV4,
       });
 
       // Delegates on every turn: without bail this loop would run to
@@ -312,7 +315,7 @@ export function createDelegationTests(context: DurableAgentTestContext) {
     });
 
     it('surfaces a sub-agent failure to the supervisor without killing the run', async () => {
-      const failingModel = new MockLanguageModelV2({
+      const failingModel = new MockLanguageModelV4({
         doStream: async () => {
           throw new Error('sub-agent exploded');
         },
@@ -322,7 +325,7 @@ export function createDelegationTests(context: DurableAgentTestContext) {
         name: 'broken',
         description: 'Always fails',
         instructions: 'You fail.',
-        model: failingModel as unknown as LanguageModelV2,
+        model: failingModel as unknown as LanguageModelV4,
       });
 
       const supervisorModel = createToolCallThenTextModel('agent-broken', { prompt: 'do work' }, 'Recovered');

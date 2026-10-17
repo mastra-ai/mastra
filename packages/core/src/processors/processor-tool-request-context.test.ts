@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -45,7 +45,7 @@ describe('Processor-returned tools receive requestContext', () => {
       },
     } as InputProcessor;
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         const hasToolResults = prompt.some(
           (msg: any) =>
@@ -159,7 +159,7 @@ describe('Processor-returned tools receive requestContext', () => {
 
     // LLM calls added-tool first, then existing-tool
     let callCount = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
 
@@ -279,7 +279,7 @@ describe('Processor-returned tools receive the agent id', () => {
     } as InputProcessor;
 
     let callCount = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         const chunks =

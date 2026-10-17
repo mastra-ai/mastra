@@ -6,7 +6,7 @@
  * This validates end-to-end: AIMock scripted responses →
  * OpenAI v6 provider → Agent → runEvals → gates/thresholds → verdict.
  */
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';

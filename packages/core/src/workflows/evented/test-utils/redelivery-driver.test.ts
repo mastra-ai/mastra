@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createStep, createWorkflow } from '..';
@@ -321,7 +321,7 @@ describe('RedeliveryDriver', () => {
 
   it('addresses the durable agent tool step as tool-step', async () => {
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         calls++;
         const parts: any[] =
@@ -348,7 +348,7 @@ describe('RedeliveryDriver', () => {
           warnings: [],
         };
       },
-    }) as unknown as LanguageModelV2;
+    }) as unknown as LanguageModelV4;
 
     // Hold the tool open so the duplicate lands while the step is running;
     // what a duplicate of a *completed* tool step does is F4 (COR-1307).

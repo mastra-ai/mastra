@@ -14,9 +14,7 @@ export default defineConfig({
     await generateTypes(
       process.cwd(),
       new Set([
-        'ai',
         '@ai-sdk/provider-utils',
-        '@ai-sdk/ui-utils',
         '@standard-schema/spec',
         'eventsource-parser',
         'json-schema',

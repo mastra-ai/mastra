@@ -6,8 +6,8 @@
  * tool call. Cross-process engines fall back to the boolean shadow (true).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -23,7 +23,7 @@ import { globalRunRegistry } from '../run-registry';
 import type { AgentStreamEvent } from '../types';
 
 function createMultipleToolCallsModel(tools: Array<{ name: string; args: object }>) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -51,7 +51,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
 /** Creates a model that requests one tool call, then completes after the tool resumes. */
 function createToolCallThenTextModel(tool: { name: string; args: object }) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       return {
@@ -126,7 +126,7 @@ describe('DurableAgent function-form requireToolApproval', () => {
       id: 'fn-policy-agent',
       name: 'Fn Policy Agent',
       instructions: 'tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { safeTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -165,7 +165,7 @@ describe('DurableAgent function-form requireToolApproval', () => {
       id: 'per-call-agent',
       name: 'Per Call Agent',
       instructions: 'tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { readTool, writeTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -219,7 +219,7 @@ describe('DurableAgent function-form requireToolApproval', () => {
       id: 'warm-resume-policy-agent',
       name: 'Warm Resume Policy Agent',
       instructions: 'Use the tenant tool.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { tenantTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -286,7 +286,7 @@ describe('DurableAgent function-form requireToolApproval', () => {
       id: 'throwing-policy-agent',
       name: 'Throwing Policy Agent',
       instructions: 'tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { someTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

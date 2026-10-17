@@ -7,8 +7,8 @@
  *   whose reason is 'tripwire' and carry the processor's reason.
  */
 
-import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -21,8 +21,8 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
 function createTextModel(texts: string[]) {
-  const prompts: LanguageModelV2Prompt[] = [];
-  const model = new MockLanguageModelV2({
+  const prompts: LanguageModelV4Prompt[] = [];
+  const model = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       prompts.push(prompt);
       const text = texts[Math.min(prompts.length - 1, texts.length - 1)]!;
@@ -60,12 +60,12 @@ describe('DurableAgent processOutputStep abort', () => {
     await pubsub.close();
   });
 
-  function createAgent(model: MockLanguageModelV2, processor: Processor, inputProcessors: Processor[] = []) {
+  function createAgent(model: MockLanguageModelV4, processor: Processor, inputProcessors: Processor[] = []) {
     const agent = new Agent({
       id: 'output-step-agent',
       name: 'Output Step Agent',
       instructions: 'You are a helpful assistant.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       inputProcessors,
       outputProcessors: [processor],
     });
@@ -131,7 +131,7 @@ describe('DurableAgent processOutputStep abort', () => {
 
   it('abort with retry: true on a response with tool calls drops that step and skips its tools', async () => {
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         calls++;
         return {
@@ -228,7 +228,7 @@ describe('DurableAgent processOutputStep abort', () => {
 
   it('a run-ending rejection keeps an accepted tool step from earlier in the run (#26048)', async () => {
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         calls++;
         const parts =
@@ -271,7 +271,7 @@ describe('DurableAgent processOutputStep abort', () => {
       id: 'output-step-agent',
       name: 'Output Step Agent',
       instructions: 'You are a helpful assistant.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: {
         lookup: createTool({
           id: 'lookup',

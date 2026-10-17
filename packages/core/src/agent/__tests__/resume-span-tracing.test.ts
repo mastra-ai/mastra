@@ -5,7 +5,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 describe('resumed AGENT_RUN span input and trace continuity', () => {
   let spanIdCounter = 0;
@@ -46,7 +46,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
 
   function createMockModel() {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async _options => {
         callCount++;
         if (callCount === 1) {

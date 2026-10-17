@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { MockMemory } from '../../../memory/mock';
@@ -25,7 +25,7 @@ describe('DurableAgent Model Fallback', () => {
    * Helper to create a mock model that succeeds
    */
   function createSuccessModel(text: string = 'Hello from model') {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -45,7 +45,7 @@ describe('DurableAgent Model Fallback', () => {
    * The model returns a stream that emits an error chunk (similar to real LLM failures)
    */
   function createFailingModel() {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -61,7 +61,7 @@ describe('DurableAgent Model Fallback', () => {
    */
   function createFlakyModel(failCount: number, successText: string = 'Success after retries') {
     let attempts = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         attempts++;
         if (attempts <= failCount) {
@@ -92,8 +92,8 @@ describe('DurableAgent Model Fallback', () => {
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: [
-          { model: model1 as LanguageModelV2, maxRetries: 2 },
-          { model: model2 as LanguageModelV2, maxRetries: 1 },
+          { model: model1 as LanguageModelV4, maxRetries: 2 },
+          { model: model2 as LanguageModelV4, maxRetries: 1 },
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -113,7 +113,7 @@ describe('DurableAgent Model Fallback', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: model as LanguageModelV2,
+        model: model as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -138,9 +138,9 @@ describe('DurableAgent Model Fallback', () => {
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: [
-          { model: model1 as LanguageModelV2, enabled: false },
-          { model: model2 as LanguageModelV2, enabled: true },
-          { model: model3 as LanguageModelV2 }, // enabled by default
+          { model: model1 as LanguageModelV4, enabled: false },
+          { model: model2 as LanguageModelV4, enabled: true },
+          { model: model3 as LanguageModelV4 }, // enabled by default
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -164,8 +164,8 @@ describe('DurableAgent Model Fallback', () => {
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: [
-          { model: model1 as LanguageModelV2, maxRetries: 5 },
-          { model: model2 as LanguageModelV2, maxRetries: 0 },
+          { model: model1 as LanguageModelV4, maxRetries: 5 },
+          { model: model2 as LanguageModelV4, maxRetries: 0 },
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -184,7 +184,7 @@ describe('DurableAgent Model Fallback', () => {
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
-        model: [{ model: model1 as LanguageModelV2 }, { model: model2 as LanguageModelV2 }],
+        model: [{ model: model1 as LanguageModelV4 }, { model: model2 as LanguageModelV4 }],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -213,8 +213,8 @@ describe('DurableAgent Model Fallback', () => {
         errorProcessorDefaults: false,
         memory: mockMemory,
         model: [
-          { id: 'primary', model: failingModel as LanguageModelV2, maxRetries: 0 },
-          { id: 'fallback', model: successModel as LanguageModelV2, maxRetries: 0 },
+          { id: 'primary', model: failingModel as LanguageModelV4, maxRetries: 0 },
+          { id: 'fallback', model: successModel as LanguageModelV4, maxRetries: 0 },
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -256,8 +256,8 @@ describe('DurableAgent Model Fallback', () => {
         // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
         errorProcessorDefaults: false,
         model: [
-          { id: 'primary', model: flakyModel as LanguageModelV2, maxRetries: 2 },
-          { id: 'fallback', model: fallbackModel as LanguageModelV2, maxRetries: 0 },
+          { id: 'primary', model: flakyModel as LanguageModelV4, maxRetries: 2 },
+          { id: 'fallback', model: fallbackModel as LanguageModelV4, maxRetries: 0 },
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -281,7 +281,7 @@ describe('DurableAgent Model Fallback', () => {
 
     it('should skip disabled models', async () => {
       let disabledModelCalled = false;
-      const disabledModel = new MockLanguageModelV2({
+      const disabledModel = new MockLanguageModelV4({
         doStream: async () => {
           disabledModelCalled = true;
           throw new Error('Disabled model should not be called');
@@ -296,8 +296,8 @@ describe('DurableAgent Model Fallback', () => {
         // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
         errorProcessorDefaults: false,
         model: [
-          { id: 'disabled', model: disabledModel as LanguageModelV2, enabled: false },
-          { id: 'enabled', model: enabledModel as LanguageModelV2, enabled: true },
+          { id: 'disabled', model: disabledModel as LanguageModelV4, enabled: false },
+          { id: 'enabled', model: enabledModel as LanguageModelV4, enabled: true },
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -330,8 +330,8 @@ describe('DurableAgent Model Fallback', () => {
         // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
         errorProcessorDefaults: false,
         model: [
-          { id: 'model1', model: failingModel1 as LanguageModelV2, maxRetries: 0 },
-          { id: 'model2', model: failingModel2 as LanguageModelV2, maxRetries: 0 },
+          { id: 'model1', model: failingModel1 as LanguageModelV4, maxRetries: 0 },
+          { id: 'model2', model: failingModel2 as LanguageModelV4, maxRetries: 0 },
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -363,8 +363,8 @@ describe('DurableAgent Model Fallback', () => {
         // Model-list retry and fallback semantics: no processor-level retry layer in these assertions.
         errorProcessorDefaults: false,
         model: [
-          { id: 'primary', model: flakyModel as LanguageModelV2, maxRetries: 2 }, // Will fail after 3 attempts
-          { id: 'fallback', model: fallbackModel as LanguageModelV2, maxRetries: 0 },
+          { id: 'primary', model: flakyModel as LanguageModelV4, maxRetries: 2 }, // Will fail after 3 attempts
+          { id: 'fallback', model: fallbackModel as LanguageModelV4, maxRetries: 0 },
         ],
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

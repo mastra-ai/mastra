@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -14,7 +14,6 @@ import { AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
   aiV5ModelMessageToV2PromptMessage,
-  aiV5PromptToAIV6Prompt,
   aiV5PromptToAIV7Prompt,
   coreContentToString,
   messagesAreEqual,
@@ -586,7 +585,7 @@ export class MessageList {
     messages: Array<{ role: string; content: unknown }>;
     systemMessages: Array<{ role: string; content: unknown; tag?: string }>;
   } {
-    const coreMessages = this.all.aiV5.model();
+    const coreMessages = this.all.aiSdk.model();
 
     return {
       messages: coreMessages.map(msg => ({
@@ -700,7 +699,7 @@ export class MessageList {
   }
 
   public getLatestUserContent(): string | null {
-    const currentUserMessages = this.all.aiV5.model().filter(m => m.role === 'user');
+    const currentUserMessages = this.all.aiSdk.model().filter(m => m.role === 'user');
     const content = currentUserMessages.at(-1)?.content;
     if (!content) return null;
     return coreContentToString(content);
@@ -928,7 +927,7 @@ export class MessageList {
     db: (): MastraDBMessage[] => this.messages,
     v1: (): MastraMessageV1[] => convertToV1Messages(this.all.db()),
 
-    aiV5: {
+    aiSdk: {
       model: (): AIV5Type.ModelMessage[] => {
         const promptMessages = this.getMessagesForModelPrompt();
         return convertAIV5UIToModelMessages(
@@ -936,7 +935,7 @@ export class MessageList {
           promptMessages,
         );
       },
-      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.all.db()),
+      ui: () => this.toAIV6UIMessages(this.all.db()),
 
       // Used when calling AI SDK streamText/generateText
       prompt: (): AIV5Type.ModelMessage[] => {
@@ -975,7 +974,7 @@ export class MessageList {
           downloadConcurrency: 10,
           downloadRetries: 3,
         },
-      ): Promise<LanguageModelV2Prompt> => {
+      ): Promise<LanguageModelV4Prompt> => {
         const promptMessages = this.getMessagesForModelPrompt().map(withUnavailableAttachmentPlaceholders);
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
@@ -1120,39 +1119,15 @@ export class MessageList {
 
         messages = dropCrossProviderExecutedParts(messages, this.messages, options.targetProvider, this.logger);
 
-        return messages
-          .filter(message => message != null)
-          .map(aiV5ModelMessageToV2PromptMessage)
-          .filter(
-            message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
-          );
+        return aiV5PromptToAIV7Prompt(
+          messages
+            .filter(message => message != null)
+            .map(aiV5ModelMessageToV2PromptMessage)
+            .filter(
+              message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
+            ),
+        );
       },
-    },
-    aiV6: {
-      ui: () => this.toAIV6UIMessages(this.all.db()),
-
-      // Builds the v5 prompt, then converts it to the shape AI SDK v6 (spec 'v3')
-      // providers require (tool-result `media` -> `image-data`/`file-data`).
-      llmPrompt: async (options?: {
-        downloadConcurrency?: number;
-        downloadRetries?: number;
-        supportedUrls?: Record<string, RegExp[]>;
-        targetProvider?: string;
-        skipUnavailableAttachments?: boolean;
-      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
-    },
-    aiV7: {
-      ui: () => this.toAIV6UIMessages(this.all.db()),
-
-      // Builds the v5 prompt, then converts tool-result `media` parts to the
-      // file content shape AI SDK v7 (spec 'v4') providers require.
-      llmPrompt: async (options?: {
-        downloadConcurrency?: number;
-        downloadRetries?: number;
-        supportedUrls?: Record<string, RegExp[]>;
-        targetProvider?: string;
-        skipUnavailableAttachments?: boolean;
-      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
   };
 
@@ -1160,15 +1135,12 @@ export class MessageList {
     db: () => this.messages.filter(m => this.memoryMessages.has(m)),
     v1: () => convertToV1Messages(this.remembered.db()),
 
-    aiV5: {
+    aiSdk: {
       model: () =>
         convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(this.remembered.db(), { transformToolPayloads: false }),
           this.messages,
         ),
-      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.remembered.db()),
-    },
-    aiV6: {
       ui: () => this.toAIV6UIMessages(this.remembered.db()),
     },
   };
@@ -1176,15 +1148,12 @@ export class MessageList {
     db: () => this.all.db().filter(m => this.memoryMessagesPersisted.has(m)),
     v1: () => convertToV1Messages(this.rememberedPersisted.db()),
 
-    aiV5: {
+    aiSdk: {
       model: () =>
         convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
           this.messages,
         ),
-      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.rememberedPersisted.db()),
-    },
-    aiV6: {
       ui: () => this.toAIV6UIMessages(this.rememberedPersisted.db()),
     },
   };
@@ -1193,15 +1162,12 @@ export class MessageList {
     db: () => this.messages.filter(m => this.newUserMessages.has(m)),
     v1: () => convertToV1Messages(this.input.db()),
 
-    aiV5: {
+    aiSdk: {
       model: () =>
         convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(this.input.db(), { transformToolPayloads: false }),
           this.messages,
         ),
-      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.input.db()),
-    },
-    aiV6: {
       ui: () => this.toAIV6UIMessages(this.input.db()),
     },
   };
@@ -1209,15 +1175,12 @@ export class MessageList {
     db: (): MastraDBMessage[] => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
     v1: (): MastraMessageV1[] => convertToV1Messages(this.inputPersisted.db()),
 
-    aiV5: {
+    aiSdk: {
       model: () =>
         convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
           this.messages,
         ),
-      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.inputPersisted.db()),
-    },
-    aiV6: {
       ui: () => this.toAIV6UIMessages(this.inputPersisted.db()),
     },
   };
@@ -1226,8 +1189,8 @@ export class MessageList {
     db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessages.has(m)),
     v1: (): MastraMessageV1[] => convertToV1Messages(this.response.db()),
 
-    aiV5: {
-      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.response.db()),
+    aiSdk: {
+      ui: () => this.toAIV6UIMessages(this.response.db()),
       model: (): AIV5ResponseMessage[] =>
         convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(this.response.db(), { transformToolPayloads: false }),
@@ -1237,23 +1200,20 @@ export class MessageList {
         if (typeof stepNumber === 'number') {
           // Delegate to StepContentExtractor for step-specific content extraction
           return StepContentExtractor.extractStepContent(
-            this.response.aiV5.ui(),
+            this.toAIV5UIMessages(this.response.db()),
             stepNumber,
-            this.response.aiV5.stepContent,
+            this.response.aiSdk.stepContent,
           );
         }
 
-        return this.response.aiV5.model().map(this.response.aiV5.stepContent).flat();
+        return this.response.aiSdk.model().map(this.response.aiSdk.stepContent).flat();
       },
       stepContent: (message?: AIV5Type.ModelMessage): AIV5Type.StepResult<any>['content'] => {
         // Delegate to StepContentExtractor for content conversion
         return StepContentExtractor.convertToStepContent(message, this.messages, () =>
-          this.response.aiV5.model().at(-1),
+          this.response.aiSdk.model().at(-1),
         );
       },
-    },
-    aiV6: {
-      ui: () => this.toAIV6UIMessages(this.response.db()),
     },
   };
   /** Ids of pruned response messages that are not (again) tracked as response messages in the live list. */
@@ -1295,15 +1255,12 @@ export class MessageList {
   private responsePersisted = {
     db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
 
-    aiV5: {
+    aiSdk: {
       model: () =>
         convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(this.responsePersisted.db(), { transformToolPayloads: false }),
           this.messages,
         ),
-      ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.responsePersisted.db()),
-    },
-    aiV6: {
       ui: () => this.toAIV6UIMessages(this.responsePersisted.db()),
     },
   };
@@ -2262,13 +2219,11 @@ export class MessageList {
       if (messageSource === `memory`) return null;
 
       // Check if the message is in a supported format for system messages
-      const isSupportedSystemFormat =
-        TypeDetector.isAIV6CoreMessage(message) ||
-        TypeDetector.isAIV5CoreMessage(message) ||
-        TypeDetector.isMastraDBMessage(message);
-
-      if (isSupportedSystemFormat) {
+      if (TypeDetector.isAIV5CoreMessage(message) || TypeDetector.isMastraDBMessage(message)) {
         return this.addSystem(message);
+      }
+      if (TypeDetector.isAIV6CoreMessage(message)) {
+        return this.addSystem(message as AIV6Type.ModelMessage);
       }
 
       // if we didn't add the message and we didn't ignore this intentionally, then it's a problem!

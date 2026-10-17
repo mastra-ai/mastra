@@ -1,4 +1,4 @@
-import type { UIMessage, ModelMessage } from '@internal/ai-sdk-v5';
+import type { UIMessage, ModelMessage } from '@internal/ai-v7';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -4062,7 +4062,7 @@ export class Agent<
       userContent = this.formatMessagesForTitle(messages);
     } else if (message) {
       // Single message path (backward compat): normalize and format
-      const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
+      const normMessage = new MessageList().add(message, 'user').get.all.aiSdk.ui().at(-1);
       if (!normMessage) {
         throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
       }
@@ -4152,7 +4152,7 @@ export class Agent<
         });
       }
       if (userMessage) {
-        const normMessage = new MessageList().add(userMessage, 'user').get.all.aiV5.ui().at(-1);
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.aiSdk.ui().at(-1);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
@@ -8571,7 +8571,7 @@ export class Agent<
             | undefined,
         );
 
-        const uiMessages = messageList.get.all.aiV5.ui();
+        const uiMessages = messageList.get.all.aiSdk.ui();
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title) {

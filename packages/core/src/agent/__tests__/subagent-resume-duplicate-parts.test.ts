@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -29,7 +29,7 @@ type ScriptStep = (prompt: unknown) => unknown[];
 
 function scriptedModel(script: ScriptStep[]) {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const step = script[calls++];
       if (!step) throw new Error(`Model call ${calls} is not scripted`);

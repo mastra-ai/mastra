@@ -39,7 +39,7 @@
  * call-level failure produces an identical `finish.stepResult` on every engine,
  * so that COR-1390 declaration is not applicable to this scenario.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
@@ -104,8 +104,8 @@ function failingScript(times: number): ModelScript {
  * prototype getter and delegates `doStream` to the original method, so the helper's
  * `requests` array still sees every call, while `onCall` records which model served.
  */
-function labelledModel(model: LanguageModelV2, modelId: string, onCall: (id: string) => void): LanguageModelV2 {
-  const clone = Object.assign(Object.create(Object.getPrototypeOf(model)), model, { modelId }) as LanguageModelV2;
+function labelledModel(model: LanguageModelV4, modelId: string, onCall: (id: string) => void): LanguageModelV4 {
+  const clone = Object.assign(Object.create(Object.getPrototypeOf(model)), model, { modelId }) as LanguageModelV4;
   const inner = clone.doStream;
   clone.doStream = options => {
     onCall(modelId);
@@ -298,7 +298,7 @@ function heldSetup(variant: HeldVariant): HeldSetup {
  * builds, so this one is case-local and its call is tracked through `onCall`
  * instead — the harness's own `models` assertion is what reads it back.
  */
-function fallbackModel(onCall: (id: string) => void): LanguageModelV2 {
+function fallbackModel(onCall: (id: string) => void): LanguageModelV4 {
   return labelledModel(createRecordingModel({ tapes: [textOnlyTape(FALLBACK_TEXT)] }).model, FALLBACK_ID, onCall);
 }
 
@@ -316,7 +316,7 @@ async function runHeldVariant(variant: HeldVariant) {
         ? ([
             { model: labelledModel(model, PRIMARY_ID, onCall), maxRetries: 0 },
             { model: fallbackModel(onCall), maxRetries: 0 },
-          ] as unknown as LanguageModelV2)
+          ] as unknown as LanguageModelV4)
         : model;
       return new Agent({
         id: `t27-agent-${variant}-${engine}`,

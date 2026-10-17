@@ -55,7 +55,6 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/json-schema": "^7.0.15",

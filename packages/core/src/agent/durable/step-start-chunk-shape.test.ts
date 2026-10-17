@@ -12,7 +12,7 @@
  * durable `stream()`/`observe()`.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MastraServerCache } from '../../cache';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -24,7 +24,7 @@ import { createDurableAgent } from './create-durable-agent';
 import { emitStepStartEvent } from './stream-adapter';
 
 function createTextStreamModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

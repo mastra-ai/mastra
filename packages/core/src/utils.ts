@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CoreMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage as CoreMessage } from '@internal/ai-v7';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
@@ -352,21 +352,17 @@ function createDeterministicId(input: string): string {
  * @returns The tool with the properties set
  */
 function setVercelToolProperties(tool: VercelTool) {
-  // Check if the tool already has inputSchema (v5 format)
-  // If it does, use it directly (it might be a function)
-  // Otherwise, convert the parameters to inputSchema
-  const inputSchema = 'inputSchema' in tool ? tool.inputSchema : convertVercelToolParameters(tool);
-
+  const description =
+    typeof tool.description === 'function' ? tool.description({ context: undefined }) : tool.description;
   const toolId = !('id' in tool)
-    ? tool.description
-      ? `tool-${createDeterministicId(tool.description)}`
+    ? description
+      ? `tool-${createDeterministicId(description)}`
       : `tool-${Math.random().toString(36).substring(2, 9)}`
     : tool.id;
 
   return {
     ...tool,
     id: toolId,
-    inputSchema,
   };
 }
 
@@ -402,20 +398,6 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
   }, {});
 
   return toolsWithProperties;
-}
-
-function convertVercelToolParameters(tool: VercelTool): z.ZodType {
-  // If the tool is a Vercel Tool, check if the parameters are already a zod object
-  // If not, convert the parameters to a zod object using jsonSchemaToZod
-  // Handle case where parameters (or inputSchema in v5) is a function that returns a schema
-  let schema = tool.parameters ?? z.object({});
-
-  // If schema is a function, call it to get the actual schema
-  if (typeof schema === 'function') {
-    schema = schema();
-  }
-
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 
 /**

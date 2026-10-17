@@ -1,4 +1,4 @@
-import type { TextPart } from '@internal/ai-sdk-v5';
+import type { TextPart } from '@internal/ai-v7';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
@@ -86,7 +86,7 @@ describe('ProcessorRunner', () => {
       const result = await runner.runInputProcessors(messageList);
 
       expect(executionOrder).toEqual(['processor1', 'processor2']);
-      const messages = await result.get.all.aiV5.prompt();
+      const messages = await result.get.all.aiSdk.prompt();
       expect(messages).toHaveLength(3);
       expect((messages[0].content[0] as TextPart).text).toBe('original message');
       expect((messages[1].content[0] as TextPart).text).toBe('processed by 1');
@@ -323,7 +323,7 @@ describe('ProcessorRunner', () => {
       const result = await runner.runInputProcessors(messageList);
 
       expect(executionOrder).toEqual(['processor1', 'processor3']);
-      const messages = await result.get.all.aiV5.prompt();
+      const messages = await result.get.all.aiSdk.prompt();
       expect(messages).toHaveLength(3);
       expect((messages[0].content[0] as TextPart).text).toBe('original');
       expect((messages[1].content[0] as TextPart).text).toBe('from processor 1');
@@ -503,7 +503,7 @@ describe('ProcessorRunner', () => {
         const result = await runner.runInputProcessors(messageList);
 
         // Verify the system message was added
-        const allMessages = await result.get.all.aiV5.prompt();
+        const allMessages = await result.get.all.aiSdk.prompt();
         const systemMessages = allMessages.filter((m: any) => m.role === 'system');
 
         expect(systemMessages).toHaveLength(1);
@@ -549,7 +549,7 @@ describe('ProcessorRunner', () => {
 
       const result = await runner.runOutputProcessors(messageList);
 
-      const messages = await result.get.all.aiV5.prompt();
+      const messages = await result.get.all.aiSdk.prompt();
       const assistantTexts = messages
         .filter(m => m.role === 'assistant')
         .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
@@ -598,7 +598,7 @@ describe('ProcessorRunner', () => {
         text: 'initial response',
       });
 
-      const messages = await messageList.get.all.aiV5.prompt();
+      const messages = await messageList.get.all.aiSdk.prompt();
       const assistantTexts = messages
         .filter(m => m.role === 'assistant')
         .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
@@ -669,7 +669,7 @@ describe('ProcessorRunner', () => {
       messageList.add([createMessage('initial response', 'assistant')], 'response');
 
       const result = await runner.runOutputProcessors(messageList);
-      const messages = await result.get.all.aiV5.prompt();
+      const messages = await result.get.all.aiSdk.prompt();
       const assistantTexts = messages
         .filter(m => m.role === 'assistant')
         .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))

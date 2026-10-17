@@ -1,7 +1,7 @@
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock as MockLanguageModelV4 } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
@@ -11,7 +11,7 @@ import { Agent } from '../agent';
 
 function createWorkflowCallingModel(toolName: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -53,7 +53,7 @@ function createWorkflowCallingModel(toolName: string) {
 }
 
 function createSimpleTextModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

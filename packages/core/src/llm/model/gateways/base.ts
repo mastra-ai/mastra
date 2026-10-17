@@ -3,9 +3,7 @@
  * Gateways fetch provider configurations and build URLs for model access
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
-import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import type { StreamTransport } from '../../../stream/types';
 import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
 
@@ -85,9 +83,9 @@ export type ReasoningCapabilities = Record<string, Record<string, ModelReasoning
 
 /**
  * Union type for language models that can be returned by gateways.
- * Supports AI SDK v5 (LanguageModelV2), v6 (LanguageModelV3), and v7 (LanguageModelV4).
+ * Supports AI SDK v5 (LanguageModelV4), v6 (LanguageModelV4), and v7 (LanguageModelV4).
  */
-export type GatewayLanguageModel = LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
+export type GatewayLanguageModel = LanguageModelV4 | LanguageModelV4 | LanguageModelV4;
 export type GatewayStreamTransportHandle = Pick<StreamTransport, 'type' | 'close'>;
 
 /** @internal Stream transport handle attached by gateways that own custom streaming transports. */
@@ -172,7 +170,7 @@ export interface MastraModelGatewayInterface {
 
   /**
    * Resolve a language model from the gateway.
-   * Supports returning LanguageModelV2 (AI SDK v5), LanguageModelV3 (AI SDK v6), or LanguageModelV4 (AI SDK v7).
+   * Supports returning LanguageModelV4 (AI SDK v5), LanguageModelV4 (AI SDK v6), or LanguageModelV4 (AI SDK v7).
    */
   resolveLanguageModel(args: {
     modelId: string;

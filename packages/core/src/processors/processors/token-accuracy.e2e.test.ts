@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { getLLMTestMode, defaultNameGenerator, getLLMRecordingsDir } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -37,7 +37,7 @@ describe('TokenLimiterProcessor', () => {
       messageList.add(msg, 'input');
     }
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     const result = await limiter.processLLMRequest({
       prompt,
       model: { modelId: 'test-model' } as any,
@@ -101,7 +101,7 @@ describe('TokenLimiterProcessor', () => {
       messageList.add(msg, 'input');
     }
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     const result = await limiter.processLLMRequest({
       prompt,
       model: { modelId: 'test-model' } as any,
@@ -309,7 +309,7 @@ describe('TokenLimiterProcessor', () => {
 
 describe('ToolCallFilter', () => {
   const runFilter = async (filter: ToolCallFilter, messageList: MessageList) => {
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     const result = await filter.processLLMRequest?.({
       prompt,
       model: 'test-model' as any,
@@ -323,7 +323,7 @@ describe('ToolCallFilter', () => {
     return result?.prompt ?? prompt;
   };
 
-  const toolPartsIn = (prompt: LanguageModelV2Prompt, toolName?: string) =>
+  const toolPartsIn = (prompt: LanguageModelV4Prompt, toolName?: string) =>
     prompt.flatMap(message =>
       typeof message.content === 'string'
         ? []
@@ -369,7 +369,7 @@ describe('ToolCallFilter', () => {
       toolNames: ['weather', 'calculator'],
     });
     const messageList = new MessageList().add(messagesV2, 'memory');
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const result = await runFilter(new ToolCallFilter({ exclude: [] }), messageList);
 

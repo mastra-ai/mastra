@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
@@ -27,7 +27,7 @@ function createPrefillErrorModel(
   let callCount = 0;
   const receivedPrompts: any[] = [];
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
       callCount++;
       receivedPrompts.push(prompt);
@@ -234,7 +234,7 @@ describe('PrefillErrorHandler Recovery', () => {
         return { retry: true };
       });
 
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           throw new APICallError({
@@ -279,7 +279,7 @@ describe('PrefillErrorHandler Recovery', () => {
         return { retry: true };
       });
 
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           throw new APICallError({
@@ -357,7 +357,7 @@ describe('PrefillErrorHandler Recovery', () => {
 
     it('should preserve fallback model position when an error processor retries', async () => {
       const seenModels: string[] = [];
-      const exhaustedPrimary = new MockLanguageModelV2({
+      const exhaustedPrimary = new MockLanguageModelV4({
         doGenerate: async () => {
           seenModels.push('primary');
           throw new APICallError({
@@ -371,7 +371,7 @@ describe('PrefillErrorHandler Recovery', () => {
       });
 
       let secondaryCallCount = 0;
-      const secondary = new MockLanguageModelV2({
+      const secondary = new MockLanguageModelV4({
         doGenerate: async () => {
           secondaryCallCount++;
           seenModels.push('secondary');
@@ -436,7 +436,7 @@ describe('PrefillErrorHandler Recovery', () => {
       await mockMemory.createThread({ threadId, resourceId });
 
       // A model that always throws a non-prefill, non-retryable error
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doGenerate: async () => {
           throw new APICallError({
             message: 'Invalid request body',
@@ -592,7 +592,7 @@ describe('PrefillErrorHandler Recovery', () => {
 
       // Model that always throws prefill error (never recovers)
       let callCount = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           throw new APICallError({

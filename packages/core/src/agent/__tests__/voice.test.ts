@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import { openai } from '@ai-sdk/openai-v5';
+import { openai } from '@ai-sdk/openai';
 import { beforeEach, describe, expect, it, expectTypeOf, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';

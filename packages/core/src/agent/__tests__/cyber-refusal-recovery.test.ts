@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { CyberRefusalHandler } from '../../processors/cyber-refusal-handler';
@@ -44,7 +44,7 @@ type Turn = { refuse: true } | { cyberStop: true; partialText?: string } | { too
 function createScriptedModel(turns: Turn[]) {
   const prompts: any[] = [];
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       prompts.push(prompt);
       const turn = turns[prompts.length - 1];
@@ -100,7 +100,7 @@ function createScriptedModel(turns: Turn[]) {
   return { model, prompts };
 }
 
-function createAgent(model: MockLanguageModelV2) {
+function createAgent(model: MockLanguageModelV4) {
   return new Agent({
     id: 'cyber-refusal-agent',
     name: 'Cyber Refusal Agent',

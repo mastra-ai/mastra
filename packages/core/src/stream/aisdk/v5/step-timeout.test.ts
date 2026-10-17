@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { isMastraTimeoutError } from '../../../loop/timeout';
 import { execute } from './execute';
@@ -12,7 +12,7 @@ const runExecute = async ({
   firstChunkMs,
   maxRetries,
 }: {
-  model: MockLanguageModelV2;
+  model: MockLanguageModelV4;
   stepMs?: number;
   firstChunkMs?: number;
   maxRetries?: number;
@@ -38,13 +38,13 @@ const runExecute = async ({
 
 describe('modelSettings.timeout.stepMs', () => {
   it('times out a model that never establishes a stream', async () => {
-    const model = new MockLanguageModelV2({ doStream: () => new Promise(() => {}) });
+    const model = new MockLanguageModelV4({ doStream: () => new Promise(() => {}) });
 
     await expect(runExecute({ model, stepMs: 50, maxRetries: 0 })).rejects.toSatisfy(isMastraTimeoutError);
   });
 
   it('times out a model that opens a stream then stalls mid-emission', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           start(controller) {
@@ -61,14 +61,14 @@ describe('modelSettings.timeout.stepMs', () => {
 
   it('does not retry the same model after a step timeout', async () => {
     const doStream = vi.fn(() => new Promise(() => {}));
-    const model = new MockLanguageModelV2({ doStream: doStream as any });
+    const model = new MockLanguageModelV4({ doStream: doStream as any });
 
     await expect(runExecute({ model, stepMs: 50, maxRetries: 3 })).rejects.toSatisfy(isMastraTimeoutError);
     expect(doStream).toHaveBeenCalledTimes(1);
   });
 
   it('leaves calls that finish within the budget untouched', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           start(controller) {
@@ -95,7 +95,7 @@ describe('modelSettings.timeout.stepMs', () => {
 
 describe('modelSettings.timeout.firstChunkMs', () => {
   it('times out when only non-content metadata arrives', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           start(controller) {
@@ -112,7 +112,7 @@ describe('modelSettings.timeout.firstChunkMs', () => {
   });
 
   it('clears the first-content budget after a content chunk arrives', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           async start(controller) {
@@ -149,7 +149,7 @@ describe('modelSettings.timeout.firstChunkMs', () => {
       chunks: [{ type: 'tool-call', toolCallId: 'tool-1', toolName: 'lookup', input: '{}' }],
     },
   ])('treats a $name as first content', async ({ chunks: contentChunks }) => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           async start(controller) {
@@ -204,7 +204,7 @@ describe('modelSettings.timeout.firstChunkMs', () => {
           }),
         };
       });
-      const model = new MockLanguageModelV2({ doStream: doStream as any });
+      const model = new MockLanguageModelV4({ doStream: doStream as any });
 
       const chunks = await runExecute({ model, firstChunkMs, maxRetries: 1 });
 
@@ -216,7 +216,7 @@ describe('modelSettings.timeout.firstChunkMs', () => {
 
   it('does not retry the same model after a first-content timeout', async () => {
     const doStream = vi.fn(async () => ({ stream: new ReadableStream() }));
-    const model = new MockLanguageModelV2({ doStream: doStream as any });
+    const model = new MockLanguageModelV4({ doStream: doStream as any });
 
     await expect(runExecute({ model, firstChunkMs: 50, maxRetries: 3 })).rejects.toSatisfy(isMastraTimeoutError);
     expect(doStream).toHaveBeenCalledTimes(1);

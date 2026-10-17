@@ -1,5 +1,5 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraModelGateway } from '../llm/model/gateways/base';
@@ -45,7 +45,7 @@ class CustomEnterpriseGateway extends MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> {
+  }): Promise<LanguageModelV4> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
       name: providerId,

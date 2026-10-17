@@ -21,10 +21,10 @@ import { __hookHandlerCount, AvailableHooks } from '../../hooks';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 function makeMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -95,7 +95,7 @@ describe('standalone Agent ephemeral Mastra hook leak (#19404)', () => {
     // ephemeral Mastra (#getOrCreateEphemeralMastra). A teardown-based fix
     // that only cleans up in #execute()'s finally block misses this rebuild —
     // this test pins the constructor-level guard instead.
-    const titleModel = new MockLanguageModelV2({
+    const titleModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',

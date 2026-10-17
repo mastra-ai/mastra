@@ -1,3 +1,4 @@
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 /**
  * Streaming tests for workflows
  * Note: Basic streaming tests that don't require full stream consumption
@@ -9,9 +10,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
+import { simulateReadableStream } from '@mastra/core/ai';
 // @ts-ignore - module resolution for test utilities
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import type { StreamEvent } from '@mastra/core/workflows';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
@@ -457,7 +458,7 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
       id: 'test-agent-1',
       name: 'test-agent-1',
       instructions: 'test agent instructions',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: simulateReadableStream({
             chunks: [
@@ -467,8 +468,11 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
               { type: 'text-end', id: 't1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 10, text: 10, reasoning: undefined },
+                },
               },
             ],
           }),
@@ -481,7 +485,7 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
       id: 'test-agent-2',
       name: 'test-agent-2',
       instructions: 'test agent instructions',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: simulateReadableStream({
             chunks: [
@@ -491,8 +495,11 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
               { type: 'text-end', id: 't1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 10, text: 10, reasoning: undefined },
+                },
               },
             ],
           }),
@@ -557,13 +564,13 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
   if (Agent) {
     // Track what options were received
     let receivedOptions: any = null;
-    const doStreamSpy = vi.fn(async ({ prompt, temperature }: any) => {
+    const doStreamSpy = vi.fn<LanguageModelV4['doStream']>(async ({ prompt, temperature }) => {
       // Capture options that were passed
       receivedOptions = { temperature };
 
       // Check if instructions were overridden in the messages
-      const systemMessage = prompt?.find((m: any) => m.role === 'system');
-      if (systemMessage?.content) {
+      const systemMessage = prompt.find(m => m.role === 'system');
+      if (systemMessage?.role === 'system') {
         receivedOptions.instructionsOverridden = systemMessage.content.includes('overridden instructions');
       }
 
@@ -576,8 +583,11 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
             { type: 'text-end', id: 't1' },
             {
               type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 10, text: 10, reasoning: undefined },
+              },
             },
           ],
         }),
@@ -589,7 +599,7 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
       id: 'test-agent-with-options',
       name: 'test-agent-with-options',
       instructions: 'original instructions',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: doStreamSpy,
       }),
     });
@@ -954,7 +964,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         const onChunkSpy = vi.fn();
         const maxSteps = 5;
 
-        const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }: { prompt: any; temperature: any }) => {
+        const doStreamSpy = vi.fn<LanguageModelV4['doStream']>(async ({ prompt, temperature }) => {
           const systemMessage = prompt?.find((m: any) => m.role === 'system');
           expect(systemMessage?.content).toContain('overridden instructions');
           expect(systemMessage?.content).not.toContain('original instructions');
@@ -969,8 +979,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                 { type: 'text-end', id: 't1' },
                 {
                   type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                  finishReason: { unified: 'stop', raw: 'stop' },
+                  usage: {
+                    inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 10, text: 10, reasoning: undefined },
+                  },
                 },
               ],
             }),
@@ -982,7 +995,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-with-options',
           name: 'Test Agent With Options',
           instructions: 'original instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doStream: doStreamSpy,
           }),
         });
@@ -1042,7 +1055,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doStream: async () => ({
               stream: simulateReadableStream({
                 chunks: [
@@ -1052,9 +1065,12 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   {
                     type: 'finish',
                     id: '2',
-                    finishReason: 'stop',
+                    finishReason: { unified: 'stop', raw: 'stop' },
                     logprobs: undefined,
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1067,7 +1083,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doStream: async () => ({
               stream: simulateReadableStream({
                 chunks: [
@@ -1077,9 +1093,12 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   {
                     type: 'finish',
                     id: '2',
-                    finishReason: 'stop',
+                    finishReason: { unified: 'stop', raw: 'stop' },
                     logprobs: undefined,
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1177,7 +1196,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           description: 'test-agent-1 description',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doStream: async () => ({
               stream: simulateReadableStream({
                 chunks: [
@@ -1187,8 +1206,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   { type: 'text-end', id: 't1' },
                   {
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 10, text: 10, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1202,7 +1224,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           description: 'test-agent-2 description',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doStream: async () => ({
               stream: simulateReadableStream({
                 chunks: [
@@ -1212,8 +1234,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   { type: 'text-end', id: 't1' },
                   {
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 3, outputTokens: 10, totalTokens: 10 + 3 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 10, text: 10, reasoning: undefined },
+                    },
                   },
                 ],
               }),
@@ -1293,11 +1318,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
               content: [{ type: 'text', text: 'Paris' }],
               warnings: [],
             }),
@@ -1308,11 +1336,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
-          model: new MockLanguageModelV2({
+          model: new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
               content: [{ type: 'text', text: 'London' }],
               warnings: [],
             }),
@@ -1411,7 +1442,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             },
           };
 
-          const mockModel = new MockLanguageModelV2({
+          const mockModel = new MockLanguageModelV4({
             doStream: async () => ({
               stream: new ReadableStream({
                 start(controller) {
@@ -1427,8 +1458,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   controller.enqueue({ type: 'text-end', id: '1' });
                   controller.enqueue({
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   });
                   controller.close();
                 },
@@ -1493,7 +1527,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             },
           };
 
-          const mockModel = new MockLanguageModelV2({
+          const mockModel = new MockLanguageModelV4({
             doStream: async () => ({
               stream: new ReadableStream({
                 start(controller) {
@@ -1509,8 +1543,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   controller.enqueue({ type: 'text-end', id: '1' });
                   controller.enqueue({
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   });
                   controller.close();
                 },
@@ -1582,7 +1619,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             },
           };
 
-          const mockModel = new MockLanguageModelV2({
+          const mockModel = new MockLanguageModelV4({
             doStream: async () => ({
               stream: new ReadableStream({
                 start(controller) {
@@ -1598,8 +1635,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                   controller.enqueue({ type: 'text-end', id: '1' });
                   controller.enqueue({
                     type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
                   });
                   controller.close();
                 },
@@ -1667,11 +1707,14 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             id: 'article-generator',
             name: 'Article Generator',
             instructions: 'Generate an article with title, summary, and tags',
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doGenerate: async () => ({
                 rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
                 content: [{ type: 'text', text: articleJson }],
                 warnings: [],
               }),
@@ -1692,8 +1735,11 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
                     controller.enqueue({ type: 'text-end', id: 'text-1' });
                     controller.enqueue({
                       type: 'finish',
-                      finishReason: 'stop',
-                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                      finishReason: { unified: 'stop', raw: 'stop' },
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 20, text: 20, reasoning: undefined },
+                      },
                     });
                     controller.close();
                   },

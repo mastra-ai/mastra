@@ -8,12 +8,12 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { EmbeddingModel } from '@mastra/core/ai';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
-import type { EmbeddingModel } from 'ai';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { createPinnedTools } from '../../src/processors/observational-memory/subconscious/pinned';
@@ -55,7 +55,7 @@ describe('Pinned knowledge live proof', () => {
     await storage.init();
 
     const prompts: string[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async (options: any) => {
         prompts.push(JSON.stringify(options.prompt));
         return {

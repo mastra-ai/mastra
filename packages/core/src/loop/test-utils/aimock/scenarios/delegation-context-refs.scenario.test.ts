@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai';
 import { it, expect } from 'vitest';
 import { Agent } from '../../../../agent';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';

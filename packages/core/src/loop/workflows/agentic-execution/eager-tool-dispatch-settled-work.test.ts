@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
@@ -68,7 +68,7 @@ function textOnly() {
 }
 
 function createAgent(
-  model: MockLanguageModelV2,
+  model: MockLanguageModelV4,
   executions: string[],
   opts: {
     started?: ReturnType<typeof deferred>;
@@ -187,7 +187,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const started = deferred();
     const release = deferred();
     const settled = deferred();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () =>
         toolCallThen(async controller => {
           // The model dies while the call is still running.
@@ -211,7 +211,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const executions: string[] = [];
     const settled = deferred();
     let attempts = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         attempts += 1;
         return toolCallThen(async controller => {
@@ -238,7 +238,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
   it('applies the configured payload transform to a settled result it writes on discard', async () => {
     const executions: string[] = [];
     const settled = deferred();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () =>
         toolCallThen(async controller => {
           await settled.promise;
@@ -267,7 +267,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const executions: string[] = [];
     const abortController = new AbortController();
     const settled = deferred();
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ abortSignal }) =>
         toolCallThen(async controller => {
           // The call settles, then the stream stalls until the caller gives up.
@@ -303,7 +303,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       id: 'eager-abort-agent',
       name: 'Eager abort agent',
       instructions: 'Call tool-a.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ abortSignal }) =>
           toolCallThen(async controller => {
             await started.promise;
@@ -363,7 +363,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       name: 'Eager abort incomplete agent',
       instructions: 'Call tool-a.',
       memory,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ abortSignal }) =>
           toolCallThen(async controller => {
             await started.promise;
@@ -420,7 +420,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
   it('does not leave abort listeners on a caller signal reused across runs', async () => {
     const executions: string[] = [];
     let turn = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () =>
         turn++ % 2 === 0
           ? toolCallThen(async controller => {
@@ -459,7 +459,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const prompts: unknown[] = [];
     const settled = deferred();
     let attempts = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         attempts += 1;
         prompts.push(prompt);
@@ -491,7 +491,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const executions: string[] = [];
     const gate = inFlightGate();
     let attempts = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         attempts += 1;
         if (attempts > 1) return textOnly();
@@ -524,7 +524,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     });
     let attempts = 0;
     let apiErrorCalls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         attempts += 1;
         if (attempts > 1) return textOnly();
@@ -566,7 +566,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     // so it reaches a different early exit than the retry case above.
     const executions: string[] = [];
     const gate = inFlightGate();
-    const failing = new MockLanguageModelV2({
+    const failing = new MockLanguageModelV4({
       modelId: 'failing-model',
       doStream: async () =>
         toolCallThen(async controller => {
@@ -574,7 +574,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
           controller.error(new Error('provider died mid-stream'));
         }),
     });
-    const fallback = new MockLanguageModelV2({ modelId: 'fallback-model', doStream: async () => textOnly() });
+    const fallback = new MockLanguageModelV4({ modelId: 'fallback-model', doStream: async () => textOnly() });
     const agent = createAgent(failing, executions, { gate });
     agent.__updateModel({
       model: [
@@ -597,7 +597,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const executions: string[] = [];
     const gate = inFlightGate();
     let attempts = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         attempts += 1;
         if (attempts > 1) return textOnly();
@@ -650,7 +650,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const effects: string[] = [];
     const suspended = deferred();
     let attempts = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         attempts += 1;
         return toolCallThen(async controller => {

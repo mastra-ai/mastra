@@ -9,7 +9,7 @@
  * suspension path itself (tool/step suspension without a restart) belongs to
  * the workflow cases, not here.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -24,7 +24,7 @@ afterEach(async () => {
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function createSayHiModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text', text: 'agent says hi' }],
       finishReason: 'stop',

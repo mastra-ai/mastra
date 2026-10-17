@@ -29,8 +29,8 @@
  * the entry point the harness required T16's script model to implement (its
  * header records the plain cells as INVALID without it).
  */
-import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -151,7 +151,7 @@ function createConfirmTool(log: ToolLog) {
   });
 }
 
-function t16Agent(model: LanguageModelV2, tools: Record<string, unknown>) {
+function t16Agent(model: LanguageModelV4, tools: Record<string, unknown>) {
   return new Agent<string, any, any>({
     id: AGENT_ID,
     name: 't16-agent',
@@ -177,7 +177,7 @@ function generateContent(step: ScriptStep, offset: number) {
   }));
 }
 
-function streamParts(step: ScriptStep, offset: number): LanguageModelV2StreamPart[] {
+function streamParts(step: ScriptStep, offset: number): LanguageModelV4StreamPart[] {
   if ('text' in step) {
     return [
       { type: 'stream-start' as const, warnings: [] },
@@ -190,7 +190,7 @@ function streamParts(step: ScriptStep, offset: number): LanguageModelV2StreamPar
   return [
     { type: 'stream-start' as const, warnings: [] },
     ...step.tools.map(
-      (tool, index): LanguageModelV2StreamPart => ({
+      (tool, index): LanguageModelV4StreamPart => ({
         type: 'tool-call',
         toolCallId: `call-${offset + index + 1}`,
         toolName: tool.name,
@@ -205,8 +205,8 @@ function streamParts(step: ScriptStep, offset: number): LanguageModelV2StreamPar
 /** Every response is a pure function of the prompt, so no counter lives in the process. */
 function createScriptModel(script: Script) {
   const calls: Array<'generate' | 'stream'> = [];
-  const model = new MockLanguageModelV2({
-    doGenerate: async (options: LanguageModelV2CallOptions) => {
+  const model = new MockLanguageModelV4({
+    doGenerate: async (options: LanguageModelV4CallOptions) => {
       calls.push('generate');
       const prompt = options.prompt as unknown as PromptMessage[];
       const step = script(prompt);
@@ -218,18 +218,18 @@ function createScriptModel(script: Script) {
         rawCall: { rawPrompt: null, rawSettings: {} },
       };
     },
-    doStream: async (options: LanguageModelV2CallOptions) => {
+    doStream: async (options: LanguageModelV4CallOptions) => {
       calls.push('stream');
       const prompt = options.prompt as unknown as PromptMessage[];
       const step = script(prompt);
-      const parts: LanguageModelV2StreamPart[] = streamParts(step, toolResults(prompt).length);
+      const parts: LanguageModelV4StreamPart[] = streamParts(step, toolResults(prompt).length);
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         stream: convertArrayToReadableStream(parts),
       };
     },
   });
-  return { model: model as unknown as LanguageModelV2, calls };
+  return { model: model as unknown as LanguageModelV4, calls };
 }
 
 /**

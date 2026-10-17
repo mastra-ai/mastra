@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import {
   categorizeFileData,
@@ -272,7 +272,7 @@ function isInlineData(data: string): boolean {
 // Files of the prompt
 // ---------------------------------------------------------------------------
 
-type PromptUserMessage = Extract<LanguageModelV2Prompt[number], { role: 'user' }>;
+type PromptUserMessage = Extract<LanguageModelV4Prompt[number], { role: 'user' }>;
 /** @internal */
 export type PromptFilePart = Extract<PromptUserMessage['content'][number], { type: 'file' }>;
 
@@ -387,7 +387,7 @@ export function cacheOf(state: Record<string, unknown>): UploadCache {
 
 // Files produced by the assistant or returned by tools are the agent's own; only the user's are uploaded.
 /** @internal Shared with `UnsupportedFileHandler`. */
-export function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Map<string, string>): PromptFile[] {
+export function promptFiles(prompt: LanguageModelV4Prompt, lookUpNames: () => Map<string, string>): PromptFile[] {
   let names: Map<string, string> | undefined;
   const nameOf = (data: string | Uint8Array) =>
     typeof data === 'string' ? (names ??= lookUpNames()).get(data.replace(/\s+/g, '')) : undefined;
@@ -479,7 +479,7 @@ function decodePromptData({ data, fileName, mimeType }: PromptFile): Buffer {
  *
  * @internal Shared with `UnsupportedFileHandler`.
  */
-export function replaceParts(prompt: LanguageModelV2Prompt, notes: Map<PromptFilePart, string>): LanguageModelV2Prompt {
+export function replaceParts(prompt: LanguageModelV4Prompt, notes: Map<PromptFilePart, string>): LanguageModelV4Prompt {
   return prompt.map(message =>
     message.role !== 'user'
       ? message

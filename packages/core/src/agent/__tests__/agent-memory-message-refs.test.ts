@@ -3,8 +3,8 @@
  * Messages recalled from memory are stored there as refs to their memory
  * rows, and resuming restores them from memory storage.
  */
-import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4, LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -19,8 +19,8 @@ const resourceId = 'refs-resource';
 const historyText = (i: number) => `history turn ${i}: ${'h'.repeat(500)}`;
 
 function createModel(prompts: string[]) {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }: { prompt: LanguageModelV2Prompt }) => {
+  return new MockLanguageModelV4({
+    doStream: async ({ prompt }: { prompt: LanguageModelV4Prompt }) => {
       prompts.push(JSON.stringify(prompt));
       const answered = prompt.some(message => message.role === 'tool');
       const parts = answered
@@ -44,7 +44,7 @@ function createModel(prompts: string[]) {
         warnings: [],
       };
     },
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 async function setup() {

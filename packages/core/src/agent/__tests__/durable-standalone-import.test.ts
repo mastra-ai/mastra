@@ -17,14 +17,14 @@
  * by loading the durable module through its own imports.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { DurableAgent } from '../durable/durable-agent';
 
 function makeMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () =>
       ({
         stream: convertArrayToReadableStream([
@@ -35,7 +35,7 @@ function makeMockModel() {
         ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
       }) as any,
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 describe('standalone durable Agent — only `@mastra/core/agent` imported', () => {

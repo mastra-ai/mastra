@@ -10,10 +10,7 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
-  deps: {
-    alwaysBundle: ['@internal/ai-sdk-v5', '@internal/ai-v6'],
-  },
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v5', '@internal/ai-v6']));
+    await generateTypes(process.cwd(), new Set());
   },
 });

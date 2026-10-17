@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -60,7 +60,7 @@ describe('background tool completion updates the model-facing output', () => {
   // Turn 1 calls the tool; every later turn just answers, so the run goes idle.
   function capturingModel(capturedPrompts: any[]) {
     let call = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async (options: any) => {
         capturedPrompts.push(options.prompt);
         call++;

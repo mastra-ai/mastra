@@ -6,8 +6,8 @@
  * mirroring the regular agent's `DELEGATION_BAILED_KEY` behaviour.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -18,7 +18,7 @@ import { createDurableAgent } from '../create-durable-agent';
 // ----------------------------------------------------------------------------
 
 function makeSubAgentModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -44,7 +44,7 @@ function makeSubAgentModel(text: string) {
  * delegating unless something (e.g. bail) stops it.
  */
 function makeAlwaysDelegatingModel(agentKey: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -95,7 +95,7 @@ describe('DurableAgent delegation bail', () => {
       name: 'helperAgent',
       description: 'A helper agent',
       instructions: 'You are helpful.',
-      model: makeSubAgentModel('I helped!') as LanguageModelV2,
+      model: makeSubAgentModel('I helped!') as LanguageModelV4,
     });
 
     // Supervisor always delegates — without bail, it would loop until maxSteps
@@ -103,7 +103,7 @@ describe('DurableAgent delegation bail', () => {
       id: 'supervisor-bail',
       name: 'supervisor-bail',
       instructions: 'Delegate everything.',
-      model: makeAlwaysDelegatingModel('helperAgent') as LanguageModelV2,
+      model: makeAlwaysDelegatingModel('helperAgent') as LanguageModelV4,
       agents: { helperAgent: subAgent },
     });
 

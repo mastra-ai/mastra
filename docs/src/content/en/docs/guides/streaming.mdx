@@ -66,7 +66,7 @@ See the [`MastraModelOutput` reference](/reference/streaming/agents/MastraModelO
 
 ### AI SDK integration
 
-Use `toAISdkStream()` and `toAISdkMessages()` to convert Mastra streams and stored messages to AI SDK-compatible formats. The converters default to AI SDK v5 for backward compatibility. Pass the version that matches your installed AI SDK, such as `version: 'v7'` for AI SDK v7.
+Use `toAISdkStream()` and `toAISdkMessages()` to convert Mastra streams and stored messages to AI SDK-compatible formats. Both target AI SDK v7.
 
 ```typescript
 import { toAISdkStream } from '@mastra/ai-sdk'
@@ -76,7 +76,6 @@ const stream = await testAgent.stream([{ role: 'user', content: 'Help me organiz
 
 const aiSDKStream = toAISdkStream(stream, {
   from: 'agent',
-  version: 'v7',
 })
 ```
 
@@ -85,7 +84,7 @@ Convert stored messages for `useChat()`'s `initialMessages` with `toAISdkMessage
 ```typescript
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 
-const initialMessages = toAISdkMessages([{ role: 'user', content: 'Hello' }], { version: 'v7' })
+const initialMessages = toAISdkMessages([{ role: 'user', content: 'Hello' }])
 ```
 
 For route handlers, see [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui), which covers `handleChatStream()` and `handleWorkflowStream()`. Pass the version that matches your installed AI SDK to these handlers too. See the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) and [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) references for all options.

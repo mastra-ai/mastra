@@ -1120,7 +1120,7 @@ describe('FactoryPhaseStateProcessor', () => {
       }),
     );
 
-    const prompt = JSON.stringify(messageList.get.all.aiV5.prompt());
+    const prompt = JSON.stringify(messageList.get.all.aiSdk.prompt());
     expect(prompt).toContain('Improve the settings UI');
     expect(prompt).toContain('Factory work phase');
     expect(messageList.get.all.db().map(message => message.id)).toEqual([

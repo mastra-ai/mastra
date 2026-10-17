@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage/mock';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
@@ -78,7 +78,7 @@ function createTextStream(text = 'Done.') {
 /** Build a mock model whose first call returns a tool-call and subsequent calls return text. */
 function createMockModel(toolName: string) {
   let callCount = 0;
-  return new MastraLanguageModelV2Mock({
+  return new MastraLanguageModelV4Mock({
     doStream: async () => {
       callCount++;
       return { stream: callCount === 1 ? createToolCallStream(toolName) : createTextStream() };
@@ -104,7 +104,7 @@ async function setupController({
 }: {
   modes: AgentControllerMode[];
   tools: Record<string, ReturnType<typeof createTool>>;
-  model: MastraLanguageModelV2Mock;
+  model: MastraLanguageModelV4Mock;
   toolCategoryResolver?: (toolName: string) => 'read' | 'edit' | 'execute' | 'mcp' | 'other' | null;
   initialState?: Record<string, unknown>;
 }) {
@@ -140,7 +140,7 @@ async function setupController({
 describe('AgentController: mode availableTools allowlist', () => {
   it('sets activeTools from mode.availableTools in stream options', async () => {
     // Use a text-only stream so we don't trigger tool approval flow.
-    const model = new MastraLanguageModelV2Mock({
+    const model = new MastraLanguageModelV4Mock({
       doStream: async () => ({ stream: createTextStream() }),
     });
 

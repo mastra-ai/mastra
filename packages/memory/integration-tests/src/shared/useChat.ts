@@ -7,13 +7,12 @@ import path from 'node:path';
 import { useChat } from '@ai-sdk/react';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { hasRealApiKey } from '@internal/test-utils';
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { toAISdkMessages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
 import { AIV4Adapter, AIV5Adapter } from '@mastra/core/agent/message-list';
+import type { Message, UIMessage } from '@mastra/core/ai';
+import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from '@mastra/core/ai';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import type { Message } from 'ai';
-import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai-v5';
-import type { UIMessage } from 'ai-v5';
 import { JSDOM } from 'jsdom';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createWeatherAgent } from '../v4/mastra/agents/weather';
@@ -586,7 +585,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
         agentId: 'progress',
       });
 
-      const uiMessages: UIMessage[] = toAISdkV5Messages(storageMessages);
+      const uiMessages: UIMessage[] = toAISdkMessages(storageMessages);
 
       const assistantMessages = uiMessages.filter(m => m.role === 'assistant');
       const userMessages = uiMessages.filter(m => m.role === 'user');

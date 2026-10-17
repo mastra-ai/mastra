@@ -10,10 +10,10 @@
  * @see https://github.com/mastra-ai/mastra/issues/26081
  */
 
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '../../../agent/__tests__/mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '../../../agent/__tests__/mock-model';
 import { Agent } from '../../../agent/agent';
 import { createDurableAgent } from '../../../agent/durable/create-durable-agent';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -81,7 +81,7 @@ function responseTexts(messages: any[]): string[] {
 describe('#26081 — mid-stream API-error retry discards the failed attempt', () => {
   it('drops the failed partial text from the final answer, response messages and retry prompt', async () => {
     const prompts: any[][] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt as any[]);
         return {
@@ -119,7 +119,7 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
 
   it('drops the failed partial text when the error is thrown on a non-last fallback model and retried', async () => {
     const prompts: any[][] = [];
-    const primary = new MockLanguageModelV2({
+    const primary = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt as any[]);
         return {
@@ -130,7 +130,7 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
         };
       },
     });
-    const secondary = new MockLanguageModelV2({
+    const secondary = new MockLanguageModelV4({
       doStream: async () => {
         throw new Error('the fallback model must not be reached when the primary is retried');
       },
@@ -167,7 +167,7 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
       execute: async ({ text }) => ({ text }),
     });
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt as any[]);
         const call = prompts.length;
@@ -231,7 +231,7 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
   it('does not carry a structured object from the failed attempt onto the recovered one', async () => {
     const schema = z.object({ answer: z.number() });
     const prompts: any[][] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt as any[]);
         return {
@@ -260,7 +260,7 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
 
   it("drops the failed partial text from a durable agent's final answer", async () => {
     const prompts: any[][] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt as any[]);
         const stream =

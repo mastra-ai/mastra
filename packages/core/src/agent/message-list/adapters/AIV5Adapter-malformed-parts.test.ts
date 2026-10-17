@@ -40,9 +40,9 @@ describe('AIV5Adapter malformed parts', () => {
 
     expect(() => messageList.add(message, 'memory')).not.toThrow();
     expect(messageList.get.all.db()[0]?.content.parts).toEqual([{ type: 'text', text: 'hi' }]);
-    expect(messageList.get.all.aiV5.ui()[0]?.parts).toEqual([{ type: 'text', text: 'hi' }]);
+    expect(messageList.get.all.aiSdk.ui()[0]?.parts).toEqual([{ type: 'text', text: 'hi' }]);
 
-    await expect(messageList.get.all.aiV5.llmPrompt()).resolves.toEqual([
+    await expect(messageList.get.all.aiSdk.llmPrompt()).resolves.toEqual([
       {
         role: 'user',
         content: [{ type: 'text', text: 'hi' }],
@@ -73,7 +73,7 @@ describe('AIV5Adapter malformed parts', () => {
       'memory',
     );
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
     const toolResult = prompt
       .flatMap(message => (Array.isArray(message.content) ? message.content : []))
       .find(part => part.type === 'tool-result');

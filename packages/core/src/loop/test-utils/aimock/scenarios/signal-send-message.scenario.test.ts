@@ -1,4 +1,4 @@
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { stepCountIs } from '@internal/ai-v7';
 import { expect, it } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
 import { PubSub } from '../../../../events/pubsub';

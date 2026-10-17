@@ -1,4 +1,4 @@
-import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { RequestContext } from '../../request-context';
@@ -24,7 +24,7 @@ import { ModelRouterLanguageModel } from './router';
  */
 
 // Mock V3 language model (as returned by .responses())
-function createMockV3Model(): LanguageModelV3 {
+function createMockV3Model(): LanguageModelV4 {
   return {
     specificationVersion: 'v3',
     provider: 'openai',
@@ -57,9 +57,9 @@ class V3Gateway extends MastraModelGateway {
   readonly id = 'v3-gateway';
   readonly name = 'V3 Gateway';
 
-  private mockModel: LanguageModelV3;
+  private mockModel: LanguageModelV4;
 
-  constructor(mockModel: LanguageModelV3) {
+  constructor(mockModel: LanguageModelV4) {
     super();
     this.mockModel = mockModel;
   }
@@ -89,7 +89,7 @@ class V3Gateway extends MastraModelGateway {
 }
 
 describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)', () => {
-  let mockV3Model: LanguageModelV3;
+  let mockV3Model: LanguageModelV4;
   let gateway: V3Gateway;
 
   beforeEach(() => {

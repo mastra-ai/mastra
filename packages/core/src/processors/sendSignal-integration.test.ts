@@ -81,7 +81,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
     );
 
     // Signal should appear in the LLM prompt as a user message with XML markup
-    const promptMessages = await messageList.get.all.aiV5.prompt();
+    const promptMessages = await messageList.get.all.aiSdk.prompt();
     const userMessages = promptMessages.filter((m: any) => m.role === 'user');
     const signalInPrompt = userMessages.find((m: any) => {
       const text = extractPromptText(m);
@@ -267,7 +267,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
     expect(signals).toHaveLength(2);
 
     // Both signals should also appear in the LLM prompt
-    const promptMessages = await messageList.get.all.aiV5.prompt();
+    const promptMessages = await messageList.get.all.aiSdk.prompt();
     const signalTexts = promptMessages
       .filter((m: any) => m.role === 'user')
       .map((m: any) => extractPromptText(m))
@@ -502,7 +502,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
     expect(signalIndex).toBeGreaterThan(lastAssistantIndex);
 
     // And the prompt sent to the model contains the reminder exactly once.
-    const promptMessages = await messageList.get.all.aiV5.prompt();
+    const promptMessages = await messageList.get.all.aiSdk.prompt();
     const reminderCount = promptMessages.filter((m: any) =>
       extractPromptText(m).includes('Stay focused on the current task.'),
     ).length;

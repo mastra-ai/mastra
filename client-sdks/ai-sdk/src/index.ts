@@ -17,7 +17,7 @@ export type {
   AgentStreamAncestryEntry,
 } from './transformers';
 
-export { toAISdkStream, toAISdkV5Stream } from './convert-streams';
+export { toAISdkStream } from './convert-streams';
 export { workflowSnapshotToStream } from './convert-snapshot';
 export { smoothStream } from './smooth-stream';
 export type { MastraStreamTransform, MastraStreamTransformOptions } from './smooth-stream';

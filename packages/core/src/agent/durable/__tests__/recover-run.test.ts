@@ -12,8 +12,8 @@
  * end-to-end against the in-memory workflow storage.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
@@ -74,8 +74,8 @@ function makeSnapshot(
   } as WorkflowRunState;
 }
 
-function makeMockModel(modelId?: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+function makeMockModel(modelId?: string): LanguageModelV4 {
+  return new MockLanguageModelV4({
     ...(modelId ? { modelId } : {}),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -84,7 +84,7 @@ function makeMockModel(modelId?: string): LanguageModelV2 {
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 function createDurableWithStore(agentId: string, store = new InMemoryStore(), pubsub?: PubSub) {
@@ -1222,7 +1222,7 @@ describe('DurableAgent.recover(runId)', () => {
     // ones. Recovery must rebind live entries to the persisted ids, not trust
     // re-derived ids.
     let resolveCount = 0;
-    const resolvedCalls: Array<{ a: LanguageModelV2; b: LanguageModelV2 }> = [];
+    const resolvedCalls: Array<{ a: LanguageModelV4; b: LanguageModelV4 }> = [];
     const baseAgent = new Agent({
       id: 'agent-fallback-recovery',
       name: 'Fallback Recovery Agent',
@@ -1270,7 +1270,7 @@ describe('DurableAgent.recover(runId)', () => {
     // The bound models are live instances minted by the resolver during
     // recovery (calls #2+), not config-reconstructed stand-ins and not the
     // stale preparation-time instances from call #1. resolveModelConfig wraps
-    // raw V2 models in a fresh AISDKV5LanguageModel, so compare by the
+    // raw V2 models in a fresh AISDKV7LanguageModel, so compare by the
     // per-call unique modelId instead of raw instance identity.
     const recoveryCalls = resolvedCalls.slice(1);
     expect(recoveryCalls.length).toBeGreaterThan(0);

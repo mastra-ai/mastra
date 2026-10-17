@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import { beginGoalActivity, stopGoalActivity } from '../../agent/goal';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
@@ -381,8 +381,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         const initialData = {
           messageId: messageId,
           messages: {
-            all: messageList.get.all.aiV5.model(),
-            user: messageList.get.input.aiV5.model(),
+            all: messageList.get.all.aiSdk.model(),
+            user: messageList.get.input.aiSdk.model(),
             nonUser: [],
           },
           output: {

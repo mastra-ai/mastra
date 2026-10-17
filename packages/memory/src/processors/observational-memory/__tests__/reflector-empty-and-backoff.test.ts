@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
@@ -12,7 +12,7 @@ import { RETRY_CONFIG } from '../retry';
  */
 function createScriptedModel(outputs: string[]) {
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     modelId: 'mock-reflector',
     doStream: async () => {
       const text = outputs[Math.min(calls, outputs.length - 1)]!;
@@ -46,7 +46,7 @@ function createScriptedModel(outputs: string[]) {
 
 function createFailingModel(failuresBeforeSuccess = Number.POSITIVE_INFINITY) {
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     modelId: 'mock-failing-reflector',
     doStream: async () => {
       calls++;
@@ -90,7 +90,7 @@ function observationsPayload(body: string) {
  * threshold — countObservations is character length, threshold is 100.
  */
 function createReflectorRunner(
-  model: MockLanguageModelV2,
+  model: MockLanguageModelV4,
   overrides?: { storage?: any; buffering?: any; reflectionConfig?: any },
 ) {
   const createReflectionGeneration = vi.fn(async (input: any) => ({

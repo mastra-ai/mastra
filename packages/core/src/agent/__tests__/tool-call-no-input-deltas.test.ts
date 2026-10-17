@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
@@ -8,7 +8,7 @@ import { Agent } from '../agent';
 // tool-input-start + tool-input-end with no deltas, and only carry the args on the final tool-call.
 function createModel() {
   let doStreamCallCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       doStreamCallCount++;
       if (doStreamCallCount === 1) {

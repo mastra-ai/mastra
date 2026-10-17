@@ -4,9 +4,9 @@
  * - Scripted buffer + post-seal id scenario (#14745)
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { ObservationalMemory } from '@mastra/memory/processors';
@@ -20,7 +20,7 @@ export const OM_ORDERING_LONG_TEXT =
 export function createOmOrderingMockModel() {
   let generateCallCount = 0;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       generateCallCount++;
 
@@ -64,7 +64,7 @@ export function createOmOrderingMockObserverModel() {
 <current-task>Help the user with their request</current-task>
 <suggested-response>I can help you with that.</suggested-response>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected doGenerate call');
     },
@@ -89,7 +89,7 @@ export function createOmOrderingMockReflectorModel() {
 - User needs help with tasks
 </observations>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected doGenerate call');
     },
@@ -194,7 +194,7 @@ export function createOm14745MockObserverModel() {
 * Buffered chunk observed
 </observations>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       throw new Error('Unexpected doGenerate — OM observer should stream');
     },

@@ -31,7 +31,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       messageList.add([userMessage], 'input');
 
       // Get AIV5 UI messages - this is what happens internally when converting to AI SDK v5 format
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       // The AIV5 UI message should have the URL properly preserved
       expect(v5Messages).toHaveLength(1);
@@ -79,7 +79,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       expect(v5Messages).toHaveLength(1);
       expect(v5Messages[0].parts).toHaveLength(3);
@@ -128,7 +128,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       expect(v5Messages).toHaveLength(1);
       expect(v5Messages[0].parts).toHaveLength(2);
@@ -170,7 +170,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       expect(v5Messages).toHaveLength(1);
       expect(v5Messages[0].parts).toHaveLength(2);
@@ -213,7 +213,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       expect(v5Messages).toHaveLength(1);
       const filePart = v5Messages[0].parts[0];
@@ -252,7 +252,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       expect(v5Messages).toHaveLength(1);
       const filePart = v5Messages[0].parts[0];
@@ -304,7 +304,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       }
 
       // Now convert to AI SDK v5 (what happens internally for streaming)
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       expect(v5Messages).toHaveLength(1);
       expect(v5Messages[0].parts).toHaveLength(2);
@@ -344,7 +344,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       const messageList = new MessageList();
       messageList.add(modelMessages, 'input');
 
-      const v5Messages = messageList.get.all.aiV5.ui();
+      const v5Messages = messageList.get.all.aiSdk.ui();
 
       expect(v5Messages).toHaveLength(1);
       const v3FilePart = v5Messages[0].parts[0];

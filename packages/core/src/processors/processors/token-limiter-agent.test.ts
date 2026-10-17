@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
@@ -70,8 +70,8 @@ const longHistory = (): MastraDBMessage[] =>
 const LONG_HISTORY_LENGTH = 40;
 
 function createV2Model() {
-  const prompts: LanguageModelV2Prompt[] = [];
-  const model = new MockLanguageModelV2({
+  const prompts: LanguageModelV4Prompt[] = [];
+  const model = new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
       prompts.push(prompt);
       return {
@@ -98,7 +98,7 @@ function createV2Model() {
   return { model, prompts };
 }
 
-const nonSystemCount = (prompt: LanguageModelV2Prompt | undefined) =>
+const nonSystemCount = (prompt: LanguageModelV4Prompt | undefined) =>
   prompt?.filter(message => message.role !== 'system').length ?? 0;
 
 describe('TokenLimiterProcessor through an agent', () => {

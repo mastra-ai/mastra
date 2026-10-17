@@ -1,6 +1,6 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, DurableAgent } from '@mastra/core/agent/durable';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -26,7 +26,7 @@ function twoApprovalsModel() {
       warnings: [],
     };
   };
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => next(),
     doStream: async () => {
       const result = next();

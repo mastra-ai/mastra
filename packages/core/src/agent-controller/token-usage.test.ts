@@ -1,11 +1,11 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import { InMemoryStore } from '../storage/mock';
-import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../test-utils/llm-mock';
 import { createTool } from '../tools';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -94,7 +94,7 @@ describe('step-finish token usage extraction', () => {
           },
         },
       ],
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           calls++;
           if (calls === 2)
@@ -656,7 +656,7 @@ describe('step-finish token usage extraction', () => {
             execute: async () => 'ok',
           }),
         },
-        model: new MastraLanguageModelV2Mock({
+        model: new MastraLanguageModelV4Mock({
           doStream: async () => ({
             stream: new ReadableStream({
               start(output) {

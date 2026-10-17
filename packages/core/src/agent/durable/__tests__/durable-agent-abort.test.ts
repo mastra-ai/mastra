@@ -11,8 +11,8 @@
  * AbortError once the signal fires, mirroring real AI SDK provider behaviour.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -27,7 +27,7 @@ import { createEventedAgent } from '../create-evented-agent';
 
 /** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
 function createAbortableModel(onCall?: () => void) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
       onCall?.();
       // If the caller already aborted before the call landed, fail fast with
@@ -71,7 +71,7 @@ function createAbortableModel(onCall?: () => void) {
 }
 
 function createErrorModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: new ReadableStream({
         start(controller) {
@@ -108,7 +108,7 @@ describe('DurableAgent abort signal', () => {
       id: 'abort-runtime-agent',
       name: 'Abort Runtime Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -143,7 +143,7 @@ describe('DurableAgent abort signal', () => {
       id: `abort-parity-${_kind}`,
       name: `Abort Parity ${_kind}`,
       instructions: 'Test',
-      model: createAbortableModel() as LanguageModelV2,
+      model: createAbortableModel() as LanguageModelV4,
     });
     const agent = createAgent({ agent: baseAgent, pubsub });
     const onAbort = vi.fn();
@@ -176,7 +176,7 @@ describe('DurableAgent abort signal', () => {
       id: `error-parity-${_kind}`,
       name: `Error Parity ${_kind}`,
       instructions: 'Test',
-      model: createErrorModel() as LanguageModelV2,
+      model: createErrorModel() as LanguageModelV4,
     });
     const agent = createAgent({ agent: baseAgent, pubsub });
     const onError = vi.fn();
@@ -195,7 +195,7 @@ describe('DurableAgent abort signal', () => {
   });
 
   it('onAbort receives the text streamed before the abort', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
         stream: new ReadableStream({
           start(controller) {
@@ -226,7 +226,7 @@ describe('DurableAgent abort signal', () => {
       id: 'abort-partial-text-agent',
       name: 'Abort Partial Text Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -256,7 +256,7 @@ describe('DurableAgent abort signal', () => {
     '%s abort preserves partial text without persisting the remaining iteration steps',
     async (_kind, createAgent) => {
       const mockMemory = new MockMemory();
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
           stream: new ReadableStream({
             start(controller) {
@@ -287,7 +287,7 @@ describe('DurableAgent abort signal', () => {
         id: 'abort-persist-agent',
         name: 'Abort Persist Agent',
         instructions: 'Test',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         memory: mockMemory,
       });
       const durableAgent = createAgent({ agent: baseAgent, pubsub });
@@ -353,7 +353,7 @@ describe('DurableAgent abort signal', () => {
     ['evented', createEventedAgent],
   ] as const)('%s preserves completed-step usage when the next LLM call is aborted', async (_kind, createAgent) => {
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ abortSignal }) => {
         const first = calls++ === 0;
         return {
@@ -424,7 +424,7 @@ describe('DurableAgent abort signal', () => {
 
   it('persists streamed text when a response processor throws AbortError after streaming (#22593)', async () => {
     const mockMemory = new MockMemory();
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
           start(controller) {
@@ -463,7 +463,7 @@ describe('DurableAgent abort signal', () => {
       id: 'processor-abort-agent',
       name: 'Processor Abort Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       memory: mockMemory,
       inputProcessors: [abortingProcessor as any],
     });
@@ -500,7 +500,7 @@ describe('DurableAgent abort signal', () => {
       id: 'abort-observed-agent',
       name: 'Abort Observed Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -559,7 +559,7 @@ describe('DurableAgent abort signal', () => {
       id: 'abort-before-start-agent',
       name: 'Abort Before Start Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({ doStream }) as LanguageModelV2,
+      model: new MockLanguageModelV4({ doStream }) as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     const runId = 'abort-before-start-run';
@@ -602,7 +602,7 @@ describe('DurableAgent abort signal', () => {
         id: 'abort-thread-stream-agent',
         name: 'Abort Thread Stream Agent',
         instructions: 'Test',
-        model: createAbortableModel(() => streaming()) as LanguageModelV2,
+        model: createAbortableModel(() => streaming()) as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -645,7 +645,7 @@ describe('DurableAgent abort signal', () => {
       });
       const blocking = createAbortableModel(streaming);
       let calls = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async options => {
           if (++calls === 1) return blocking.doStream(options);
           return {
@@ -778,7 +778,7 @@ describe('DurableAgent abort signal', () => {
       id: 'abort-run-stream-agent',
       name: 'Abort Run Stream Agent',
       instructions: 'Test',
-      model: createAbortableModel(() => streaming()) as LanguageModelV2,
+      model: createAbortableModel(() => streaming()) as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -808,7 +808,7 @@ describe('DurableAgent abort signal', () => {
       id: 'abort-preaborted-agent',
       name: 'Abort Preaborted Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

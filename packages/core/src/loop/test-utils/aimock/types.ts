@@ -209,6 +209,10 @@ export interface RunLoopScenarioOptions {
    * and observing error propagation. Fires after errorProcessors (if any).
    */
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
+  /** Forwarded to `agent.stream({ onAbort })`. */
+  onAbort?: (event: any) => Promise<void> | void;
+  /** Forwarded to `agent.stream({ includeRawChunks })`. */
+  includeRawChunks?: boolean;
   /**
    * Callback fired for stream chunks. Forwarded to `agent.stream({ onChunk })`.
    * Useful for asserting server-side chunk observability separately from

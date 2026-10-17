@@ -5,8 +5,8 @@
  * plumbing without an ObservationalMemory instance or any storage writes.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -57,7 +57,7 @@ function createMockSummarizerModel(
       warnings: [],
     };
   });
-  const model = new MockLanguageModelV2({ doStream } as any);
+  const model = new MockLanguageModelV4({ doStream } as any);
   return { model, doStream };
 }
 

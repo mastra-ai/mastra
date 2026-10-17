@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-v7';
 import { z } from 'zod/v4';
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';
 import type { ModelRouterModelId, MastraModelSettings } from '../llm/model';
@@ -91,10 +91,7 @@ export type ProcessorMessageType = {
  * In workflows, model configs may not yet be resolved, so we accept both resolved and unresolved types.
  */
 export type ProcessorStepModelConfig =
-  | LanguageModelV2
-  | ModelRouterModelId
-  | OpenAICompatibleConfig
-  | MastraLanguageModel;
+  LanguageModelV4 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
 
 /**
  * Tools type for processor step schema.

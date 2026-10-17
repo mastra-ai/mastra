@@ -9,7 +9,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MastraEditor } from './index';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import {
   ProcessInputArgs,
   ProcessInputResult,
@@ -39,11 +39,11 @@ const createTestVector = (id: string) => {
   });
 };
 
-// Mock LLM using MockLanguageModelV2
+// Mock LLM using MockLanguageModelV4
 const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
   let responseIndex = 0;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async (args: any) => {
       const response = responses[responseIndex] || { text: 'Default response' };
 
@@ -232,7 +232,7 @@ class MockGateway extends MastraModelGateway {
 
       default:
         // Fallback mock model
-        return new MockLanguageModelV2({
+        return new MockLanguageModelV4({
           doGenerate: async options => {
             return {
               content: [{ type: 'text', text: 'Default mock response' }],
@@ -1540,7 +1540,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const stream = await agent?.stream('Stream the weather');
       expect(stream).toBeDefined();
 
-      // Verify stream exists (we can't iterate in tests as MockLanguageModelV2 doesn't provide async iterator)
+      // Verify stream exists (we can't iterate in tests as MockLanguageModelV4 doesn't provide async iterator)
       expect(stream).toBeDefined();
     });
 

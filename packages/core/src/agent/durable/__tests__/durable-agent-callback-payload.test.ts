@@ -4,8 +4,8 @@
  * `usedFallbackValue` on `onFinish` (#26524).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -14,7 +14,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -48,7 +48,7 @@ describe('durable agent callback payloads', () => {
       id: `payload-agent-${engine}`,
       name: 'Payload Agent',
       instructions: 'Test',
-      model: createTextModel(text) as LanguageModelV2,
+      model: createTextModel(text) as LanguageModelV4,
     });
     return engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
   }
@@ -176,7 +176,7 @@ describe('durable agent callback payloads', () => {
         id: 'payload-agent-unconsumed-structured',
         name: 'Payload Agent',
         instructions: 'Test',
-        model: createTextModel(JSON.stringify({ city: 'Rome' })) as LanguageModelV2,
+        model: createTextModel(JSON.stringify({ city: 'Rome' })) as LanguageModelV4,
       }),
       pubsub,
     });

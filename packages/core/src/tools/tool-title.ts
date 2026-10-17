@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 import type { JSONObject } from '../stream/types';
 import type { CoreTool } from './types';
 

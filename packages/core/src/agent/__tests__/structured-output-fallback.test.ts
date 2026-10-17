@@ -1,10 +1,10 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 
 function textModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -32,7 +32,7 @@ describe('structured output usedFallbackValue', () => {
   const valid = { summary: 'There are 3 files in the directory.', filesFound: 3 };
   const fallbackValue = { summary: 'unknown', filesFound: 0 };
 
-  function createAgent(model: MockLanguageModelV2) {
+  function createAgent(model: MockLanguageModelV4) {
     return new Agent({
       id: 'structured-output-fallback',
       name: 'Structured Output Fallback',
@@ -121,7 +121,7 @@ describe('structured output usedFallbackValue', () => {
 
   it('does not carry the flag from a discarded attempt onto the surviving one', async () => {
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,

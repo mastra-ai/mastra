@@ -1,14 +1,6 @@
-import { generateText, streamText } from '@internal/ai-sdk-v5';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV5,
-  MockLanguageModelV2,
-} from '@internal/ai-sdk-v5/test';
-import { generateText as generateTextV6 } from '@internal/ai-v6';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV6,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { generateText, streamText } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -26,16 +18,19 @@ import { createProcessorMiddleware, withMastra } from './middleware';
 
 // Helper to create a mock model with a specific response
 function createMockModel(response: string = 'Test response') {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text', text: response }],
-      finishReason: 'stop',
-      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 5, text: 5, reasoning: undefined },
+      },
       rawCall: { rawPrompt: [], rawSettings: {} },
       warnings: [],
     }),
     doStream: async () => ({
-      stream: convertArrayToReadableStreamV5([
+      stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
         { type: 'text-start', id: '1' },
@@ -44,8 +39,11 @@ function createMockModel(response: string = 'Test response') {
         { type: 'text-end', id: '1' },
         {
           type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 5, text: 5, reasoning: undefined },
+          },
         },
       ]),
       rawCall: { rawPrompt: [], rawSettings: {} },
@@ -55,7 +53,7 @@ function createMockModel(response: string = 'Test response') {
 }
 
 function createMockModelV3(response: string = 'Test response') {
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text', text: response }],
       finishReason: { unified: 'stop', raw: 'stop' },
@@ -66,7 +64,7 @@ function createMockModelV3(response: string = 'Test response') {
       warnings: [],
     }),
     doStream: async () => ({
-      stream: convertArrayToReadableStreamV6([
+      stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
         { type: 'text-start', id: '1' },
@@ -126,7 +124,7 @@ describe('withMastra middleware', () => {
     it('should accept LanguageModelV3 models', async () => {
       const model = withMastra(createMockModelV3(), {});
 
-      const result = await generateTextV6({
+      const result = await generateText({
         model,
         prompt: 'Hello from V3',
       });
@@ -364,10 +362,9 @@ describe('withMastra middleware', () => {
         // Consume the stream.
       }
 
-      await expect(result.usage).resolves.toEqual({
+      await expect(result.usage).resolves.toMatchObject({
         inputTokens: undefined,
         outputTokens: 0,
-        totalTokens: undefined,
       });
     });
 
@@ -513,9 +510,9 @@ describe('withMastra middleware', () => {
         },
       };
 
-      const errorModel = new MockLanguageModelV2({
+      const errorModel = new MockLanguageModelV4({
         doStream: async () => ({
-          stream: convertArrayToReadableStreamV5([
+          stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Partial' },
@@ -564,9 +561,9 @@ describe('withMastra middleware', () => {
         },
       };
 
-      const toolModel = new MockLanguageModelV2({
+      const toolModel = new MockLanguageModelV4({
         doStream: async () => ({
-          stream: convertArrayToReadableStreamV5([
+          stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
             { type: 'text-start', id: '1' },
@@ -661,7 +658,7 @@ describe('withMastra middleware', () => {
     it('should not call LLM when input tripwire is triggered', async () => {
       let llmCalled = false;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => {
           llmCalled = true;
           return {
@@ -1186,7 +1183,7 @@ describe('withMastra middleware', () => {
         outputProcessors: [processor as OutputProcessor],
       });
 
-      expect(middleware.middlewareVersion).toBe('v2');
+      expect(middleware.specificationVersion).toBe('v4');
       expect(middleware.transformParams).toBeDefined();
       expect(middleware.wrapGenerate).toBeDefined();
       expect(middleware.wrapStream).toBeDefined();

@@ -8,8 +8,8 @@
  * 4. Header merge order is correct (memory < modelConfig < callTime)
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -47,13 +47,13 @@ describe('DurableAgent header handling', () => {
 
   it('strips headers from serialized workflowInput and stores them on registryEntry', async () => {
     const doStream = createDoStreamMock();
-    const mockModel = new MockLanguageModelV2({ doStream });
+    const mockModel = new MockLanguageModelV4({ doStream });
 
     const baseAgent = new Agent({
       id: 'header-strip-agent',
       name: 'Header Strip Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -82,13 +82,13 @@ describe('DurableAgent header handling', () => {
 
   it('callTimeHeaders reach the model doStream call', async () => {
     const doStream = createDoStreamMock();
-    const mockModel = new MockLanguageModelV2({ doStream });
+    const mockModel = new MockLanguageModelV4({ doStream });
 
     const baseAgent = new Agent({
       id: 'header-flow-agent',
       name: 'Header Flow Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -116,13 +116,13 @@ describe('DurableAgent header handling', () => {
 
   it('returns undefined callTimeHeaders when modelSettings has no headers', async () => {
     const doStream = createDoStreamMock();
-    const mockModel = new MockLanguageModelV2({ doStream });
+    const mockModel = new MockLanguageModelV4({ doStream });
 
     const baseAgent = new Agent({
       id: 'no-headers-agent',
       name: 'No Headers Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -135,13 +135,13 @@ describe('DurableAgent header handling', () => {
 
   it('prepareStep-injected headers merge with callTimeHeaders', async () => {
     const doStream = createDoStreamMock();
-    const mockModel = new MockLanguageModelV2({ doStream });
+    const mockModel = new MockLanguageModelV4({ doStream });
 
     const baseAgent = new Agent({
       id: 'prepare-step-headers-agent',
       name: 'PrepareStep Headers Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -176,13 +176,13 @@ describe('DurableAgent header handling', () => {
 
   it('filters out non-string header values', async () => {
     const doStream = createDoStreamMock();
-    const mockModel = new MockLanguageModelV2({ doStream });
+    const mockModel = new MockLanguageModelV4({ doStream });
 
     const baseAgent = new Agent({
       id: 'bad-headers-agent',
       name: 'Bad Headers Agent',
       instructions: 'Test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

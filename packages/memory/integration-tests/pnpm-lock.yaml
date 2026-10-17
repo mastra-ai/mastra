@@ -16,7 +16,7 @@ overrides:
   mastra: link:../../cli
   '@internal/llm-recorder': link:../../_llm-recorder
   '@internal/test-utils': link:../../_test-utils
-  '@internal/ai-v6': link:../../_vendored/ai_v6
+  '@internal/ai-v7': link:../../_vendored/ai_v6
   '@mastra/schema-compat': link:../../schema-compat
   proxy-addr: 2.0.8
   compression@<=1.8.1: 1.8.2
@@ -49,10 +49,10 @@ importers:
 
   .:
     dependencies:
-      '@ai-sdk/anthropic-v5':
+      '@ai-sdk/anthropic':
         specifier: npm:@ai-sdk/anthropic@^2.0.81
         version: '@ai-sdk/anthropic@2.0.88(zod@3.25.76)'
-      '@ai-sdk/anthropic-v6':
+      '@ai-sdk/anthropic':
         specifier: npm:@ai-sdk/anthropic@^4.0.12
         version: '@ai-sdk/anthropic@4.0.17(zod@3.25.76)'
       '@ai-sdk/google':
@@ -61,31 +61,31 @@ importers:
       '@ai-sdk/google-ai6':
         specifier: npm:@ai-sdk/google@^3.0.101
         version: '@ai-sdk/google@3.0.119(zod@3.25.76)'
-      '@ai-sdk/google-v5':
+      '@ai-sdk/google':
         specifier: npm:@ai-sdk/google@^2.0.70
         version: '@ai-sdk/google@2.0.83(zod@3.25.76)'
-      '@ai-sdk/google-v6':
+      '@ai-sdk/google':
         specifier: npm:@ai-sdk/google@^4.0.12
         version: '@ai-sdk/google@4.0.20(zod@3.25.76)'
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@3.25.76)
-      '@ai-sdk/openai-v5':
+      '@ai-sdk/openai':
         specifier: npm:@ai-sdk/openai@^2.0.103
         version: '@ai-sdk/openai@2.0.114(zod@3.25.76)'
-      '@ai-sdk/openai-v6':
+      '@ai-sdk/openai':
         specifier: npm:@ai-sdk/openai@^4.0.11
         version: '@ai-sdk/openai@4.0.17(zod@3.25.76)'
       '@ai-sdk/react':
         specifier: ^1.2.12
         version: 1.2.12(react@19.2.7)(zod@3.25.76)
-      '@ai-sdk/react-v5':
+      '@ai-sdk/react':
         specifier: npm:@ai-sdk/react@^2.0.181
         version: '@ai-sdk/react@2.0.219(react@19.2.7)(zod@3.25.76)'
-      '@ai-sdk/react-v6':
+      '@ai-sdk/react':
         specifier: npm:@ai-sdk/react@^4.0.23
         version: '@ai-sdk/react@4.0.36(react@19.2.7)(zod@3.25.76)'
-      '@internal/ai-v6':
+      '@internal/ai-v7':
         specifier: link:../../_vendored/ai_v6
         version: link:../../_vendored/ai_v6
       '@mastra/ai-sdk':

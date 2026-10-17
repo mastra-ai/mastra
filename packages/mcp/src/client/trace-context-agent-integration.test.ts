@@ -1,6 +1,6 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { createTool } from '@mastra/core/tools';
 import { Observability } from '@mastra/observability';
@@ -63,7 +63,7 @@ describe('MCP trace context - agent to MCPServer round trip', () => {
 
   it('links the MCP tool call span and the served request to each other', async () => {
     let step = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         step++;
         return {

@@ -227,3 +227,16 @@ export function applyCompatLayer({
     return convertZodSchemaToAISDKSchema(zodSchema);
   }
 }
+
+/**
+ * AI SDK v7 types `Schema.jsonSchema` as possibly async; schemas built by
+ * schema-compat are always synchronous.
+ * @internal
+ */
+export function getSyncJSONSchema(schema: Schema<any>): JSONSchema7 {
+  const json = schema.jsonSchema;
+  if (json && typeof (json as PromiseLike<JSONSchema7>).then === 'function') {
+    throw new Error('Expected a synchronous JSON schema');
+  }
+  return json as JSONSchema7;
+}

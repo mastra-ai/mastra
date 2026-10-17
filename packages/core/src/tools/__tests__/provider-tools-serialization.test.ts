@@ -1,5 +1,5 @@
-import { google } from '@ai-sdk/google-v5';
-import { openai } from '@ai-sdk/openai-v5';
+import { google } from '@ai-sdk/google';
+import { openai } from '@ai-sdk/openai';
 import { describe, expect, it } from 'vitest';
 import { isProviderDefinedTool } from '../toolchecks';
 

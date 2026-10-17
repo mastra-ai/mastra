@@ -5,8 +5,8 @@
  * `generateBackgroundTaskSystemPrompt`. Previously the durable workflow
  * skipped this injection point entirely.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -37,7 +37,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
     const calledPromise = new Promise<void>(r => {
       resolveCalled = r;
     });
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt, tools }) => {
         promptSnapshots.push(prompt as any);
         toolSnapshots.push(tools as any[]);
@@ -73,7 +73,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
       id: 'bg-prompt-agent',
       name: 'BG Prompt Agent',
       instructions: 'Research topics when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
     });
@@ -111,7 +111,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
     const calledPromise = new Promise<void>(r => {
       resolveCalled = r;
     });
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         promptSnapshots.push(prompt as any);
         resolveCalled();
@@ -145,7 +145,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
       id: 'no-bg-agent',
       name: 'No BG Agent',
       instructions: 'Greet people',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { greet: greetTool },
     });
 

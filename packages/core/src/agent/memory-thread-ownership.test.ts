@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MastraError } from '../error';
 import { MockMemory } from '../memory/mock';
@@ -15,7 +15,7 @@ describe('thread/resource ownership enforcement', () => {
     memory = new MockMemory();
     modelCalls = 0;
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         modelCalls += 1;
         return {

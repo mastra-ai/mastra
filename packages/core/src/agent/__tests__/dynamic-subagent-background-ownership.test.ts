@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
@@ -21,7 +21,7 @@ it('keeps asynchronously selected subagents on their owning instance with distin
       id: 'supervisor',
       name: 'supervisor',
       instructions: 'Delegate to helper.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -38,7 +38,7 @@ it('keeps asynchronously selected subagents on their owning instance with distin
             name: 'helper',
             description: 'Selected helper.',
             instructions: 'Reply.',
-            model: new MockLanguageModelV2({
+            model: new MockLanguageModelV4({
               doStream: async () => {
                 executions.push(selected);
                 if (selected === 'A') await gate;

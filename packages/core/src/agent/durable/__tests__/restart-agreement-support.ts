@@ -70,7 +70,7 @@ function scriptError(step: { error: string; retryable?: boolean }) {
   return err;
 }
 
-/** Port of the harness's deterministic `LanguageModelV2`. */
+/** Port of the harness's deterministic `LanguageModelV4`. */
 export function createScriptModel(script: Script, { onCall, usage = true }: ModelOptions = {}) {
   const reported = (prompt: ScriptMessage[], step: ScriptStep) => {
     if (typeof usage === 'function') return usage(prompt, step);

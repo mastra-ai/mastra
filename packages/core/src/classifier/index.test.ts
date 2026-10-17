@@ -2,7 +2,7 @@ import {
   APICallError,
   type Experimental_DecisionModelV4 as DecisionModelV4,
   type Experimental_EvaluationModelV4 as EvaluationModelV4,
-} from '@ai-sdk/provider-v7';
+} from '@ai-sdk/provider';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraBase } from '../base';

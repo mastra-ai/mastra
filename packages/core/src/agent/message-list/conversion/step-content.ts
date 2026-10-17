@@ -1,4 +1,6 @@
-import * as AIV5 from '@internal/ai-sdk-v5';
+import { convertUIToModelMessages } from './ui-to-model';
+import { flattenFileData } from '../../../stream/aisdk/v5/compat/content';
+import * as AIV5 from '@internal/ai-v7';
 
 import { DefaultGeneratedFileWithType } from '../../../stream/aisdk/v5/file';
 import { convertDataContentToBase64String } from '../prompt/data-content';
@@ -166,7 +168,7 @@ export class StepContentExtractor {
       },
     ];
 
-    const modelMessages = AIV5.convertToModelMessages(sanitizeV5UIMessages(stepUiMessages));
+    const modelMessages = convertUIToModelMessages(sanitizeV5UIMessages(stepUiMessages));
     return modelMessages.flatMap(stepContentFn);
   }
 
@@ -195,48 +197,67 @@ export class StepContentExtractor {
       return [{ type: 'text', text: latest.content }];
     }
 
-    return latest.content.map(c => {
+    return latest.content.flatMap((c): AIV5Type.StepResult<any>['content'][number][] => {
+      // Approval parts are prompt-only; Mastra surfaces approvals through its own chunks.
+      if (c.type === 'tool-approval-request' || c.type === 'tool-approval-response') return [];
+
       if (c.type === 'tool-result') {
-        return {
-          type: 'tool-result',
-          input: findToolCallArgs(dbMessages, c.toolCallId),
-          output: c.output,
-          toolCallId: c.toolCallId,
-          toolName: c.toolName,
-        } satisfies AIV5Type.StaticToolResult<any>;
+        return [
+          {
+            type: 'tool-result',
+            input: findToolCallArgs(dbMessages, c.toolCallId),
+            output: c.output,
+            toolCallId: c.toolCallId,
+            toolName: c.toolName,
+          } satisfies AIV5Type.StaticToolResult<any>,
+        ];
       }
 
       if (c.type === 'file') {
-        return {
-          type: 'file',
-          file: new DefaultGeneratedFileWithType({
-            data:
-              typeof c.data === 'string'
-                ? parseDataUri(c.data).base64Content // Strip data URI prefix if present
-                : c.data instanceof URL
-                  ? c.data.toString()
-                  : convertDataContentToBase64String(c.data),
-            mediaType: c.mediaType,
-          }),
-        } satisfies Extract<AIV5Type.StepResult<any>['content'][number], { type: 'file' }>;
+        return [
+          {
+            type: 'file',
+            file: new DefaultGeneratedFileWithType({
+              data: flatFileDataToString(flattenFileData(c.data)),
+              mediaType: c.mediaType,
+            }),
+          } satisfies Extract<AIV5Type.StepResult<any>['content'][number], { type: 'file' }>,
+        ];
+      }
+
+      if (c.type === 'reasoning-file') {
+        return [
+          {
+            type: 'reasoning-file',
+            file: new DefaultGeneratedFileWithType({
+              data: flatFileDataToString(flattenFileData(c.data)),
+              mediaType: c.mediaType,
+            }),
+            ...(c.providerOptions ? { providerMetadata: c.providerOptions } : {}),
+          } satisfies Extract<AIV5Type.StepResult<any>['content'][number], { type: 'reasoning-file' }>,
+        ];
       }
 
       if (c.type === 'image') {
-        return {
-          type: 'file',
-          file: new DefaultGeneratedFileWithType({
-            data:
-              typeof c.image === 'string'
-                ? parseDataUri(c.image).base64Content // Strip data URI prefix if present
-                : c.image instanceof URL
-                  ? c.image.toString()
-                  : convertDataContentToBase64String(c.image),
-            mediaType: c.mediaType || 'unknown',
-          }),
-        };
+        return [
+          {
+            type: 'file',
+            file: new DefaultGeneratedFileWithType({
+              data: flatFileDataToString(flattenFileData(c.image)),
+              mediaType: c.mediaType || 'unknown',
+            }),
+          },
+        ];
       }
 
-      return { ...c };
+      return [{ ...c }];
     });
   }
+}
+
+function flatFileDataToString(data: Uint8Array | string | URL | undefined): string {
+  if (data === undefined) return '';
+  if (typeof data === 'string') return parseDataUri(data).base64Content; // Strip data URI prefix if present
+  if (data instanceof URL) return data.toString();
+  return convertDataContentToBase64String(data);
 }

@@ -5,7 +5,7 @@
  * writer is always defined. This covers the full agent.stream() path
  * (handleChatStream → agent.stream() → workflowLoopStream → MastraModelOutput).
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import type { Processor, ProcessorStreamWriter } from '../processors/index';
 import type { ChunkType } from '../stream/types';
@@ -26,7 +26,7 @@ describe('writer availability in processOutputStream (end-to-end)', () => {
       }
     }
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },

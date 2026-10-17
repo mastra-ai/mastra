@@ -61,7 +61,7 @@ export class TypeDetector {
    * At runtime, the v5 and v6 UI shapes overlap heavily. We only treat a
    * message as distinctly v6 if it uses v6-only parts, tool states, or fields.
    */
-  static isAIV6UIMessage(msg: MessageInput): msg is AIV6Type.UIMessage {
+  static isAIV6UIMessage(msg: MessageInput): boolean {
     return (
       !TypeDetector.isMastraMessage(msg) &&
       'parts' in msg &&
@@ -85,7 +85,7 @@ export class TypeDetector {
   /**
    * Check if a message is an AIV6 ModelMessage (CoreMessage equivalent).
    */
-  static isAIV6CoreMessage(msg: MessageInput): msg is AIV6Type.ModelMessage {
+  static isAIV6CoreMessage(msg: MessageInput): boolean {
     return (
       !TypeDetector.isMastraMessage(msg) &&
       !('parts' in msg) &&

@@ -6,8 +6,8 @@
  * the durable agentic loop, the same way it runs in the non-durable agent.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -19,10 +19,10 @@ import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness
 function createTwoStepToolThenTextModel(toolName: string, finalText: string) {
   let callCount = 0;
   const seenActiveTools: Array<string[] | undefined> = [];
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async (options: any) => {
       callCount++;
-      // The MockLanguageModelV2 exposes the prompt+tools the loop handed it.
+      // The MockLanguageModelV4 exposes the prompt+tools the loop handed it.
       // We can inspect which tools were enabled for this step via options.tools.
       const tools = Array.isArray(options.tools) ? options.tools.map((t: any) => t.name) : undefined;
       seenActiveTools.push(tools);
@@ -105,7 +105,7 @@ describe('DurableAgent prepareStep', () => {
       id: 'prepare-step-agent',
       name: 'Prepare Step Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { allowedTool: tool, hiddenTool: hidden },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -138,7 +138,7 @@ describe('DurableAgent prepareStep', () => {
       id: 'prepare-step-prep-agent',
       name: 'Prepare Step Prep Agent',
       instructions: 'noop',
-      model: createTwoStepToolThenTextModel('t', 'x').model as LanguageModelV2,
+      model: createTwoStepToolThenTextModel('t', 'x').model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

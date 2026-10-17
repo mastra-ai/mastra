@@ -5,7 +5,7 @@
  * are buffered in the background when async observation buffering is enabled.
  *
  * Uses spies on ObservationTurn's OM dependency to avoid needing real model
- * instances (the @internal/ai-sdk-v5 mock models require a build step).
+ * instances (the @internal/ai-v7 mock models require a build step).
  */
 
 import { MessageList } from '@mastra/core/agent';

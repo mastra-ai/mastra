@@ -1,9 +1,9 @@
-import type { LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import { ModelRouterLanguageModel } from './router';
 
-const tools: LanguageModelV2CallOptions['tools'] = [
+const tools: LanguageModelV4CallOptions['tools'] = [
   { type: 'function', name: 'lookup', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
 ];
 const usage = {
@@ -13,9 +13,9 @@ const usage = {
   completion_tokens_details: { reasoning_tokens: 3 },
 };
 
-async function collect(stream: ReadableStream<LanguageModelV2StreamPart>) {
+async function collect(stream: ReadableStream<LanguageModelV4StreamPart>) {
   const reader = stream.getReader();
-  const parts: LanguageModelV2StreamPart[] = [];
+  const parts: LanguageModelV4StreamPart[] = [];
   while (true) {
     const { done, value } = await reader.read();
     if (done) return parts;
@@ -118,7 +118,7 @@ describe('DeepSeek router history compatibility', () => {
       const router = new ModelRouterLanguageModel({ id: 'deepseek/deepseek-flash', apiKey: 'test-key' });
       const list = history();
       const before = JSON.stringify(list.get.all.db());
-      const result = await router[method]({ prompt: await list.get.all.aiV5.llmPrompt(), tools });
+      const result = await router[method]({ prompt: await list.get.all.aiSdk.llmPrompt(), tools });
       const parts = await collect(result.stream);
 
       expect(requests[0]).toMatchObject({
@@ -183,7 +183,7 @@ describe('DeepSeek router history compatibility', () => {
         'memory',
       );
       restored.add({ role: 'user', content: 'One more question' }, 'input');
-      await collect((await router[method]({ prompt: await restored.get.all.aiV5.llmPrompt(), tools })).stream);
+      await collect((await router[method]({ prompt: await restored.get.all.aiSdk.llmPrompt(), tools })).stream);
       expect(requests[1]).toMatchObject({
         messages: expect.arrayContaining([
           expect.objectContaining({ role: 'assistant', content: 'Answer', reasoning_content: 'New thinking' }),
@@ -201,7 +201,7 @@ describe('DeepSeek router history compatibility', () => {
     async (type, reasoningEffort, expectedType, expectedEffort) => {
       const router = new ModelRouterLanguageModel({ id: 'deepseek/deepseek-flash', apiKey: 'test-key' });
       const result = await router.doGenerate({
-        prompt: await history().get.all.aiV5.llmPrompt(),
+        prompt: await history().get.all.aiSdk.llmPrompt(),
         providerOptions: { deepseek: { thinking: { type }, reasoningEffort } },
       });
       await collect(result.stream);

@@ -1,6 +1,4 @@
-import type { LanguageModelV2, LanguageModelV2CallOptions, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
-import type { LanguageModelV4, LanguageModelV4CallOptions, SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
+import type { LanguageModelV4, LanguageModelV4CallOptions, SharedV4ProviderOptions } from '@ai-sdk/provider';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod/v4';
 import type { TracingPolicy } from '../../observability';
@@ -49,48 +47,27 @@ export type OpenAICompatibleConfig =
       api?: 'chat' | 'responses'; // OpenAI wire API for custom url; defaults to 'chat'
     };
 
-type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
-type DoStreamResultPromiseV3 = PromiseLike<Awaited<ReturnType<LanguageModelV3['doStream']>>>;
-type DoStreamResultPromiseV4 = PromiseLike<Awaited<ReturnType<LanguageModelV4['doStream']>>>;
+type DoStreamResultPromise = PromiseLike<Awaited<ReturnType<LanguageModelV4['doStream']>>>;
 
-/** Wrapped V2 model with unified doGenerate/doStream that returns streams */
-export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
-  /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
-  id?: string;
-  doGenerate: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
-  doStream: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
-};
-
-/** Wrapped V3 model with unified doGenerate/doStream that returns streams */
-export type MastraLanguageModelV3 = Omit<LanguageModelV3, 'doGenerate' | 'doStream'> & {
-  /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
-  id?: string;
-  doGenerate: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
-  doStream: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
-};
-
-/** Wrapped V4 model with unified doGenerate/doStream that returns streams */
+/** Wrapped AI SDK v7 (spec v4) model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV4 = Omit<LanguageModelV4, 'doGenerate' | 'doStream'> & {
   /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
   id?: string;
-  doGenerate: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
-  doStream: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
+  doGenerate: (options: LanguageModelV4CallOptions) => DoStreamResultPromise;
+  doStream: (options: LanguageModelV4CallOptions) => DoStreamResultPromise;
 };
 
-/** Union of modern language models (V2/V3/V4) */
-export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3 | MastraLanguageModelV4;
+export type MastraLanguageModel = MastraLanguageModelV4;
 
-export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions;
+export type SharedProviderOptions = SharedV4ProviderOptions;
 
 // Support for:
 // - "openai/gpt-4o" (magic string with autocomplete)
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
-// - LanguageModelV2/V3/V4 (existing AI SDK models)
+// - LanguageModelV4 (AI SDK v7 models)
 // - { model, id: "mastra/openai/gpt-4o" } (any of the above, labeled with its full model ID)
 type BaseModelConfig =
-  | LanguageModelV2
-  | LanguageModelV3
   | LanguageModelV4
   | ModelRouterModelId
   | OpenAICompatibleConfig

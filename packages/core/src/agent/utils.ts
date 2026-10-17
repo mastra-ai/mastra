@@ -1,4 +1,4 @@
-import { JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-sdk-v5';
+import { JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-v7';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLanguageModel } from '../llm/model/shared.types';

@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
+import { stepCountIs } from '@mastra/core/ai';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { z } from 'zod';
 import { AgentBuilder } from '../../agent';

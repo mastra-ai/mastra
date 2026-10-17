@@ -5,8 +5,8 @@
  * Regression tests for https://github.com/mastra-ai/mastra/issues/24950
  */
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import { Observability, TestExporter } from '@mastra/observability';
@@ -19,7 +19,7 @@ import { OtelBridge } from './bridge.js';
 const SETUP_DOCS_URL = 'https://mastra.ai/reference/observability/tracing/bridges/otel#setup-requirements';
 
 function createModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       content: [{ type: 'text', text: 'ok' }],

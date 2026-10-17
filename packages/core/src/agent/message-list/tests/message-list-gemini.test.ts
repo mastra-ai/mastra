@@ -1,4 +1,4 @@
-import { convertToModelMessages } from '@internal/ai-sdk-v5';
+import { convertToModelMessages } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
@@ -13,7 +13,7 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add({ role: 'assistant', content: 'Hello!' }, 'memory');
       list.add({ role: 'user', content: 'Hi there' }, 'input');
 
-      const prompt = list.get.all.aiV5.prompt();
+      const prompt = list.get.all.aiSdk.prompt();
 
       expect(prompt.map(m => m.role)).toEqual(['system', 'assistant', 'user']);
     });
@@ -24,7 +24,7 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add({ role: 'assistant', content: 'Previous response' }, 'memory');
       list.add({ role: 'user', content: 'Current input' }, 'input');
 
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const llmPrompt = await list.get.all.aiSdk.llmPrompt();
 
       expect(llmPrompt.map(m => m.role)).toEqual(['system', 'assistant', 'user']);
     });
@@ -32,8 +32,8 @@ describe('MessageList - Gemini Compatibility', () => {
     it('should pass through empty message list unchanged', async () => {
       const list = new MessageList();
 
-      expect(list.get.all.aiV5.prompt()).toHaveLength(0);
-      expect(await list.get.all.aiV5.llmPrompt()).toHaveLength(0);
+      expect(list.get.all.aiSdk.prompt()).toHaveLength(0);
+      expect(await list.get.all.aiSdk.llmPrompt()).toHaveLength(0);
     });
   });
 
@@ -72,7 +72,7 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add(assistantWithDataParts, 'response');
       list.add({ role: 'user', content: 'Can you modify the chart?' }, 'input');
 
-      const prompt = list.get.all.aiV5.prompt();
+      const prompt = list.get.all.aiSdk.prompt();
 
       // Find the assistant message in the prompt
       const assistantMsg = prompt.find(m => m.role === 'assistant');
@@ -121,7 +121,7 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add(assistantWithDataParts, 'response');
       list.add({ role: 'user', content: 'What is the status?' }, 'input');
 
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const llmPrompt = await list.get.all.aiSdk.llmPrompt();
 
       // Find the assistant message in the prompt
       const assistantMsg = llmPrompt.find(m => m.role === 'assistant');
@@ -164,7 +164,7 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add(assistantWithOnlySource, 'response');
       list.add({ role: 'user', content: 'Continue' }, 'input');
 
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const llmPrompt = await list.get.all.aiSdk.llmPrompt();
 
       for (const msg of llmPrompt) {
         if (msg.role !== 'system' && typeof msg.content !== 'string') {
@@ -207,7 +207,7 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add(assistantWithSourceAndText, 'response');
       list.add({ role: 'user', content: 'Continue' }, 'input');
 
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const llmPrompt = await list.get.all.aiSdk.llmPrompt();
       const assistantMessages = llmPrompt.filter(m => m.role === 'assistant');
 
       expect(assistantMessages.length).toBeGreaterThan(0);
@@ -238,14 +238,14 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add(assistantWithDataParts, 'response');
 
       // UI messages should preserve data-* parts (for UI rendering)
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       const uiAssistant = uiMessages.find(m => m.role === 'assistant');
       expect(uiAssistant).toBeDefined();
       const hasDataPartInUI = uiAssistant!.parts.some((p: any) => p.type?.startsWith('data-'));
       expect(hasDataPartInUI).toBe(true);
 
       // Model messages (for LLM) should NOT have data-* parts
-      const modelMessages = list.get.all.aiV5.model();
+      const modelMessages = list.get.all.aiSdk.model();
       const modelAssistant = modelMessages.find(m => m.role === 'assistant');
       expect(modelAssistant).toBeDefined();
 
@@ -278,7 +278,7 @@ describe('MessageList - Gemini Compatibility', () => {
 
       // The prompt should still be valid - either the message is removed or has empty text
       // What's important is that it doesn't crash Gemini with invalid parts
-      const prompt = list.get.all.aiV5.prompt();
+      const prompt = list.get.all.aiSdk.prompt();
 
       // Verify no data-* parts exist in any message
       for (const msg of prompt) {
@@ -289,7 +289,7 @@ describe('MessageList - Gemini Compatibility', () => {
       }
     });
 
-    it('AI SDK convertToModelMessages should filter out data-* parts', () => {
+    it('AI SDK convertToModelMessages should filter out data-* parts', async () => {
       // This test verifies the AI SDK behavior that we rely on
       const uiMessages = [
         {
@@ -307,7 +307,7 @@ describe('MessageList - Gemini Compatibility', () => {
         },
       ];
 
-      const modelMessages = convertToModelMessages(uiMessages);
+      const modelMessages = await convertToModelMessages(uiMessages);
 
       // Find the assistant message
       const assistantModel = modelMessages.find(m => m.role === 'assistant');
@@ -353,7 +353,7 @@ describe('MessageList - Gemini Compatibility', () => {
       list.add({ role: 'user', content: 'Continue the conversation' }, 'input');
 
       // Get the prompt that would be sent to Gemini
-      const prompt = list.get.all.aiV5.prompt();
+      const prompt = list.get.all.aiSdk.prompt();
 
       // CRITICAL: No messages should have empty content arrays
       // This would cause: "Unable to submit request because it must include at least one parts field"
@@ -369,7 +369,7 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(prompt.filter(m => m.role === 'user').length).toBe(2);
     });
 
-    it('AI SDK convertToModelMessages produces empty content arrays for data-only messages (documents SDK behavior)', () => {
+    it('AI SDK convertToModelMessages drops data-only messages (documents SDK behavior)', async () => {
       // This test DOCUMENTS the AI SDK behavior that we work around.
       // The AI SDK's convertToModelMessages produces empty content arrays
       // for messages that have only data-* parts.
@@ -395,16 +395,10 @@ describe('MessageList - Gemini Compatibility', () => {
         },
       ];
 
-      const modelMessages = convertToModelMessages(uiMessages);
+      const modelMessages = await convertToModelMessages(uiMessages);
 
-      // Find the assistant message (which had only data-* parts)
-      const assistantMsg = modelMessages.find(m => m.role === 'assistant');
-      expect(assistantMsg).toBeDefined();
-
-      // The AI SDK produces an empty content array
-      // This is why we filter data-* parts in sanitizeV5UIMessages before conversion
-      expect(typeof assistantMsg!.content).not.toBe('string');
-      expect((assistantMsg!.content as any[]).length).toBe(0);
+      // AI SDK v7 drops a message whose parts are all data-* instead of emitting empty content.
+      expect(modelMessages.find(m => m.role === 'assistant')).toBeUndefined();
     });
 
     it('should preserve data-* parts in DB/UI but filter from model/prompt messages', () => {
@@ -445,12 +439,12 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(dbAssistant?.content.parts?.map(p => p.type)).toContain('data-progress');
 
       // 2. UI messages should preserve ALL parts (needed for frontend rendering)
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       const uiAssistant = uiMessages.find(m => m.id === 'mixed-msg');
       expect(uiAssistant?.parts.map(p => p.type)).toContain('data-progress');
 
       // 3. Model messages should NOT have data-* parts
-      const modelMessages = list.get.all.aiV5.model();
+      const modelMessages = list.get.all.aiSdk.model();
       for (const msg of modelMessages) {
         if (msg.role === 'assistant' && typeof msg.content !== 'string') {
           const hasDataPart = msg.content.some((p: any) => p.type?.startsWith('data-'));
@@ -459,7 +453,7 @@ describe('MessageList - Gemini Compatibility', () => {
       }
 
       // 4. Prompt messages should NOT have data-* parts or empty content arrays
-      const promptMessages = list.get.all.aiV5.prompt();
+      const promptMessages = list.get.all.aiSdk.prompt();
       for (const msg of promptMessages) {
         if (typeof msg.content !== 'string') {
           // No data-* parts
@@ -477,8 +471,8 @@ describe('MessageList - Gemini Compatibility', () => {
       const list = new MessageList();
       list.addSystem('You are a helpful assistant.');
 
-      expect(list.get.all.aiV5.prompt().map(m => m.role)).toEqual(['system']);
-      expect((await list.get.all.aiV5.llmPrompt()).map(m => m.role)).toEqual(['system']);
+      expect(list.get.all.aiSdk.prompt().map(m => m.role)).toEqual(['system']);
+      expect((await list.get.all.aiSdk.llmPrompt()).map(m => m.role)).toEqual(['system']);
     });
   });
 
@@ -523,7 +517,7 @@ describe('MessageList - Gemini Compatibility', () => {
         'input',
       );
 
-      const prompt = list.get.all.aiV5.prompt();
+      const prompt = list.get.all.aiSdk.prompt();
 
       expect(prompt.map(m => m.role)).toEqual(['system', 'assistant', 'user', 'assistant', 'user']);
     });

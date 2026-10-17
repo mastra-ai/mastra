@@ -76,7 +76,7 @@ function resolveOutputText(messageList: MessageList): string {
     return lastConverted ? coreContentToString(lastConverted.content) : '';
   }
 
-  const converted = messageList.get.response.aiV5.model();
+  const converted = messageList.get.response.aiSdk.model();
   const lastResponseMessage = converted.at(-1);
   return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
 }
@@ -512,7 +512,7 @@ export async function generateDurableThreadTitle({
   if (!shouldGenerate || thread?.title) return;
 
   const titleMessageList = new MessageList().deserialize(messageListState);
-  const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.aiV5.ui());
+  const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.aiSdk.ui());
   if (uiMessages.length < (minMessages ?? 1)) return;
 
   const userMessage = agent.getMostRecentUserMessage(uiMessages);

@@ -5,11 +5,9 @@
  * Some models return finishReason: 'stop' even when tool calls are present.
  * The agent loop must continue processing tool results in all cases.
  */
-import { anthropic } from '@ai-sdk/anthropic-v5';
-import { google } from '@ai-sdk/google-v5';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { openai as openai_v6 } from '@ai-sdk/openai-v6';
-import { openai as openai_v7 } from '@ai-sdk/openai-v7';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
+import { openai } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -164,12 +162,8 @@ async function runToolCallTest(engine: EngineLeg, agent: Agent, modelName: strin
 
 describe('Tool calls with various LLM providers', { timeout: 120_000 }, () => {
   const models = [
-    { name: 'openai/gpt-4o-mini (v5)', model: openai_v5('gpt-4o-mini'), envKey: 'OPENAI_API_KEY' },
-    { name: 'openai/gpt-4o-mini (v6)', model: openai_v6('gpt-4o-mini'), envKey: 'OPENAI_API_KEY' },
-    { name: 'openai/gpt-4o-mini (v7)', model: openai_v7('gpt-4o-mini'), envKey: 'OPENAI_API_KEY' },
-    { name: 'openai/gpt-5.3-codex (v5)', model: openai_v5('gpt-5.3-codex'), envKey: 'OPENAI_API_KEY' },
-    { name: 'openai/gpt-5.3-codex (v6)', model: openai_v6('gpt-5.3-codex'), envKey: 'OPENAI_API_KEY' },
-    { name: 'openai/gpt-5.3-codex (v7)', model: openai_v7('gpt-5.3-codex'), envKey: 'OPENAI_API_KEY' },
+    { name: 'openai/gpt-4o-mini (v7)', model: openai('gpt-4o-mini'), envKey: 'OPENAI_API_KEY' },
+    { name: 'openai/gpt-5.3-codex (v7)', model: openai('gpt-5.3-codex'), envKey: 'OPENAI_API_KEY' },
     {
       name: 'anthropic/claude-haiku-4-5-20251001',
       model: anthropic('claude-haiku-4-5-20251001'),

@@ -15,7 +15,7 @@ Converts Mastra streams (agent or workflow) to AI SDK-compatible streams. Use th
 
 This is useful when building custom streaming endpoints outside Mastra's provided route helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) or [`workflowRoute()`](/reference/ai-sdk/workflow-route).
 
-`toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'` in the options object.
+`toAISdkStream()` emits an AI SDK v7 UI message stream.
 
 ## Structured output in UI streams
 
@@ -78,14 +78,6 @@ The second parameter is an options object:
 
 <PropertiesTable
   content={[
-  {
-    name: 'version',
-    type: "'v5' | 'v6' | 'v7'",
-    description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers. Pass `'v7'` when your app is typed against AI SDK v7.",
-    isOptional: true,
-    defaultValue: "'v5'",
-  },
   {
     name: 'from',
     type: "'agent' | 'workflow'",
@@ -240,7 +232,6 @@ export async function POST(req: Request) {
     execute: async ({ writer }) => {
       for await (const part of toAISdkStream(stream, {
         from: 'agent',
-        version: 'v6',
       })) {
         await writer.write(part)
       }

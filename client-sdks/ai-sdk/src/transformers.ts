@@ -1,22 +1,10 @@
 import { TransformStream } from 'node:stream/web';
-import type {
-  InferUIMessageChunk,
-  TextStreamPart,
-  ToolSet,
-  UIMessage,
-  UIMessageStreamOptions,
-} from '@internal/ai-sdk-v5';
-import type {
-  InferUIMessageChunk as InferUIMessageChunkV6,
-  UIMessage as UIMessageV6,
-  UIMessageStreamOptions as UIMessageStreamOptionsV6,
-} from '@internal/ai-v6';
 import type { LLMStepResult } from '@mastra/core/agent';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from '@mastra/core/ai';
 import type { AgentChunkType, ChunkType, DataChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
 import {
-  convertMastraChunkToAISDKv5,
-  convertMastraChunkToAISDKv6,
+  convertMastraChunkToAISDK as convertMastraChunkToAISDKDefault,
   convertFullStreamChunkToUIMessageStream,
 } from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType } from './helpers';
@@ -283,19 +271,7 @@ export function WorkflowStreamToAISDKTransformer({
   sendReasoning,
   sendSources,
 }: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
-  return createWorkflowStreamToAISDKTransformer<InferUIMessageChunk<UIMessage>>(convertMastraChunkToAISDKv5, {
-    includeTextStreamParts,
-    sendReasoning,
-    sendSources,
-  });
-}
-
-export function WorkflowStreamToAISDKV6Transformer({
-  includeTextStreamParts,
-  sendReasoning,
-  sendSources,
-}: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
-  return createWorkflowStreamToAISDKTransformer<InferUIMessageChunkV6<UIMessageV6>>(convertMastraChunkToAISDKv6, {
+  return createWorkflowStreamToAISDKTransformer<InferUIMessageChunk<UIMessage>>(convertMastraChunkToAISDKDefault, {
     includeTextStreamParts,
     sendReasoning,
     sendSources,
@@ -495,38 +471,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   onError?: UIMessageStreamOptions<UIMessage>['onError'];
   includeSubAgentMetadata?: boolean;
 }) {
-  return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv5, {
-    lastMessageId,
-    sendStart,
-    sendFinish,
-    sendReasoning,
-    sendSources,
-    messageMetadata,
-    onError,
-    includeSubAgentMetadata,
-  });
-}
-
-export function AgentStreamToAISDKV6Transformer<OUTPUT>({
-  lastMessageId,
-  sendStart = true,
-  sendFinish = true,
-  sendReasoning,
-  sendSources,
-  messageMetadata,
-  onError,
-  includeSubAgentMetadata = false,
-}: {
-  lastMessageId?: string;
-  sendStart?: boolean;
-  sendFinish?: boolean;
-  sendReasoning?: boolean;
-  sendSources?: boolean;
-  messageMetadata?: WithTraceId<UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata']>;
-  onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
-  includeSubAgentMetadata?: boolean;
-}) {
-  return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv6, {
+  return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKDefault, {
     lastMessageId,
     sendStart,
     sendFinish,
@@ -1062,7 +1007,7 @@ export function transformWorkflow<OUTPUT>(
   isNested?: boolean,
   includeTextStreamParts?: boolean,
   streamOptions?: { sendReasoning?: boolean; sendSources?: boolean },
-  convertMastraChunkToAISDK: ConvertMastraChunkToAISDK = convertMastraChunkToAISDKv5,
+  convertMastraChunkToAISDK: ConvertMastraChunkToAISDK = convertMastraChunkToAISDKDefault,
 ) {
   switch (payload.type) {
     case 'workflow-start':

@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { APICallError } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { APICallError } from '@internal/ai-v7';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart, MessageList } from '../agent/message-list';
 import { getResponseProviderItemIdFromPart } from '../agent/message-list';
@@ -30,7 +30,7 @@ import type {
  *   (e.g. tool-call ID format).
  *
  * - **Preemptively** via {@link CompatRule.applyToPrompt}: runs in
- *   `processLLMRequest` after `MessageList → LanguageModelV2Prompt` conversion
+ *   `processLLMRequest` after `MessageList → LanguageModelV4Prompt` conversion
  *   and before the prompt is sent to the provider. Mutations affect only the
  *   outbound prompt; nothing is persisted to the message list. Suitable for
  *   incompatibilities that would otherwise re-trigger on every turn (e.g.
@@ -55,10 +55,10 @@ export interface CompatRule {
    * `undefined` to leave the prompt unchanged.
    */
   applyToPrompt?: (args: {
-    prompt: LanguageModelV2Prompt;
+    prompt: LanguageModelV4Prompt;
     model: unknown;
     messageList?: MessageList;
-  }) => LanguageModelV2Prompt | undefined;
+  }) => LanguageModelV4Prompt | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
  * distinct replacements; the nth result carrying that id pairs with the nth
  * call, which is the only resolvable reading of an already-degenerate prompt.
  */
-function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt | undefined {
+function rewritePromptToolIds(prompt: LanguageModelV4Prompt): LanguageModelV4Prompt | undefined {
   const replacements = new Map<string, string[]>();
   const claimed = new Set<string>();
 
@@ -183,7 +183,9 @@ function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Pro
       continue;
     }
     if (message.role === 'tool') {
-      for (const part of message.content) claimed.add(part.toolCallId);
+      for (const part of message.content) {
+        if (part.type === 'tool-result') claimed.add(part.toolCallId);
+      }
     }
   }
 
@@ -225,7 +227,7 @@ function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Pro
   const takeCall = (id: string) => takeAt(callIndex, id);
   const takeResult = (id: string) => takeAt(resultIndex, id);
 
-  const rewritten: LanguageModelV2Prompt = prompt.map(message => {
+  const rewritten: LanguageModelV4Prompt = prompt.map(message => {
     if (message.role === 'assistant' && Array.isArray(message.content)) {
       let changed = false;
       const content = message.content.map(part => {
@@ -241,6 +243,7 @@ function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Pro
     if (message.role === 'tool') {
       let changed = false;
       const content = message.content.map(part => {
+        if (part.type !== 'tool-result') return part;
         const replacement = takeResult(part.toolCallId);
         if (!replacement) return part;
         changed = true;
@@ -420,7 +423,7 @@ export const stripForeignProviderExecutedTools: CompatRule = {
 
     if (foreignToolCallIds.size === 0) return undefined;
 
-    const rewritten: LanguageModelV2Prompt = [];
+    const rewritten: LanguageModelV4Prompt = [];
     for (const message of prompt) {
       if (message.role === 'assistant') {
         const content = message.content.filter(
@@ -431,7 +434,9 @@ export const stripForeignProviderExecutedTools: CompatRule = {
       }
 
       if (message.role === 'tool') {
-        const content = message.content.filter(part => !foreignToolCallIds.has(part.toolCallId));
+        const content = message.content.filter(
+          part => part.type !== 'tool-result' || !foreignToolCallIds.has(part.toolCallId),
+        );
         if (content.length > 0) rewritten.push({ ...message, content });
         continue;
       }
@@ -576,9 +581,9 @@ export const ensureUserFirstTurn = {
     prompt,
     model,
   }: {
-    prompt: LanguageModelV2Prompt;
+    prompt: LanguageModelV4Prompt;
     model: unknown;
-  }): LanguageModelV2Prompt | undefined {
+  }): LanguageModelV4Prompt | undefined {
     if (!isMaybeRequiringUserFirstTurn(model)) return undefined;
 
     const firstTurnIndex = prompt.findIndex(message => message.role !== 'system');
@@ -600,7 +605,7 @@ export const ensureUserFirstTurn = {
  * e.g. when the prompt ends with a fresh user turn, in which case Anthropic
  * ignores thinking blocks on earlier assistant messages.
  */
-function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
+function getProtectedAssistantIndex(prompt: LanguageModelV4Prompt): number {
   for (let i = prompt.length - 1; i >= 0; i--) {
     const role = prompt[i]!.role;
     if (role === 'assistant') return i;
@@ -621,17 +626,17 @@ function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
  * modified").
  */
 function stripReasoningFromPrompt(
-  prompt: LanguageModelV2Prompt,
+  prompt: LanguageModelV4Prompt,
   shouldStrip: (
     part: Extract<
-      Extract<LanguageModelV2Prompt[number], { role: 'assistant' }>['content'][number],
+      Extract<LanguageModelV4Prompt[number], { role: 'assistant' }>['content'][number],
       { type: 'reasoning' }
     >,
   ) => boolean = () => true,
   skipIndex = -1,
-): LanguageModelV2Prompt | undefined {
+): LanguageModelV4Prompt | undefined {
   let mutated = false;
-  const next: LanguageModelV2Prompt = [];
+  const next: LanguageModelV4Prompt = [];
   for (let index = 0; index < prompt.length; index++) {
     const message = prompt[index]!;
     if (
@@ -669,7 +674,7 @@ function isAnthropicReasoningPart(part: { providerOptions?: unknown; providerMet
   return false;
 }
 
-function getProtectedAnthropicAssistantIndex(prompt: LanguageModelV2Prompt): number {
+function getProtectedAnthropicAssistantIndex(prompt: LanguageModelV4Prompt): number {
   const index = getProtectedAssistantIndex(prompt);
   if (index === -1) return -1;
 
@@ -804,8 +809,7 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
       for (const part of dbMessage.content.parts ?? []) {
         if (part.type !== 'reasoning') continue;
         const anthropic = part.providerMetadata?.anthropic as
-          | { signature?: unknown; redactedData?: unknown }
-          | undefined;
+          { signature?: unknown; redactedData?: unknown } | undefined;
         for (const value of [anthropic?.signature, anthropic?.redactedData]) {
           if (typeof value === 'string' && value && !foreign.has(value)) foreign.set(value, origin);
         }
@@ -814,7 +818,7 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
     if (foreign.size === 0) return undefined;
 
     let dropped = 0;
-    const next: LanguageModelV2Prompt = [];
+    const next: LanguageModelV4Prompt = [];
     for (const message of prompt) {
       if (message.role !== 'assistant' || !Array.isArray(message.content)) {
         next.push(message);
@@ -823,8 +827,7 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
       const content = message.content.filter(part => {
         if (part.type !== 'reasoning') return true;
         const anthropic = part.providerOptions?.anthropic as
-          | { signature?: unknown; redactedData?: unknown }
-          | undefined;
+          { signature?: unknown; redactedData?: unknown } | undefined;
         const signature = anthropic?.signature ?? anthropic?.redactedData;
         if (typeof signature === 'string' && foreign.has(signature)) {
           dropped++;
@@ -868,7 +871,7 @@ export const azureSystemReminderTransform: CompatRule = {
     if (!isMaybeAzure(model)) return undefined;
 
     let mutated = false;
-    const next: LanguageModelV2Prompt = prompt.map(message => {
+    const next: LanguageModelV4Prompt = prompt.map(message => {
       if (message.role === 'system') {
         const content = rewriteSystemReminderTags(message.content);
         if (content === message.content) return message;

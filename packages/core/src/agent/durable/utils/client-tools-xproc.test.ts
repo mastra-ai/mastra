@@ -6,7 +6,7 @@
  * Mastra instance. Client tools are call-time only, so they must ride on the
  * serialized workflow options and be passed back into the rebuild.
  */
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -28,7 +28,7 @@ describe('cross-process client tools', () => {
       id: 'weather-agent',
       name: 'weather-agent',
       instructions: 'test',
-      model: new MockLanguageModelV2(),
+      model: new MockLanguageModelV4(),
     });
     const mastra = new Mastra({ agents: { agent }, logger: false });
 

@@ -1,5 +1,5 @@
-import type { CoreSystemMessage, SystemModelMessage } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { SystemModelMessage } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../../logger';
 import { Mastra } from '../../mastra';
@@ -9,11 +9,11 @@ import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
 
 function instructionTests(version: 'v2') {
-  let dummyModel: MockLanguageModelV2;
+  let dummyModel: MockLanguageModelV4;
 
   beforeEach(() => {
     {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -42,7 +42,7 @@ function instructionTests(version: 'v2') {
 
     beforeEach(() => {
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -163,7 +163,7 @@ function instructionTests(version: 'v2') {
     });
 
     it('should support CoreSystemMessage instructions', async () => {
-      const systemMessage: CoreSystemMessage = {
+      const systemMessage: SystemModelMessage = {
         role: 'system',
         content: 'You are an expert programmer.',
       };
@@ -211,7 +211,7 @@ function instructionTests(version: 'v2') {
     });
 
     it('should support array of CoreSystemMessage instructions', async () => {
-      const instructionsArray: CoreSystemMessage[] = [
+      const instructionsArray: SystemModelMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'system', content: 'Always be polite.' },
       ];
@@ -228,7 +228,7 @@ function instructionTests(version: 'v2') {
     });
 
     it('should support array of CoreSystemMessage with provider metadata', async () => {
-      const instructionsArray: CoreSystemMessage[] = [
+      const instructionsArray: SystemModelMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         {
           role: 'system',
@@ -301,11 +301,11 @@ function instructionTests(version: 'v2') {
         name: 'Test Agent',
         instructions: ({ requestContext }) => {
           const expertise = (requestContext?.get('expertise') as string[]) || [];
-          const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
+          const expertiseMessages: SystemModelMessage[] = expertise.map((exp: string) => ({
             role: 'system',
             content: `You have expertise in ${exp}.`,
           }));
-          const messages: CoreSystemMessage[] = [
+          const messages: SystemModelMessage[] = [
             { role: 'system', content: 'You are a helpful assistant.' },
             ...expertiseMessages,
           ];
@@ -364,7 +364,7 @@ function instructionTests(version: 'v2') {
         model: dummyModel,
       });
 
-      const additionalSystem: CoreSystemMessage = {
+      const additionalSystem: SystemModelMessage = {
         role: 'system',
         content: 'Be concise in your responses.',
       };
@@ -387,7 +387,7 @@ function instructionTests(version: 'v2') {
       // are properly combined when using generate
 
       // Use CoreSystemMessage array instead of mixed array
-      const agentInstructions: CoreSystemMessage[] = [
+      const agentInstructions: SystemModelMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
         { role: 'system', content: 'You are an expert.' },
       ];

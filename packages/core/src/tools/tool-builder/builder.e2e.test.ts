@@ -1,9 +1,8 @@
-import { openai } from '@ai-sdk/openai';
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { openai, createOpenAI } from '@ai-sdk/openai';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { canonicalizeRequestJsonSchema, createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
+import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
@@ -20,10 +19,10 @@ const mock = createGatewayMock({ exactMatch: true, transformRequest: canonicaliz
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
-export const isOpenAIModel = (model: LanguageModelV2) =>
+export const isOpenAIModel = (model: LanguageModelV4) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
 
-const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
 
 type Result = {
@@ -126,7 +125,7 @@ function createTestSchemas(schemaKeys: SchemaKey[] = []): z.ZodObject<any> {
 }
 
 async function runStructuredOutputSchemaTest(
-  model: LanguageModelV2,
+  model: LanguageModelV4,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
@@ -229,7 +228,7 @@ async function runStructuredOutputSchemaTest(
 }
 
 async function runSingleToolSchemaTest(
-  model: LanguageModelV2,
+  model: LanguageModelV4,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
@@ -317,8 +316,8 @@ const modelsToTestV2 = [
   openrouter_v5('openai/gpt-4o-mini'),
   openrouter_v5('openai/gpt-4.1-mini'),
   openrouter_v5('openai/o3-mini'),
-  openai_v5('o3-mini'),
-  openai_v5('o4-mini'),
+  openai('o3-mini'),
+  openai('o4-mini'),
   openrouter_v5('google/gemini-2.5-pro'),
   openrouter_v5('google/gemini-2.5-flash'),
   openrouter_v5('google/gemini-3.1-flash-lite'),

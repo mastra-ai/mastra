@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent/agent';
 import { Mastra } from '../mastra';
@@ -10,7 +10,7 @@ function makeAgent(id: string): Agent {
     id,
     name: id,
     instructions: 'test',
-    model: new MockLanguageModelV2(),
+    model: new MockLanguageModelV4(),
   });
 }
 

@@ -23,13 +23,13 @@ beforeEach(() => {
   mocks.getCachedModel.mockClear();
 });
 
-test('registers role specific multilingual e5 models on the v3 provider', async () => {
+test('registers role specific multilingual e5 models as spec v4 models', async () => {
   const { fastembed } = await import('./index.js');
 
   expect(fastembed.multilingualE5LargeQuery.modelId).toBe('multilingual-e5-large-query');
   expect(fastembed.multilingualE5LargePassage.modelId).toBe('multilingual-e5-large-passage');
   for (const model of [fastembed.multilingualE5LargeQuery, fastembed.multilingualE5LargePassage]) {
-    expect(model.specificationVersion).toBe('v3');
+    expect(model.specificationVersion).toBe('v4');
     expect(model.provider).toBe('fastembed');
   }
 });

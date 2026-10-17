@@ -21,8 +21,8 @@
  *    `durable-agentic-loop`) were never discoverable.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -36,7 +36,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
 
 function makeSubAgentModel(label: string, resultToken: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasToolResult = JSON.stringify(prompt).includes(resultToken);
       if (!hasToolResult) {
@@ -80,7 +80,7 @@ function makeSubAgentModel(label: string, resultToken: string) {
 
 /** Supervisor: one turn with TWO parallel delegations, then the final answer. */
 function makeSupervisorModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const text = JSON.stringify(prompt);
       const hasBoth = text.includes('alpha done') && text.includes('beta done');
@@ -202,7 +202,7 @@ describe('durable parallel delegation approvals', () => {
       name: 'subAlpha',
       description: 'Does alpha',
       instructions: 'Use your tool.',
-      model: makeSubAgentModel('alpha', 'alpha done') as LanguageModelV2,
+      model: makeSubAgentModel('alpha', 'alpha done') as LanguageModelV4,
       tools: { gatedTool: buildGatedTool() },
     });
     const subBeta = new Agent({
@@ -210,14 +210,14 @@ describe('durable parallel delegation approvals', () => {
       name: 'subBeta',
       description: 'Does beta',
       instructions: 'Use your tool.',
-      model: makeSubAgentModel('beta', 'beta done') as LanguageModelV2,
+      model: makeSubAgentModel('beta', 'beta done') as LanguageModelV4,
       tools: { gatedTool: buildGatedTool() },
     });
     const supervisor = new Agent({
       id: 'supervisor',
       name: 'Supervisor',
       instructions: 'Delegate to both sub-agents.',
-      model: makeSupervisorModel() as LanguageModelV2,
+      model: makeSupervisorModel() as LanguageModelV4,
       agents: { subAlpha, subBeta },
       memory: mockMemory,
     });
@@ -384,7 +384,7 @@ describe('durable parallel delegation approvals', () => {
       id: 'solo',
       name: 'Solo',
       instructions: 'Use your tool.',
-      model: makeSubAgentModel('solo', 'solo done') as LanguageModelV2,
+      model: makeSubAgentModel('solo', 'solo done') as LanguageModelV4,
       tools: { gatedTool },
       memory: mockMemory,
     });
@@ -430,7 +430,7 @@ describe('durable parallel delegation approvals', () => {
       id: 'solo-public',
       name: 'SoloPublic',
       instructions: 'Use your tool.',
-      model: makeSubAgentModel('solo', 'solo done') as LanguageModelV2,
+      model: makeSubAgentModel('solo', 'solo done') as LanguageModelV4,
       tools: { gatedTool },
       memory: new MockMemory(),
       durable: true,

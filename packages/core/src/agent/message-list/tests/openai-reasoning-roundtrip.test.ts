@@ -93,7 +93,7 @@ describe('OpenAI reasoning round-trip', () => {
 
     list.add({ role: 'user', content: 'Now what is 3+3?' }, 'input');
 
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
 
     const assistantMessages = prompt.filter(m => m.role === 'assistant');
     expect(assistantMessages).toHaveLength(1);
@@ -211,7 +211,7 @@ describe('OpenAI reasoning round-trip', () => {
 
     list.add({ role: 'user', content: 'What about tomorrow?' }, 'input');
 
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
     const assistantMessages = prompt.filter(m => m.role === 'assistant');
     const allParts = assistantMessages.flatMap(m => (Array.isArray(m.content) ? m.content : []));
 
@@ -284,7 +284,7 @@ describe('OpenAI reasoning round-trip', () => {
 
     list.add({ role: 'user', content: 'Continue.' }, 'input');
 
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
     const assistantMessages = prompt.filter(m => m.role === 'assistant');
     const allParts = assistantMessages.flatMap(m => (Array.isArray(m.content) ? m.content : []));
 

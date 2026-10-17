@@ -1,4 +1,4 @@
-import type { Tool, ToolSet } from '@internal/ai-sdk-v5';
+import type { Tool, ToolSet } from '@internal/ai-v7';
 import { getProviderToolName, isProviderTool } from './toolchecks';
 
 /**

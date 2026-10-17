@@ -13,9 +13,9 @@
  * (defaulting to the published version, matching the built-in agent handlers)
  * so the endpoint serves the same instructions Studio does.
  */
-import type { UIMessage } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessage } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
@@ -34,7 +34,7 @@ const messages: UIMessage[] = [
  * test can assert which instructions reached the LLM.
  */
 function createCapturingModel(capture: { systemPrompt: string | undefined }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const systemMessage = (prompt as Array<{ role: string; content: unknown }>).find(m => m.role === 'system');
       capture.systemPrompt = typeof systemMessage?.content === 'string' ? systemMessage.content : undefined;

@@ -83,8 +83,8 @@ describe('agent signal UI conversion', () => {
       'memory',
     );
 
-    const v5Messages = list.get.all.aiV5.ui();
-    const v6Messages = list.get.all.aiV6.ui();
+    const v5Messages = list.get.all.aiSdk.ui();
+    const v6Messages = list.get.all.aiSdk.ui();
 
     for (const messages of [v5Messages, v6Messages]) {
       expect(messages.every(m => m.role !== 'system')).toBe(true);
@@ -117,7 +117,7 @@ describe('agent signal UI conversion', () => {
       'memory',
     );
 
-    const v5Messages = list.get.all.aiV5.ui();
+    const v5Messages = list.get.all.aiSdk.ui();
     expect(
       v5Messages.some(
         m =>
@@ -141,7 +141,7 @@ describe('agent signal UI conversion', () => {
       'memory',
     );
 
-    const v5Messages = list.get.all.aiV5.ui();
+    const v5Messages = list.get.all.aiSdk.ui();
     expect(v5Messages.every(m => m.role !== 'system')).toBe(true);
     const converted = v5Messages.find(m => m.parts.some(p => p.type === 'data-signal'));
     expect(converted).toBeDefined();

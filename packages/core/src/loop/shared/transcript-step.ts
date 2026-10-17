@@ -9,10 +9,10 @@ export interface TranscriptStep {
 }
 
 export function getTranscriptStepContent(messageList: MessageList, step: TranscriptStep) {
-  const message = messageList.get.response.aiV5.ui().find(message => message.id === step.messageId);
+  const message = messageList.get.response.aiSdk.ui().find(message => message.id === step.messageId);
   if (!message) return [];
   return aiV5UIMessagesToAIV5ModelMessages(
     [{ ...message, parts: message.parts.slice(step.start, step.end) }],
     messageList.get.all.db(),
-  ).flatMap(messageList.get.response.aiV5.stepContent);
+  ).flatMap(messageList.get.response.aiSdk.stepContent);
 }

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -32,7 +32,7 @@ describe('Output Processor Tool Result Chunks', () => {
     });
 
     // Create mock model that calls a tool
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         // Check if this is the first call (no tool results in messages) or second call (after tool execution)
         const hasToolResults = prompt.some(
@@ -126,7 +126,7 @@ describe('Output Processor Tool Result Chunks', () => {
       }
     }
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -199,7 +199,7 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
     };
 
     // Create mock model that calls a tool
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         // Check if this is the first call (no tool results in messages) or second call (after tool execution)
         const hasToolResults = prompt.some(
@@ -294,7 +294,7 @@ describe('processToolResult lifecycle hook', () => {
   // Helper that builds a mock model which calls a single tool then finishes.
   // First call requests the tool, second call (after tool result is fed back) emits final text.
   const makeMockToolCallModel = (toolName: string, toolCallId = 'call-tr-1', toolInput = { text: 'hello' }) =>
-    new MockLanguageModelV2({
+    new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         const hasToolResults = prompt.some(
           (msg: any) =>
@@ -467,7 +467,7 @@ describe('processToolResult lifecycle hook', () => {
     });
 
     const makeModel = (toolNames: string[], modelCalls: { count: number }) =>
-      new MockLanguageModelV2({
+      new MockLanguageModelV4({
         doStream: async () => {
           modelCalls.count++;
           return {
@@ -594,7 +594,7 @@ describe('processToolResult lifecycle hook', () => {
     }
 
     // Mock model that calls the tool TWICE (so processToolResult fires twice in one run)
-    const mockModelTwoCalls = new MockLanguageModelV2({
+    const mockModelTwoCalls = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         const toolResultCount = prompt.reduce((acc: number, msg: any) => {
           if (msg.role === 'tool') return acc + 1;

@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-v7';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
 import { isSpanChunk, MessagePartSpans } from '../../../agent/message-list/message-part-spans';

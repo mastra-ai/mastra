@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@internal/ai-sdk-v5/provider';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { createDelegationRefRegistry, resolveDelegationRefs } from '../delegation-refs';
@@ -26,8 +26,8 @@ function toolCallStream(toolName: string, input: Record<string, unknown>, toolCa
   ]);
 }
 
-function makeSubAgentModel(reply: string, prompts: LanguageModelV2Prompt[]) {
-  return new MockLanguageModelV2({
+function makeSubAgentModel(reply: string, prompts: LanguageModelV4Prompt[]) {
+  return new MockLanguageModelV4({
     doGenerate: async options => {
       prompts.push(options.prompt);
       return {
@@ -48,10 +48,10 @@ function makeSubAgentModel(reply: string, prompts: LanguageModelV2Prompt[]) {
 /** Supervisor that issues the given tool calls one per step, then replies "Done". */
 function makeSupervisorModel(
   calls: Array<{ toolName: string; input: Record<string, unknown> }>,
-  prompts: LanguageModelV2Prompt[],
+  prompts: LanguageModelV4Prompt[],
 ) {
   let step = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async options => {
       prompts.push(options.prompt);
       const call = calls[step];
@@ -86,7 +86,7 @@ function makeSupervisorModel(
   });
 }
 
-function userText(prompt: LanguageModelV2Prompt): string {
+function userText(prompt: LanguageModelV4Prompt): string {
   return prompt
     .filter(m => m.role === 'user')
     .flatMap(m => (Array.isArray(m.content) ? m.content : []))
@@ -94,7 +94,7 @@ function userText(prompt: LanguageModelV2Prompt): string {
     .join('\n');
 }
 
-function toolResultTexts(prompt: LanguageModelV2Prompt): string[] {
+function toolResultTexts(prompt: LanguageModelV4Prompt): string[] {
   return prompt
     .filter(m => m.role === 'tool')
     .flatMap(m => m.content)
@@ -109,9 +109,9 @@ function buildAgents(
   calls: Array<{ toolName: string; input: Record<string, unknown> }>,
   opts: { explorerReply?: string } = {},
 ) {
-  const explorerPrompts: LanguageModelV2Prompt[] = [];
-  const implementerPrompts: LanguageModelV2Prompt[] = [];
-  const supervisorPrompts: LanguageModelV2Prompt[] = [];
+  const explorerPrompts: LanguageModelV4Prompt[] = [];
+  const implementerPrompts: LanguageModelV4Prompt[] = [];
+  const supervisorPrompts: LanguageModelV4Prompt[] = [];
 
   const explorer = new Agent({
     id: 'explorer',

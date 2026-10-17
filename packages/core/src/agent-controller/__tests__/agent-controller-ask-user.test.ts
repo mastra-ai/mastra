@@ -19,7 +19,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { askUserTool } from '../../tools/builtin/ask-user';
 
@@ -83,7 +83,7 @@ async function buildController(id: string, input: string, withMemory = false) {
     id: `agent-${id}`,
     name: `Agent ${id}`,
     instructions: 'You ask the user questions.',
-    model: new MastraLanguageModelV2Mock({
+    model: new MastraLanguageModelV4Mock({
       doStream: (() => {
         let callCount = 0;
         return async () => {
@@ -205,7 +205,7 @@ describe('AgentController: ask_user native suspension', () => {
         defaultOptions: recovery === 'warm-approval-siblings' ? { toolCallConcurrency: 2 } : undefined,
         tools: { owned_state: tool },
         memory: new MockMemory({ storage }),
-        model: new MastraLanguageModelV2Mock({
+        model: new MastraLanguageModelV4Mock({
           doStream: async () => {
             sourceCalls++;
             if (recovery === 'cold-execution-failure' && sourceCalls > 1) throw new Error('source execution failed');
@@ -228,7 +228,7 @@ describe('AgentController: ask_user native suspension', () => {
         name: 'Other',
         instructions: 'Wait',
         memory: new MockMemory({ storage }),
-        model: new MastraLanguageModelV2Mock({
+        model: new MastraLanguageModelV4Mock({
           doStream: async () => ({
             stream: new ReadableStream({
               start(stream) {
@@ -740,7 +740,7 @@ describe('AgentController: ask_user native suspension', () => {
         id: 'cold-resume-agent',
         name: 'Cold resume agent',
         instructions: 'Ask the user for a hotel, then acknowledge their answer.',
-        model: new MastraLanguageModelV2Mock({
+        model: new MastraLanguageModelV4Mock({
           doStream: async ({ prompt }) => {
             modelCalls++;
             modelPrompts.push(prompt);
@@ -1115,7 +1115,7 @@ describe('AgentController: ask_user native suspension', () => {
       id: 'agent-serial',
       name: 'Agent Serial',
       instructions: 'You ask the user questions.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: (() => {
           let callCount = 0;
           return async () => {
@@ -1184,7 +1184,7 @@ describe('AgentController: Stop on a parked question frees the thread', () => {
       id: `agent-${id}`,
       name: `Agent ${id}`,
       instructions: 'You ask the user questions.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: async (options: any) => {
           prompts.push(options?.prompt);
           return {

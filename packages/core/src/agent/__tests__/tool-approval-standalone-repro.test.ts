@@ -28,7 +28,7 @@ import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import type { MastraDBMessage, MessageList } from '../message-list';
 import { TripWire } from '../trip-wire';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () => {
   const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
@@ -55,7 +55,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
 
   function createMockModel() {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -293,7 +293,7 @@ class MessageValidatingInputProcessor implements Processor<'message-validator'> 
 describe('resumeStream with input processors', () => {
   function createMockModelForResume() {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -473,7 +473,7 @@ describe('tool approval with ToolSearchProcessor', () => {
     });
 
     let callCount = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
 

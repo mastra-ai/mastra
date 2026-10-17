@@ -121,13 +121,13 @@ describe('MessageList llmPrompt after a jsonb round-trip (#26828)', () => {
       jsonbOrder(JSON.parse(JSON.stringify(list.serialize()))) as ReturnType<MessageList['serialize']>,
     );
 
-    const before = toolPayloads(await list.get.all.aiV5.llmPrompt());
-    const after = toolPayloads(await restored.get.all.aiV5.llmPrompt());
+    const before = toolPayloads(await list.get.all.aiSdk.llmPrompt());
+    const after = toolPayloads(await restored.get.all.aiSdk.llmPrompt());
     expect(before).toHaveLength(2);
     expect(after).toEqual(before);
 
-    const beforeV6 = toolPayloads(await list.get.all.aiV6.llmPrompt());
-    const afterV6 = toolPayloads(await restored.get.all.aiV6.llmPrompt());
+    const beforeV6 = toolPayloads(await list.get.all.aiSdk.llmPrompt());
+    const afterV6 = toolPayloads(await restored.get.all.aiSdk.llmPrompt());
     expect(beforeV6).toHaveLength(2);
     expect(afterV6).toEqual(beforeV6);
   });

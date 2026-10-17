@@ -3,7 +3,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
@@ -54,7 +54,7 @@ function createController(storage = new InMemoryStore()) {
     id: 'thread-owner-agent',
     name: 'Thread owner agent',
     instructions: 'Answer directly.',
-    model: new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: createTextStream() }) }),
+    model: new MastraLanguageModelV4Mock({ doStream: async () => ({ stream: createTextStream() }) }),
   });
   return {
     storage,
@@ -225,7 +225,7 @@ describe('AgentController thread ownership', () => {
       id: 'snapshot-agent',
       name: 'Snapshot agent',
       instructions: 'Always call captureOwner.',
-      model: new MastraLanguageModelV2Mock({
+      model: new MastraLanguageModelV4Mock({
         doStream: async () => {
           modelCall += 1;
           if (modelCall === 1) {

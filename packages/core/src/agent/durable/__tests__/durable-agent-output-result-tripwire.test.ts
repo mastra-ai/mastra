@@ -4,8 +4,8 @@
  * and the rejected answer must not be saved to memory.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -16,7 +16,7 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
 function createModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -49,7 +49,7 @@ describe('DurableAgent processOutputResult abort', () => {
       id: 'gate-agent',
       name: 'Gate Agent',
       instructions: 'test',
-      model: createModel() as LanguageModelV2,
+      model: createModel() as LanguageModelV4,
       memory,
       outputProcessors: [gate],
     });

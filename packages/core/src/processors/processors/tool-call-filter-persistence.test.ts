@@ -1,12 +1,12 @@
-import { stepCountIs } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
+import { stepCountIs } from '@internal/ai-v7';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events';
 import { loop } from '../../loop/loop';
-import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import type { MastraDBMessage } from '../../memory/types';
 import { InMemoryStore } from '../../storage';
 import { ProcessorRunner } from '../runner';
@@ -134,7 +134,7 @@ describe('ToolCallFilter does not persist its rewrites', () => {
         {
           id: 'test-model',
           maxRetries: 0,
-          model: new MastraLanguageModelV2Mock({
+          model: new MastraLanguageModelV4Mock({
             doStream: async ({ prompt }: { prompt: unknown }) => {
               promptsSeen.push(prompt);
               return {

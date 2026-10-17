@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { withMessageAuthor } from '../../agent-controller/message-author';
@@ -34,7 +34,7 @@ import {
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 function createTextStreamModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -60,7 +60,7 @@ function createBlockingFirstTextStreamModel(firstResponseText: string, laterResp
     releaseFirst = resolve;
   });
   let streamCount = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       streamCount += 1;
       const currentStreamCount = streamCount;
@@ -3253,7 +3253,7 @@ describe('Agent signals', () => {
     const senderRuntime = new AgentThreadStreamRuntime();
     let streamCount = 0;
     const createCountingModel = (responseText: string) =>
-      new MockLanguageModelV2({
+      new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -6792,7 +6792,7 @@ describe('Agent signals', () => {
       id: 'medium-summary-wake-agent',
       name: 'Medium Summary Wake Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -6954,7 +6954,7 @@ describe('Agent signals', () => {
       domains: { notifications },
     });
     const responseText = 'active response';
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         streamCount += 1;
         const currentStream = streamCount;
@@ -7052,7 +7052,7 @@ describe('Agent signals', () => {
       id: 'high-active-integration-agent',
       name: 'High Active Integration Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           const responseText = `response ${streamCount}`;
@@ -7167,7 +7167,7 @@ describe('Agent signals', () => {
       id: 'priority-dispatch-agent',
       name: 'Priority Dispatch Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -7256,7 +7256,7 @@ describe('Agent signals', () => {
       id: 'medium-active-dispatch-agent',
       name: 'Medium Active Dispatch Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           const responseText = `medium response ${streamCount}`;
@@ -7349,7 +7349,7 @@ describe('Agent signals', () => {
       id: 'low-priority-notification-agent',
       name: 'Low Priority Notification Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -7420,7 +7420,7 @@ describe('Agent signals', () => {
       id: 'inbox-read-delivery-agent',
       name: 'Inbox Read Delivery Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -7488,7 +7488,7 @@ describe('Agent signals', () => {
       id: 'inbox-read-already-delivered-agent',
       name: 'Inbox Read Already Delivered Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -7546,7 +7546,7 @@ describe('Agent signals', () => {
       id: 'no-subscriber-notification-agent',
       name: 'No Subscriber Notification Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -7590,7 +7590,7 @@ describe('Agent signals', () => {
       id: 'deferred-notification-agent',
       name: 'Deferred Notification Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -7692,7 +7692,7 @@ describe('Agent signals', () => {
     let streamCount = 0;
     const prompts: any[][] = [];
     const handledSignalMetadata: unknown[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         streamCount += 1;
         prompts.push(prompt);
@@ -8549,7 +8549,7 @@ describe('Agent signals', () => {
     });
     let streamCount = 0;
     const prompts: any[][] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         streamCount += 1;
         prompts.push(prompt);
@@ -8633,7 +8633,7 @@ describe('Agent signals', () => {
     });
     let streamCount = 0;
     const prompts: any[][] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         streamCount += 1;
         prompts.push(prompt);
@@ -8722,7 +8722,7 @@ describe('Agent signals', () => {
       releaseFirst = resolve;
     });
     const prompts: any[][] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt);
         const isFirst = prompts.length === 1;
@@ -9211,7 +9211,7 @@ describe('Agent signals', () => {
       id: 'share-signal-agent',
       name: 'Share Signal Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           const text = `signal response ${streamCount}`;
@@ -9389,7 +9389,7 @@ describe('Agent signals', () => {
       id: 'idle-persist-agent',
       name: 'Idle Persist Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           streamCount += 1;
           return {
@@ -9701,7 +9701,7 @@ describe('Agent signals', () => {
       id: 'active-discard-agent',
       name: 'Active Discard Agent',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           streamCount += 1;
           prompts.push(prompt);
@@ -10328,7 +10328,7 @@ describe('Agent signals', () => {
     it('serializes two concurrent agent.stream() calls on the same thread', async () => {
       let concurrent = 0;
       let maxConcurrent = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           concurrent += 1;
           maxConcurrent = Math.max(maxConcurrent, concurrent);
@@ -11310,7 +11310,7 @@ describe('Agent signals', () => {
     let streamCount = 0;
     const prompts: any[][] = [];
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         streamCount += 1;
         const callIndex = streamCount;
@@ -11473,7 +11473,7 @@ describe('Agent signals', () => {
       continueToToolCall = resolve;
     });
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         callCount += 1;
         const callIndex = callCount;
@@ -11583,7 +11583,7 @@ describe('Agent signals', () => {
     let providerAborted = false;
     const onAbort = vi.fn();
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt, abortSignal }) => {
         callCount += 1;
         const callIndex = callCount;
@@ -11683,7 +11683,7 @@ describe('Agent signals', () => {
     async type => {
       const prompts: any[][] = [];
 
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           prompts.push(prompt);
 
@@ -11811,7 +11811,7 @@ describe('Agent signals', () => {
     const prompts: any[][] = [];
     let callCount = 0;
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         callCount += 1;
         const callIndex = callCount;
@@ -11913,7 +11913,7 @@ describe('Agent signals', () => {
       id: 'cross-agent-a',
       name: 'Cross Agent A',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           firstStarted = true;
           return {
@@ -11948,7 +11948,7 @@ describe('Agent signals', () => {
       id: 'cross-agent-b',
       name: 'Cross Agent B',
       instructions: 'Test',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           secondStarted = true;
           return {
@@ -12176,7 +12176,7 @@ describe('Agent signals', () => {
       let streamCount = 0;
       const prompts: any[][] = [];
 
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           streamCount += 1;
           prompts.push(prompt);
@@ -12262,7 +12262,7 @@ describe('Agent signals', () => {
     'delivers idle %s context to the model and echoes it',
     async type => {
       let capturedPrompt: any[] | undefined;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           capturedPrompt = prompt;
           return {

@@ -20,7 +20,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 // The thread-stream runtime and this registry both read `MASTRA_SUSPENDED_RUN_TTL_MS`
 // (asserted in `mastra/internal-workflow-registry.test.ts`), so a single advance past
@@ -40,7 +40,7 @@ const findUser = vi.fn(async (input: { name: string }) => ({ name: input.name, e
 
 function createToolCallThenTextModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -78,7 +78,7 @@ function createToolCallThenTextModel() {
 }
 
 function createTextOnlyModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

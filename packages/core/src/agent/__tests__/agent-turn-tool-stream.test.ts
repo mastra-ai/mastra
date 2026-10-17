@@ -5,8 +5,8 @@
  *
  * Regression for https://github.com/mastra-ai/mastra/issues/26406
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -33,7 +33,7 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function createOneToolCallModel() {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       const parts =
@@ -70,7 +70,7 @@ function createOneToolCallModel() {
  */
 function createAbortOnSecondCallModel(abort: () => void) {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
       calls++;
       if (calls === 1) return createOneToolCallModel().doStream({} as any);
@@ -97,7 +97,7 @@ function createAbortOnSecondCallModel(abort: () => void) {
   });
 }
 
-function createQuietAgent(id: string, model: MockLanguageModelV2 = createOneToolCallModel()) {
+function createQuietAgent(id: string, model: MockLanguageModelV4 = createOneToolCallModel()) {
   const quiet = createTool({
     id: 'quiet',
     description: 'Does not stream anything',
@@ -108,7 +108,7 @@ function createQuietAgent(id: string, model: MockLanguageModelV2 = createOneTool
     id,
     name: id,
     instructions: 'Call the tool',
-    model: model as LanguageModelV2,
+    model: model as LanguageModelV4,
     tools: { quiet },
   });
 }

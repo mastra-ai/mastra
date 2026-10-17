@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
 import type { ModelManagerModelConfig } from '../stream/types';
@@ -34,7 +34,7 @@ describe('modelSettings.timeout drives model fallback', () => {
     const stalling: ModelManagerModelConfig = {
       id: 'stalling-before-content',
       maxRetries: 0,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]).pipeThrough(
             new TransformStream({
@@ -51,7 +51,7 @@ describe('modelSettings.timeout drives model fallback', () => {
     const working: ModelManagerModelConfig = {
       id: 'working-after-first-content-timeout',
       maxRetries: 0,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: 'text-1' },
@@ -82,7 +82,7 @@ describe('modelSettings.timeout drives model fallback', () => {
       id: 'delayed-with-step-override',
       maxRetries: 0,
       modelSettings: { timeout: { stepMs: 500 } },
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: new ReadableStream({
             async start(controller) {
@@ -102,7 +102,7 @@ describe('modelSettings.timeout drives model fallback', () => {
     const working: ModelManagerModelConfig = {
       id: 'working-after-merged-timeout',
       maxRetries: 0,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: 'text-2' },
@@ -136,7 +136,7 @@ describe('modelSettings.timeout drives model fallback', () => {
       id: 'invalid-timeout',
       maxRetries: 0,
       modelSettings: { timeout } as any,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           throw new Error('invalid model should not run');
         },
@@ -145,7 +145,7 @@ describe('modelSettings.timeout drives model fallback', () => {
     const fallbackModel: ModelManagerModelConfig = {
       id: 'fallback',
       maxRetries: 0,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([{ type: 'finish', finishReason: 'stop', usage: testUsage }]),
         }),
@@ -169,13 +169,13 @@ describe('modelSettings.timeout drives model fallback', () => {
     const stalling: ModelManagerModelConfig = {
       id: 'stalling',
       maxRetries: 0,
-      model: new MockLanguageModelV2({ doStream: () => new Promise(() => {}) }),
+      model: new MockLanguageModelV4({ doStream: () => new Promise(() => {}) }),
     };
 
     const working: ModelManagerModelConfig = {
       id: 'working',
       maxRetries: 0,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: 'text-1' },

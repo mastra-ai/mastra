@@ -100,7 +100,6 @@ describe('handleWorkflowStream', () => {
       mastra: mockMastra as any,
       workflowId: 'test-workflow',
       params: { runId: 'test-run', inputData: { foo: 'bar' } },
-      version: 'v7',
     });
 
     const chunks: any[] = [];

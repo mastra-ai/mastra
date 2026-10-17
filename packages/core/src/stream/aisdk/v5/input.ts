@@ -1,6 +1,6 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import type { IdGenerator } from '@internal/ai-sdk-v5';
-import { generateId as defaultGenerateId } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import type { IdGenerator } from '@internal/ai-v7';
+import { generateId as defaultGenerateId } from '@internal/ai-v7';
 import type { RegisteredLogger } from '../../../logger';
 import { safeEnqueue, MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';
@@ -38,7 +38,7 @@ export class AISDKV5InputStream extends MastraModelInput {
     controller,
   }: {
     runId: string;
-    stream: ReadableStream<LanguageModelV2StreamPart>;
+    stream: ReadableStream<LanguageModelV4StreamPart>;
     controller: ReadableStreamDefaultController<ChunkType>;
   }) {
     // Map numeric IDs to unique IDs for uniqueness across steps.

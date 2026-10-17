@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { coreFeatures } from '../../../features';
@@ -35,7 +35,7 @@ describe('execute structured output prompt handling', () => {
 
   it('injects direct structured output schema into the leading system message for boolean and system modes', async () => {
     const capturedPrompts: unknown[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }: any) => {
         capturedPrompts.push(prompt);
         return {
@@ -79,7 +79,7 @@ describe('execute structured output prompt handling', () => {
   it('injects direct structured output schema into the latest user message for inline mode', async () => {
     let capturedPrompt: unknown;
     let capturedResponseFormat: unknown;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt, responseFormat }: any) => {
         capturedPrompt = prompt;
         capturedResponseFormat = responseFormat;
@@ -132,7 +132,7 @@ describe('execute structured output prompt handling', () => {
 
   it('adds a user message for inline mode when no user message exists', async () => {
     let capturedPrompt: unknown;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }: any) => {
         capturedPrompt = prompt;
         return {
@@ -171,7 +171,7 @@ describe('execute structured output prompt handling', () => {
   });
   it('does not inject processor schema instructions into the main prompt when useAgent is enabled', async () => {
     let capturedPrompt: unknown;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }: any) => {
         capturedPrompt = prompt;
         return {
@@ -213,7 +213,7 @@ describe('execute structured output prompt handling', () => {
 
   it('injects processor schema instructions into the main prompt when useAgent is disabled', async () => {
     let capturedPrompt: unknown;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }: any) => {
         capturedPrompt = prompt;
         return {
@@ -257,7 +257,7 @@ describe('execute structured output prompt handling', () => {
     [true, true],
   ])('processor mode with jsonPromptInjection: %s injects schema hint: %s', async (jsonPromptInjection, injects) => {
     let capturedPrompt: unknown;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }: any) => {
         capturedPrompt = prompt;
         return {
@@ -308,7 +308,7 @@ describe('execute compact structuredOutput.instructions (issue #23798)', () => {
 
   function makeCapturingModel() {
     const captured: { prompt?: any } = {};
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }: any) => {
         captured.prompt = prompt;
         return {
@@ -475,7 +475,7 @@ describe('execute compact structuredOutput.instructions (issue #23798)', () => {
 describe('execute sampling-param stripping (issue #23319)', () => {
   function makeCapturingModel(provider: string, modelId: string) {
     const captured: { options?: any } = {};
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       provider,
       modelId,
       doStream: async (options: any) => {
@@ -498,7 +498,7 @@ describe('execute sampling-param stripping (issue #23319)', () => {
     return { model, captured };
   }
 
-  async function run(model: MockLanguageModelV2) {
+  async function run(model: MockLanguageModelV4) {
     const stream = execute({
       runId: 'test-run-id-strip',
       model: model as any,
@@ -544,7 +544,7 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
 
   function makeCapturingModel(provider: string, supportsStructuredOutputs?: boolean) {
     const captured: { options?: any } = {};
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       provider,
       modelId: 'gpt-4o',
       doStream: async (options: any) => {
@@ -571,7 +571,7 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
   }
 
   async function run(
-    model: MockLanguageModelV2,
+    model: MockLanguageModelV4,
     options: { providerOptions?: Record<string, any>; jsonPromptInjection?: boolean; schema?: any } = {},
   ) {
     const stream = execute({
@@ -747,7 +747,7 @@ describe("execute toolChoice 'none' (issue #25908)", () => {
 
   async function captureCallOptions(structuredOutput?: Parameters<typeof execute>[0]['structuredOutput']) {
     let captured: any;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async (options: any) => {
         captured = options;
         return {

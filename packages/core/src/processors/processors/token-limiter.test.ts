@@ -1,5 +1,5 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { TextPart } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import type { TextPart } from '@internal/ai-v7';
 import { estimateTokenCount } from 'tokenx';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -575,7 +575,7 @@ describe('TokenLimiterProcessor', () => {
 
     it('should count provider tool-result messages with one message overhead', () => {
       processor = new TokenLimiterProcessor({ limit: 100 });
-      const message: LanguageModelV2Prompt[number] = {
+      const message: LanguageModelV4Prompt[number] = {
         role: 'tool',
         content: [
           {
@@ -935,7 +935,7 @@ describe('TokenLimiterProcessor', () => {
       messageList: MessageList,
       systemMessages: Array<{ role: 'system'; content: string }> = [],
     ) => {
-      const prompt = [...systemMessages, ...(await messageList.get.all.aiV5.llmPrompt())] as LanguageModelV2Prompt;
+      const prompt = [...systemMessages, ...(await messageList.get.all.aiSdk.llmPrompt())] as LanguageModelV4Prompt;
 
       return limiter.processLLMRequest({
         prompt,
@@ -1422,8 +1422,8 @@ describe('TokenLimiterProcessor', () => {
           role: 'system' as const,
           content: typeof message.content === 'string' ? message.content : '',
         })),
-        ...(await messageList.get.all.aiV5.llmPrompt()),
-      ] as LanguageModelV2Prompt;
+        ...(await messageList.get.all.aiSdk.llmPrompt()),
+      ] as LanguageModelV4Prompt;
 
       await expect(
         limiter.processLLMRequest({ prompt, model: createMockModel(), stepNumber: 1, steps: [], state: {} }),

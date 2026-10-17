@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -13,7 +13,7 @@ import { globalRunRegistry } from '../run-registry';
 const sensitiveText = 'card: 4111-1111-1111-1111';
 
 function createModel(deltas: string[] = [sensitiveText]) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -50,7 +50,7 @@ describe('durable output processor errors', () => {
         id: `output-processor-error-${engine}`,
         name: `Output Processor Error ${engine}`,
         instructions: 'You are a test agent.',
-        model: createModel() as LanguageModelV2,
+        model: createModel() as LanguageModelV4,
         outputProcessors: [
           {
             id: 'throwing-redactor',
@@ -97,7 +97,7 @@ describe('durable output processor errors', () => {
       id: 'output-processor-error-regular-step-finish',
       name: 'Output Processor Error Regular Step Finish',
       instructions: 'You are a test agent.',
-      model: createModel(['hello']) as LanguageModelV2,
+      model: createModel(['hello']) as LanguageModelV4,
       outputProcessors: [
         {
           id: 'throwing-processor',
@@ -146,7 +146,7 @@ describe('durable output processor errors', () => {
         id: `output-processor-error-${engine}-${chunkType}`,
         name: `Output Processor Error ${engine} ${chunkType}`,
         instructions: 'You are a test agent.',
-        model: createModel(['hello']) as LanguageModelV2,
+        model: createModel(['hello']) as LanguageModelV4,
         outputProcessors: [
           {
             id: 'throwing-processor',
@@ -204,7 +204,7 @@ describe('durable output processor errors', () => {
         id: `output-processor-block-${engine}`,
         name: `Output Processor Block ${engine}`,
         instructions: 'You are a test agent.',
-        model: createModel(['hello ', 'SECRET ', 'after']) as LanguageModelV2,
+        model: createModel(['hello ', 'SECRET ', 'after']) as LanguageModelV4,
         outputProcessors: [
           {
             id: 'guard',
@@ -254,7 +254,7 @@ describe('durable output processor errors', () => {
       id: 'output-processor-error-memory',
       name: 'Output Processor Error Memory',
       instructions: 'You are a test agent.',
-      model: createModel(['hello ', sensitiveText]) as LanguageModelV2,
+      model: createModel(['hello ', sensitiveText]) as LanguageModelV4,
       memory,
       outputProcessors: [
         {

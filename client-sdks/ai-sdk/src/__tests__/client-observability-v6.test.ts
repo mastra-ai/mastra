@@ -7,9 +7,9 @@
  * Request 2: client returns tool output with buffered OTLP in toolMetadata →
  *   Agent must forward payload to ClientObservabilityProxy.receive and strip metadata.
  */
-import type { UIMessage } from '@internal/ai-v6';
-import { convertArrayToReadableStream, MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessage } from '@mastra/core/ai';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { ChunkFrom } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
@@ -80,7 +80,7 @@ describe('handleChatStream v6 client observability', () => {
     const stream = await handleChatStream({
       mastra: mockMastra as any,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: {
         messages: [
           {
@@ -117,7 +117,7 @@ describe('handleChatStream v6 client observability', () => {
     };
 
     let callCount = 0;
-    const model = new MockLanguageModelV3({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -200,7 +200,7 @@ describe('handleChatStream v6 client observability', () => {
     const stream1 = await handleChatStream({
       mastra,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages: [userMessage] },
     });
     const chunks1 = await collectStreamChunks(stream1);
@@ -233,7 +233,7 @@ describe('handleChatStream v6 client observability', () => {
     const stream2 = await handleChatStream({
       mastra,
       agentId: 'test-agent',
-      version: 'v6',
+
       params: { messages: continuationMessages },
     });
     await collectStreamChunks(stream2);

@@ -1,7 +1,7 @@
 import { ChunkFrom } from '@mastra/core/stream';
 import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { toAISdkV5Stream } from '../convert-streams';
+import { toAISdkStream } from '../convert-streams';
 
 describe('tool-call-resumed (#24280)', () => {
   it('maps to a data-tool-call-suspended part with the same id and resumed: true', async () => {
@@ -31,7 +31,7 @@ describe('tool-call-resumed (#24280)', () => {
     });
 
     const parts: any[] = [];
-    for await (const part of toAISdkV5Stream(stream as unknown as MastraModelOutput, { from: 'agent' })) {
+    for await (const part of toAISdkStream(stream as unknown as MastraModelOutput, { from: 'agent' })) {
       parts.push(part);
     }
 
@@ -66,7 +66,7 @@ describe('tool-call-resumed (#24280)', () => {
     });
 
     const parts: any[] = [];
-    for await (const part of toAISdkV5Stream(stream as unknown as MastraModelOutput, { from: 'agent' })) {
+    for await (const part of toAISdkStream(stream as unknown as MastraModelOutput, { from: 'agent' })) {
       parts.push(part);
     }
 

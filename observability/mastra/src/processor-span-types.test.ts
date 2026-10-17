@@ -8,8 +8,8 @@
  * These drive a real Agent through the processor runner and assert on exported
  * spans, so they cover the runner wiring rather than the declarations alone.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
@@ -55,7 +55,7 @@ class SpanCollector implements ObservabilityExporter {
 }
 
 function createMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text', text: 'Mock response' }],
       finishReason: 'stop' as const,

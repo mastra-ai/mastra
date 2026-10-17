@@ -29,7 +29,7 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
 }
 
 type ProviderTool = {
-  type: 'provider-defined' | 'provider';
+  type: 'provider';
   id: string;
   args?: Record<string, unknown>;
   inputSchema?: unknown;
@@ -49,7 +49,7 @@ type ProviderTool = {
 export function isProviderDefinedTool(tool: unknown): tool is ProviderTool {
   if (typeof tool !== 'object' || tool === null) return false;
   const t = tool as Record<string, unknown>;
-  const isProviderType = t.type === 'provider-defined' || t.type === 'provider';
+  const isProviderType = t.type === 'provider';
   return isProviderType && typeof t.id === 'string';
 }
 

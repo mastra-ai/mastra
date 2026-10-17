@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { APICallError, UnsupportedFunctionalityError } from '@ai-sdk/provider-v5';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError, UnsupportedFunctionalityError } from '@ai-sdk/provider';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../agent';
@@ -18,11 +18,11 @@ const MEMORY = { thread: 'unsupported-file-thread', resource: 'unsupported-file-
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
-type Rejection = (prompt: LanguageModelV2Prompt) => Error | undefined;
+type Rejection = (prompt: LanguageModelV4Prompt) => Error | undefined;
 
-const userFileParts = (prompt: LanguageModelV2Prompt) =>
+const userFileParts = (prompt: LanguageModelV4Prompt) =>
   prompt.flatMap(message => (message.role === 'user' ? message.content : [])).filter(part => part.type === 'file');
-const userTexts = (prompt: LanguageModelV2Prompt) =>
+const userTexts = (prompt: LanguageModelV4Prompt) =>
   prompt
     .flatMap(message => (message.role === 'user' ? message.content : []))
     .flatMap(part => (part.type === 'text' ? [part.text] : []));
@@ -38,13 +38,13 @@ const rejectsTypes =
   };
 
 function createModel(reject: Rejection) {
-  const prompts: LanguageModelV2Prompt[] = [];
-  const check = (prompt: LanguageModelV2Prompt) => {
+  const prompts: LanguageModelV4Prompt[] = [];
+  const check = (prompt: LanguageModelV4Prompt) => {
     prompts.push(prompt);
     const error = reject(prompt);
     if (error) throw error;
   };
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
       check(prompt);
       return { content: [{ type: 'text', text: 'ok' }], finishReason: 'stop', usage, warnings: [] };

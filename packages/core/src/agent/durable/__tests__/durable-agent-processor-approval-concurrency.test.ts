@@ -17,8 +17,8 @@
  * the approvals sequentially to a terminal result.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -49,7 +49,7 @@ function createApprovalToolInjector(tool: unknown) {
  * replay after a suspension re-derives the identical batch.
  */
 function makeParallelCallModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasEchoResult = JSON.stringify(prompt).includes('echoed');
       if (hasEchoResult) {
@@ -129,7 +129,7 @@ describe('durable processor-injected approval tool concurrency', () => {
       id: 'processorApprovalAgent',
       name: 'processorApprovalAgent',
       instructions: 'Call the echo tool twice in parallel.',
-      model: makeParallelCallModel() as LanguageModelV2,
+      model: makeParallelCallModel() as LanguageModelV4,
       inputProcessors: [createApprovalToolInjector(approvalEcho)],
       memory: mockMemory,
     });

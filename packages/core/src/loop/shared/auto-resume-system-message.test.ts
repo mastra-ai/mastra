@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import {
@@ -27,7 +27,7 @@ function makeAssistantMessage(overrides: {
   } as unknown as MastraDBMessage;
 }
 
-const baseInputMessages: LanguageModelV2Prompt = [
+const baseInputMessages: LanguageModelV4Prompt = [
   { role: 'system', content: 'You are helpful.' },
   { role: 'user', content: [{ type: 'text', text: 'hi' }] },
 ];
@@ -195,7 +195,7 @@ describe('appendSuffixToLeadingSystemMessage', () => {
   });
 
   it('does not append when first message is not a system message', () => {
-    const promptWithoutSystem: LanguageModelV2Prompt = [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }];
+    const promptWithoutSystem: LanguageModelV4Prompt = [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }];
     const result = appendSuffixToLeadingSystemMessage(promptWithoutSystem, '\nEXTRA');
     expect(result).toEqual(promptWithoutSystem);
   });

@@ -9,7 +9,7 @@
  * fresh process) and requires the run to finish.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
@@ -146,7 +146,7 @@ const finish = (finishReason: string, usage: TestUsage) => ({ type: 'finish', fi
 // Decides from the transcript, so a recovered process makes the same call the
 // original process made for the same history: two tool rounds, then text.
 function createModel(usages: TestUsage[] = [completeUsage, completeUsage, completeUsage]) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const answered = prompt.filter(m => m.role === 'tool').flatMap(m => m.content).length;
       const parts =

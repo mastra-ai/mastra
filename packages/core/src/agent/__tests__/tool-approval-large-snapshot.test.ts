@@ -20,7 +20,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows/types';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const executedCalls: string[] = [];
 
@@ -40,7 +40,7 @@ function createApprovalTool() {
 /** One approval-gated tool call on the first turn, then a final text answer. */
 function createApprovalModel(toolCallId = 'call-1') {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {

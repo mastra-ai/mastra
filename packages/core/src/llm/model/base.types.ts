@@ -1,6 +1,6 @@
 import type {
   UIMessage,
-  CoreMessage,
+  ModelMessage as CoreMessage,
   GenerateTextResult as OriginalGenerateTextResult,
   GenerateObjectResult as OriginalGenerateObjectResult,
   StreamTextResult as OriginalStreamTextResult,
@@ -10,13 +10,15 @@ import type {
   streamText,
   streamObject,
   StreamObjectOnFinishCallback as OriginalStreamObjectOnFinishCallback,
-  StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
-  StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
+  StreamTextOnEndCallback as OriginalStreamTextOnFinishCallback,
+  GenerateTextOnStepEndCallback as OriginalStreamTextOnStepFinishCallback,
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
   Tool,
   ToolSet,
+  Context,
+  OutputInterface,
   DeepPartial,
-} from '@internal/ai-sdk-v5';
+} from '@internal/ai-v7';
 import type { JSONSchema7 } from 'json-schema';
 import type { MessageList } from '../../agent/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
@@ -26,7 +28,7 @@ import type { RequestContext } from '../../request-context';
 import type { ZodSchema } from '../../schema';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
-export type { ToolSet } from '@internal/ai-sdk-v5';
+export type { ToolSet } from '@internal/ai-v7';
 
 type MastraCustomLLMOptions = ObservabilityContext & {
   tools?: Record<string, Tool>;
@@ -94,7 +96,7 @@ export type ScoringData = {
 export type OriginalGenerateTextOptions<
   TOOLS extends ToolSet,
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = Parameters<typeof generateText<TOOLS, inferOutput<Output>, DeepPartial<inferOutput<Output>>>>[0];
+> = Parameters<typeof generateText<TOOLS, Context, OutputInterface>>[0];
 type GenerateTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
   OriginalGenerateTextOptions<Tools, Output>,
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish'
@@ -115,7 +117,7 @@ export type GenerateTextWithMessagesArgs<
 export type GenerateTextResult<
   Tools extends ToolSet,
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = Omit<OriginalGenerateTextResult<Tools, inferOutput<Output>>, 'experimental_output'> & {
+> = Omit<OriginalGenerateTextResult<Tools, Context, OutputInterface>, 'experimental_output'> & {
   object?: Output extends undefined ? never : inferOutput<Output>;
   messageList?: MessageList;
 } & TripwireProperties &
@@ -155,7 +157,7 @@ export type GenerateReturn<
 export type OriginalStreamTextOptions<
   TOOLS extends ToolSet,
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = Parameters<typeof streamText<TOOLS, inferOutput<Output>, DeepPartial<inferOutput<Output>>>>[0];
+> = Parameters<typeof streamText<TOOLS, Context, OutputInterface>>[0];
 type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
   OriginalStreamTextOptions<Tools, Output>,
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish' | 'onFinish'
@@ -177,7 +179,7 @@ export type StreamTextWithMessagesArgs<
 export type StreamTextResult<
   Tools extends ToolSet,
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = Omit<OriginalStreamTextResult<Tools, DeepPartial<inferOutput<Output>>>, 'experimental_output'> & {
+> = Omit<OriginalStreamTextResult<Tools, Context, OutputInterface>, 'experimental_output'> & {
   object?: inferOutput<Output>;
 } & TripwireProperties &
   TracingProperties;

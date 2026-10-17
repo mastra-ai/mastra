@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
-import { MockLanguageModelV2 } from './mock-model';
+import { MockLanguageModelV4 } from './mock-model';
 
 /**
  * Tests for the AGENT_RESUME_NO_SNAPSHOT_FOUND error.
@@ -18,7 +18,7 @@ import { MockLanguageModelV2 } from './mock-model';
  */
 
 function createMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

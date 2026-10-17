@@ -410,7 +410,8 @@ export async function getAgentCardByIdHandler({
     skills: Object.entries(tools).map(([toolId, tool]) => ({
       id: toolId,
       name: toolId,
-      description: ('description' in tool && tool.description) || `Tool: ${toolId}`,
+      description:
+        ('description' in tool && typeof tool.description === 'string' && tool.description) || `Tool: ${toolId}`,
       // Optional fields
       tags: ['tool'],
     })),

@@ -10,9 +10,9 @@
  * Does NOT test through the processor or agent integration layer.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { createObservabilityContext } from '@mastra/core/observability';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
@@ -164,7 +164,7 @@ function createMockObserverModel(
 Continue helping the user
 </suggested-response>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -203,7 +203,7 @@ function createMockReflectorModel(
 * Condensed: User and assistant had a productive conversation about testing
 </observations>`;
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -646,7 +646,7 @@ name: Tyler
     });
 
     it('should call onObservationEnd even if observer fails', async () => {
-      const failingModel = new MockLanguageModelV2({
+      const failingModel = new MockLanguageModelV4({
         doGenerate: async () => {
           throw new Error('Observer failed');
         },
@@ -678,7 +678,7 @@ name: Tyler
     });
 
     it('reports the swallowed failure to onObservationEnd under failurePolicy continue', async () => {
-      const failingModel = new MockLanguageModelV2({
+      const failingModel = new MockLanguageModelV4({
         doGenerate: async () => {
           throw new TypeError('fetch failed');
         },
@@ -881,7 +881,7 @@ name: Tyler
 
   describe('transform hooks', () => {
     /** Serialize every prompt the mock model received so we can assert on its contents. */
-    function capturePrompts(model: MockLanguageModelV2) {
+    function capturePrompts(model: MockLanguageModelV4) {
       const doGenerate = vi.spyOn(model, 'doGenerate');
       const doStream = vi.spyOn(model, 'doStream');
       return () => JSON.stringify([...doGenerate.mock.calls, ...doStream.mock.calls].map(call => call[0]?.prompt));
@@ -2650,7 +2650,7 @@ describe('reflect()', () => {
   });
 
   it('should handle reflector failure gracefully', async () => {
-    const failingReflector = new MockLanguageModelV2({
+    const failingReflector = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Reflector failed');
       },
@@ -4672,7 +4672,7 @@ describe('config-level hooks', () => {
   });
 
   it('reports failed async-buffered cycles through onObservationEnd.error instead of swallowing them', async () => {
-    const failingModel = new MockLanguageModelV2({
+    const failingModel = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new Error('Observer failed');
       },

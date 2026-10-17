@@ -1,4 +1,4 @@
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@mastra/core/ai';
 import { describe, expect, it } from 'vitest';
 
 import { isContextOverflowError } from '../context-overflow';

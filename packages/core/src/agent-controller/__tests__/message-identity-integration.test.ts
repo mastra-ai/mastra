@@ -4,7 +4,7 @@
  * live transcript against refetched history by id — two ids for one turn
  * render the turn twice (doubled assistant bubble after an SSE reconnect).
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -21,7 +21,7 @@ import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
 
 function createTextStreamModel(responseText: string, identity: { provider?: string; modelId?: string } = {}) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     ...identity,
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -43,7 +43,7 @@ function createTextStreamModel(responseText: string, identity: { provider?: stri
 }
 
 function createToolCallModel(identity: { provider: string; modelId: string }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     ...identity,
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -65,7 +65,7 @@ function createToolCallModel(identity: { provider: string; modelId: string }) {
 }
 
 function createFailingModel(identity: { provider: string; modelId: string }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     ...identity,
     doStream: async () => {
       throw new Error('rate limited');
@@ -74,7 +74,7 @@ function createFailingModel(identity: { provider: string; modelId: string }) {
 }
 
 function createModelStoppedMidReply(identity: { provider: string; modelId: string }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     ...identity,
     doStream: async ({ abortSignal }) => ({
       rawCall: { rawPrompt: null, rawSettings: {} },

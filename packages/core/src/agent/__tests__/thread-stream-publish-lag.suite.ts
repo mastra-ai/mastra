@@ -20,7 +20,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 import { nextTicks } from './thread-stream-test-utils';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -51,7 +51,7 @@ function streamOf(parts: any[]) {
  * `beforeAnswer` holds step 2 back.
  */
 function model(tool: string, beforeAnswer?: Promise<void>, siblings = false) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       if (!JSON.stringify(prompt).includes('"type":"tool-result"')) {
         return streamOf([

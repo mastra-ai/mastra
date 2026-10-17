@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
@@ -20,7 +20,7 @@ import type { ToolsInput } from '../types';
  */
 describe('Working memory tool context propagation', () => {
   function getToolNames(
-    tools: Parameters<NonNullable<ConstructorParameters<typeof MockLanguageModelV2>[0]>['doStream']>[0]['tools'],
+    tools: Parameters<NonNullable<ConstructorParameters<typeof MockLanguageModelV4>[0]>['doStream']>[0]['tools'],
   ) {
     return (tools ?? []).map(t => t.name);
   }
@@ -31,7 +31,7 @@ describe('Working memory tool context propagation', () => {
 
   function createMockModelWithWorkingMemoryToolCall() {
     let callCount = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async ({ tools }) => {
         callCount++;
 
@@ -102,7 +102,7 @@ describe('Working memory tool context propagation', () => {
   }
 
   function createSimpleMockModel(onTools?: (toolNames: string[]) => void) {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async ({ tools }) => {
         onTools?.(getToolNames(tools));
         return {
@@ -125,7 +125,7 @@ describe('Working memory tool context propagation', () => {
     });
   }
 
-  async function createAgentWithThread(mockModel: MockLanguageModelV2, opts?: { tools?: ToolsInput }) {
+  async function createAgentWithThread(mockModel: MockLanguageModelV4, opts?: { tools?: ToolsInput }) {
     const mockMemory = new MockMemory({
       enableWorkingMemory: true,
       workingMemoryTemplate: `# Notes\n- **Key**:\n- **Value**:\n`,
@@ -213,7 +213,7 @@ describe('Working memory tool context propagation', () => {
     });
 
     let modelCallCount = 0;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ tools }) => {
         modelCallCount++;
 

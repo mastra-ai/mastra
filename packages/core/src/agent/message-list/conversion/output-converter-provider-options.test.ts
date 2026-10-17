@@ -40,7 +40,7 @@ describe('aiV5UIMessagesToAIV5ModelMessages — message-level providerOptions', 
     };
     messageList.add(cachedUserMessage, 'input');
 
-    const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+    const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const lastUser = [...llmPrompt].reverse().find((m: any) => m.role === 'user');
     expect(lastUser?.providerOptions).toEqual({
@@ -79,7 +79,7 @@ describe('aiV5UIMessagesToAIV5ModelMessages — message-level providerOptions', 
     };
     messageList.add(assistantWithTool, 'memory');
 
-    const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+    const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const assistantMsg = llmPrompt.find((m: any) => m.role === 'assistant');
     expect(assistantMsg?.providerOptions).toEqual({

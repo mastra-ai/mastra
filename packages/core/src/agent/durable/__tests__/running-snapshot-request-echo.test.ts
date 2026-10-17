@@ -5,8 +5,8 @@
  * wrap the whole LLM step output under `llmOutput`, which kept two more copies
  * of it per step and re-wrote them on every persist (issue #26462).
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -22,7 +22,7 @@ const TOOL_STEPS = 2;
 
 function createToolCallingModel() {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       const finishWithText = call > TOOL_STEPS;
@@ -67,7 +67,7 @@ describe('durable agent running snapshots (issue #26462)', () => {
       id: 'request-echo-agent',
       name: 'request-echo-agent',
       instructions: 'Call the noop tool, then answer.',
-      model: createToolCallingModel() as LanguageModelV2,
+      model: createToolCallingModel() as LanguageModelV4,
       tools: {
         noop: createTool({
           id: 'noop',

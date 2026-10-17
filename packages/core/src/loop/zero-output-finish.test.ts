@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { Mastra } from '../mastra';
@@ -62,7 +62,7 @@ describe('zero-output finishReason "other"', () => {
   const zeroOutputOtherModel = (): ModelManagerModelConfig => ({
     id: 'zero-output-other',
     maxRetries: 0,
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([{ type: 'finish', finishReason: 'other', usage: testUsage }]),
       }),
@@ -93,7 +93,7 @@ describe('zero-output finishReason "other"', () => {
       const model: ModelManagerModelConfig = {
         id: `text-then-${finishReason}`,
         maxRetries: 0,
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => {
             call++;
             return {
@@ -126,7 +126,7 @@ describe('zero-output finishReason "other"', () => {
     const model: ModelManagerModelConfig = {
       id: 'other-with-tool-call',
       maxRetries: 0,
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           call++;
           return {

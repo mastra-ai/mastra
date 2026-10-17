@@ -6,7 +6,7 @@
  *   1. Inline-only agents (no workspace)
  *   2. Agents with both inline skills and workspace skills (merge path)
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeWithContext, initContextStorage } from '../../observability/context-storage';
@@ -84,7 +84,7 @@ function getSystemMessages(prompt: unknown): string[] {
 // =============================================================================
 
 describe('Agent-level skills wiring', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
   let capturedTools: unknown;
   let capturedPrompt: unknown;
 
@@ -92,7 +92,7 @@ describe('Agent-level skills wiring', () => {
     capturedTools = undefined;
     capturedPrompt = undefined;
 
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt, tools }) => {
         capturedTools = tools;
         capturedPrompt = prompt;

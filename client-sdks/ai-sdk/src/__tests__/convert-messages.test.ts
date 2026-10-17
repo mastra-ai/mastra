@@ -1,12 +1,10 @@
-import type { UIMessage as UIMessageV5 } from '@internal/ai-sdk-v5';
-import type { UIMessage as UIMessageV6 } from '@internal/ai-v6';
-import type { UIMessage as UIMessageV7 } from '@internal/ai-v7';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent/message-list';
+import type { UIMessage as UIMessageV5, UIMessage as UIMessageV6, UIMessage as UIMessageV7 } from '@mastra/core/ai';
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { toAISdkMessages, toAISdkV5Messages } from '../convert-messages';
-import { toAISdkV5Stream } from '../convert-streams';
+import { toAISdkMessages } from '../convert-messages';
+import { toAISdkStream } from '../convert-streams';
 
 describe('toAISdkFormat', () => {
   const sampleMessages: MastraDBMessage[] = [
@@ -24,9 +22,9 @@ describe('toAISdkFormat', () => {
     },
   ];
 
-  describe('toAISdkV5Messages', () => {
+  describe('toAISdkMessages', () => {
     it('should convert Mastra V2 messages to AI SDK V5 UI format', () => {
-      const result = toAISdkV5Messages(sampleMessages);
+      const result = toAISdkMessages(sampleMessages);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toHaveProperty('id', 'msg-1');
@@ -36,12 +34,12 @@ describe('toAISdkFormat', () => {
     });
 
     it('should handle empty array', () => {
-      const result = toAISdkV5Messages([]);
+      const result = toAISdkMessages([]);
       expect(result).toEqual([]);
     });
 
     it('should keep system reminders out of UI-facing v5 conversions', () => {
-      const result = toAISdkV5Messages([
+      const result = toAISdkMessages([
         {
           id: 'msg-reminder',
           role: 'user',
@@ -67,37 +65,35 @@ describe('toAISdkFormat', () => {
       const result = toAISdkMessages(sampleMessages);
 
       expectTypeOf(result).toEqualTypeOf<UIMessageV5[]>();
-      expect(result).toEqual(toAISdkV5Messages(sampleMessages));
+      expect(result).toEqual(toAISdkMessages(sampleMessages));
     });
 
     it('should support AI SDK V6 UI message types when version is v6', () => {
-      const result = toAISdkMessages(sampleMessages, { version: 'v6' });
+      const result = toAISdkMessages(sampleMessages, {});
 
       expectTypeOf(result).toEqualTypeOf<UIMessageV6[]>();
-      expect(result).toEqual(new MessageList().add(sampleMessages, 'memory').get.all.aiV6.ui());
+      expect(result).toEqual(new MessageList().add(sampleMessages, 'memory').get.all.aiSdk.ui());
     });
 
     it('should support AI SDK V7 UI message types when version is v7', () => {
-      const result = toAISdkMessages(sampleMessages, { version: 'v7' });
+      const result = toAISdkMessages(sampleMessages, {});
 
       expectTypeOf(result).toEqualTypeOf<UIMessageV7[]>();
-      expect(result).toEqual(new MessageList().add(sampleMessages, 'memory').get.all.aiV7.ui());
+      expect(result).toEqual(new MessageList().add(sampleMessages, 'memory').get.all.aiSdk.ui());
     });
 
     it('should produce the same messages for v6 and v7', () => {
-      expect(toAISdkMessages(sampleMessages, { version: 'v7' })).toEqual(
-        toAISdkMessages(sampleMessages, { version: 'v6' }),
-      );
+      expect(toAISdkMessages(sampleMessages, {})).toEqual(toAISdkMessages(sampleMessages, {}));
     });
 
     it('should handle empty arrays for all versions', () => {
       expect(toAISdkMessages([])).toEqual([]);
-      expect(toAISdkMessages([], { version: 'v6' })).toEqual([]);
-      expect(toAISdkMessages([], { version: 'v7' })).toEqual([]);
+      expect(toAISdkMessages([], {})).toEqual([]);
+      expect(toAISdkMessages([], {})).toEqual([]);
     });
   });
 
-  describe('toAISdkV5Stream error handling', () => {
+  describe('toAISdkStream error handling', () => {
     it('should preserve error message details when converting agent stream', async () => {
       const errorMessage =
         'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits';
@@ -128,7 +124,7 @@ describe('toAISdkFormat', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
 
       const errorChunks: any[] = [];
 
@@ -149,7 +145,7 @@ describe('toAISdkFormat', () => {
     });
   });
 
-  describe('toAISdkV5Stream tripwire handling', () => {
+  describe('toAISdkStream tripwire handling', () => {
     it('should send finish event with finishReason "other" when tripwire occurs and stream does not exit gracefully', async () => {
       const tripwireReason = 'Content filter triggered';
 
@@ -175,7 +171,7 @@ describe('toAISdkFormat', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
         from: 'agent',
         sendFinish: true,
       });
@@ -246,7 +242,7 @@ describe('toAISdkFormat', () => {
         },
       });
 
-      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+      const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
         from: 'agent',
         sendFinish: true,
       });

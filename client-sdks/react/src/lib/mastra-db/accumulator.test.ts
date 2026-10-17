@@ -1640,7 +1640,7 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     const user = out.find(m => m.role === 'user');
     expect(user).toBeDefined();
 
-    const uiMessages = new MessageList().add([user!], 'memory').get.all.aiV6.ui();
+    const uiMessages = new MessageList().add([user!], 'memory').get.all.aiSdk.ui();
     expect(uiMessages).toHaveLength(1);
     // Issue #19356 expected behavior: the attachment survives conversion as a
     // usable AI SDK UI file part, with the original URL and media type intact.

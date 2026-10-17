@@ -1,6 +1,6 @@
-import { anthropic as anthropicV6 } from '@ai-sdk/anthropic-v6';
-import { google as googleV6 } from '@ai-sdk/google-v6';
-import { openai as openaiV6 } from '@ai-sdk/openai-v6';
+import { anthropic as anthropicV6 } from '@ai-sdk/anthropic';
+import { google as googleV6 } from '@ai-sdk/google';
+import { openai as openaiV6 } from '@ai-sdk/openai';
 
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';

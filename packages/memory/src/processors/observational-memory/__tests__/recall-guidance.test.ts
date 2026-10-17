@@ -1,5 +1,5 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { MessageList } from '@mastra/core/agent';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -209,7 +209,7 @@ describe('actor recall guidance', () => {
               state,
               steps: [],
               systemMessages: [],
-              model: new MockLanguageModelV2() as any,
+              model: new MockLanguageModelV4() as any,
               retryCount: 0,
               abort: () => {
                 throw new Error('Unexpected abort');

@@ -3,7 +3,7 @@
  * another instance (shared pubsub + storage). When that run is resumed there and
  * completes, the follower must drop its mirror instead of keeping a stale call.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -22,7 +22,7 @@ const resourceId = 'follow-user';
 const threadId = 'follow-thread';
 
 function model() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const answered = JSON.stringify(prompt).includes('"type":"tool-result"');
       const parts = answered

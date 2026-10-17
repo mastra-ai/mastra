@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
@@ -18,7 +18,7 @@ import { Agent } from '../agent';
 let subAgentCalls = 0;
 
 function buildSubAgent() {
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       subAgentCalls += 1;
       return {
@@ -66,7 +66,7 @@ function buildSupervisor() {
     resumeData: { fileUrl: ['https://example.com/f.pdf'] },
     suspendedToolRunId: 'hallucinated-run-id',
   });
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       step += 1;
       return {

@@ -1,4 +1,4 @@
-import { convertBase64ToUint8Array, convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils-v6';
+import { convertBase64ToUint8Array, convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils';
 import { detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat/media';
 import { convertDataContentToBase64String } from './data-content';
 
@@ -133,7 +133,7 @@ export function imageContentToDataUri(image: ImageContent, mimeType: string = 'i
  * @param image - The image data in various formats
  * @returns A string or number suitable for cache key generation
  */
-export function getImageCacheKey(image: ImageContent): string | number {
+export function getImageCacheKey(image: ImageContent | Record<string, string>): string | number {
   if (image instanceof URL) {
     return image.toString();
   }
@@ -148,6 +148,11 @@ export function getImageCacheKey(image: ImageContent): string | number {
 
   if (image instanceof ArrayBuffer) {
     return image.byteLength;
+  }
+
+  if (typeof image === 'object' && image !== null) {
+    // Provider file reference, e.g. { openai: 'file-abc' }
+    return JSON.stringify(image);
   }
 
   return image;

@@ -9,7 +9,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent, AGENT_RESUME_CLAIM_STALE_MS } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 function createMockModel() {
   let callCount = 0;
@@ -48,7 +48,7 @@ function createMockModel() {
       finish('stop'),
     ]);
   };
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: doCall,
     doGenerate: async () => {
       callCount++;

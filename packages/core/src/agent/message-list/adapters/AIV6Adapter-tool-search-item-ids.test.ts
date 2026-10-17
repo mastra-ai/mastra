@@ -1,4 +1,4 @@
-import { isToolUIPart } from '@internal/ai-v6';
+import { isToolUIPart } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 
 import type { MastraDBMessage, MastraToolInvocationPart } from '../state/types';

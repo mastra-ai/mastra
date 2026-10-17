@@ -24,7 +24,7 @@ type AcpToolResult = Extract<NonNullable<SubAgentStreamResult['toolResults']>, u
 const model = {
   modelId: 'acp-agent',
   provider: '@mastra/acp',
-  specificationVersion: 'v3',
+  specificationVersion: 'v4',
   supportedUrls: {},
   doGenerate: async () => ({
     stream: new ReadableStream({
@@ -222,8 +222,8 @@ function extractText(messages: MessageListInput): string {
   const messageList = new MessageList();
   messageList.add(messages, 'input');
 
-  return messageList.get.all
-    .core()
+  return messageList.get.all.aiSdk
+    .model()
     .map(message => coreContentToString(message.content))
     .filter(Boolean)
     .join('\n');
@@ -342,7 +342,7 @@ function createOnFinishResult({
     totalUsage: usage,
     warnings: [],
     response: {
-      messages: messageList.get.response.aiV5.model(),
+      messages: messageList.get.response.aiSdk.model(),
     },
     steps: [],
     toolResults,

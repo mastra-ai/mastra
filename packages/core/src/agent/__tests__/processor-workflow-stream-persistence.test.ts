@@ -12,7 +12,7 @@
  * the text is emitted unchanged. The same workflow started directly by the user must keep
  * persisting normally.
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -28,7 +28,7 @@ function expectedText(chunkCount: number) {
 }
 
 function createStreamingModel(chunkCount: number) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

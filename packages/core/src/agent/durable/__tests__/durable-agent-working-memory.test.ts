@@ -21,8 +21,8 @@
  *       background runs / agents without per-request memory must stay intact).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect } from 'vitest';
 import { MockMemory } from '../../../memory/mock';
 import { RequestContext } from '../../../request-context';
@@ -33,7 +33,7 @@ import { prepareForDurableExecution } from '../preparation';
 const STORED_WORKING_MEMORY = 'User prefers dark mode and concise answers in Danish.';
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -90,7 +90,7 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       id: 'wm-inject-agent',
       name: 'WM Inject Agent',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('ok') as LanguageModelV2,
+      model: createTextModel('ok') as LanguageModelV4,
       memory,
     });
 
@@ -125,7 +125,7 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       id: 'wm-gated-agent',
       name: 'WM Gated Agent',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('ok') as LanguageModelV2,
+      model: createTextModel('ok') as LanguageModelV4,
       memory,
     });
 
@@ -155,7 +155,7 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       id: 'wm-no-memory-agent',
       name: 'WM No Memory Agent',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('ok') as LanguageModelV2,
+      model: createTextModel('ok') as LanguageModelV4,
     });
 
     const result = await prepareForDurableExecution({
@@ -187,7 +187,7 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       id: 'wm-inherited-ctx-agent',
       name: 'WM Inherited Ctx Agent',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('ok') as LanguageModelV2,
+      model: createTextModel('ok') as LanguageModelV4,
       memory,
     });
 
@@ -225,7 +225,7 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       id: 'wm-resolve-agent',
       name: 'WM Resolve Agent',
       instructions: 'You are a helpful assistant.',
-      model: createTextModel('ok') as LanguageModelV2,
+      model: createTextModel('ok') as LanguageModelV4,
       memory,
     });
 

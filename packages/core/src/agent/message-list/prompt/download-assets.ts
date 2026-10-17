@@ -1,5 +1,6 @@
-import { isUrlSupported } from '@ai-sdk/provider-utils-v6';
+import { isUrlSupported } from '@ai-sdk/provider-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { flattenFileData } from '../../../stream/aisdk/v5/compat/content';
 import { fetchWithRetry } from '../../../utils/fetchWithRetry';
 import type { AIV5Type } from '../types';
 
@@ -72,7 +73,7 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
 };
 
 function toAssetUrl(part: AIV5Type.ImagePart | AIV5Type.FilePart) {
-  const data = part.type === 'image' ? part.image : part.data;
+  const data = flattenFileData(part.type === 'image' ? part.image : part.data);
   if (typeof data !== 'string') return data;
   try {
     return new URL(data);

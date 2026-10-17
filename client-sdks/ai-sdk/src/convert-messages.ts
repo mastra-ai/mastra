@@ -1,6 +1,6 @@
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type { V5UIMessage, V6UIMessage, V7UIMessage } from './public-types';
+import type { UIMessage } from '@mastra/core/ai';
 
 function isSystemReminderUIMessage(message: {
   role?: string;
@@ -33,111 +33,18 @@ function filterSystemReminderUIMessages<
   return messages.filter(message => !isSystemReminderUIMessage(message));
 }
 
-type MessageConversionOptionsV5 = {
-  version?: 'v5';
-};
-
-type MessageConversionOptionsV6 = {
-  version: 'v6';
-};
-
-type MessageConversionOptionsV7 = {
-  version: 'v7';
-};
-
-type MessageConversionOptions = MessageConversionOptionsV5 | MessageConversionOptionsV6 | MessageConversionOptionsV7;
-
 /**
- * Converts messages from various input formats to AI SDK UI message format.
- *
- * This function accepts messages in multiple formats (strings, AI SDK V4/V5/V6 messages, Mastra DB messages, etc.)
- * and normalizes them to the AI SDK UIMessage format. It keeps the existing AI SDK v5/default behavior. If your app
- * is typed against AI SDK v6 or v7, pass `version: 'v6'` or `version: 'v7'`.
- *
- * Note: `version: 'v6'` and `version: 'v7'` use the MessageList AI SDK v6/v7 UI output paths. MessageList input
- * detection and ingestion remain unchanged.
- *
- * @param messages - Messages to convert. Accepts:
- *   - `string` - A single text message (treated as user role)
- *   - `string[]` - Multiple text messages
- *   - `MessageInput` - A single message object in any supported format:
- *     - AI SDK V5 UIMessage or ModelMessage
- *     - AI SDK V4 UIMessage or CoreMessage
- *     - MastraDBMessage (internal storage format)
- *     - MastraMessageV1 (legacy format)
- *   - `MessageInput[]` - Array of message objects
- * @param options - Conversion options. Omit or pass `{ version: 'v5' }` for the existing default behavior. Pass
- *   `{ version: 'v6' }` or `{ version: 'v7' }` when your app is typed against AI SDK v6/v7 `useChat()` message types.
- *
- * @returns An array of AI SDK UIMessage objects typed for the selected version.
+ * Converts messages from any supported input format (strings, AI SDK v7 messages, Mastra DB messages)
+ * to AI SDK v7 UI messages, suitable for `useChat()`. System-reminder messages are filtered out.
  *
  * @example
  * ```typescript
  * import { toAISdkMessages } from '@mastra/ai-sdk/ui';
  *
- * const v5Messages = toAISdkMessages(storedMessages);
- * const v6Messages = toAISdkMessages(storedMessages, { version: 'v6' });
- * const v7Messages = toAISdkMessages(storedMessages, { version: 'v7' });
+ * const messages = toAISdkMessages(storedMessages);
  * ```
  */
-export function toAISdkMessages(messages: MessageListInput, options?: MessageConversionOptionsV5): V5UIMessage[];
-export function toAISdkMessages(messages: MessageListInput, options: MessageConversionOptionsV6): V6UIMessage[];
-export function toAISdkMessages(messages: MessageListInput, options: MessageConversionOptionsV7): V7UIMessage[];
-export function toAISdkMessages(
-  messages: MessageListInput,
-  options: MessageConversionOptions = {},
-): V5UIMessage[] | V6UIMessage[] | V7UIMessage[] {
+export function toAISdkMessages(messages: MessageListInput): UIMessage[] {
   const list = new MessageList().add(messages, `memory`);
-  if (options.version === 'v7') {
-    return filterSystemReminderUIMessages(list.get.all.aiV7.ui()) as V7UIMessage[];
-  }
-  if (options.version === 'v6') {
-    return filterSystemReminderUIMessages(list.get.all.aiV6.ui());
-  }
-  return filterSystemReminderUIMessages(list.get.all.aiV5.ui());
-}
-
-/**
- * Converts messages from various input formats to AI SDK V5 UI message format.
- *
- * This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5 UIMessage format, which is suitable for use with AI SDK V5 UI components like `useChat()`.
- *
- * @param messages - Messages to convert. Accepts:
- *   - `string` - A single text message (treated as user role)
- *   - `string[]` - Multiple text messages
- *   - `MessageInput` - A single message object in any supported format:
- *     - AI SDK V5 UIMessage or ModelMessage
- *     - AI SDK V4 UIMessage or CoreMessage
- *     - MastraDBMessage (internal storage format)
- *     - MastraMessageV1 (legacy format)
- *   - `MessageInput[]` - Array of message objects
- *
- * @returns An array of AI SDK V5 UIMessage objects with:
- *   - `id` - Unique message identifier
- *   - `role` - 'user' | 'assistant' | 'system'
- *   - `parts` - Array of UI parts (text, tool results, files, reasoning, etc.)
- *   - `metadata` - Optional metadata including createdAt, threadId, resourceId
- *
- * @example
- * ```typescript
- * import { toAISdkV5Messages } from '@mastra/ai-sdk';
- *
- * // Convert simple text messages
- * const messages = toAISdkV5Messages(['Hello', 'How can I help?']);
- *
- * // Convert AI SDK V4 messages to V5 format
- * const v4Messages = [
- *   { id: '1', role: 'user', content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
- *   { id: '2', role: 'assistant', content: 'Hi!', parts: [{ type: 'text', text: 'Hi!' }] }
- * ];
- * const v5Messages = toAISdkV5Messages(v4Messages);
- *
- * // Use with useChat or similar AI SDK V5 hooks
- * const { messages: chatMessages } = useChat({
- *   initialMessages: toAISdkV5Messages(storedMessages)
- * });
- * ```
- */
-export function toAISdkV5Messages(messages: MessageListInput) {
-  return filterSystemReminderUIMessages(toAISdkMessages(messages));
+  return filterSystemReminderUIMessages(list.get.all.aiSdk.ui()) as UIMessage[];
 }

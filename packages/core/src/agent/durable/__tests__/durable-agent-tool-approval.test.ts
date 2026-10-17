@@ -5,8 +5,8 @@
  * Validates that tools requiring approval properly suspend and can be approved/declined.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -25,7 +25,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a mock model that returns a tool call
  */
 function createToolCallModel(toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -54,7 +54,7 @@ function createToolCallModel(toolName: string, toolArgs: object) {
  * Creates a mock model that returns text first, then a tool call
  */
 function createTextThenToolModel(text: string, toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -95,7 +95,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
     providerExecuted: false,
   }));
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -117,7 +117,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
  * Creates a simple text-only model for follow-up responses
  */
 function _createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -168,7 +168,7 @@ describe('DurableAgent tool approval', () => {
         id: 'approval-agent',
         name: 'Approval Agent',
         instructions: 'You can find users',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { findUser: findUserTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -194,7 +194,7 @@ describe('DurableAgent tool approval', () => {
         id: 'no-approval-agent',
         name: 'No Approval Agent',
         instructions: 'You can find users',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { findUser: findUserTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -222,7 +222,7 @@ describe('DurableAgent tool approval', () => {
         id: 'tool-approval-agent',
         name: 'Tool Approval Agent',
         instructions: 'You can find users',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { findUser: findUserTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -261,7 +261,7 @@ describe('DurableAgent tool approval', () => {
         id: 'mixed-approval-agent',
         name: 'Mixed Approval Agent',
         instructions: 'You can find users and send emails',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { findUser: findUserTool, sendEmail: sendEmailTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -290,7 +290,7 @@ describe('DurableAgent tool approval', () => {
         id: 'dangerous-op-agent',
         name: 'Dangerous Operation Agent',
         instructions: 'You can perform dangerous operations',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { dangerousTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -322,7 +322,7 @@ describe('DurableAgent tool approval', () => {
         id: 'interactive-agent',
         name: 'Interactive Agent',
         instructions: 'You can use interactive tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { interactiveTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -341,7 +341,7 @@ describe('DurableAgent tool approval', () => {
     it('checkpoints active goal duration before publishing a durable approval wait', async () => {
       const storage = new InMemoryStore();
       let modelCall = 0;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => {
           modelCall++;
           await new Promise(resolve => setTimeout(resolve, 20));
@@ -394,7 +394,7 @@ describe('DurableAgent tool approval', () => {
         id: 'goal-duration-durable-agent',
         name: 'Goal Duration Durable Agent',
         instructions: 'You can search for information',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { searchTool },
         memory: new MockMemory(),
         goal: {},
@@ -450,7 +450,7 @@ describe('DurableAgent tool approval', () => {
         id: 'search-agent',
         name: 'Search Agent',
         instructions: 'You can search for information',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { searchTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -479,7 +479,7 @@ describe('DurableAgent tool approval', () => {
         id: 'text-then-tool-agent',
         name: 'Text Then Tool Agent',
         instructions: 'You can search for information',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { searchTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -509,7 +509,7 @@ describe('DurableAgent tool approval', () => {
         id: 'callback-agent',
         name: 'Callback Agent',
         instructions: 'You can use approvable tools',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { approvableTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -549,7 +549,7 @@ describe('DurableAgent tool approval', () => {
         id: 'metadata-agent',
         name: 'Metadata Agent',
         instructions: 'You use tools with metadata',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
         tools: { metadataTool },
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -591,7 +591,7 @@ describe('DurableAgent tool approval with workflows as tools', () => {
       id: 'workflow-tool-agent',
       name: 'Workflow Tool Agent',
       instructions: 'You can use workflow tools',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { workflowTool },
       defaultOptions: {
         requireToolApproval: true,

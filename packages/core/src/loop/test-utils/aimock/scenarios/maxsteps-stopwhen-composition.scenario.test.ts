@@ -60,6 +60,37 @@ describeForAllEngines(
 
       expect(requests).toHaveLength(3);
     });
+
+    it('evaluates every condition in a stopWhen array and stops when any is true', async () => {
+      const seen: number[][] = [];
+      const { requests, output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Keep ticking.',
+        tools: { tick: tickTool() },
+        maxSteps: 10,
+        stopWhen: [
+          ({ steps }: any) => {
+            seen.push([0, steps.length]);
+            return false;
+          },
+          ({ steps }: any) => {
+            seen.push([1, steps.length]);
+            return true;
+          },
+        ],
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] });
+        },
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(await output.steps).toHaveLength(1);
+      expect(seen).toEqual([
+        [0, 1],
+        [1, 1],
+      ]);
+    });
   },
   {},
 );

@@ -14,8 +14,8 @@
  * silently regress it.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -52,7 +52,7 @@ function buildProcessOrderTool() {
  * the suspend/resume boundary.
  */
 function makeToolThenAnswerModel(answer: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasToolResult = JSON.stringify(prompt).includes('"processed":true');
       if (!hasToolResult) {
@@ -96,7 +96,7 @@ function makeToolThenAnswerModel(answer: string) {
 
 /** Supervisor model: delegates until the sub-agent's answer is in context. */
 function makeSupervisorModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const hasDelegationResult = JSON.stringify(prompt).includes('Order processed.');
       if (!hasDelegationResult) {
@@ -195,7 +195,7 @@ describe('durable resume custom frames (#22277)', () => {
       id: 'orderAgent',
       name: 'Order Agent',
       instructions: 'Process orders with your tool.',
-      model: makeToolThenAnswerModel('Order processed.') as LanguageModelV2,
+      model: makeToolThenAnswerModel('Order processed.') as LanguageModelV4,
       tools: { processOrder: buildProcessOrderTool() },
       memory: mockMemory,
     });
@@ -228,14 +228,14 @@ describe('durable resume custom frames (#22277)', () => {
       name: 'subAgent',
       description: 'Processes orders',
       instructions: 'Process orders with your tool.',
-      model: makeToolThenAnswerModel('Order processed.') as LanguageModelV2,
+      model: makeToolThenAnswerModel('Order processed.') as LanguageModelV4,
       tools: { processOrder: buildProcessOrderTool() },
     });
     const supervisor = new Agent({
       id: 'supervisor',
       name: 'Supervisor',
       instructions: 'Delegate to subAgent.',
-      model: makeSupervisorModel() as LanguageModelV2,
+      model: makeSupervisorModel() as LanguageModelV4,
       agents: { subAgent },
       memory: mockMemory,
     });
@@ -268,14 +268,14 @@ describe('durable resume custom frames (#22277)', () => {
       name: 'subAgent',
       description: 'Processes orders',
       instructions: 'Process orders with your tool.',
-      model: makeToolThenAnswerModel('Order processed.') as LanguageModelV2,
+      model: makeToolThenAnswerModel('Order processed.') as LanguageModelV4,
       tools: { processOrder: buildProcessOrderTool() },
     });
     const supervisor = new Agent({
       id: 'supervisor',
       name: 'Supervisor',
       instructions: 'Delegate to subAgent.',
-      model: makeSupervisorModel() as LanguageModelV2,
+      model: makeSupervisorModel() as LanguageModelV4,
       agents: { subAgent },
       memory: mockMemory,
     });

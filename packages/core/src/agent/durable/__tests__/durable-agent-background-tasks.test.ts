@@ -6,8 +6,8 @@
  * for the durable agent's PubSub-based architecture.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -25,7 +25,7 @@ import { globalRunRegistry } from '../run-registry';
 
 function makeScriptedModel(scripts: Array<(abortSignal?: AbortSignal) => ReadableStream<any>>) {
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ abortSignal }) => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -97,7 +97,7 @@ function abortableTextResponse(text: string, tail: string) {
 
 function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -194,7 +194,7 @@ describe('DurableAgent background tasks via stream()', () => {
       id: 'bg-dispatch-agent',
       name: 'BG Dispatch Agent',
       instructions: 'Research topics when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
     });
@@ -236,7 +236,7 @@ describe('DurableAgent background tasks via stream()', () => {
       id: 'fg-tool-agent',
       name: 'FG Tool Agent',
       instructions: 'Greet people',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { greet: greetTool },
     });
 
@@ -282,7 +282,7 @@ describe('DurableAgent background tasks via stream()', () => {
       id: 'bg-onresult-agent',
       name: 'BG onResult Agent',
       instructions: 'Research when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
     });
@@ -348,7 +348,7 @@ describe('DurableAgent background tasks via stream()', () => {
       id: 'bg-readonly-agent',
       name: 'BG ReadOnly Agent',
       instructions: 'Research when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
       memory,
@@ -405,7 +405,7 @@ describe('DurableAgent background tasks via stream()', () => {
       id: 'bg-pubsub-agent',
       name: 'BG PubSub Agent',
       instructions: 'Research when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
     });
@@ -474,7 +474,7 @@ describe('DurableAgent background tasks via stream()', () => {
       id: 'bg-suspend-da',
       name: 'BG Suspend DA',
       instructions: 'Research when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
     });
@@ -532,7 +532,7 @@ describe('DurableAgent background tasks via stream()', () => {
       background: { enabled: true },
     });
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -578,7 +578,7 @@ describe('DurableAgent background tasks via stream()', () => {
       id: 'bg-loop-agent',
       name: 'BG Loop Agent',
       instructions: 'Research when asked',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
     });
@@ -1194,7 +1194,7 @@ describe('DurableAgent.streamUntilIdle', () => {
     const memory = new MockMemory();
 
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         calls++;
         if (calls === 1) {

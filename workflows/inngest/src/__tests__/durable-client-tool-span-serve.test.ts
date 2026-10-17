@@ -4,10 +4,10 @@
  * It must be parented on the exported agent_run span.
  */
 import { Agent } from '@mastra/core/agent';
+import { simulateReadableStream } from '@mastra/core/ai';
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { Observability } from '@mastra/observability';
-import { simulateReadableStream } from 'ai';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

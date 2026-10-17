@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import type { ErrorProcessor, ErrorProcessorOrWorkflow } from '../../processors';
@@ -22,7 +22,7 @@ function createFailOnceModel() {
       isRetryable: false,
     });
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       calls++;
       if (calls === 1) throw failure();
@@ -70,7 +70,7 @@ class RecoveringMemory extends MockMemory {
   }
 }
 
-function createAgent(memory: RecoveringMemory, model: MockLanguageModelV2, extra: Record<string, unknown> = {}) {
+function createAgent(memory: RecoveringMemory, model: MockLanguageModelV4, extra: Record<string, unknown> = {}) {
   return new Agent({
     id: 'memory-error-agent',
     name: 'Memory error agent',

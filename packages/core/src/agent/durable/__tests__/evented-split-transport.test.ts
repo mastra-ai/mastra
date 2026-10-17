@@ -16,8 +16,8 @@
  * own EventEmitterPubSub while Mastra keeps its default internal bus.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -29,7 +29,7 @@ import { createEventedAgent } from '../create-evented-agent';
 import type { EventedAgent } from '../evented-agent';
 
 function createTextStreamModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -45,11 +45,11 @@ function createTextStreamModel(text: string) {
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 function createToolCallModel(toolName: string, args: Record<string, unknown>) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -69,7 +69,7 @@ function createToolCallModel(toolName: string, args: Record<string, unknown>) {
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 async function collectStreamChunks(stream: AsyncIterable<any>) {
@@ -91,7 +91,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     await agentPubsub.close();
   });
 
-  function createSetup(model: LanguageModelV2, tools?: Record<string, any>) {
+  function createSetup(model: LanguageModelV4, tools?: Record<string, any>) {
     const baseAgent = new Agent({
       id: 'split-transport-agent',
       name: 'Split Transport Agent',

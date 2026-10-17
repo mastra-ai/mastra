@@ -1,24 +1,31 @@
-import type { LanguageModelV2FilePart, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
-import type { DataContent, ImagePart, FilePart } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4FilePart, LanguageModelV4TextPart } from '@ai-sdk/provider';
+import type { DataContent, ImagePart, FilePart } from '@internal/ai-v7';
 import { convertToDataContent, detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat';
+import { anyToV4FileData, flattenFileData, toV4FileData } from '../../../stream/aisdk/v5/compat/content';
 
 export function convertImageFilePart(
   part: ImagePart | FilePart,
   downloadedAssets?: Record<string, { mediaType: string | undefined; data: Uint8Array }>,
-): LanguageModelV2TextPart | LanguageModelV2FilePart {
-  let originalData: DataContent | URL;
+): LanguageModelV4TextPart | LanguageModelV4FilePart {
   const type = part.type;
-  switch (type) {
-    case 'image':
-      originalData = part.image;
-      break;
-    case 'file':
-      originalData = part.data;
-
-      break;
-    default:
-      throw new Error(`Unsupported part type: ${type}`);
+  const source = type === 'image' ? part.image : type === 'file' ? part.data : undefined;
+  if (source === undefined) {
+    throw new Error(`Unsupported part type: ${type}`);
   }
+
+  // v7 parts may carry tagged file data; inline data and URLs go through the normal path,
+  // provider references and inline text pass through untouched.
+  const flat = flattenFileData(source);
+  if (flat === undefined) {
+    return {
+      type: 'file',
+      mediaType: part.mediaType ?? (type === 'image' ? 'image/*' : 'application/octet-stream'),
+      filename: type === 'file' ? part.filename : undefined,
+      data: anyToV4FileData(source),
+      providerOptions: part.providerOptions,
+    };
+  }
+  const originalData: DataContent | URL = flat;
 
   const { data: convertedData, mediaType: convertedMediaType } = convertToDataContent(originalData);
 
@@ -35,7 +42,7 @@ export function convertImageFilePart(
   }
 
   // Now that we have the normalized data either as a URL or a Uint8Array,
-  // we can create the LanguageModelV2Part.
+  // we can create the LanguageModelV4Content.
   switch (type) {
     case 'image': {
       // When possible, try to detect the media type automatically
@@ -49,7 +56,7 @@ export function convertImageFilePart(
         type: 'file',
         mediaType: mediaType ?? 'image/*', // any image
         filename: undefined,
-        data,
+        data: toV4FileData(data),
         providerOptions: part.providerOptions,
       };
     }
@@ -64,7 +71,7 @@ export function convertImageFilePart(
         type: 'file',
         mediaType,
         filename: part.filename,
-        data,
+        data: toV4FileData(data),
         providerOptions: part.providerOptions,
       };
     }

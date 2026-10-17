@@ -1,16 +1,16 @@
-import type { CoreMessage } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { ModelMessage as CoreMessage } from '@internal/ai-v7';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 
 describe('Base64 Images with Threads - Issue #10480', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
   let mockMemory: MockMemory;
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text', text: 'I can see the image' }],
         finishReason: 'stop',
@@ -117,7 +117,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
     const base64Image =
       'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII';
 
-    const streamModel = new MockLanguageModelV2({
+    const streamModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'text-delta', id: 'text-1', delta: 'I see ' },
@@ -268,7 +268,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
     // Use a real placeholder image service that actually works
     const imageUrl = 'https://placehold.co/600x400/png';
 
-    const urlModel = new MockLanguageModelV2({
+    const urlModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text', text: 'I can see the image' }],
         finishReason: 'stop',
@@ -323,7 +323,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
     const rawBase64 =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
-    const mixedModel = new MockLanguageModelV2({
+    const mixedModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text', text: 'I can see the image' }],
         finishReason: 'stop',

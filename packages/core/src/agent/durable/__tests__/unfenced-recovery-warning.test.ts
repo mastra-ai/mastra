@@ -6,8 +6,8 @@
  * `recovery.durableAgents: 'auto'`, when a run raises its memory fence.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -25,7 +25,7 @@ function fakeLogger() {
 }
 
 function textModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -38,7 +38,7 @@ function textModel() {
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 function unfenced(store: { supportsRunFencing(): boolean | Promise<boolean> }) {

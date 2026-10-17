@@ -22,7 +22,7 @@
  * the step count must not quadruple the bytes written.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent/agent';
@@ -38,7 +38,7 @@ import { createTool } from '../../tools';
  */
 function createLoopingModel(toolIterations: number, toolName: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount += 1;
       const stream =

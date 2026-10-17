@@ -4,7 +4,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const RESUMES = 4;
 
@@ -32,7 +32,7 @@ async function drain(stream: any) {
 describe('resumed streams open a step boundary (#26475)', () => {
   it('keeps each buffered step to its own tool call across approvals', async () => {
     let call = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         call++;
         return call === 1 ? toolCallStream('call-lookup', 'lookup') : toolCallStream(`call-refund-${call}`, 'refund');

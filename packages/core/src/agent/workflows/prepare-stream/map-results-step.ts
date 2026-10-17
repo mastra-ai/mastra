@@ -1,4 +1,4 @@
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-v7';
 import { MastraFGAPermissions } from '../../../auth/ee';
 import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
@@ -467,7 +467,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           await options?.onFinish?.({
             ...payload,
             runId,
-            messages: messageList.get.response.aiV5.model(),
+            messages: messageList.get.response.aiSdk.model(),
             usage: payload.usage,
             totalUsage: payload.totalUsage,
           });

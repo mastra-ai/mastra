@@ -17,8 +17,8 @@
  * because the durable finalization block owns stream closure.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -32,14 +32,14 @@ import { __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 
 function hangingModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: () => new Promise(() => {}),
     doGenerate: () => new Promise(() => {}),
   });
 }
 
 function textModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -58,7 +58,7 @@ function textModel(text: string) {
 /** First call emits a tool call; any later call would answer with text. */
 function toolCallingModel(toolName: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -114,7 +114,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     await pubsub.close();
   });
 
-  function setup(model: LanguageModelV2 | Array<{ model: LanguageModelV2; maxRetries: number }>, tools?: any) {
+  function setup(model: LanguageModelV4 | Array<{ model: LanguageModelV4; maxRetries: number }>, tools?: any) {
     const baseAgent = new Agent({
       id: 'timeout-agent',
       name: 'Timeout Agent',
@@ -133,7 +133,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
   }
 
   it('terminates a hanging run as a failure with a total-timeout error chunk', async () => {
-    const durableAgent = setup(hangingModel() as LanguageModelV2);
+    const durableAgent = setup(hangingModel() as LanguageModelV4);
 
     const result = await durableAgent.stream('hello', {
       modelSettings: { timeout: { totalMs: 150 } },
@@ -154,8 +154,8 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     const fallback = textModel('from fallback');
     const doStreamSpy = vi.spyOn(fallback as any, 'doStream');
     const durableAgent = setup([
-      { model: hangingModel() as LanguageModelV2, maxRetries: 0 },
-      { model: fallback as LanguageModelV2, maxRetries: 0 },
+      { model: hangingModel() as LanguageModelV4, maxRetries: 0 },
+      { model: fallback as LanguageModelV4, maxRetries: 0 },
     ]);
 
     const result = await durableAgent.stream('hello', {
@@ -180,7 +180,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
         return { ok: true };
       },
     });
-    const durableAgent = setup(model as LanguageModelV2, { slowTool });
+    const durableAgent = setup(model as LanguageModelV4, { slowTool });
 
     const result = await durableAgent.stream('hello', {
       modelSettings: { timeout: { totalMs: 200 } },
@@ -196,7 +196,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
   });
 
   it('leaves a run that finishes within the budget untouched', async () => {
-    const durableAgent = setup(textModel('quick answer') as LanguageModelV2);
+    const durableAgent = setup(textModel('quick answer') as LanguageModelV4);
 
     const result = await durableAgent.stream('hello', {
       modelSettings: { timeout: { totalMs: 30_000 } },
@@ -210,7 +210,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
   });
 
   it('is inert when no total budget is configured', async () => {
-    const durableAgent = setup(textModel('no budget') as LanguageModelV2);
+    const durableAgent = setup(textModel('no budget') as LanguageModelV4);
 
     const result = await durableAgent.stream('hello');
     const chunks = await drain(result.fullStream);
@@ -221,7 +221,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
   });
 
   it('still honours a caller-supplied abort signal without misreporting it as a timeout', async () => {
-    const durableAgent = setup(hangingModel() as LanguageModelV2);
+    const durableAgent = setup(hangingModel() as LanguageModelV4);
     const controller = new AbortController();
     setTimeout(() => controller.abort(new Error('user cancelled')), 50);
 
@@ -246,7 +246,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
         id: 'timeout-restart-agent',
         name: 'Timeout Restart Agent',
         instructions: 'You are a helpful agent.',
-        model: hangingModel() as LanguageModelV2,
+        model: hangingModel() as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       // `running` checkpoints — the rows recover() reads — are only persisted
@@ -321,7 +321,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
         return { ok: true };
       },
     });
-    const durableAgent = setup(toolCallingModel('hold') as LanguageModelV2, { hold });
+    const durableAgent = setup(toolCallingModel('hold') as LanguageModelV4, { hold });
 
     const result = await durableAgent.stream('hello', {
       maxSteps: 2,

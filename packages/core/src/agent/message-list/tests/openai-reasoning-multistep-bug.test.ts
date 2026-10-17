@@ -107,7 +107,7 @@ describe('OpenAI reasoning — memory-loaded multi-step conversations', () => {
     expect(assistantDbMsgs.length).toBe(2);
 
     // Get the prompt
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
 
     // The text-only assistant message must retain its itemId
     const assistantPromptMsgs = prompt.filter(m => m.role === 'assistant');

@@ -278,7 +278,7 @@ describe('Working memory via state signals (opt-in)', () => {
 
   describe('agent stream end-to-end (the path Studio hits)', () => {
     it('keeps setWorkingMemory tool-invocation parts after agent.stream completes (useStateSignals: true)', async () => {
-      const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+      const { MockLanguageModelV4, convertArrayToReadableStream } = await import('@mastra/core/ai/test');
       const { Agent } = await import('@mastra/core/agent');
 
       const memory = await createMemory({ useStateSignals: true, dbPath });
@@ -287,7 +287,7 @@ describe('Working memory via state signals (opt-in)', () => {
 
       // Two-step model: step 1 emits an updateWorkingMemory tool call; step 2 emits text.
       let streamCallCount = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           streamCallCount++;
           if (streamCallCount === 1) {
@@ -384,7 +384,7 @@ describe('Working memory via state signals (opt-in)', () => {
     });
 
     it('strips updateWorkingMemory tool-invocation parts on agent.stream with useStateSignals: false (default behavior preserved)', async () => {
-      const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+      const { MockLanguageModelV4, convertArrayToReadableStream } = await import('@mastra/core/ai/test');
       const { Agent } = await import('@mastra/core/agent');
 
       const memory = await createMemory({ useStateSignals: false, dbPath });
@@ -392,7 +392,7 @@ describe('Working memory via state signals (opt-in)', () => {
       const resourceId = 'resource-agent-stream-default';
 
       let streamCallCount = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           streamCallCount++;
           if (streamCallCount === 1) {

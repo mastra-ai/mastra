@@ -673,6 +673,8 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** Forward provider raw chunks to the stream */
+  includeRawChunks?: boolean;
   /** Callback when a step finishes */
   onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
   /** Callback when the recovered run finishes */
@@ -1179,6 +1181,7 @@ export class DurableAgent<
         offset: recoverOffset,
         onChunk: options?.onChunk,
         experimentalTransform: options?.experimentalTransform,
+        includeRawChunks: options?.includeRawChunks,
         onStepFinish: options?.onStepFinish,
         onFinish: options?.onFinish,
         onStreamFinished: scheduleAutoCleanup,
@@ -2844,6 +2847,7 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       experimentalTransform: options?.experimentalTransform,
+      includeRawChunks: options?.includeRawChunks,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -3486,6 +3490,7 @@ export class DurableAgent<
       offset: resumeOffset,
       onChunk: resolvedOptions.onChunk,
       experimentalTransform: resolvedOptions.experimentalTransform,
+      includeRawChunks: resolvedOptions.includeRawChunks,
       hideSignals: resolvedOptions.hideSignals,
       onStepFinish: resolvedOptions.onStepFinish,
       onFinish: resolvedOptions.onFinish,
@@ -4262,6 +4267,7 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       experimentalTransform: options?.experimentalTransform,
+      includeRawChunks: options?.includeRawChunks,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,

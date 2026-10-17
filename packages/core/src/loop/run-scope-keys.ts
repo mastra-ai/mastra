@@ -14,7 +14,7 @@
  * directly without going through `loop()`.
  */
 
-import type { IdGenerator, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
+import type { IdGenerator, ModelMessage, ToolSet } from '@internal/ai-v7';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { CreatedAgentSignal } from '../agent/signals';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';

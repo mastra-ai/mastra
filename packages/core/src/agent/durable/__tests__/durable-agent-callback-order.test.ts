@@ -22,7 +22,7 @@
  * divergences are ticketed under COR-1390: the wrappers report `onError` after both steps where plain
  * reports it between them.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../memory/mock';
@@ -130,7 +130,7 @@ async function runT36(variant: StreamedVariant): Promise<{
             },
           }
         : script,
-    buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV2 }) => {
+    buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV4 }) => {
       const parked = deferred<void>();
       const release = deferred<void>();
       const state: EngineCaseState = { names: [], payloadKeys: [], chunkTypes: [], released: [] };

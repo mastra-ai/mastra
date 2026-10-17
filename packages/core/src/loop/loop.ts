@@ -1,5 +1,5 @@
-import { generateId } from '@internal/ai-sdk-v5';
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import { generateId } from '@internal/ai-v7';
+import type { ToolSet } from '@internal/ai-v7';
 import { createStoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { validateModelTimeoutSettings } from '../llm/model/model-settings';

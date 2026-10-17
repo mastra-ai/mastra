@@ -1,7 +1,7 @@
-import { openai } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { openai } from '@ai-sdk/openai';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
@@ -31,11 +31,11 @@ function modelListTests(version: 'v2') {
       }
       expect(modelList.length).toBe(3);
       expect(modelList.every(model => !Object.hasOwn(model, 'maxRetriesConfigured'))).toBe(true);
-      const model0 = modelList[0]?.model as LanguageModelV2;
+      const model0 = modelList[0]?.model as LanguageModelV4;
       expect(model0.modelId).toBe('gpt-4o');
-      const model1 = modelList[1]?.model as LanguageModelV2;
+      const model1 = modelList[1]?.model as LanguageModelV4;
       expect(model1.modelId).toBe('gpt-4o-mini');
-      const model2 = modelList[2]?.model as LanguageModelV2;
+      const model2 = modelList[2]?.model as LanguageModelV4;
       expect(model2.modelId).toBe('gpt-4.1');
     });
 
@@ -74,9 +74,9 @@ function modelListTests(version: 'v2') {
       expect(reorderedModelList[0]?.id).toBe(reversedModelIds[0]);
       expect(reorderedModelList[1]?.id).toBe(reversedModelIds[1]);
 
-      const model0 = reorderedModelList[0]?.model as LanguageModelV2;
+      const model0 = reorderedModelList[0]?.model as LanguageModelV4;
       expect(model0.modelId).toBe('gpt-4.1');
-      const model1 = reorderedModelList[1]?.model as LanguageModelV2;
+      const model1 = reorderedModelList[1]?.model as LanguageModelV4;
       expect(model1.modelId).toBe('gpt-4o-mini');
     });
 
@@ -113,9 +113,9 @@ function modelListTests(version: 'v2') {
       }
 
       expect(reorderedModelList.length).toBe(3);
-      const model0 = reorderedModelList[0]?.model as LanguageModelV2;
-      const model1 = reorderedModelList[1]?.model as LanguageModelV2;
-      const model2 = reorderedModelList[2]?.model as LanguageModelV2;
+      const model0 = reorderedModelList[0]?.model as LanguageModelV4;
+      const model1 = reorderedModelList[1]?.model as LanguageModelV4;
+      const model2 = reorderedModelList[2]?.model as LanguageModelV4;
       expect(model0.modelId).toBe('gpt-4.1');
       expect(model1.modelId).toBe('gpt-4o');
       expect(model2.modelId).toBe('gpt-4o-mini');
@@ -156,10 +156,10 @@ function modelListTests(version: 'v2') {
         expect.fail('Updated model list should exist');
       }
       expect(updatedModelList.length).toBe(3);
-      const updatedModel1 = updatedModelList[1]?.model as LanguageModelV2;
+      const updatedModel1 = updatedModelList[1]?.model as LanguageModelV4;
       expect(updatedModel1.modelId).toBe('gpt-4');
       expect(updatedModelList[1]?.maxRetries).toBe(5);
-      const updatedModel2 = updatedModelList[2]?.model as LanguageModelV2;
+      const updatedModel2 = updatedModelList[2]?.model as LanguageModelV4;
       expect(updatedModel2.modelId).toBe('gpt-4.1');
     });
 
@@ -167,10 +167,10 @@ function modelListTests(version: 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV2;
-      let standardModel: MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV4;
+      let standardModel: MockLanguageModelV4;
 
-      premiumModel = new MockLanguageModelV2({
+      premiumModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'premium';
           return {
@@ -218,7 +218,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      standardModel = new MockLanguageModelV2({
+      standardModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'standard';
           throw new Error('Simulated generate error');
@@ -260,14 +260,14 @@ function modelListTests(version: 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV2;
-      let standardModel: MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV4;
+      let standardModel: MockLanguageModelV4;
 
       const streamErrorFn = vi.fn(() => {
         throw new Error('Simulated stream error');
       });
 
-      premiumModel = new MockLanguageModelV2({
+      premiumModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'premium';
           return {
@@ -315,7 +315,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      standardModel = new MockLanguageModelV2({
+      standardModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'standard';
           throw new Error('Simulated generate error');
@@ -360,9 +360,9 @@ function modelListTests(version: 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV2;
-      let standardModel: MockLanguageModelV2;
-      let standardModel2: MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV4;
+      let standardModel: MockLanguageModelV4;
+      let standardModel2: MockLanguageModelV4;
 
       const streamErrorFn = vi.fn(() => {
         throw new Error('Simulated stream error');
@@ -371,7 +371,7 @@ function modelListTests(version: 'v2') {
         throw new Error('Simulated stream error');
       });
 
-      premiumModel = new MockLanguageModelV2({
+      premiumModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'premium';
           return {
@@ -419,7 +419,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      standardModel = new MockLanguageModelV2({
+      standardModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'standard';
           throw new Error('Simulated generate error');
@@ -435,7 +435,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      standardModel2 = new MockLanguageModelV2({
+      standardModel2 = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'standard2';
           throw new Error('Simulated generate error');
@@ -484,9 +484,9 @@ function modelListTests(version: 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV2;
-      let standardModel: MockLanguageModelV2;
-      let standardModel2: MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV4;
+      let standardModel: MockLanguageModelV4;
+      let standardModel2: MockLanguageModelV4;
 
       const streamErrorFn = vi.fn(() => {
         throw new Error('Simulated stream error');
@@ -495,7 +495,7 @@ function modelListTests(version: 'v2') {
         throw new Error('Simulated stream error');
       });
 
-      premiumModel = new MockLanguageModelV2({
+      premiumModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'premium';
           return {
@@ -543,7 +543,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      standardModel = new MockLanguageModelV2({
+      standardModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'standard';
           throw new Error('Simulated generate error');
@@ -559,7 +559,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      standardModel2 = new MockLanguageModelV2({
+      standardModel2 = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'standard2';
           throw new Error('Simulated generate error');
@@ -609,9 +609,9 @@ function modelListTests(version: 'v2') {
       let usedModelName = '';
 
       // Create two different models
-      let premiumModel: MockLanguageModelV2;
-      let premiumModel2: MockLanguageModelV2;
-      let standardModel: MockLanguageModelV2;
+      let premiumModel: MockLanguageModelV4;
+      let premiumModel2: MockLanguageModelV4;
+      let standardModel: MockLanguageModelV4;
 
       const streamErrorFn = vi.fn(() => {
         throw new Error('Simulated stream error');
@@ -621,7 +621,7 @@ function modelListTests(version: 'v2') {
         console.log('premium model 2 called');
       });
 
-      premiumModel = new MockLanguageModelV2({
+      premiumModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'premium';
           return {
@@ -669,7 +669,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      premiumModel2 = new MockLanguageModelV2({
+      premiumModel2 = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'premium';
           return {
@@ -718,7 +718,7 @@ function modelListTests(version: 'v2') {
         },
       });
 
-      standardModel = new MockLanguageModelV2({
+      standardModel = new MockLanguageModelV4({
         doGenerate: async () => {
           usedModelName = 'standard';
           throw new Error('Simulated generate error');
@@ -771,7 +771,7 @@ function modelListTests(version: 'v2') {
         doGenerate: async () => ({}),
         doStream: async () => ({}),
       } as any;
-      const v2Model = new MockLanguageModelV2({
+      const v2Model = new MockLanguageModelV4({
         doGenerate: async () => {
           return {
             rawCall: { rawPrompt: null, rawSettings: {} },

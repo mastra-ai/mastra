@@ -1,13 +1,13 @@
-import type * as AIV5 from '@internal/ai-sdk-v5';
-import type * as AIV6 from '@internal/ai-v6';
+import type * as AIV5 from '@internal/ai-v7';
+import type * as AIV6 from '@internal/ai-v7';
 import type * as AIV7 from '@internal/ai-v7';
 
 import type { CreatedAgentSignal } from '../signals';
 import type { MastraDBMessage, MastraMessageV1 } from './state/types';
 
 // Re-export AI SDK types
-export type * as AIV5Type from '@internal/ai-sdk-v5';
-export type * as AIV6Type from '@internal/ai-v6';
+export type * as AIV5Type from '@internal/ai-v7';
+export type * as AIV6Type from '@internal/ai-v7';
 export type * as AIV7Type from '@internal/ai-v7';
 
 // Re-export all message types from state/types for convenience

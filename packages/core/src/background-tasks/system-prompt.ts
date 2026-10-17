@@ -9,7 +9,7 @@ import type { AgentBackgroundConfig, ToolBackgroundConfig } from './types';
 export interface BackgroundPromptTool {
   background?: ToolBackgroundConfig;
   backgroundConfig?: ToolBackgroundConfig;
-  description?: string;
+  [key: string]: unknown;
 }
 
 /**

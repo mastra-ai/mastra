@@ -12,7 +12,7 @@
  * Agent + MockMemory + real Dataset.startExperiment — the pre-existing
  * experiment tests mock the agent, which is why the bug went unnoticed.
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent/agent';
 import type { Mastra } from '../../mastra';
@@ -30,7 +30,7 @@ import { Dataset } from '../dataset';
 const ITEM_INPUTS = ['Hello there', 'Second item', 'Third item'];
 
 function createV2Model() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
@@ -63,7 +63,7 @@ function createV1Model() {
   }));
 }
 
-function createMemoryAgent(model: MockLanguageModelV2) {
+function createMemoryAgent(model: MockLanguageModelV4) {
   const memory = new MockMemory({ storage: new InMemoryStore() });
   const agent = new Agent({
     id: 'memory-agent',
@@ -333,7 +333,7 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     // executeAgent, so each attempt must mint its own thread rather than
     // appending the retry transcript to the failed attempt's thread.
     let calls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => {
         calls += 1;
         if (calls === 1) throw new Error('transient model failure');

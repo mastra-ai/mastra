@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
@@ -63,7 +63,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
   it('should stop the loop when model hits max output tokens (finishReason: length) after tool call', async () => {
     let callCount = 0;
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         callCount++;
 
@@ -195,7 +195,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
   it('should stop the loop when model hits max output tokens (finishReason: length) - no tools', async () => {
     let callCount = 0;
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => {
         callCount++;
         return {
@@ -261,7 +261,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
   it('should stop the loop when model hits max output tokens (finishReason: length) - stream', async () => {
     let callCount = 0;
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         return {
@@ -314,7 +314,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
    * Verify the happy path still works: tool call in step 1, structured JSON in step 2.
    */
   it('should return structured output when model calls tools before generating JSON (generate)', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         const hasToolResults = prompt.some(
           (msg: any) =>
@@ -421,7 +421,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
    * Verify the happy path for stream: tool call in step 1, structured JSON in step 2.
    */
   it('should return structured output when model calls tools before generating JSON (stream)', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         const hasToolResults = prompt.some(
           (msg: any) =>
@@ -494,7 +494,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
    * complete gracefully without hanging or throwing.
    */
   it('should handle maxSteps: 1 gracefully when model calls tools instead of generating JSON', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },

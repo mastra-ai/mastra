@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
@@ -8,10 +8,10 @@ import { delay } from '../../utils';
 import { Agent } from '../agent';
 
 describe('Writable Stream from Tool', () => {
-  let mockElectionModel: MockLanguageModelV2;
+  let mockElectionModel: MockLanguageModelV4;
 
   beforeEach(() => {
-    mockElectionModel = new MockLanguageModelV2({
+    mockElectionModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -101,7 +101,7 @@ describe('Writable Stream from Tool', () => {
     // Create thread first
     await memory.createThread({ threadId, resourceId, title: 'Data Parts Test' });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -192,7 +192,7 @@ describe('Writable Stream from Tool', () => {
 
     await memory.createThread({ threadId, resourceId, title: 'Roundtrip Test' });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },

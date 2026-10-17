@@ -1,6 +1,7 @@
-import { retryWithExponentialBackoff } from '@ai-sdk/provider-utils-v7';
+import { retryWithExponentialBackoff } from '@ai-sdk/provider-utils';
 import {
   APICallError,
+  Experimental_DecisionRefusalError as DecisionRefusalError,
   Experimental_DecisionUnsupportedQuestionTypeError as DecisionUnsupportedQuestionTypeError,
   type Experimental_DecisionModelV4 as DecisionModelV4,
   type Experimental_DecisionModelV4Answer as DecisionModelV4Answer,
@@ -8,11 +9,12 @@ import {
   type Experimental_DecisionModelV4Input as DecisionModelV4Input,
   type Experimental_DecisionModelV4Question as DecisionModelV4Question,
   type Experimental_DecisionModelV4Result as DecisionModelV4Result,
+  type Experimental_DecisionModelV4State as DecisionModelV4State,
   type Experimental_EvaluationModelV4 as EvaluationModelV4,
   type SharedV4ProviderMetadata,
   type SharedV4ProviderOptions,
   type SharedV4Warning,
-} from '@ai-sdk/provider-v7';
+} from '@ai-sdk/provider';
 
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
@@ -322,7 +324,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           attemptCount += 1;
           try {
             const callOptions = {
-              state: options.state,
+              state: toDecisionState(options.state),
               questions: providerQuestions,
               abortSignal: options.abortSignal,
               providerOptions: options.providerOptions,
@@ -349,13 +351,14 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       }
 
       options.abortSignal?.throwIfAborted();
-      validateProviderResult(questions, providerResult.answers, providerResult.rounding);
+      validateProviderResult(questions, providerResult.answers, providerResult.rounding, this.model);
       validateProviderEnvelope(providerResult);
 
       const inputTokens = providerResult.usage?.inputTokens;
       const outputTokens = providerResult.usage?.outputTokens;
       const result: ClassifierResult<ClassifierQuestions> = {
-        answers: providerResult.answers,
+        // validateProviderResult checked every answer against its question.
+        answers: providerResult.answers as ClassifierAnswers<ClassifierQuestions>,
         usage: {
           inputTokens,
           outputTokens,
@@ -518,16 +521,27 @@ function validateProviderEnvelope(result: {
   }
 }
 
+/** Classifier state is plain content; the decision model takes it as prompt parts. */
+function toDecisionState(state: DecisionModelV4Input): DecisionModelV4State {
+  return typeof state === 'string' ? [{ type: 'text', text: state }] : [{ type: 'json', value: state }];
+}
+
 function validateProviderResult(
   questions: ClassifierQuestions,
   answers: Record<string, DecisionModelV4Answer>,
-  rounding?: { probabilityDecimals?: number; scoreDecimals?: number },
+  rounding: { probabilityDecimals?: number; scoreDecimals?: number } | undefined,
+  model: { provider: string; modelId: string },
 ): void {
   if (!isPlainObject(answers)) throw new TypeError('The evaluation model returned invalid answers.');
   const questionIds = Object.keys(questions);
   const answerIds = Object.keys(answers);
   if (answerIds.length !== questionIds.length || answerIds.some(id => !(id in questions))) {
     throw new TypeError('The evaluation model must return exactly one answer per question.');
+  }
+
+  const refusedIds = answerIds.filter(id => isPlainObject(answers[id]) && answers[id]!.type === 'refusal');
+  if (refusedIds.length > 0) {
+    throw new DecisionRefusalError({ questionIds: refusedIds, provider: model.provider, modelId: model.modelId });
   }
 
   validateRounding(rounding);

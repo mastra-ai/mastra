@@ -1,5 +1,5 @@
 import { createAzure } from '@ai-sdk/azure';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { createOpenAIWebSocketFetch } from '../openai-websocket-fetch.js';
@@ -36,7 +36,7 @@ interface CachedToken {
   expiresAt: number;
 }
 
-type AzureLanguageModelCallOptions = Parameters<LanguageModelV2['doGenerate']>[0];
+type AzureLanguageModelCallOptions = Parameters<LanguageModelV4['doGenerate']>[0];
 
 export interface AzureAccessToken {
   token: string;
@@ -138,10 +138,10 @@ function mirrorAzureResponseProviderOptions(
   return (promptModified ? mirroredPrompt : prompt) as AzureLanguageModelCallOptions['prompt'];
 }
 
-function withAzureResponsesInputCompatibility(model: LanguageModelV2): LanguageModelV2 {
+function withAzureResponsesInputCompatibility(model: LanguageModelV4): LanguageModelV4 {
   return new Proxy(model, {
     get(target, property, receiver) {
-      // Audit this wrapper when AI SDK adds new prompt-taking LanguageModelV2 methods.
+      // Audit this wrapper when AI SDK adds new prompt-taking LanguageModelV4 methods.
       if (property === 'doGenerate') {
         return (options: AzureLanguageModelCallOptions) =>
           target.doGenerate({
@@ -152,7 +152,7 @@ function withAzureResponsesInputCompatibility(model: LanguageModelV2): LanguageM
       }
 
       if (property === 'doStream') {
-        return (options: Parameters<LanguageModelV2['doStream']>[0]) =>
+        return (options: Parameters<LanguageModelV4['doStream']>[0]) =>
           target.doStream({
             ...options,
             providerOptions: mirrorAzureProviderOptionsForOpenAI(options.providerOptions),
@@ -571,7 +571,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     headers?: Record<string, string>;
     transport?: OpenAITransport;
     responsesWebSocket?: ResponsesWebSocketOptions;
-  }): Promise<LanguageModelV2> {
+  }): Promise<LanguageModelV4> {
     const useResponsesAPI = this.config.useResponsesAPI ?? false;
     const apiVersion =
       this.config.apiVersion ||

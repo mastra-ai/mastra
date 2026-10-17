@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
@@ -14,7 +14,7 @@ vi.mock('posthog-node', () => ({
 }));
 
 function createCapturingModel(captured: { systemMessages: string[] }) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async options => {
       captured.systemMessages = options.prompt
         .filter((msg: any) => msg.role === 'system')

@@ -29,7 +29,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
 import { MessageList } from '../message-list';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const TOOL_CALL_ID = 'call-1';
 const DECLINE_REASON = 'Tool call was not approved by the user';
@@ -60,7 +60,7 @@ function createFindUserTool() {
  */
 function createMockModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -115,7 +115,7 @@ function findStoredToolInvocation(messages: MastraDBMessage[], toolCallId: strin
 
 /** Project recalled messages to AI SDK v6 UI parts and pull the part for a toolCallId. */
 function findV6ToolPart(messages: MastraDBMessage[], toolCallId: string) {
-  const uiMessages = new MessageList().add(messages, 'memory').get.all.aiV6.ui();
+  const uiMessages = new MessageList().add(messages, 'memory').get.all.aiSdk.ui();
   for (const uiMessage of uiMessages) {
     for (const part of uiMessage.parts) {
       if ('toolCallId' in part && part.toolCallId === toolCallId) {

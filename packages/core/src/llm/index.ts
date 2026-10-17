@@ -1,20 +1,20 @@
 import type {
   EmbedManyResult as AiEmbedManyResult,
   EmbedResult as AiEmbedResult,
-  CoreAssistantMessage as AiCoreAssistantMessage,
-  CoreMessage as AiCoreMessage,
-  CoreSystemMessage as AiCoreSystemMessage,
-  CoreToolMessage as AiCoreToolMessage,
-  CoreUserMessage as AiCoreUserMessage,
+  AssistantModelMessage as AiCoreAssistantMessage,
+  ModelMessage as AiCoreMessage,
+  SystemModelMessage as AiCoreSystemMessage,
+  ToolModelMessage as AiCoreToolMessage,
+  UserModelMessage as AiCoreUserMessage,
   UIMessage,
   streamText,
   streamObject,
   generateText,
   generateObject,
-  StreamTextOnFinishCallback,
+  StreamTextOnEndCallback as StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
   SystemModelMessage,
-} from '@internal/ai-sdk-v5';
+} from '@internal/ai-v7';
 
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -36,9 +36,9 @@ export type CoreUserMessage = AiCoreUserMessage;
 
 export type CoreToolMessage = AiCoreToolMessage;
 
-export type EmbedResult<T> = AiEmbedResult<T>;
+export type EmbedResult = AiEmbedResult;
 
-export type EmbedManyResult<T> = AiEmbedManyResult<T>;
+export type EmbedManyResult = AiEmbedManyResult;
 
 export type BaseStructuredOutputType = 'string' | 'number' | 'boolean' | 'date';
 

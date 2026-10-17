@@ -76,6 +76,7 @@ export default defineConfig({
     'src/network/index.ts',
     'src/network/vNext/index.ts',
     'src/vector/filter/index.ts',
+    'src/ai/test.ts',
     'src/test-utils/llm-mock.ts',
     'src/a2a/client.ts',
     'src/a2a/v1.ts',
@@ -115,8 +116,7 @@ export default defineConfig({
     neverBundle: ['vite', 'vitest'],
     alwaysBundle: [
       '@ai-sdk/openai',
-      '@internal/ai-sdk-v5',
-      '@internal/ai-v6',
+      '@internal/ai-v7',
       '@internal/auth',
       '@internal/core',
       '@internal/voice',
@@ -131,8 +131,6 @@ export default defineConfig({
       new Set([
         '@ai-sdk/*',
         'eventsource-parser',
-        '@internal/ai-sdk-v5',
-        '@internal/ai-v6',
         '@internal/ai-v7',
         '@internal/external-types',
         '@internal/core',

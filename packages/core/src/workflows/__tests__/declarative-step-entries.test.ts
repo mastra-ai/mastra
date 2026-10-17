@@ -6,7 +6,7 @@
  * materializes them into runnable steps, the shared helpers, and end-to-end
  * runtime behavior across both execution engines.
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
@@ -34,7 +34,7 @@ function textAgent(id: string, response: string, durable: boolean = false) {
     id,
     name: id,
     instructions: 'You echo a fixed response.',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

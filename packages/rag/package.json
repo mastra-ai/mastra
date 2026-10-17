@@ -45,7 +45,6 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/big.js": "^6.2.2",

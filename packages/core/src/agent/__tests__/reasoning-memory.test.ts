@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV4, convertArrayToReadableStream } from './mock-model';
 
 /**
  * Creates a mock model that simulates OpenAI reasoning model responses.
@@ -9,7 +9,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model'
  * followed by text content.
  */
 function createReasoningMockModel(reasoningItemId: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -100,7 +100,7 @@ function createReasoningMockModel(reasoningItemId: string) {
  * - text has itemId: "msg_xxx"
  */
 function createReasoningMockModelWithTextItemId(reasoningItemId: string, textItemId: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () =>
       ({
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -207,7 +207,7 @@ function createReasoningMockModelWithTextItemId(reasoningItemId: string, textIte
  * Creates a simple mock model for the follow-up request.
  */
 function createSimpleMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -600,7 +600,7 @@ describe('Reasoning + Memory Integration', () => {
     const textItemId = 'msg_text123';
 
     // Create a model that sends text with providerMetadata, then a tool call
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () =>
         ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -725,7 +725,7 @@ describe('Reasoning + Memory Integration', () => {
     const textItemId = 'msg_text123';
 
     // Create a model that sends: reasoning → text → tool call
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () =>
         ({
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -877,10 +877,10 @@ describe('Reasoning + Memory Integration', () => {
 /**
  * Spy Tests: Compare LLM Response Output vs Next Request Input
  *
- * These tests use MockLanguageModelV2.doStreamCalls to spy on what the model
+ * These tests use MockLanguageModelV4.doStreamCalls to spy on what the model
  * receives on the second call, and compare it with what the first call returned.
  * This reveals exactly what reasoning data survives the conversion pipeline:
- * MastraDBMessage → UIMessage → ModelMessage → LanguageModelV2Prompt
+ * MastraDBMessage → UIMessage → ModelMessage → LanguageModelV4Prompt
  *
  * @see https://github.com/mastra-ai/mastra/issues/12980
  */
@@ -904,7 +904,7 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
     const textItemId = 'msg_spy_text_456';
 
     // Turn 1: OpenAI-style model returns reasoning (rs_*) + text (msg_*)
-    const openaiModel = new MockLanguageModelV2({
+    const openaiModel = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -963,7 +963,7 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
     });
 
     // Turn 2: Spy model
-    const spyModel = new MockLanguageModelV2({
+    const spyModel = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

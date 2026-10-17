@@ -67,7 +67,7 @@ Create `server/api/chat.ts`:
 
 ```ts title="server/api/chat.ts"
 import { handleChatStream } from '@mastra/ai-sdk'
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 import { createUIMessageStreamResponse } from 'ai'
 import { mastra } from '../../src/mastra'
 
@@ -108,7 +108,7 @@ export default defineEventHandler(async event => {
       console.log('No previous messages found.')
     }
 
-    const uiMessages = toAISdkV5Messages(response?.messages || [])
+    const uiMessages = toAISdkMessages(response?.messages || [])
 
     return uiMessages
   }

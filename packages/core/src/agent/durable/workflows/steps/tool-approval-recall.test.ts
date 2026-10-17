@@ -139,7 +139,7 @@ async function runMappingStep(toolResults: unknown[]) {
     | Record<string, any>
     | undefined;
 
-  const v6 = recalled.get.all.aiV6
+  const v6 = recalled.get.all.aiSdk
     .ui()
     .flatMap(m => m.parts)
     .find((p: any) => 'toolCallId' in p && p.toolCallId === TOOL_CALL_ID) as Record<string, any> | undefined;

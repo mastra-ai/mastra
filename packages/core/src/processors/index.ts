@@ -1,5 +1,5 @@
-import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { CoreMessage as CoreMessageV4, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4, SharedV4Warning, LanguageModelV4Prompt } from '@ai-sdk/provider';
+import type { ModelMessage as CoreMessageV4, StepResult, ToolChoice } from '@internal/ai-v7';
 import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
@@ -199,7 +199,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
 
   /**
    * Current model for this step.
-   * Can be a resolved MastraLanguageModelV2 or an unresolved config (string, OpenAI-compatible config).
+   * Can be a resolved MastraLanguageModelV4 or an unresolved config (string, OpenAI-compatible config).
    */
   model: MastraLanguageModel;
   /** Current tools available for this step */
@@ -246,7 +246,7 @@ export type RunProcessInputStepArgs = Omit<
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
 export type ProcessInputStepResult = {
-  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
+  model?: LanguageModelV4 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
   /** Override the active assistant response message ID for this step */
   messageId?: string;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
@@ -281,7 +281,7 @@ export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & 
  * Arguments for processLLMRequest method.
  *
  * Called *after* `MessageList` has been converted to the LLM-shaped prompt
- * (`LanguageModelV2Prompt`) and *before* the prompt is forwarded to the
+ * (`LanguageModelV4Prompt`) and *before* the prompt is forwarded to the
  * provider. Mutations affect only what is sent to the model on this call —
  * they are *not* persisted back to the message list, so reasoning,
  * tool-result formats, etc. can be rewritten transiently without losing data
@@ -356,7 +356,7 @@ export type ComputeStateSignalResult = ProcessorStateSignal | undefined | void;
 
 export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
   /** The LLM request prompt that will be sent to the provider on this call. Processors may return a modified copy. */
-  prompt: LanguageModelV2Prompt;
+  prompt: LanguageModelV4Prompt;
   /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
   model: MastraLanguageModel;
   /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
@@ -384,7 +384,7 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
 export type ProcessLLMRequestResult =
   | {
       /** The prompt to forward to the provider for this call. */
-      prompt?: LanguageModelV2Prompt;
+      prompt?: LanguageModelV4Prompt;
       /**
        * When set, the loop emits these chunks instead of invoking the model.
        * The cached chunks must be in the same shape `MastraModelOutput`
@@ -423,7 +423,7 @@ export interface CachedLLMStepResponse {
    */
   chunks: CachedLLMStepChunk[];
   /** Warnings reported by the language model call (e.g. unsupported settings). */
-  warnings?: LanguageModelV2CallWarning[];
+  warnings?: SharedV4Warning[];
   /** Provider request body captured for tracing/observability. */
   request?: unknown;
   /** Raw provider response captured for tracing/observability. */
@@ -458,7 +458,7 @@ export interface ProcessLLMResponseArgs<TTripwireMetadata = unknown> extends Pro
   /** Per-processor state shared with `processLLMRequest`. */
   state: Record<string, unknown>;
   /** Warnings reported by the language model call. */
-  warnings?: LanguageModelV2CallWarning[];
+  warnings?: SharedV4Warning[];
   /** Provider request body, when available. */
   request?: unknown;
   /** Raw provider response, when available. */
@@ -673,8 +673,7 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * compile time.
    */
   readonly spanAttributes?:
-    | Partial<SpanTypeMap[ProcessorSpanType]>
-    | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>);
+    Partial<SpanTypeMap[ProcessorSpanType]> | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>);
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -752,7 +751,7 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
 
   /**
    * Process the LLM-shaped prompt after `MessageList` has been converted to
-   * `LanguageModelV2Prompt` and immediately before it is forwarded to the
+   * `LanguageModelV4Prompt` and immediately before it is forwarded to the
    * provider on this call.
    *
    * Unlike `processInputStep`, mutations made here are *not* persisted to the
@@ -934,9 +933,7 @@ export type ErrorProcessor<TTripwireMetadata = unknown> = WithRequired<
   Processor<string, TTripwireMetadata>;
 
 export type ProcessorTypes<TTripwireMetadata = unknown> =
-  | InputProcessor<TTripwireMetadata>
-  | OutputProcessor<TTripwireMetadata>
-  | ErrorProcessor<TTripwireMetadata>;
+  InputProcessor<TTripwireMetadata> | OutputProcessor<TTripwireMetadata> | ErrorProcessor<TTripwireMetadata>;
 
 /** @internal Context consumed by processor step adapters, without workflow engine machinery. */
 export type ProcessorStepExecutor<TInput = ProcessorStepOutput> = (args: {
@@ -982,15 +979,13 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
  * Input processor config: can be a Processor or a Workflow.
  */
 export type InputProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  | InputProcessor<TTripwireMetadata>
-  | ProcessorWorkflow;
+  InputProcessor<TTripwireMetadata> | ProcessorWorkflow;
 
 /**
  * Output processor config: can be a Processor or a Workflow.
  */
 export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  | OutputProcessor<TTripwireMetadata>
-  | ProcessorWorkflow;
+  OutputProcessor<TTripwireMetadata> | ProcessorWorkflow;
 
 /**
  * Error processor config: must be a processor with processAPIError.
@@ -1005,8 +1000,7 @@ export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcess
  * `processLLMRequest` still gets its hook. Entries without that method are inert there.
  */
 export type LLMRequestProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  | InputProcessorOrWorkflow<TTripwireMetadata>
-  | ErrorProcessorOrWorkflow<TTripwireMetadata>;
+  InputProcessorOrWorkflow<TTripwireMetadata> | ErrorProcessorOrWorkflow<TTripwireMetadata>;
 
 export { isProcessorWorkflow } from './is-processor-workflow';
 

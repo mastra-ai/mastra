@@ -3,8 +3,8 @@
  * citation) must be stored in memory as a `source-document` part, not as a
  * url source with an empty url.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
@@ -15,7 +15,7 @@ const threadId = 'source-document-thread';
 const resourceId = 'source-document-resource';
 
 function createModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -37,7 +37,7 @@ function createModel() {
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 describe('Agent memory: streamed document sources', () => {
@@ -75,7 +75,7 @@ describe('Agent memory: streamed document sources', () => {
     );
     expect(storedParts.filter(part => part.type === 'source' && !part.source.url)).toEqual([]);
 
-    const [uiMessage] = new MessageList().add(assistant!, 'memory').get.all.aiV5.ui();
+    const [uiMessage] = new MessageList().add(assistant!, 'memory').get.all.aiSdk.ui();
     expect(uiMessage!.parts).toContainEqual(
       expect.objectContaining({ type: 'source-document', sourceId: 'doc-1', filename: 'q3.pdf' }),
     );

@@ -1,11 +1,11 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Processor } from '../processors/index';
 import type { MastraDBMessage } from './message-list';
 import { Agent } from './index';
 
 describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
   let processedStreamChunks: string[] = [];
   let finalMessageContent: string = '';
 
@@ -52,7 +52,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
     processedStreamChunks = [];
     finalMessageContent = '';
 
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doStream: async () => {
         return {
           stream: convertArrayToReadableStream([
@@ -140,7 +140,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
 describe('Output processor stream errors', () => {
   it('fails before emitting an unprocessed sensitive chunk', async () => {
     const sensitiveText = 'card: 4111-1111-1111-1111';
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -191,7 +191,7 @@ describe('Output processor stream errors', () => {
 });
 
 describe('Processor state persistence across processOutputStream and processOutputResult', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
   let stateInOutputStream: Record<string, unknown> | null = null;
   let stateInOutputResult: Record<string, unknown> | null = null;
 
@@ -221,7 +221,7 @@ describe('Processor state persistence across processOutputStream and processOutp
     stateInOutputStream = null;
     stateInOutputResult = null;
 
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doStream: async () => {
         return {
           stream: convertArrayToReadableStream([
@@ -313,10 +313,10 @@ describe('Processor state persistence across processOutputStream and processOutp
 });
 
 describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doStream: async () => {
         return {
           stream: convertArrayToReadableStream([

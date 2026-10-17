@@ -1,10 +1,6 @@
-import { openai } from '@ai-sdk/openai-v5';
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+import { openai } from '@ai-sdk/openai';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { TestIntegration } from '../../integration/openapi-toolset.mock';
@@ -29,11 +25,11 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 
 function toolsTest(version: 'v2' | 'v3') {
   const integration = new TestIntegration();
-  let mockModel: MockLanguageModelV2 | MockLanguageModelV3;
+  let mockModel: MockLanguageModelV4 | MockLanguageModelV4;
 
   beforeEach(() => {
     {
-      mockModel = new MockLanguageModelV2({
+      mockModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -252,10 +248,10 @@ function toolsTest(version: 'v2' | 'v3') {
 
     it('should call findUserTool with parameters', async () => {
       // Create a new mock model for this test that calls findUserTool
-      let findUserToolModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let findUserToolModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        findUserToolModel = new MockLanguageModelV2({
+        findUserToolModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -335,10 +331,10 @@ function toolsTest(version: 'v2' | 'v3') {
 
     it('should call client side tools in generate', async () => {
       // Create a mock model that calls the changeColor tool
-      let clientToolModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let clientToolModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        clientToolModel = new MockLanguageModelV2({
+        clientToolModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -405,10 +401,10 @@ function toolsTest(version: 'v2' | 'v3') {
 
     it('should call client side tools in stream', async () => {
       // Reuse the same mock model for streaming
-      let clientToolModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let clientToolModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        clientToolModel = new MockLanguageModelV2({
+        clientToolModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -479,10 +475,10 @@ function toolsTest(version: 'v2' | 'v3') {
 
     it('should make requestContext available to tools in generate', async () => {
       // Create a mock model that calls the testTool
-      let requestContextModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let requestContextModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        requestContextModel = new MockLanguageModelV2({
+        requestContextModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -573,10 +569,10 @@ function toolsTest(version: 'v2' | 'v3') {
 
     it('should make requestContext available to tools in stream', async () => {
       // Create a mock model that calls the testTool
-      let requestContextModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let requestContextModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        requestContextModel = new MockLanguageModelV2({
+        requestContextModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls',
@@ -685,10 +681,10 @@ function toolsTest(version: 'v2' | 'v3') {
 
       let callCount = 0;
 
-      let stopFinishModel: MockLanguageModelV2 | MockLanguageModelV3;
+      let stopFinishModel: MockLanguageModelV4 | MockLanguageModelV4;
 
       {
-        stopFinishModel = new MockLanguageModelV2({
+        stopFinishModel = new MockLanguageModelV4({
           doStream: async () => {
             callCount++;
             if (callCount === 1) {
@@ -776,7 +772,7 @@ toolsTest('v3');
 
 describe('requireApproval property preservation', () => {
   it('should preserve requireApproval property from tools passed via toolsets', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -827,7 +823,7 @@ describe('requireApproval property preservation', () => {
   });
 
   it('should preserve requireApproval property from tools passed via clientTools', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -876,7 +872,7 @@ describe('requireApproval property preservation', () => {
   });
 
   it('should preserve requireApproval property from assigned tools', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -959,7 +955,7 @@ describe('requireApproval property preservation', () => {
   });
 
   it('should preserve a needsApprovalFn attached directly to a tool (MCP shape) through convertTools', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -1018,7 +1014,7 @@ describe('requireApproval property preservation', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'Test agent for hooks',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -1060,7 +1056,7 @@ describe('requireApproval property preservation', () => {
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'Test agent for hooks',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -1120,7 +1116,7 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
   });
 
   it('sub-agent tool is created with correct schema', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -1157,7 +1153,7 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
   });
 
   it('reuses sub-agent tool schemas across conversions', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -1223,7 +1219,7 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
   ])(
     'does not register new schemas in the Zod global registry on repeated conversions ($name)',
     async ({ options }) => {
-      const mockModel = new MockLanguageModelV2();
+      const mockModel = new MockLanguageModelV4();
       const work = createTool({
         id: 'work',
         description: 'Does work',

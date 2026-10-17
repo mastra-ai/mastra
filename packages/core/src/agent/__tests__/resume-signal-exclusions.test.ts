@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -16,7 +16,7 @@ describe.each([false, true])('resume signals (durable: %s)', durable => {
       async hideSignals => {
         let calls = 0;
         const prompts: unknown[] = [];
-        const model = new MockLanguageModelV2({
+        const model = new MockLanguageModelV4({
           doStream: async ({ prompt }) => {
             prompts.push(prompt);
             const first = calls++ === 0;

@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -19,7 +19,7 @@ function createModel(modelId = 'test') {
     provider: 'test',
     modelId,
     specificationVersion: 'v2',
-  } as LanguageModelV2;
+  } as LanguageModelV4;
 }
 
 describe.each(AgentTypes)('%s modelSettings.timeout validation', (_, AgentType) => {

@@ -1,7 +1,7 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType, getOrCreateSpan, getTimeToFirstChunkMs } from '@mastra/core/observability';
@@ -315,7 +315,7 @@ const createMockModelV2 = () => {
     return `00000000-0000-0000-0000-${String(callCount).padStart(12, '0')}`;
   };
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async options => {
       const responseId = getResponseId();
       const prompt = extractPromptText(options.prompt);
@@ -1112,7 +1112,7 @@ describe('Tracing Integration Tests', () => {
   describe('time to first chunk isolation', () => {
     /** Streams one word after `delayMs`, so each agent gets a distinct first-chunk clock. */
     function delayedTextModel(delayMs: number, text: string) {
-      return new MockLanguageModelV2({
+      return new MockLanguageModelV4({
         doStream: async () => {
           await new Promise(resolve => setTimeout(resolve, delayMs));
           return {
@@ -1157,7 +1157,7 @@ describe('Tracing Integration Tests', () => {
         },
       });
       let call = 0;
-      const outerModel = new MockLanguageModelV2({
+      const outerModel = new MockLanguageModelV4({
         doStream: async () => {
           await new Promise(resolve => setTimeout(resolve, 40));
           return {
@@ -1256,7 +1256,7 @@ describe('Tracing Integration Tests', () => {
         execute: async () => ({ summary: 'done' }),
       });
       let call = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           await new Promise(resolve => setTimeout(resolve, 40));
           return {
@@ -1657,7 +1657,7 @@ describe('Tracing Integration Tests', () => {
   });
 
   it('should propagate tracingContext to agent steps in workflows', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'response-metadata', id: '1' },
@@ -1711,7 +1711,7 @@ describe('Tracing Integration Tests', () => {
     // This test verifies that MODEL_STEP spans have correct startTime.
     // The span should start when the model API call begins, not when the response starts streaming.
 
-    const delayedMockModel = new MockLanguageModelV2({
+    const delayedMockModel = new MockLanguageModelV4({
       doStream: async () => {
         // Simulate model processing delay before first token.
         // This must be a real delay (not a microtask) because the test asserts
@@ -1809,7 +1809,7 @@ describe('Tracing Integration Tests', () => {
 
         let callCount = 0;
 
-        const multiStepMockModel = new MockLanguageModelV2({
+        const multiStepMockModel = new MockLanguageModelV4({
           doGenerate: async () => {
             callCount++;
 

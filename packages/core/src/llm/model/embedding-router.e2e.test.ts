@@ -7,16 +7,16 @@ import { MASTRA_USER_AGENT } from './gateways/constants.js';
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai', 'google']);
 
-// Mock the @ai-sdk/openai-compatible-v6 module for custom URL tests
-vi.mock('@ai-sdk/openai-compatible-v6', async () => {
-  const actual = await vi.importActual('@ai-sdk/openai-compatible-v6');
+// Mock the @ai-sdk/openai-compatible module for custom URL tests
+vi.mock('@ai-sdk/openai-compatible', async () => {
+  const actual = await vi.importActual('@ai-sdk/openai-compatible');
   return {
     ...actual,
     createOpenAICompatible: vi.fn(),
   };
 });
 
-const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v6');
+const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
@@ -225,7 +225,7 @@ describe('ModelRouterEmbeddingModel Integration', () => {
       // Setup mock implementation to return a mock embedding model
       vi.mocked(createOpenAICompatible).mockReturnValue({
         embeddingModel: vi.fn((_modelId: string) => {
-          // Return a mock EmbeddingModelV3 instance
+          // Return a mock EmbeddingModelV4 instance
           return {
             specificationVersion: 'v3',
             modelId: _modelId,

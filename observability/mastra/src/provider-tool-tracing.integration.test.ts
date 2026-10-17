@@ -9,9 +9,9 @@
  * - a call whose result never arrives falls back to the AGENT_RUN anchor,
  * for both the regular and durable agent loops.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -24,7 +24,7 @@ const testUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
 
 /** Provider tool-call and tool-result resolve within a single model step. */
 function sameStepProviderToolModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -60,7 +60,7 @@ function sameStepProviderToolModel() {
  */
 function crossStepProviderToolModel() {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const first = call++ === 0;
       return {
@@ -110,7 +110,7 @@ function crossStepProviderToolModel() {
 
 /** Provider tool-call whose result never arrives before the run finishes. */
 function abandonedProviderToolModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -141,7 +141,7 @@ const weatherTool = createTool({
   execute: async ({ city }: { city: string }) => ({ city, tempC: 21 }),
 });
 
-function buildAgent(model: MockLanguageModelV2) {
+function buildAgent(model: MockLanguageModelV4) {
   const testExporter = new TestExporter();
   const agent = new Agent({
     id: 'provider-tool-agent',
@@ -159,7 +159,7 @@ function buildAgent(model: MockLanguageModelV2) {
   return { agent: mastra.getAgent('agent'), testExporter };
 }
 
-function buildDurableAgent(model: MockLanguageModelV2) {
+function buildDurableAgent(model: MockLanguageModelV4) {
   const testExporter = new TestExporter();
   const agent = new Agent({
     id: 'provider-tool-agent',

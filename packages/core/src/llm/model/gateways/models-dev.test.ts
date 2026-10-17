@@ -40,19 +40,19 @@ const {
   xAIResponsesMock: vi.fn(),
 }));
 
-vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
-vi.mock('@ai-sdk/cerebras-v6', () => ({ createCerebras: createCerebrasMock }));
-vi.mock('@ai-sdk/deepinfra-v6', () => ({ createDeepInfra: createDeepInfraMock }));
-vi.mock('@ai-sdk/deepseek-v7', () => ({ createDeepSeek: createDeepSeekMock }));
-vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
-vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
-vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
-vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
-vi.mock('@ai-sdk/perplexity-v6', () => ({ createPerplexity: createPerplexityMock }));
-vi.mock('@ai-sdk/togetherai-v6', () => ({ createTogetherAI: createTogetherAIMock }));
-vi.mock('@ai-sdk/xai-v6', () => ({ createXai: createXaiMock }));
-vi.mock('@internal/ai-v6', () => ({ createGateway: createGatewayMock }));
-vi.mock('@openrouter/ai-sdk-provider-v6', () => ({ createOpenRouter: createOpenRouterMock }));
+vi.mock('@ai-sdk/anthropic', () => ({ createAnthropic: createAnthropicMock }));
+vi.mock('@ai-sdk/cerebras', () => ({ createCerebras: createCerebrasMock }));
+vi.mock('@ai-sdk/deepinfra', () => ({ createDeepInfra: createDeepInfraMock }));
+vi.mock('@ai-sdk/deepseek', () => ({ createDeepSeek: createDeepSeekMock }));
+vi.mock('@ai-sdk/google', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
+vi.mock('@ai-sdk/groq', () => ({ createGroq: createGroqMock }));
+vi.mock('@ai-sdk/mistral', () => ({ createMistral: createMistralMock }));
+vi.mock('@ai-sdk/openai', () => ({ createOpenAI: createOpenAIMock }));
+vi.mock('@ai-sdk/perplexity', () => ({ createPerplexity: createPerplexityMock }));
+vi.mock('@ai-sdk/togetherai', () => ({ createTogetherAI: createTogetherAIMock }));
+vi.mock('@ai-sdk/xai', () => ({ createXai: createXaiMock }));
+vi.mock('@internal/ai-v7', () => ({ createGateway: createGatewayMock }));
+vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: createOpenRouterMock }));
 
 // Mock fetch globally
 const mockFetch = vi.fn();

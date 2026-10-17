@@ -139,7 +139,7 @@ describe('SemanticRecall', () => {
       });
 
       // Should prepend similar messages
-      const resultMessages = Array.isArray(result) ? result : result.get.all.aiV5.ui();
+      const resultMessages = Array.isArray(result) ? result : result.get.all.aiSdk.ui();
       expect(resultMessages).toHaveLength(3);
       expect(resultMessages[0].id).toBe('msg-1');
       expect(resultMessages[1].id).toBe('msg-2');
@@ -281,7 +281,7 @@ describe('SemanticRecall', () => {
       });
 
       // Should only include messages above threshold
-      const resultMessages = Array.isArray(result) ? result : result.get.all.aiV5.ui();
+      const resultMessages = Array.isArray(result) ? result : result.get.all.aiSdk.ui();
       expect(resultMessages).toHaveLength(3); // 2 similar + 1 new
       expect(resultMessages.find((m: any) => m.id === 'msg-2')).toBeUndefined();
 
@@ -445,7 +445,7 @@ describe('SemanticRecall', () => {
       });
 
       // Should return original messages on error
-      const resultMessages = Array.isArray(result) ? result : result.get.all.aiV5.ui();
+      const resultMessages = Array.isArray(result) ? result : result.get.all.aiSdk.ui();
       expect(resultMessages).toHaveLength(inputMessages.length);
       expect(resultMessages[0]!.id).toBe(inputMessages[0]!.id);
     });
@@ -641,7 +641,7 @@ describe('SemanticRecall', () => {
       });
 
       // Should not duplicate msg-1
-      const resultMessages = Array.isArray(result) ? result : result.get.all.aiV5.ui();
+      const resultMessages = Array.isArray(result) ? result : result.get.all.aiSdk.ui();
       expect(resultMessages).toHaveLength(3); // msg-2 (new from search) + msg-1 (existing) + msg-new
       expect(resultMessages.filter((m: any) => m.id === 'msg-1')).toHaveLength(1);
     });
@@ -857,7 +857,7 @@ describe('SemanticRecall', () => {
       });
 
       // Should have: system message (cross-thread) + same-thread message + original message
-      const promptMessages = Array.isArray(result) ? result : result.get.all.aiV5.prompt();
+      const promptMessages = Array.isArray(result) ? result : result.get.all.aiSdk.prompt();
       expect(promptMessages).toHaveLength(3);
 
       // First message should be the formatted cross-thread message (as system message)
@@ -925,7 +925,7 @@ describe('SemanticRecall', () => {
         requestContext,
       });
 
-      const [systemMessage] = (result as MessageList).get.all.aiV5.prompt();
+      const [systemMessage] = (result as MessageList).get.all.aiSdk.prompt();
       const month = new Date('2024-01-15T10:30:00.000Z').toLocaleString('default', { month: 'short' });
 
       expect(systemMessage!.role).toBe('system');

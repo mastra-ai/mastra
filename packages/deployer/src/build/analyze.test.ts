@@ -390,7 +390,7 @@ describe('npm alias dependencies', () => {
         version: '1.0.0',
         type: 'module',
         dependencies: {
-          '@ai-sdk/provider-utils-v7': 'npm:@ai-sdk/provider-utils@5.0.0',
+          '@ai-sdk/provider-utils': 'npm:@ai-sdk/provider-utils@5.0.0',
         },
       }),
     );
@@ -402,7 +402,7 @@ describe('npm alias dependencies', () => {
     await writeFile(
       entryFile,
       `
-        import { aliasValue } from '@ai-sdk/provider-utils-v7';
+        import { aliasValue } from '@ai-sdk/provider-utils';
 
         export const value = aliasValue;
       `,
@@ -416,14 +416,14 @@ describe('npm alias dependencies', () => {
         projectRoot: tempDir,
         platform: 'node',
         bundlerOptions: {
-          externals: ['@ai-sdk/provider-utils-v7'],
+          externals: ['@ai-sdk/provider-utils'],
           enableSourcemap: false,
         },
       },
       noopLogger,
     );
 
-    expect(result.externalDependencies.get('@ai-sdk/provider-utils-v7')).toEqual({
+    expect(result.externalDependencies.get('@ai-sdk/provider-utils')).toEqual({
       version: '5.0.0',
       packageSpec: 'npm:@ai-sdk/provider-utils@5.0.0',
     });
@@ -446,7 +446,7 @@ describe('npm alias dependencies', () => {
         version: '1.0.0',
         type: 'module',
         dependencies: {
-          '@ai-sdk/provider-utils-v5': 'npm:@ai-sdk/provider-utils@3.0.25',
+          '@ai-sdk/provider-utils': 'npm:@ai-sdk/provider-utils@3.0.25',
         },
       }),
     );
@@ -466,14 +466,14 @@ describe('npm alias dependencies', () => {
         platform: 'node',
         bundlerOptions: {
           externals: [],
-          dynamicPackages: ['@ai-sdk/provider-utils-v5'],
+          dynamicPackages: ['@ai-sdk/provider-utils'],
           enableSourcemap: false,
         },
       },
       noopLogger,
     );
 
-    expect(result.externalDependencies.get('@ai-sdk/provider-utils-v5')).toEqual({
+    expect(result.externalDependencies.get('@ai-sdk/provider-utils')).toEqual({
       version: '3.0.25',
       packageSpec: 'npm:@ai-sdk/provider-utils@3.0.25',
     });

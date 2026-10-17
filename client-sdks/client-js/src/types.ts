@@ -3,7 +3,6 @@ import type {
   AgentExecutionOptions,
   SerializableStructuredOutputOptions,
   ToolsInput,
-  UIMessageWithMetadata,
   AgentInstructions,
   AgentEditorConfig,
 } from '@mastra/core/agent';

@@ -1,8 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+import { convertArrayToReadableStream, MockLanguageModelV4, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraModelGateway } from '../../llm/model/gateways/base';
@@ -45,8 +41,8 @@ class StructuredOutputTestGateway extends MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<MockLanguageModelV2> {
-    return new MockLanguageModelV2({
+  }): Promise<MockLanguageModelV4> {
+    return new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -81,13 +77,13 @@ class StructuredOutputTestGateway extends MastraModelGateway {
 }
 
 function structuredOutputTests({ version }: { version: 'v2' | 'v3' }) {
-  let zodSchemaModel: MockLanguageModelV2 | MockLanguageModelV3;
-  let jsonSchemaModel: MockLanguageModelV2 | MockLanguageModelV3;
+  let zodSchemaModel: MockLanguageModelV4 | MockLanguageModelV4;
+  let jsonSchemaModel: MockLanguageModelV4 | MockLanguageModelV4;
 
   beforeEach(() => {
     {
       // V2 Mock for ZodSchema test - arrays must be wrapped in {"elements": [...]}
-      zodSchemaModel = new MockLanguageModelV2({
+      zodSchemaModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -133,7 +129,7 @@ function structuredOutputTests({ version }: { version: 'v2' | 'v3' }) {
       });
 
       // V2 Mock for JSONSchema7 test
-      jsonSchemaModel = new MockLanguageModelV2({
+      jsonSchemaModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -277,7 +273,7 @@ function structuredOutputTests({ version }: { version: 'v2' | 'v3' }) {
       it('should use Mastra custom gateways for a separate structuring model', async () => {
         process.env.TEST_API_KEY = 'test-api-key-123';
 
-        const primaryModel = new MockLanguageModelV2({
+        const primaryModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -338,7 +334,7 @@ function structuredOutputTests({ version }: { version: 'v2' | 'v3' }) {
       });
 
       it('should surface separate structuring model errors from the processor', async () => {
-        const primaryModel = new MockLanguageModelV2({
+        const primaryModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -365,7 +361,7 @@ function structuredOutputTests({ version }: { version: 'v2' | 'v3' }) {
         });
 
         const structuringError = new Error('No recording found for gpt-5.4');
-        const structuringModel = new MockLanguageModelV2({
+        const structuringModel = new MockLanguageModelV4({
           doStream: async () => {
             throw structuringError;
           },
@@ -396,9 +392,9 @@ function structuredOutputTests({ version }: { version: 'v2' | 'v3' }) {
       });
 
       it('should parse JSON from text field when object is undefined and finishReason is tool-calls (generate)', async () => {
-        let bedrockStyleModel: MockLanguageModelV2 | MockLanguageModelV3;
+        let bedrockStyleModel: MockLanguageModelV4 | MockLanguageModelV4;
         {
-          bedrockStyleModel = new MockLanguageModelV2({
+          bedrockStyleModel = new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'tool-calls',
@@ -472,9 +468,9 @@ function structuredOutputTests({ version }: { version: 'v2' | 'v3' }) {
       });
 
       it('should parse JSON from text field when object is undefined and finishReason is tool-calls (stream)', async () => {
-        let bedrockStyleModel: MockLanguageModelV2 | MockLanguageModelV3;
+        let bedrockStyleModel: MockLanguageModelV4 | MockLanguageModelV4;
         {
-          bedrockStyleModel = new MockLanguageModelV2({
+          bedrockStyleModel = new MockLanguageModelV4({
             doGenerate: async () => {
               throw new Error('Generate not needed for stream test');
             },
@@ -548,7 +544,7 @@ describe('separate-model structured output logging', () => {
   const fallbackValue = { answer: 'fallback' };
 
   function textModel(text: string) {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: 'text', text }],
         finishReason: 'stop',
@@ -694,7 +690,7 @@ describe('separate-model structured output logging', () => {
       model: textModel('Forty-two.'),
     });
     new Mastra({ agents: { agent }, logger, storage: new InMemoryStore() });
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },

@@ -10,8 +10,8 @@
  *          feedback message, then stops (two-phase stop via pendingFeedbackStop).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -29,7 +29,7 @@ let callCount = 0;
  */
 function makeToolCallingModel(toolCallsBeforeStop: number) {
   callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount <= toolCallsBeforeStop) {
@@ -81,7 +81,7 @@ function makeToolCallingModel(toolCallsBeforeStop: number) {
  */
 function makeNeverStoppingModel() {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       return {
@@ -109,7 +109,7 @@ function makeNeverStoppingModel() {
   });
 }
 
-function makeAgent(model: LanguageModelV2, toolOutput?: unknown) {
+function makeAgent(model: LanguageModelV4, toolOutput?: unknown) {
   return new Agent({
     id: 'test-agent',
     name: 'test-agent',
@@ -142,7 +142,7 @@ describe('DurableAgent onIterationComplete callback', () => {
 
   it('stops the loop when callback returns { continue: false } (Bug 15)', async () => {
     const model = makeNeverStoppingModel();
-    const agent = makeAgent(model as LanguageModelV2);
+    const agent = makeAgent(model as LanguageModelV4);
     const durableAgent = createDurableAgent({ agent, pubsub });
 
     const onIterationComplete = vi.fn(() => ({ continue: false as const }));
@@ -170,7 +170,7 @@ describe('DurableAgent onIterationComplete callback', () => {
   it('forces the loop to continue when callback returns { continue: true } (Bug 15)', async () => {
     // Model stops naturally after 1 tool call (finishReason: stop on call 2)
     const model = makeToolCallingModel(1);
-    const agent = makeAgent(model as LanguageModelV2);
+    const agent = makeAgent(model as LanguageModelV4);
     const durableAgent = createDurableAgent({ agent, pubsub });
 
     let iteration = 0;
@@ -201,7 +201,7 @@ describe('DurableAgent onIterationComplete callback', () => {
 
   it('two-phase stop: { continue: false, feedback } allows one more turn then stops (Bug 13)', async () => {
     const model = makeNeverStoppingModel();
-    const agent = makeAgent(model as LanguageModelV2);
+    const agent = makeAgent(model as LanguageModelV4);
     const durableAgent = createDurableAgent({ agent, pubsub });
 
     let iteration = 0;
@@ -241,7 +241,7 @@ describe('DurableAgent onIterationComplete callback', () => {
 
   it('{ feedback } without continue injects feedback and continues (Bug 13)', async () => {
     const model = makeToolCallingModel(2);
-    const agent = makeAgent(model as LanguageModelV2);
+    const agent = makeAgent(model as LanguageModelV4);
     const durableAgent = createDurableAgent({ agent, pubsub });
 
     let iteration = 0;
@@ -274,7 +274,7 @@ describe('DurableAgent onIterationComplete callback', () => {
 
   it('receives correct iteration context', async () => {
     const model = makeToolCallingModel(1);
-    const agent = makeAgent(model as LanguageModelV2);
+    const agent = makeAgent(model as LanguageModelV4);
     const durableAgent = createDurableAgent({ agent, pubsub });
 
     const contexts: any[] = [];
@@ -318,7 +318,7 @@ describe('DurableAgent onIterationComplete callback', () => {
     ],
   ])('%s in the iteration callback payload', async (_name, toolOutput, expectedResult) => {
     const model = makeToolCallingModel(1);
-    const agent = makeAgent(model as LanguageModelV2, toolOutput);
+    const agent = makeAgent(model as LanguageModelV4, toolOutput);
     const durableAgent = createDurableAgent({ agent, pubsub });
     const onIterationComplete = vi.fn(() => ({ continue: false as const }));
 
@@ -344,7 +344,7 @@ describe('DurableAgent onIterationComplete callback', () => {
 
   it('errors in onIterationComplete do not crash the loop', async () => {
     const model = makeToolCallingModel(1);
-    const agent = makeAgent(model as LanguageModelV2);
+    const agent = makeAgent(model as LanguageModelV4);
     const durableAgent = createDurableAgent({ agent, pubsub });
 
     const onIterationComplete = vi.fn(() => {

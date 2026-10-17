@@ -1,9 +1,7 @@
-import { anthropic } from '@ai-sdk/anthropic-v5';
-import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v5';
-import { google } from '@ai-sdk/google-v5';
-import { openai } from '@ai-sdk/openai-v5';
-import { openai as openaiV6 } from '@ai-sdk/openai-v6';
-import { openai as openaiV7 } from '@ai-sdk/openai-v7';
+import { anthropic } from '@ai-sdk/anthropic';
+import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
+import { openai, openai as openaiV6, openai as openaiV7 } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

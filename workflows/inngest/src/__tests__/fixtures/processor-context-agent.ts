@@ -17,11 +17,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
+import { simulateReadableStream } from '@mastra/core/ai';
 import { Mastra } from '@mastra/core/mastra';
 import type { Processor } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import { DefaultStorage } from '@mastra/libsql';
-import { simulateReadableStream } from 'ai';
 import { Inngest } from 'inngest';
 import { z } from 'zod';
 

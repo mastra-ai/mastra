@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { EmbeddingModel } from '@mastra/core/ai';
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -11,7 +12,6 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
-import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type Adapter = 'libsql' | 'pg';

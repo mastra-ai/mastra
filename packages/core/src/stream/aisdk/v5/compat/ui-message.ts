@@ -1,4 +1,4 @@
-import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from '@internal/ai-v7';
 import { isUrlString } from './content';
 
 export function getResponseUIMessageId({
@@ -239,6 +239,14 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'raw': {
       // Raw chunks are not included in UI message streams
       // as they contain provider-specific data for developer use
+      return;
+    }
+
+    case 'custom':
+    case 'reasoning-file':
+    case 'tool-approval-request':
+    case 'tool-approval-response':
+    case 'tool-output-denied': {
       return;
     }
 

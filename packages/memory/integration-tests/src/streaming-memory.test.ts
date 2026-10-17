@@ -1,7 +1,5 @@
-import { openai } from '@ai-sdk/openai';
-import { openai as openaiV6 } from '@ai-sdk/openai-v6';
-import { useChat as useChatV5 } from '@ai-sdk/react-v5';
-import { useChat as useChatV6 } from '@ai-sdk/react-v6';
+import { openai, openai as openaiV6 } from '@ai-sdk/openai';
+import { useChat as useChatV5, useChat as useChatV6 } from '@ai-sdk/react';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, beforeAll, afterAll } from 'vitest';

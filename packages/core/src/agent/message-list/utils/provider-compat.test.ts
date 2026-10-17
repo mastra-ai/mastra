@@ -1,4 +1,4 @@
-import type { ModelMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage } from '@internal/ai-v7';
 import { describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';

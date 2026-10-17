@@ -6,8 +6,8 @@
  * with image-url normalization (Bug 9 parity fix).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -25,7 +25,7 @@ function createToolCallingModel(
   onPrompt?: (prompt: unknown) => void,
 ) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       onPrompt?.(prompt);
       callCount++;
@@ -70,7 +70,7 @@ function createToolCallingModel(
         warnings: [],
       };
     },
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 describe('DurableAgent toModelOutput parity', () => {
@@ -497,7 +497,7 @@ describe('DurableAgent toModelOutput parity', () => {
     });
 
     const prompts: any[] = [];
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt);
         return {
@@ -513,7 +513,7 @@ describe('DurableAgent toModelOutput parity', () => {
           warnings: [],
         };
       },
-    }) as unknown as LanguageModelV2;
+    }) as unknown as LanguageModelV4;
 
     const baseAgent = new Agent({
       name: 'client-map-agent',

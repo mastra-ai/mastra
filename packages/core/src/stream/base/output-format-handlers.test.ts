@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
-import { asSchema } from '@internal/ai-sdk-v5';
-import type { JSONSchema7 } from '@internal/ai-sdk-v5';
+import { asSchema } from '@internal/ai-v7';
+import type { JSONSchema7 } from '@internal/ai-v7';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../../error';

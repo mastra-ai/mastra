@@ -11,8 +11,8 @@
  * the contract instead of inferring it from streamed output. It fails when the
  * adapter passes `handleEvent` through unwrapped.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 
 import { PubSub } from '../../../events/pubsub';
@@ -66,7 +66,7 @@ class RecordingPubSub extends PubSub implements LeaseProvider {
 }
 
 function createTextModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -88,7 +88,7 @@ describe('durable stream adapter acknowledges every delivery', () => {
       id: 'ack-agent',
       name: 'Ack Agent',
       instructions: 'Test',
-      model: createTextModel() as LanguageModelV2,
+      model: createTextModel() as LanguageModelV4,
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, expect, it } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../utils';
 import { createFaithfulnessScorer } from './faithfulness';
@@ -7,7 +7,7 @@ import { createHallucinationScorer } from './hallucination';
 // Answers each judge call with the next scripted response: preprocess -> analyze -> reason.
 function scriptedJudge(responses: string[]) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const text = responses[call] ?? responses.at(-1)!;
       call += 1;

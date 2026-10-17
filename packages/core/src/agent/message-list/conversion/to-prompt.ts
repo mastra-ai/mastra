@@ -1,11 +1,14 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt, LanguageModelV4ToolResultOutput } from '@ai-sdk/provider';
 
+type LanguageModelV4ToolResultContent = Extract<LanguageModelV4ToolResultOutput, { type: 'content' }>['value'];
+
+import { anyToV4FileData } from '../../../stream/aisdk/v5/compat/content';
 import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData } from '../prompt/image-utils';
 import type { AIV5Type } from '../types';
 import { sanitizeToolName } from '../utils/tool-name';
 
-type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
+type AIV5LanguageModelV2Message = LanguageModelV4Prompt[0];
 
 /**
  * Deep-copy plain objects with their keys sorted, so the serialized bytes of tool
@@ -115,7 +118,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         }
         // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
         // An output-less tool result (lost result chunk, OM rewrite) must still
-        // present a valid LanguageModelV2ToolResultOutput shape.
+        // present a valid LanguageModelV4ToolResultOutput shape.
         const output = part.output ?? { type: 'json' as const, value: null };
         roleContent[role].push({
           ...part,
@@ -123,7 +126,14 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
           output:
             output.type === 'json' || output.type === 'error-json'
               ? { ...output, value: sortKeysDeep(output.value) as typeof output.value }
-              : output,
+              : output.type === 'content'
+                ? {
+                    ...output,
+                    value: output.value.map(item =>
+                      item.type === 'file' ? { ...item, data: anyToV4FileData(item.data) } : item,
+                    ) as LanguageModelV4ToolResultContent,
+                  }
+                : output,
         });
         break;
       }
@@ -134,7 +144,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         }
         roleContent[role].push({
           ...part,
-          data: part.data instanceof ArrayBuffer ? new Uint8Array(part.data) : part.data,
+          data: anyToV4FileData(part.data),
         });
         break;
       }
@@ -147,7 +157,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
           ...part,
           mediaType: part.mediaType || 'image/unknown',
           type: 'file',
-          data: part.image instanceof ArrayBuffer ? new Uint8Array(part.image) : part.image,
+          data: anyToV4FileData(part.image),
         });
         break;
       }
@@ -174,7 +184,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
   }
 
   throw new Error(
-    `Encountered unknown role ${role} when converting V5 ModelMessage -> V5 LanguageModelV2Message, input message: ${JSON.stringify(modelMessage, null, 2)}`,
+    `Encountered unknown role ${role} when converting V5 ModelMessage -> V5 LanguageModelV4Message, input message: ${JSON.stringify(modelMessage, null, 2)}`,
   );
 }
 
@@ -191,13 +201,13 @@ type ConvertibleToolResultPartType = 'media' | 'image-url' | 'file-url';
  * provider spec. Returning the same item from the callback is a pass-through.
  */
 function convertToolResultContent(
-  prompt: LanguageModelV2Prompt,
+  prompt: LanguageModelV4Prompt,
   convertPart: (
     contentPart: Record<string, unknown>,
     partType: ConvertibleToolResultPartType,
     mediaType: string,
   ) => unknown,
-): LanguageModelV2Prompt {
+): LanguageModelV4Prompt {
   return prompt.map(message => {
     if (message.role !== `tool`) return message;
 
@@ -227,7 +237,7 @@ function convertToolResultContent(
     });
 
     return messageModified ? { ...message, content } : message;
-  }) as LanguageModelV2Prompt;
+  }) as LanguageModelV4Prompt;
 }
 
 /**
@@ -238,31 +248,6 @@ function convertToolResultContent(
  */
 function isRemoteUrl(data: string): boolean {
   return /^https?:\/\//i.test(data);
-}
-
-/**
- * Convert v5-authored media tool results to the `image-data`/`file-data` shape
- * expected only by AI SDK v6 (`v3`) providers. V5 providers accept `media`, and
- * V7 providers expect `file` parts with tagged data instead. `image-url` and
- * `file-url` parts are natively valid V3 tool-result content and pass through
- * unchanged; legacy `media` parts carrying a remote URL are healed into them.
- *
- * See: https://github.com/mastra-ai/mastra/issues/17876 and
- * https://github.com/mastra-ai/mastra/issues/22618
- */
-export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
-  return convertToolResultContent(prompt, (contentPart, partType, mediaType) => {
-    if (partType !== `media`) return contentPart;
-    const isImage = mediaType.startsWith(`image/`);
-    const data = contentPart.data as string;
-    const remoteUrl = isRemoteUrl(data) ? parseUrl(data) : undefined;
-    if (remoteUrl) {
-      const rest = { ...contentPart };
-      delete rest.data;
-      return { ...rest, type: isImage ? `image-url` : `file-url`, url: data };
-    }
-    return { ...contentPart, type: isImage ? `image-data` : `file-data`, mediaType };
-  });
 }
 
 // V4 file parts carry `url: URL`. Unparseable strings pass through so a bad
@@ -277,7 +262,7 @@ function parseUrl(url: unknown): URL | undefined {
   }
 }
 
-export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
+export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV4Prompt): LanguageModelV4Prompt {
   return convertToolResultContent(prompt, (contentPart, partType, mediaType) => {
     if (partType === `image-url` || partType === `file-url`) {
       const url = parseUrl(contentPart.url);

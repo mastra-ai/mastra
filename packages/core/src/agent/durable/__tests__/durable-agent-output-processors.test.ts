@@ -5,8 +5,8 @@
  * output processors (Bug 4 parity fix).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
@@ -21,7 +21,7 @@ import { globalRunRegistry } from '../run-registry';
 
 function createToolCallingModel(toolName: string, toolArgs: Record<string, unknown>) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -118,7 +118,7 @@ describe('DurableAgent output processors for tool chunks', () => {
       id: 'processor-agent',
       name: 'Processor Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV4,
       tools: { getWeather: weatherTool },
       outputProcessors: [outputProcessor as any],
     });
@@ -174,7 +174,7 @@ describe('DurableAgent output processors for tool chunks', () => {
       id: 'blocker-agent',
       name: 'Blocker Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV4,
       tools: { getWeather: weatherTool },
       outputProcessors: [blockingProcessor as any],
     });
@@ -228,7 +228,7 @@ describe('DurableAgent output processors for tool chunks', () => {
       id: 'gated-agent',
       name: 'Gated Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('getSecret', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('getSecret', { city: 'NYC' }) as LanguageModelV4,
       tools: { getSecret: secretTool },
       outputProcessors: [gatedRedactor as any],
     });
@@ -285,7 +285,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       id: 'once-agent',
       name: 'Once Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV4,
       tools: { getWeather: tool },
       outputProcessors: [outputProcessor],
     });
@@ -382,7 +382,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       id: 'missing-tool-agent',
       name: 'Missing Tool Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('missingTool', {}) as LanguageModelV2,
+      model: createToolCallingModel('missingTool', {}) as LanguageModelV4,
       outputProcessors: [processor as any],
     });
 
@@ -416,7 +416,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       id: 'provider-tool-agent',
       name: 'Provider Tool Agent',
       instructions: 'You are a helpful agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -443,7 +443,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
         }),
-      }) as LanguageModelV2,
+      }) as LanguageModelV4,
       outputProcessors: [processor as any],
     });
 
@@ -466,7 +466,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
   // Newer providers (AI SDK v6+) leave `providerExecuted` unset on tool results
   // in the model stream.
   function createProviderResultModel() {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -487,7 +487,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       }),
-    }) as LanguageModelV2;
+    }) as LanguageModelV4;
   }
 
   it('a provider tool-result without providerExecuted is processed exactly once', async () => {
@@ -556,7 +556,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       id: 'regular-agent',
       name: 'Regular Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV4,
       tools: {
         getWeather: createTool({
           id: 'getWeather',
@@ -630,7 +630,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       id: 'replay-agent',
       name: 'Replay Agent',
       instructions: 'You are a helpful agent.',
-      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV2,
+      model: createToolCallingModel('getWeather', { city: 'NYC' }) as LanguageModelV4,
       tools: {
         getWeather: createTool({
           id: 'getWeather',

@@ -1,6 +1,6 @@
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import type { ToolChoice, ToolSet } from '@internal/ai-v7';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 import { serializeError } from '../../../../events/codec/error';
@@ -973,22 +973,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               model: currentModel,
               skipUnavailableAttachments,
             });
-            const llmPromptForModel =
-              currentModel.specificationVersion === 'v4'
-                ? messageList.get.all.aiV7.llmPrompt
-                : currentModel.specificationVersion === 'v3'
-                  ? messageList.get.all.aiV6.llmPrompt
-                  : messageList.get.all.aiV5.llmPrompt;
-            let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            const llmPromptForModel = messageList.get.all.aiSdk.llmPrompt;
+            let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV4Prompt;
             // Identify OM's prompt message by its source ID and position before request
             // processors run. Equal text in real user messages is not synthetic context.
             const dbMessages = messageList.get.all.db();
             const continuationIndex = dbMessages.findIndex(message => message.id === 'om-continuation');
-            let omContinuationPrompt: LanguageModelV2Prompt[number] | undefined;
+            let omContinuationPrompt: LanguageModelV4Prompt[number] | undefined;
             if (continuationIndex !== -1) {
               const precedingMessages = createRunMessageList({ mastra });
               precedingMessages.add(dbMessages.slice(0, continuationIndex), 'input');
-              const precedingUserCount = precedingMessages.get.all.aiV5
+              const precedingUserCount = precedingMessages.get.all.aiSdk
                 .model()
                 .filter(message => message.role === 'user' && message.content.length > 0).length;
               omContinuationPrompt = inputMessages.filter(message => message.role === 'user')[precedingUserCount];
@@ -1529,6 +1524,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 runId,
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 requestContext,
+                includeRawChunks: execOptions.includeRawChunks,
               },
             });
 
@@ -1858,9 +1854,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       ...clientChunk,
                       payload: {
                         ...clientChunk.payload,
+                        stepResult: {
+                          ...clientChunk.payload?.stepResult,
+                          warnings: clientChunk.payload?.stepResult?.warnings ?? warnings,
+                        },
                         metadata: {
                           ...clientChunk.payload?.metadata,
-                          modelId: clientChunk.payload?.metadata?.modelId || model.modelId,
+                          id: clientChunk.payload?.metadata?.id ?? responseMetadata.id,
+                          timestamp: clientChunk.payload?.metadata?.timestamp ?? responseMetadata.timestamp,
+                          modelId: clientChunk.payload?.metadata?.modelId || responseMetadata.modelId || model.modelId,
                         },
                       },
                     };

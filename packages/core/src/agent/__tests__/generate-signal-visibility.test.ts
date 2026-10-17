@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -16,7 +16,7 @@ describe.each([false, true])('generate signal visibility (durable: %s)', durable
     for (const hideSignals of [undefined, false, true, ['reactive', 'system-reminder', 'state'] as const]) {
       let calls = 0;
       const prompts: unknown[] = [];
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doGenerate: async ({ prompt }) => {
           prompts.push(prompt);
           const suspend = resumed && calls++ === 0;

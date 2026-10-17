@@ -1,5 +1,5 @@
 import { format } from 'node:util';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import type { Author, FetchOptions, Message, Thread } from 'chat';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -3627,13 +3627,13 @@ describe('thread history end to end', () => {
   }
 
   async function createHarness(options: { prior: Message[]; state?: unknown } = { prior: [] }) {
-    const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+    const { MockLanguageModelV4, convertArrayToReadableStream } = await import('@internal/ai-v7/test');
     const { Mastra } = await import('../../mastra');
     const { InMemoryStore } = await import('../../storage/mock');
     const { MockMemory } = await import('../../memory/mock');
 
-    const prompts: LanguageModelV2Prompt[] = [];
-    const model = new MockLanguageModelV2({
+    const prompts: LanguageModelV4Prompt[] = [];
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt);
         return {
@@ -3796,13 +3796,13 @@ describe('per-sender handler runs end to end', () => {
   }
 
   async function createHarness() {
-    const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+    const { MockLanguageModelV4, convertArrayToReadableStream } = await import('@internal/ai-v7/test');
     const { Mastra } = await import('../../mastra');
     const { InMemoryStore } = await import('../../storage/mock');
     const { MockMemory } = await import('../../memory/mock');
 
-    const prompts: LanguageModelV2Prompt[] = [];
-    const model = new MockLanguageModelV2({
+    const prompts: LanguageModelV4Prompt[] = [];
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         prompts.push(prompt);
         return {
@@ -3897,11 +3897,11 @@ describe('per-sender handler runs end to end', () => {
       ['subscribed', 'B1'],
       ['subscribed', 'A2'],
     ]);
-    const lastUserText = (p: LanguageModelV2Prompt) => {
+    const lastUserText = (p: LanguageModelV4Prompt) => {
       const user = p.filter(m => m.role === 'user').at(-1);
       return user?.content.map(part => (part.type === 'text' ? part.text : '')).join('') ?? '';
     };
-    const systemText = (p: LanguageModelV2Prompt) =>
+    const systemText = (p: LanguageModelV4Prompt) =>
       p
         .filter(m => m.role === 'system')
         .map(m => m.content)

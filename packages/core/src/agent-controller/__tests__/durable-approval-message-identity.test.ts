@@ -6,7 +6,7 @@ import { InMemoryServerCache } from '../../cache';
 import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
@@ -28,7 +28,7 @@ describe('public approval completion keeps one answer identity', () => {
     async ({ yolo, durable, rounds, siblings, chunkDelay }) => {
       let modelCalls = 0;
       let toolCalls = 0;
-      const model = new MastraLanguageModelV2Mock({
+      const model = new MastraLanguageModelV4Mock({
         doStream: async () => {
           const call = ++modelCalls;
           return {

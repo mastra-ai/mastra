@@ -12,13 +12,20 @@
  * - processOutputStep sees the correct tool call info
  */
 
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { stepCountIs } from '@internal/ai-v7';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import { TaskSignalProvider } from '../../../../signals';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+
+// Task signals append a user message after each tool result, so aimock's current-turn
+// `hasToolResult`/`toolCallId` gates cannot see it; match on the latest tool result instead.
+// The leg-1 tool-call fixture is registered last so it only serves the first request.
+function lastToolResultId(req: any): string | undefined {
+  return [...(req.messages ?? [])].reverse().find((m: any) => m.role === 'tool')?.tool_call_id;
+}
 
 describeForAllEngines(
   'AIMock loop scenario: output step processor (per-step)',
@@ -221,6 +228,34 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
+            { endpoint: 'chat', predicate: req => lastToolResultId(req) === 'call_task_write_debugger' },
+            {
+              toolCalls: [
+                {
+                  id: 'call_task_update_debugger',
+                  name: 'task_update',
+                  arguments: { id: 'debugger_task', status: 'in_progress' },
+                },
+              ],
+            },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: req => lastToolResultId(req) === 'call_task_update_debugger' },
+            {
+              toolCalls: [
+                {
+                  id: 'call_task_complete_debugger',
+                  name: 'task_complete',
+                  arguments: { id: 'debugger_task' },
+                },
+              ],
+            },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: req => lastToolResultId(req) === 'call_task_complete_debugger' },
+            { content: 'TASK_SIGNAL_DONE' },
+          );
+          llm.on(
             { endpoint: 'chat', hasToolResult: false },
             {
               toolCalls: [
@@ -241,25 +276,6 @@ describeForAllEngines(
               ],
             },
           );
-          llm.onTurn(2, /.*/, {
-            toolCalls: [
-              {
-                id: 'call_task_update_debugger',
-                name: 'task_update',
-                arguments: { id: 'debugger_task', status: 'in_progress' },
-              },
-            ],
-          });
-          llm.onTurn(3, /.*/, {
-            toolCalls: [
-              {
-                id: 'call_task_complete_debugger',
-                name: 'task_complete',
-                arguments: { id: 'debugger_task' },
-              },
-            ],
-          });
-          llm.onTurn(4, /.*/, { content: 'TASK_SIGNAL_DONE' });
         },
       });
 
@@ -345,6 +361,17 @@ describeForAllEngines(
           stepContents.push(content);
         },
         fixtures: llm => {
+          llm.onTurn(3, /.*/, {
+            content: 'TEXT_BEFORE_TASK_UPDATE',
+            toolCalls: [
+              {
+                id: 'call_text_task_update_debugger',
+                name: 'task_update',
+                arguments: { id: 'debugger_text_task', status: 'in_progress' },
+              },
+            ],
+          });
+          llm.onTurn(5, /.*/, { content: 'TASK_SIGNAL_TEXT_DONE' });
           llm.on(
             { endpoint: 'chat', hasToolResult: false },
             {
@@ -367,17 +394,6 @@ describeForAllEngines(
               ],
             },
           );
-          llm.onTurn(3, /.*/, {
-            content: 'TEXT_BEFORE_TASK_UPDATE',
-            toolCalls: [
-              {
-                id: 'call_text_task_update_debugger',
-                name: 'task_update',
-                arguments: { id: 'debugger_text_task', status: 'in_progress' },
-              },
-            ],
-          });
-          llm.onTurn(5, /.*/, { content: 'TASK_SIGNAL_TEXT_DONE' });
         },
       });
 

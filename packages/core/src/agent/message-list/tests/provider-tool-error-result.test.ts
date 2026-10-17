@@ -88,11 +88,11 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
     expect(part.toolInvocation.result).toEqual(toolSearchError);
     expect(part.providerExecuted).toBe(true);
 
-    const found = findProviderToolResult(await messageList.get.all.aiV5.llmPrompt());
+    const found = findProviderToolResult(await messageList.get.all.aiSdk.llmPrompt());
     expect(found?.role).toBe('assistant');
     expect(found?.part.output).toEqual({ type: 'error-json', value: toolSearchError });
 
-    const v6 = findProviderToolResult(await messageList.get.all.aiV6.llmPrompt());
+    const v6 = findProviderToolResult(await messageList.get.all.aiSdk.llmPrompt());
     expect(v6?.part.output).toEqual({ type: 'error-json', value: toolSearchError });
   });
 
@@ -116,7 +116,7 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
     recalled.add(persisted, 'memory');
     recalled.add({ ...userMessage(), id: 'user-2', createdAt: new Date(3) }, 'input');
 
-    const found = findProviderToolResult(await recalled.get.all.aiV5.llmPrompt());
+    const found = findProviderToolResult(await recalled.get.all.aiSdk.llmPrompt());
     expect(found?.part.output).toEqual({ type: 'error-json', value: toolSearchError });
   });
 
@@ -136,7 +136,7 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
       providerExecuted: true,
     });
 
-    const found = findProviderToolResult(await messageList.get.all.aiV5.llmPrompt());
+    const found = findProviderToolResult(await messageList.get.all.aiSdk.llmPrompt());
     expect(found?.part.output).toEqual({ type: 'json', value: success });
   });
 
@@ -175,7 +175,7 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
       'memory',
     );
 
-    const outputs = (await messageList.get.all.aiV5.llmPrompt()).flatMap(message =>
+    const outputs = (await messageList.get.all.aiSdk.llmPrompt()).flatMap(message =>
       Array.isArray(message.content)
         ? message.content.filter((part: any) => part.type === 'tool-result').map((part: any) => part.output)
         : [],
@@ -216,7 +216,7 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
       const recalled = new MessageList();
       recalled.add(JSON.parse(JSON.stringify(drained)), 'memory');
       recalled.add({ ...userMessage(), id: 'user-2', createdAt: new Date(3) }, 'input');
-      const found = findProviderToolResult(await recalled.get.all.aiV5.llmPrompt());
+      const found = findProviderToolResult(await recalled.get.all.aiSdk.llmPrompt());
       expect(found?.part.output).toEqual({ type: 'error-json', value: toolSearchError });
     },
   );

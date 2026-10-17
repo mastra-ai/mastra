@@ -43,8 +43,6 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@internal/ai-sdk-v5": "workspace:*",
-    "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/node": "22.20.1",

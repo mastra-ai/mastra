@@ -148,7 +148,7 @@ describe('Bundler.writePackageJson', () => {
     await bundler.writePackageJson(
       tempDir,
       new Map([
-        ['@ai-sdk/provider-utils-v7', { version: '5.0.0', packageSpec: 'npm:@ai-sdk/provider-utils@5.0.0' }],
+        ['@ai-sdk/provider-utils', { version: '5.0.0', packageSpec: 'npm:@ai-sdk/provider-utils@5.0.0' }],
         ['@inner/transitive-c', { version: '1.0.0', packageSpec: workspaceResolutions['@inner/transitive-c'] }],
         ['regular-package/subpath', { version: '1.2.3' }],
       ]),
@@ -157,7 +157,7 @@ describe('Bundler.writePackageJson', () => {
 
     const pkg = JSON.parse(await readFile(join(tempDir, 'package.json'), 'utf-8'));
     expect(pkg.dependencies).toEqual({
-      '@ai-sdk/provider-utils-v7': 'npm:@ai-sdk/provider-utils@5.0.0',
+      '@ai-sdk/provider-utils': 'npm:@ai-sdk/provider-utils@5.0.0',
       '@inner/transitive-c': 'file:./workspace-module/inner-transitive-c-1.0.0.tgz',
       'regular-package': '1.2.3',
     });
@@ -174,14 +174,14 @@ describe('Bundler.writePackageJson', () => {
       tempDir,
       new Map([
         ['zod/v4', { version: '^4.3.6' }],
-        ['@ai-sdk/openai-v5', { version: '5.0.93', packageSpec: 'npm:@ai-sdk/openai@^5.0.0' }],
+        ['@ai-sdk/openai', { version: '5.0.93', packageSpec: 'npm:@ai-sdk/openai@^5.0.0' }],
       ]),
     );
 
     const pkg = JSON.parse(await readFile(join(tempDir, 'package.json'), 'utf-8'));
     expect(pkg.dependencies).toEqual({
       zod: '^4.3.6',
-      '@ai-sdk/openai-v5': 'npm:@ai-sdk/openai@^5.0.0',
+      '@ai-sdk/openai': 'npm:@ai-sdk/openai@^5.0.0',
     });
     expect(pkg).not.toHaveProperty('overrides');
     expect(pkg).not.toHaveProperty('pnpm');
@@ -315,9 +315,9 @@ describe('applySourceDependencyRange', () => {
 
   it('adopts the declared npm alias spec for an aliased dependency', () => {
     const result = applySourceDependencyRange(
-      '@ai-sdk/openai-v5',
+      '@ai-sdk/openai',
       { version: '5.0.93', packageSpec: 'npm:@ai-sdk/openai@5.0.93' },
-      constraints({ dependencies: { '@ai-sdk/openai-v5': 'npm:@ai-sdk/openai@^5.0.0' } }),
+      constraints({ dependencies: { '@ai-sdk/openai': 'npm:@ai-sdk/openai@^5.0.0' } }),
     );
 
     expect(result.packageSpec).toBe('npm:@ai-sdk/openai@^5.0.0');
@@ -325,9 +325,9 @@ describe('applySourceDependencyRange', () => {
 
   it('never composes a non-registry specifier into an npm alias spec', () => {
     const result = applySourceDependencyRange(
-      '@ai-sdk/openai-v5',
+      '@ai-sdk/openai',
       { version: '5.0.93', packageSpec: 'npm:@ai-sdk/openai@5.0.93' },
-      constraints({ dependencies: { '@ai-sdk/openai-v5': 'catalog:' } }),
+      constraints({ dependencies: { '@ai-sdk/openai': 'catalog:' } }),
     );
 
     expect(result.packageSpec).toBe('npm:@ai-sdk/openai@5.0.93');
@@ -402,9 +402,9 @@ describe('applySourceDependencyRange', () => {
 
   it('keeps the resolved alias when the declared value is a bare range for a differently named package', () => {
     const result = applySourceDependencyRange(
-      'ai-v5',
+      'ai',
       { version: '5.0.93', packageSpec: 'npm:ai@5.0.93' },
-      constraints({ dependencies: { 'ai-v5': '^5.0.0' } }),
+      constraints({ dependencies: { ai: '^5.0.0' } }),
     );
 
     expect(result).toEqual({ version: '5.0.93', packageSpec: 'npm:ai@5.0.93' });
@@ -416,7 +416,7 @@ describe('getSourceDependencyConstraints', () => {
     const { projectRoot, mastraEntryFile } = await createSourceApp({
       appManifest: {
         name: 'source-app',
-        dependencies: { zod: '^4.3.6', '@ai-sdk/openai-v5': 'npm:@ai-sdk/openai@^5.0.0' },
+        dependencies: { zod: '^4.3.6', '@ai-sdk/openai': 'npm:@ai-sdk/openai@^5.0.0' },
         overrides: { 'left-pad': '1.4.2' },
         resolutions: { chalk: '5.0.0' },
         pnpm: { overrides: { debug: '4.3.7' } },
@@ -424,7 +424,7 @@ describe('getSourceDependencyConstraints', () => {
     });
 
     await expect(getSourceDependencyConstraints({ projectRoot, mastraEntryFile })).resolves.toEqual({
-      dependencies: { zod: '^4.3.6', '@ai-sdk/openai-v5': 'npm:@ai-sdk/openai@^5.0.0' },
+      dependencies: { zod: '^4.3.6', '@ai-sdk/openai': 'npm:@ai-sdk/openai@^5.0.0' },
       pinnedByResolutionField: new Set(['left-pad', 'chalk', 'debug']),
     });
   });

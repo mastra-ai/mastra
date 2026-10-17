@@ -1,7 +1,7 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import type { LanguageModelV2Prompt, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt, LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Memory } from '../../../../memory/src';
@@ -17,8 +17,8 @@ import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
 
 function makeModel(supported: boolean | 'data-urls' = false) {
-  const prompts: LanguageModelV2Prompt[] = [];
-  const model = new MockLanguageModelV2({
+  const prompts: LanguageModelV4Prompt[] = [];
+  const model = new MockLanguageModelV4({
     supportedUrls:
       supported === 'data-urls'
         ? { '*/*': [/^data:/] }
@@ -52,9 +52,9 @@ function makeModel(supported: boolean | 'data-urls' = false) {
 
 /** Calls a tool on its first step, then answers, so one run makes two model calls. */
 function makeToolCallingModel() {
-  const prompts: LanguageModelV2Prompt[] = [];
+  const prompts: LanguageModelV4Prompt[] = [];
   const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       prompts.push(prompt);
       return {
@@ -128,7 +128,7 @@ describe('attachment download recovery', () => {
     durable?: boolean;
     errorProcessor?: ErrorProcessorOrWorkflow;
     inputProcessor?: InputProcessorOrWorkflow;
-    models?: MockLanguageModelV2[];
+    models?: MockLanguageModelV4[];
     tools?: Record<string, typeof lookupTool>;
   } = {}) {
     const { model, prompts } = makeModel();
@@ -244,7 +244,7 @@ describe('attachment download recovery', () => {
     }
   }
 
-  function promptAttachments(prompt: LanguageModelV2Prompt) {
+  function promptAttachments(prompt: LanguageModelV4Prompt) {
     const parts = prompt.flatMap(message => (message.role === 'user' ? message.content : []));
     return {
       files: parts.filter(part => part.type === 'file'),
@@ -746,22 +746,22 @@ describe('attachment download recovery', () => {
   it.each([false, true])(
     'keeps an attachment skipped when a queued signal interrupts the skip retry (durable: %s)',
     async durable => {
-      const prompts: LanguageModelV2Prompt[] = [];
+      const prompts: LanguageModelV4Prompt[] = [];
       let notifyReasoning!: () => void;
       const reasoning = new Promise<void>(resolve => (notifyReasoning = resolve));
-      const answer = (): LanguageModelV2StreamPart[] => [
+      const answer = (): LanguageModelV4StreamPart[] => [
         { type: 'stream-start', warnings: [] },
         { type: 'text-start', id: 'text' },
         { type: 'text-delta', id: 'text', delta: 'ok' },
         { type: 'text-end', id: 'text' },
         { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
       ];
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           if (prompts.length !== 2) return { stream: convertArrayToReadableStream(answer()) };
           return {
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
+            stream: new ReadableStream<LanguageModelV4StreamPart>({
               start(controller) {
                 controller.enqueue({ type: 'reasoning-start', id: 'stale' });
                 controller.enqueue({ type: 'reasoning-delta', id: 'stale', delta: 'STALE_REASONING' });

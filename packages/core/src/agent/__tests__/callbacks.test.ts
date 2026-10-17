@@ -1,14 +1,14 @@
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 
 function callbackTests(version: 'v2') {
-  let dummyModel: MockLanguageModelV2;
+  let dummyModel: MockLanguageModelV4;
 
   beforeEach(() => {
     {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',

@@ -1,8 +1,8 @@
-import type { TextPart } from '@internal/ai-sdk-v5';
+import type { TextPart } from '@internal/ai-v7';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import { mockTextModel } from '../../test-utils/llm-mock';
@@ -2706,7 +2706,7 @@ describe('PIIDetector', () => {
   describe('structured output schema compatibility', () => {
     it('should not send number bounds to Anthropic in score or confidence schemas', async () => {
       const mockResult = createMockPIIResult();
-      const mockModel = new MastraLanguageModelV2Mock({
+      const mockModel = new MastraLanguageModelV4Mock({
         provider: 'anthropic',
         modelId: 'claude-3-5-sonnet',
         doGenerate: async () => ({

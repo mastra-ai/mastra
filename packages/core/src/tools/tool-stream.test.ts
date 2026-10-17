@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
@@ -21,7 +21,7 @@ describe('ToolStream', () => {
       ],
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -124,10 +124,10 @@ describe('ToolStream', () => {
 });
 
 describe('ToolStream - writer.custom', () => {
-  let mockModel: MockLanguageModelV2;
+  let mockModel: MockLanguageModelV4;
 
   beforeEach(() => {
-    mockModel = new MockLanguageModelV2({
+    mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -249,7 +249,7 @@ describe('ToolStream - writer.custom', () => {
       },
     });
 
-    const subAgentModel = new MockLanguageModelV2({
+    const subAgentModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -286,7 +286,7 @@ describe('ToolStream - writer.custom', () => {
     });
 
     // Create parent agent that has the sub-agent registered
-    const parentAgentModel = new MockLanguageModelV2({
+    const parentAgentModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -369,7 +369,7 @@ describe('ToolStream - writer.custom', () => {
       },
     });
 
-    const mixedToolModel = new MockLanguageModelV2({
+    const mixedToolModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -477,7 +477,7 @@ describe('ToolStream - writer.custom', () => {
 
     // Create a mock model that calls the tool on first invocation, then just returns text
     let callCount = 0;
-    const mockModelWithTool = new MockLanguageModelV2({
+    const mockModelWithTool = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {
@@ -611,7 +611,7 @@ describe('ToolStream - writer.custom', () => {
     });
 
     let mixedCallCount = 0;
-    const mockModelWithTool = new MockLanguageModelV2({
+    const mockModelWithTool = new MockLanguageModelV4({
       doStream: async () => {
         mixedCallCount++;
         if (mixedCallCount === 1) {

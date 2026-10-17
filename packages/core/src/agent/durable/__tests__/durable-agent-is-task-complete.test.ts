@@ -11,8 +11,8 @@
  *   either stops (passed) or continues with feedback (failed).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { MockMemory } from '../../../memory/mock';
@@ -21,7 +21,7 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -43,7 +43,7 @@ function createTextModel(text: string) {
 
 function createSequencedTextModel(texts: string[]) {
   let i = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const text = texts[Math.min(i, texts.length - 1)] ?? '';
       i++;
@@ -105,7 +105,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-prep-agent',
       name: 'Task Complete Prep Agent',
       instructions: 'noop',
-      model: createTextModel('done') as LanguageModelV2,
+      model: createTextModel('done') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -146,7 +146,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'no-task-complete-agent',
       name: 'No Task Complete Agent',
       instructions: 'noop',
-      model: createTextModel('done') as LanguageModelV2,
+      model: createTextModel('done') as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -162,7 +162,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-pass-agent',
       name: 'Task Complete Pass Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -203,7 +203,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-no-report-agent',
       name: 'Task Complete No Report Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       memory,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -233,7 +233,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-fail-agent',
       name: 'Task Complete Fail Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -267,7 +267,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-ctx-agent',
       name: 'Task Complete Ctx Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -302,7 +302,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-suppress-agent',
       name: 'Task Complete Suppress Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -330,7 +330,7 @@ describe('DurableAgent isTaskComplete', () => {
   // re-issue the identical request every iteration until maxSteps.
   it('terminates with a stream error instead of spinning when the model finishes "other" with no output', async () => {
     let doStreamCalls = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         doStreamCalls++;
         return {
@@ -352,7 +352,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-zero-output-agent',
       name: 'Task Complete Zero Output Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -387,7 +387,7 @@ describe('DurableAgent isTaskComplete', () => {
   });
 
   it('still grades a finishReason "other" iteration that produced output', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -409,7 +409,7 @@ describe('DurableAgent isTaskComplete', () => {
       id: 'task-complete-other-output-agent',
       name: 'Task Complete Other Output Agent',
       instructions: 'noop',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

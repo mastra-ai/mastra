@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, it, expect } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import type { RubricAnalysisResult } from './prompts';
@@ -10,7 +10,7 @@ import { createRubricScorer } from '.';
  */
 function mockJudge(analysis: RubricAnalysisResult) {
   const text = JSON.stringify(analysis);
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',

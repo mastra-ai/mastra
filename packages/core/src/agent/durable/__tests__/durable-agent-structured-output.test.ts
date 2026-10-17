@@ -5,8 +5,8 @@
  * Validates that structuredOutput option works correctly through the durable workflow.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { z as z3 } from 'zod/v3';
@@ -23,7 +23,7 @@ import { durableOptionsSchema } from '../workflows/shared/schemas';
  * Creates a mock model that returns structured JSON output
  */
 function createStructuredOutputModel(jsonOutput: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -67,7 +67,7 @@ function createChunkedStructuredOutputModel(jsonOutput: object) {
     jsonString.slice(Math.floor((2 * jsonString.length) / 3)),
   ];
 
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -93,7 +93,7 @@ function createChunkedStructuredOutputModel(jsonOutput: object) {
  * Creates a mock model that returns tool-calls finishReason (Bedrock-style)
  */
 function createBedrockStyleModel(jsonOutput: object) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'tool-calls',
@@ -159,7 +159,7 @@ describe('DurableAgent structured output', () => {
         id: 'election-agent',
         name: 'US Election Agent',
         instructions: 'You know about past US elections',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -200,7 +200,7 @@ describe('DurableAgent structured output', () => {
         id: 'array-schema-agent',
         name: 'Array Schema Agent',
         instructions: 'Return user data',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -235,7 +235,7 @@ describe('DurableAgent structured output', () => {
         id: 'json-schema-agent',
         name: 'JSON Schema Agent',
         instructions: 'You know about past US elections',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -280,7 +280,7 @@ describe('DurableAgent structured output', () => {
         id: 'streaming-schema-agent',
         name: 'Streaming Schema Agent',
         instructions: 'Return user profile',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -309,7 +309,7 @@ describe('DurableAgent structured output', () => {
         id: 'observe-structured-output-agent',
         name: 'Observe Structured Output Agent',
         instructions: 'Return the requested structured output',
-        model: createChunkedStructuredOutputModel(expectedOutput) as LanguageModelV2,
+        model: createChunkedStructuredOutputModel(expectedOutput) as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -357,7 +357,7 @@ describe('DurableAgent structured output', () => {
         id: 'nested-schema-agent',
         name: 'Nested Schema Agent',
         instructions: 'Return nested user data',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -401,7 +401,7 @@ describe('DurableAgent structured output', () => {
         id: 'routing-agent',
         name: 'Routing Agent',
         instructions: 'Route requests to appropriate agents',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -431,7 +431,7 @@ describe('DurableAgent structured output', () => {
         id: 'empty-schema-agent',
         name: 'Empty Schema Agent',
         instructions: 'Return empty object',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -456,7 +456,7 @@ describe('DurableAgent structured output', () => {
         id: 'optional-fields-agent',
         name: 'Optional Fields Agent',
         instructions: 'Return user with optional fields',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -484,7 +484,7 @@ describe('DurableAgent structured output', () => {
         id: 'union-schema-agent',
         name: 'Union Schema Agent',
         instructions: 'Return result with union type',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -528,7 +528,7 @@ describe('DurableAgent structured output workflow integration', () => {
       id: 'serialization-test-agent',
       name: 'Serialization Test Agent',
       instructions: 'Test serialization',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -560,7 +560,7 @@ describe('DurableAgent structured output workflow integration', () => {
       id: 'described-schema-agent',
       name: 'Described Schema Agent',
       instructions: 'Test described schemas',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -599,7 +599,7 @@ describe('DurableAgent structured output workflow integration', () => {
       id: 'round-trip-agent',
       name: 'Round Trip Agent',
       instructions: 'Test round trip',
-      model: createStructuredOutputModel({ name: 'a', age: 1 }) as LanguageModelV2,
+      model: createStructuredOutputModel({ name: 'a', age: 1 }) as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -672,7 +672,7 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
   });
 
   function createCapturingModel(promptSnapshots: any[][], onCalled: () => void) {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async ({ prompt }: any) => {
         promptSnapshots.push(prompt);
         onCalled();
@@ -704,7 +704,7 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
       id: agentId,
       name: agentId,
       instructions: 'Agent system instructions.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -720,7 +720,7 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
       id: 'durable-instructions-serialization',
       name: 'Durable Instructions Serialization',
       instructions: 'Test serialization',
-      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -736,14 +736,14 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
       id: 'durable-instructions-structuring-model',
       name: 'Durable Instructions Structuring Model',
       instructions: 'Test serialization',
-      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const result = await durableAgent.prepare('Extract now.', {
       structuredOutput: {
         schema: sentinelSchema,
-        model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+        model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV4,
         jsonPromptInjection: 'system',
         instructions: INSTRUCTIONS,
       },
@@ -787,7 +787,7 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
       id: 'durable-no-instructions-serialization',
       name: 'Durable No Instructions',
       instructions: 'Test serialization',
-      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     const prepared = await durableAgent.prepare('Extract now.', {

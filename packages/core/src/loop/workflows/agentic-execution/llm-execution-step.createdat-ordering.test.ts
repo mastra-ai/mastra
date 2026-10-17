@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
@@ -55,9 +55,9 @@ describe('llm-execution-step response createdAt ordering (#16893)', () => {
   const createIterationInput = () => ({
     messageId: 'msg-resp-0',
     messages: {
-      all: messageList.get.all.aiV5.model(),
-      user: messageList.get.input.aiV5.model(),
-      nonUser: messageList.get.response.aiV5.model(),
+      all: messageList.get.all.aiSdk.model(),
+      user: messageList.get.input.aiSdk.model(),
+      nonUser: messageList.get.response.aiSdk.model(),
     },
     output: {
       usage: testUsage,

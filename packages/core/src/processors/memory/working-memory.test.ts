@@ -66,7 +66,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
@@ -117,7 +117,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
@@ -209,7 +209,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
@@ -264,7 +264,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages[0].content).toContain('# Custom Template');
       expect(resultMessages[0].content).toContain('- Field 1:');
     });
@@ -312,7 +312,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages[0].content).toContain('If your memory has not changed');
       expect(resultMessages[0].content).toContain('Information not being relevant to the current conversation');
     });
@@ -343,7 +343,7 @@ describe('WorkingMemory', () => {
         requestContext: new RequestContext(),
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(1);
       expect(resultMessages[0].role).toBe('user');
       expect(mockStorage.getThreadById).not.toHaveBeenCalled();
@@ -390,7 +390,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(mockStorage.getResourceById).toHaveBeenCalledWith({ resourceId: 'resource-1' });
       expect(mockStorage.getThreadById).not.toHaveBeenCalled();
@@ -447,7 +447,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages[0].content).toContain('Use JSON format for all data');
       expect(resultMessages[0].content).not.toContain('IMPORTANT: When calling updateWorkingMemory');
     });
@@ -512,7 +512,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages[0].content).toContain('Use JSON format for all data');
       // Should contain the recursively generated empty object template
       expect(resultMessages[0].content).toContain('"user":{"name":"","email":""}');
@@ -567,7 +567,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(3);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[1].role).toBe('user');
@@ -616,7 +616,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('<working_memory_data>');
@@ -667,7 +667,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
@@ -722,7 +722,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
@@ -774,7 +774,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
@@ -825,7 +825,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
@@ -874,7 +874,7 @@ describe('WorkingMemory', () => {
         requestContext,
       });
 
-      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
@@ -945,7 +945,7 @@ describe('WorkingMemory', () => {
           requestContext,
         });
 
-        const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+        const resultMessages = result instanceof MessageList ? result.get.all.aiSdk.prompt() : result;
         expect(resultMessages[0].role).toBe('system');
         expect(resultMessages[0].content).toContain(
           '<working_memory_data>\nNo working memory data available.\n</working_memory_data>',

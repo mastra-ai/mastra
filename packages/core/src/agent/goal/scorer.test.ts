@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../evals/base';
@@ -213,7 +213,7 @@ describe('createGoalScorer native structured output', () => {
   it.each([undefined, 'Custom judge prompt.'])(
     'keeps native output on the first attempt without handwritten JSON instructions (prompt: %s)',
     async prompt => {
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         provider: 'crof',
         modelId: 'glm-5.3-flash',
         doStream: async () => ({
@@ -261,7 +261,7 @@ describe('goal-only JSON fallback placement', () => {
   ])('keeps native first and scopes inline fallback (goal: $goal, tools: $withTools)', async ({ goal, withTools }) => {
     let calls = 0;
     const attemptLength = withTools ? 2 : 1;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       provider: 'crof',
       modelId: 'glm-5.3-flash',
       doStream: async () => {
@@ -353,7 +353,7 @@ describe('goal-only JSON fallback placement', () => {
   it.each(['**Decision: done**', '{"decision":"invalid","reason":"because"}'])(
     'rejects invalid fallback output without inventing a verdict: %s',
     async text => {
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         provider: 'crof',
         modelId: 'glm-5.3-flash',
         doStream: async () => ({

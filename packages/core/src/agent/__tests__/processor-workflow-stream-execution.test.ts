@@ -1,11 +1,11 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { isProcessorWorkflow } from '../../processors';
 import type { Processor } from '../../processors';
 import { Agent } from '../agent';
 
 function createModel(chunks: number) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       warnings: [],
       stream: convertArrayToReadableStream([

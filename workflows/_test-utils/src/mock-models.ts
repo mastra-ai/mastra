@@ -1,18 +1,18 @@
 /**
  * Mock model factories for DurableAgent tests
  *
- * These factories create MockLanguageModelV2 instances with various
+ * These factories create MockLanguageModelV4 instances with various
  * streaming behaviors for testing different scenarios.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 
 /**
  * Create a mock model that streams a simple text response
  */
-export function createTextStreamModel(text: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+export function createTextStreamModel(text: string): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -22,20 +22,23 @@ export function createTextStreamModel(text: string): LanguageModelV2 {
         { type: 'text-end', id: 'text-1' },
         {
           type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: 20, reasoning: undefined },
+          },
         },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
  * Create a mock model that streams multiple text chunks
  */
-export function createMultiChunkStreamModel(chunks: string[]): LanguageModelV2 {
-  return new MockLanguageModelV2({
+export function createMultiChunkStreamModel(chunks: string[]): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -45,20 +48,23 @@ export function createMultiChunkStreamModel(chunks: string[]): LanguageModelV2 {
         { type: 'text-end', id: 'text-1' },
         {
           type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: chunks.length * 5, totalTokens: 10 + chunks.length * 5 },
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: chunks.length * 5, text: chunks.length * 5, reasoning: undefined },
+          },
         },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
  * Create a mock model that returns a single tool call
  */
-export function createToolCallModel(toolName: string, args: Record<string, unknown>): LanguageModelV2 {
-  return new MockLanguageModelV2({
+export function createToolCallModel(toolName: string, args: Record<string, unknown>): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -72,13 +78,16 @@ export function createToolCallModel(toolName: string, args: Record<string, unkno
         },
         {
           type: 'finish',
-          finishReason: 'tool-calls',
-          usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage: {
+            inputTokens: { total: 15, noCache: 15, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 10, text: 10, reasoning: undefined },
+          },
         },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
@@ -86,8 +95,8 @@ export function createToolCallModel(toolName: string, args: Record<string, unkno
  */
 export function createMultiToolCallModel(
   toolCalls: Array<{ toolName: string; args: Record<string, unknown> }>,
-): LanguageModelV2 {
-  return new MockLanguageModelV2({
+): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -101,13 +110,16 @@ export function createMultiToolCallModel(
         })),
         {
           type: 'finish',
-          finishReason: 'tool-calls',
-          usage: { inputTokens: 15, outputTokens: 10 * toolCalls.length, totalTokens: 15 + 10 * toolCalls.length },
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage: {
+            inputTokens: { total: 15, noCache: 15, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 10 * toolCalls.length, text: 10 * toolCalls.length, reasoning: undefined },
+          },
         },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
@@ -118,9 +130,9 @@ export function createToolCallThenTextModel(
   toolName: string,
   args: Record<string, unknown>,
   finalText: string,
-): LanguageModelV2 {
+): LanguageModelV4 {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -137,8 +149,11 @@ export function createToolCallThenTextModel(
             },
             {
               type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+              finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+              usage: {
+                inputTokens: { total: 15, noCache: 15, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 10, text: 10, reasoning: undefined },
+              },
             },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -153,15 +168,18 @@ export function createToolCallThenTextModel(
             { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 20, noCache: 20, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 15, text: 15, reasoning: undefined },
+              },
             },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
         };
       }
     },
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
@@ -172,9 +190,9 @@ export function createToolCallThenTextModel(
 export function createMultiToolCallThenTextModel(
   toolCalls: Array<{ toolName: string; args: Record<string, unknown> }>,
   finalText: string,
-): LanguageModelV2 {
+): LanguageModelV4 {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -191,11 +209,10 @@ export function createMultiToolCallThenTextModel(
             })),
             {
               type: 'finish',
-              finishReason: 'tool-calls',
+              finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
               usage: {
-                inputTokens: 15,
-                outputTokens: 10 * toolCalls.length,
-                totalTokens: 15 + 10 * toolCalls.length,
+                inputTokens: { total: 15, noCache: 15, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 10 * toolCalls.length, text: 10 * toolCalls.length, reasoning: undefined },
               },
             },
           ]),
@@ -211,33 +228,36 @@ export function createMultiToolCallThenTextModel(
             { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 20, noCache: 20, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 15, text: 15, reasoning: undefined },
+              },
             },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
         };
       }
     },
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
  * Create a mock model that throws an error
  */
-export function createErrorModel(errorMessage: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+export function createErrorModel(errorMessage: string): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => {
       throw new Error(errorMessage);
     },
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
  * Create a simple mock model for basic tests
  * Returns "Hello" as the response
  */
-export function createSimpleMockModel(): LanguageModelV2 {
+export function createSimpleMockModel(): LanguageModelV4 {
   return createTextStreamModel('Hello');
 }
 
@@ -245,8 +265,8 @@ export function createSimpleMockModel(): LanguageModelV2 {
  * Create a mock model that emits an error chunk (for fallback testing)
  * Unlike createErrorModel which throws, this returns a stream with an error chunk.
  */
-export function createFailingChunkModel(errorMessage: string = 'Model execution failed'): LanguageModelV2 {
-  return new MockLanguageModelV2({
+export function createFailingChunkModel(errorMessage: string = 'Model execution failed'): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -254,15 +274,15 @@ export function createFailingChunkModel(errorMessage: string = 'Model execution 
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
  * Create a mock model that streams reasoning content followed by text
  * Simulates a reasoning-capable model (e.g., o1, deepseek-r1)
  */
-export function createReasoningStreamModel(reasoningText: string, responseText: string): LanguageModelV2 {
-  return new MockLanguageModelV2({
+export function createReasoningStreamModel(reasoningText: string, responseText: string): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -275,22 +295,25 @@ export function createReasoningStreamModel(reasoningText: string, responseText: 
         { type: 'text-end', id: 'text-1' },
         {
           type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+          finishReason: { unified: 'stop', raw: 'stop' },
+          usage: {
+            inputTokens: { total: 20, noCache: 20, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 30, text: 30, reasoning: undefined },
+          },
         },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }
 
 /**
  * Create a flaky mock model that fails N times then succeeds
  * Useful for testing retry logic before fallback
  */
-export function createFlakyModel(failCount: number, successText: string = 'Success after retries'): LanguageModelV2 {
+export function createFlakyModel(failCount: number, successText: string = 'Success after retries'): LanguageModelV4 {
   let attempts = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       attempts++;
       if (attempts <= failCount) {
@@ -311,12 +334,15 @@ export function createFlakyModel(failCount: number, successText: string = 'Succe
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
           },
         ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
       };
     },
-  }) as LanguageModelV2;
+  }) as LanguageModelV4;
 }

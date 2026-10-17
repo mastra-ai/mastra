@@ -1,5 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -11,7 +11,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
 
 function toolCallModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -60,7 +60,7 @@ describe('deferred suspension events (#26435)', () => {
       id: 'support',
       name: 'support',
       instructions: 'help',
-      model: toolCallModel() as LanguageModelV2,
+      model: toolCallModel() as LanguageModelV4,
       tools: { askUser },
     });
     const durableAgent = createDurableAgent({ agent, pubsub });

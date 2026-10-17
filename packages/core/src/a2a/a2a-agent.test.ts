@@ -1,5 +1,5 @@
 import type { AgentCard, Message, Task } from '@a2a-js/sdk-v0_3';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { SubAgent } from '../agent';
 import { Agent } from '../agent';
@@ -114,7 +114,7 @@ function createMessage(text: string): Message {
 }
 
 function createParentModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',

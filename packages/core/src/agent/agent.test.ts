@@ -1,14 +1,14 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { LanguageModelV2CallOptions, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4CallOptions, LanguageModelV4TextPart } from '@ai-sdk/provider';
 import type {
   ModelMessage as CoreMessage,
   SystemModelMessage as CoreSystemMessage,
   SystemModelMessage,
-} from '@internal/ai-sdk-v5';
-import { APICallError, tool } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+} from '@internal/ai-v7';
+import { APICallError, tool } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { config } from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -29,13 +29,13 @@ config();
 
 function agentTests({ version }: { version: 'v2' }) {
   const _integration = new TestIntegration();
-  let dummyModel: MockLanguageModelV2;
-  let electionModel: MockLanguageModelV2;
-  let obamaObjectModel: MockLanguageModelV2;
+  let dummyModel: MockLanguageModelV4;
+  let electionModel: MockLanguageModelV4;
+  let obamaObjectModel: MockLanguageModelV4;
 
   beforeEach(() => {
     {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -74,7 +74,7 @@ function agentTests({ version }: { version: 'v2' }) {
         }),
       });
 
-      electionModel = new MockLanguageModelV2({
+      electionModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -110,7 +110,7 @@ function agentTests({ version }: { version: 'v2' }) {
         }),
       });
 
-      obamaObjectModel = new MockLanguageModelV2({
+      obamaObjectModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -200,7 +200,7 @@ function agentTests({ version }: { version: 'v2' }) {
       let configuredModelUsed = false;
       let overrideModelUsed = false;
 
-      const configuredModel = new MockLanguageModelV2({
+      const configuredModel = new MockLanguageModelV4({
         doGenerate: async () => {
           configuredModelUsed = true;
           return {
@@ -213,7 +213,7 @@ function agentTests({ version }: { version: 'v2' }) {
         },
       });
 
-      const overrideModel = new MockLanguageModelV2({
+      const overrideModel = new MockLanguageModelV4({
         doGenerate: async () => {
           overrideModelUsed = true;
           return {
@@ -308,10 +308,10 @@ function agentTests({ version }: { version: 'v2' }) {
   });
 
   describe(`${version} - agent memory with metadata`, () => {
-    let dummyModel: MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV4;
     beforeEach(() => {
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -539,13 +539,13 @@ function agentTests({ version }: { version: 'v2' }) {
 
   describe(`${version} - Agent save message parts`, () => {
     // Model that emits 10 parts
-    let dummyResponseModel: MockLanguageModelV2;
-    let emptyResponseModel: MockLanguageModelV2;
-    let errorResponseModel: MockLanguageModelV2;
+    let dummyResponseModel: MockLanguageModelV4;
+    let emptyResponseModel: MockLanguageModelV4;
+    let errorResponseModel: MockLanguageModelV4;
 
     beforeEach(() => {
       {
-        dummyResponseModel = new MockLanguageModelV2({
+        dummyResponseModel = new MockLanguageModelV4({
           doGenerate: async _options => ({
             text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
             finishReason: 'stop',
@@ -590,7 +590,7 @@ function agentTests({ version }: { version: 'v2' }) {
         });
 
         // Model never emits any parts
-        emptyResponseModel = new MockLanguageModelV2({
+        emptyResponseModel = new MockLanguageModelV4({
           doGenerate: async _options => ({
             text: undefined,
             finishReason: 'stop',
@@ -623,7 +623,7 @@ function agentTests({ version }: { version: 'v2' }) {
         });
 
         // Model throws immediately before emitting any part
-        errorResponseModel = new MockLanguageModelV2({
+        errorResponseModel = new MockLanguageModelV4({
           doGenerate: async _options => {
             throw new Error('Immediate interruption');
           },
@@ -686,7 +686,7 @@ function agentTests({ version }: { version: 'v2' }) {
     describe('error handling consistency', () => {
       // Helper to create a model that calls a non-existent tool
       function createModelWithNonExistentToolCall() {
-        return new MockLanguageModelV2({
+        return new MockLanguageModelV4({
           doGenerate: async () => ({
             content: [
               { type: 'tool-call', toolCallId: '123', toolName: 'nonExistentTool', input: '{"input": "test"}' },
@@ -716,7 +716,7 @@ function agentTests({ version }: { version: 'v2' }) {
       }
 
       // Helper to create an agent with a tool that exists but the model will call a non-existent one
-      function createAgentWithMismatchedTool(model: MockLanguageModelV2) {
+      function createAgentWithMismatchedTool(model: MockLanguageModelV4) {
         const existingTool = createTool({
           id: 'existingTool',
           description: 'A tool that exists',
@@ -784,7 +784,7 @@ function agentTests({ version }: { version: 'v2' }) {
       it('should allow model to self-correct after calling non-existent tool in generate', async () => {
         // Model first calls wrong tool, then self-corrects, then returns text
         let callCount = 0;
-        const selfCorrectingModel = new MockLanguageModelV2({
+        const selfCorrectingModel = new MockLanguageModelV4({
           doGenerate: async () => {
             callCount++;
             if (callCount === 1) {
@@ -835,7 +835,7 @@ function agentTests({ version }: { version: 'v2' }) {
       it('should allow model to self-correct after calling non-existent tool in stream', async () => {
         // Model first calls wrong tool, then self-corrects, then returns text
         let callCount = 0;
-        const selfCorrectingModel = new MockLanguageModelV2({
+        const selfCorrectingModel = new MockLanguageModelV4({
           doStream: async () => {
             callCount++;
             if (callCount === 1) {
@@ -920,7 +920,7 @@ function agentTests({ version }: { version: 'v2' }) {
         const abortController = new AbortController();
         let pullCalls = 0;
 
-        const abortModel = new MockLanguageModelV2({
+        const abortModel = new MockLanguageModelV4({
           // @ts-expect-error - error
           doGenerate: async () => {
             await new Promise(resolve => setImmediate(resolve));
@@ -985,12 +985,12 @@ function agentTests({ version }: { version: 'v2' }) {
   }
 
   describe(`${version} - UIMessageWithMetadata support`, () => {
-    let dummyModel: MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV4;
     const mockMemory = new MockMemory();
 
     beforeEach(() => {
       {
-        dummyModel = new MockLanguageModelV2({
+        dummyModel = new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -1402,7 +1402,7 @@ describe('Agent Tests', () => {
 
     function createArrayModel(deltas: string[]) {
       let capturedResponseFormat: any;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doGenerate: async options => {
           capturedResponseFormat = options.responseFormat;
           return {
@@ -1514,7 +1514,7 @@ describe('Agent Tests', () => {
         id: 'array-agent',
         name: 'array-agent',
         instructions: 'list',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -1535,8 +1535,8 @@ describe('Agent Tests', () => {
 
   describe('prepareStep', () => {
     it("keeps tools and tool history when prepareStep forces toolChoice 'none' (#25908)", async () => {
-      const calls: LanguageModelV2CallOptions[] = [];
-      const mockModel = new MockLanguageModelV2({
+      const calls: LanguageModelV4CallOptions[] = [];
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           calls.push(options);
           return {
@@ -1595,7 +1595,7 @@ describe('Agent Tests', () => {
 
     it('should allow adding new tools via prepareStep', async () => {
       let capturedTools: any;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           capturedTools = options.tools;
           return {
@@ -1648,7 +1648,7 @@ describe('Agent Tests', () => {
 
     it('should allow replacing all tools via prepareStep', async () => {
       let capturedTools: any;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           capturedTools = options.tools;
           return {
@@ -1705,7 +1705,7 @@ describe('Agent Tests', () => {
       let capturedCallOptions: Array<{ stepNumber: number; responseFormat: any }> = [];
       let callCount = 0;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           callCount++;
           capturedCallOptions.push({
@@ -1786,7 +1786,7 @@ describe('Agent Tests', () => {
 
       let capturedStructuredOutput: any;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => {
           return {
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1847,7 +1847,7 @@ describe('Agent Tests', () => {
       let callCount = 0;
       let capturedResponseFormats: Array<{ stepNumber: number; responseFormat: any }> = [];
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           callCount++;
           const stepNumber = callCount - 1;
@@ -2028,7 +2028,7 @@ describe('Agent Tests', () => {
     messageList.add(emptyAssistant_Core, 'memory');
     messageList.add(userMessage_Core, 'memory');
 
-    const finalCoreMessages = await messageList.get.all.aiV5.llmPrompt();
+    const finalCoreMessages = await messageList.get.all.aiSdk.llmPrompt();
 
     // Expected:
     // 1. Assistant message with tool-1 call.
@@ -2064,7 +2064,7 @@ describe('Agent Tests', () => {
 
   it('should properly sanitize incomplete tool calls from memory messages', async () => {
     const messageList = new MessageList();
-    // Original CoreMessages for context, but we'll test the output of list.get.all.aiV5.model()
+    // Original CoreMessages for context, but we'll test the output of list.get.all.aiSdk.model()
     const toolResultOne_Core: CoreMessage = {
       role: 'tool',
       content: [
@@ -2093,7 +2093,7 @@ describe('Agent Tests', () => {
     messageList.add(toolResultTwo_Core, 'memory');
     messageList.add(toolCallThree_Core, 'memory');
 
-    const finalCoreMessages = await messageList.get.all.aiV5.llmPrompt();
+    const finalCoreMessages = await messageList.get.all.aiSdk.llmPrompt();
 
     // Expected: toolCallThree (orphaned assistant call) should be gone.
     // toolResultOne assumes the tool call was completed, so should be present
@@ -2154,7 +2154,7 @@ describe('Agent Tests', () => {
       let callCount = 0;
 
       // Create a model that makes a tool call on first step, then stops
-      const toolCallModel = new MockLanguageModelV2({
+      const toolCallModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -2242,7 +2242,7 @@ describe('Agent Tests', () => {
       let capturedPrepareStepProviderOptions: any = null;
 
       // Create a model that captures the providerOptions it receives
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async ({ providerOptions }) => {
           capturedProviderOptions = providerOptions;
           return {
@@ -2297,7 +2297,7 @@ describe('Agent Tests', () => {
       let capturedOptions: any = null;
 
       // Create a model that captures all options passed to doGenerate
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async options => {
           // Capture the full options object to inspect modelSettings
           capturedOptions = options;
@@ -2381,7 +2381,7 @@ describe('Agent Tests', () => {
       });
 
       let callCount = 0;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -2466,7 +2466,7 @@ describe('Agent Tests', () => {
       });
 
       let callCount = 0;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {
@@ -2544,7 +2544,7 @@ describe('Agent Tests', () => {
 describe('sub-agent tool input schema coercion', () => {
   function createSupervisorModel(argsJson: string) {
     let call = 0;
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         call++;
         if (call === 1) {
@@ -2580,7 +2580,7 @@ describe('sub-agent tool input schema coercion', () => {
   }
 
   function createChildModel(invocations: string[]) {
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async () => {
         invocations.push('child-ran');
         return {

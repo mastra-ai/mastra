@@ -6,7 +6,7 @@
  * 2. Evented-engine-specific tests that cannot be shared across engines
  */
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
 import type {
   WorkflowResult,
@@ -1099,7 +1099,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       (apiError as any).requestId = 'req_abc123';
       (apiError as any).isRetryable = true;
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => {
           throw apiError;
         },

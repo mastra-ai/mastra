@@ -1,4 +1,4 @@
-import { jsonSchema as aiSdkJsonSchema } from '@internal/ai-v6';
+import { jsonSchema as aiSdkJsonSchema } from '@internal/ai-v7';
 import { type } from 'arktype';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect } from 'vitest';

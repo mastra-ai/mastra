@@ -1,10 +1,10 @@
 import type {
-  LanguageModelV2FinishReason,
-  LanguageModelV2CallWarning,
-  SharedV2ProviderMetadata,
-  LanguageModelV2Source,
-} from '@ai-sdk/provider-v5';
+  SharedV4Warning,
+  SharedV4ProviderMetadata,
+  LanguageModelV4Source,
+} from '@ai-sdk/provider';
 import type {
+  FinishReason,
   LanguageModelRequestMetadata,
   ReasoningPart,
   StepResult,
@@ -18,14 +18,14 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
   GeneratedFile,
-} from '@internal/ai-sdk-v5';
+} from '@internal/ai-v7';
 import { z } from 'zod/v4';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
   /** Includes 'tripwire' and 'retry' for processor scenarios */
-  reason: LanguageModelV2FinishReason | 'tripwire' | 'retry' | 'abort';
-  warnings: LanguageModelV2CallWarning[];
+  reason: FinishReason | 'tripwire' | 'retry' | 'abort';
+  warnings: SharedV4Warning[];
   isContinued: boolean;
   /** Private continuation: the physical attempt did not complete a logical step. */
   signalPreempted?: boolean;
@@ -42,7 +42,7 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT = un
   files?: GeneratedFile[];
   toolCalls?: TypedToolCall<Tools>[];
   toolResults?: TypedToolResult<Tools>[];
-  sources?: LanguageModelV2Source[];
+  sources?: LanguageModelV4Source[];
   staticToolCalls?: StaticToolCall<Tools>[];
   dynamicToolCalls?: DynamicToolCall[];
   staticToolResults?: StaticToolResult<Tools>[];
@@ -62,7 +62,7 @@ export interface LLMIterationMetadata {
     modelProvider: string;
   };
   timestamp?: Date;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: SharedV4ProviderMetadata;
   headers?: Record<string, string>;
   request?: LanguageModelRequestMetadata;
 }
@@ -138,7 +138,7 @@ export const llmIterationOutputSchema = z.object({
     files: z.array(z.any()).optional(), // GeneratedFile[]
     toolCalls: z.array(z.any()).optional(), // TypedToolCall[]
     toolResults: z.array(z.any()).optional(), // TypedToolResult[]
-    sources: z.array(z.any()).optional(), // LanguageModelV2Source[]
+    sources: z.array(z.any()).optional(), // LanguageModelV4Source[]
     staticToolCalls: z.array(z.any()).optional(),
     dynamicToolCalls: z.array(z.any()).optional(),
     staticToolResults: z.array(z.any()).optional(),

@@ -1,6 +1,6 @@
-import type { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import type { toAISdkMessages } from '@mastra/ai-sdk/ui';
 
-type AISdkUIMessage = ReturnType<typeof toAISdkV5Messages>[number];
+type AISdkUIMessage = ReturnType<typeof toAISdkMessages>[number];
 
 export interface ChildMessage {
   type: 'tool' | 'text';

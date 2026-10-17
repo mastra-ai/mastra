@@ -1,6 +1,6 @@
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it, vi } from 'vitest';
-import { toAISdkStream, toAISdkV5Stream } from '../convert-streams';
+import { toAISdkStream } from '../convert-streams';
 
 describe('messageMetadata', () => {
   it('should call messageMetadata function with the correct part for start chunk', async () => {
@@ -30,7 +30,7 @@ describe('messageMetadata', () => {
       },
     });
 
-    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+    const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
       from: 'agent',
       sendStart: true,
       messageMetadata: messageMetadataFn,
@@ -88,7 +88,7 @@ describe('messageMetadata', () => {
       },
     });
 
-    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+    const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
       from: 'agent',
       sendFinish: true,
       messageMetadata: messageMetadataFn,
@@ -161,7 +161,7 @@ describe('messageMetadata', () => {
       },
     });
 
-    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+    const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
       from: 'agent',
       sendStart: true,
       sendFinish: true,
@@ -215,7 +215,7 @@ describe('messageMetadata', () => {
       },
     });
 
-    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+    const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
       from: 'agent',
       sendStart: true,
       sendFinish: true,
@@ -252,7 +252,7 @@ describe('messageMetadata', () => {
       },
     });
 
-    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+    const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
       from: 'agent',
       sendStart: true,
       messageMetadata: messageMetadataFn,
@@ -297,7 +297,7 @@ describe('messageMetadata', () => {
       },
     });
 
-    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+    const aiSdkStream = toAISdkStream(mockStream as unknown as MastraModelOutput, {
       from: 'agent',
       sendStart: true,
       messageMetadata: messageMetadataFn,
@@ -370,7 +370,7 @@ describe('messageMetadata', () => {
 
     it('does not add traceId to message metadata on its own', async () => {
       const chunks = await collect(
-        toAISdkV5Stream(createTracedStream() as unknown as MastraModelOutput, { from: 'agent' }),
+        toAISdkStream(createTracedStream() as unknown as MastraModelOutput, { from: 'agent' }),
       );
 
       expect(chunks.find(c => c.type === 'start')).toEqual({ type: 'start', messageId: 'msg-1' });

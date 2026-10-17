@@ -1,5 +1,5 @@
-import { openai } from '@ai-sdk/openai-v5';
-import { streamText, stepCountIs, tool } from '@internal/ai-sdk-v5';
+import { openai } from '@ai-sdk/openai';
+import { streamText, stepCountIs, tool } from '@mastra/core/ai';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { convertMessages } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';

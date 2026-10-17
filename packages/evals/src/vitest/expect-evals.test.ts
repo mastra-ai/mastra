@@ -1,5 +1,5 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { createScorer } from '@mastra/core/evals';
 import { afterEach, describe, expect, it, test } from 'vitest';
 
@@ -7,7 +7,7 @@ import type { ExpectEvalOptions, ExpectEvalsOptions } from './expect-evals';
 import { EvalPassRateError, expectEval, expectEvals } from './expect-evals';
 
 function createMockAgent(response = 'The capital of France is Paris.') {
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text', text: response }],
       finishReason: 'stop',

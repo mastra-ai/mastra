@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, it, expect } from 'vitest';
 import { createAgentTestRun, createTestMessage, createToolInvocation } from '../../utils';
 import { TRANSCRIPT_END } from './prompts';
@@ -16,7 +16,7 @@ function mockJudge(analysis: MultiTurnJudgeAnalysisResult) {
     prompts.push(JSON.stringify(options.prompt));
   };
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async options => {
       record(options);
       return {

@@ -8,8 +8,8 @@
  * reply.
  */
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -29,7 +29,7 @@ const transientProviderError = () =>
 function createScriptedModel(replies: Reply[]) {
   const prompts: string[][] = [];
   const assistantTexts: string[][] = [];
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     provider: 'google.vertex.chat',
     modelId: 'gemini-3.5-flash-lite',
     doStream: async ({ prompt }: any) => {
@@ -82,7 +82,7 @@ function createMessage(text: string, role: 'user' | 'assistant', threadId = 'thr
   };
 }
 
-function createObserverRunner(model: MockLanguageModelV2, extractors: Extractor<any>[] = []) {
+function createObserverRunner(model: MockLanguageModelV4, extractors: Extractor<any>[] = []) {
   return new ObserverRunner({
     observationConfig: {
       model: 'mock/model',
@@ -98,7 +98,7 @@ function createObserverRunner(model: MockLanguageModelV2, extractors: Extractor<
   });
 }
 
-function createReflectorRunner(model: MockLanguageModelV2, extractors: Extractor<any>[] = []) {
+function createReflectorRunner(model: MockLanguageModelV4, extractors: Extractor<any>[] = []) {
   return new ReflectorRunner({
     reflectionConfig: { model: 'mock/model', observationTokens: 1000, extractors } as any,
     observationConfig: { model: 'mock/model', messageTokens: 1000 } as any,

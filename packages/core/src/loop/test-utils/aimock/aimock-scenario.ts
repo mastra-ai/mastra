@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
@@ -313,6 +313,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     toolsets,
     errorProcessors,
     onError,
+    onAbort,
+    includeRawChunks,
     onChunk,
     onStepFinish,
     onFinish,
@@ -427,6 +429,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
     ...(onError ? { onError } : {}),
+    ...(onAbort ? { onAbort } : {}),
+    ...(includeRawChunks !== undefined ? { includeRawChunks } : {}),
     ...(onChunk && !isDurable ? { onChunk } : {}),
     ...(savePerStep !== undefined ? { savePerStep } : {}),
     ...(actor ? { actor } : {}),

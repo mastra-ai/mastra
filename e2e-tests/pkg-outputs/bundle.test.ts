@@ -203,7 +203,6 @@ describe('@mastra/core runtime-only dependencies', () => {
 
 describe('package devDependency bundling validation', () => {
   const packageAllowlist: Record<string, string[]> = {
-    '@internal/ai-sdk-v5': ['msw'],
     '@internal/llm-recorder': ['vitest'],
     '@internal/test-utils': ['vitest'],
     '@mastra/core': ['vitest'],

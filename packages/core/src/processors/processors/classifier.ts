@@ -1,4 +1,4 @@
-import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { Classifier, ClassifierAnswers, ClassifierQuestions, ClassifierResult } from '../../classifier';
@@ -73,8 +73,7 @@ export interface ClassifierProcessorRegisteredOptions<
 }
 
 export type ClassifierProcessorOptions<Q extends ClassifierQuestions> =
-  | ClassifierProcessorInstanceOptions<Q>
-  | ClassifierProcessorRegisteredOptions<Q>;
+  ClassifierProcessorInstanceOptions<Q> | ClassifierProcessorRegisteredOptions<Q>;
 
 /**
  * Runs a `Classifier` over agent input, output, or stream chunks and hands the typed answers

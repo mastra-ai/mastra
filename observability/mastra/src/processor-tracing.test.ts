@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
@@ -222,7 +222,7 @@ function processorPhaseSpans(exporter: ProcessorTestExporter) {
 }
 
 function createMockModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text', text: 'Mock response' }],
       finishReason: 'stop' as const,
@@ -1363,7 +1363,7 @@ describe('Processor Tracing Tests', () => {
       // Always return a JSON body matching the moderation schema so the
       // moderation processor's structured-output parse succeeds cleanly.
       const moderationJson = JSON.stringify({ category_scores: null, reason: null });
-      return new MockLanguageModelV2({
+      return new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [{ type: 'text', text: moderationJson }],
           finishReason: 'stop' as const,
@@ -2117,7 +2117,7 @@ describe('Processor Tracing Tests', () => {
      *       - input step processor: model-router PROCESSOR_RUN
      */
     it('should update MODEL_GENERATION span when processInputStep overrides model', async () => {
-      const originalModel = new MockLanguageModelV2({
+      const originalModel = new MockLanguageModelV4({
         provider: 'original-provider',
         modelId: 'original-model',
         doGenerate: async () => ({
@@ -2135,7 +2135,7 @@ describe('Processor Tracing Tests', () => {
         }),
       });
 
-      const overriddenModel = new MockLanguageModelV2({
+      const overriddenModel = new MockLanguageModelV4({
         provider: 'overridden-provider',
         modelId: 'overridden-model',
         doGenerate: async () => ({
@@ -2251,7 +2251,7 @@ describe('Processor Tracing Tests', () => {
      * should be reflected on the MODEL_GENERATION span.
      */
     it('should update MODEL_GENERATION span when processInputStep overrides both model and modelSettings', async () => {
-      const originalModel = new MockLanguageModelV2({
+      const originalModel = new MockLanguageModelV4({
         provider: 'original-provider',
         modelId: 'original-model',
         doGenerate: async () => ({
@@ -2269,7 +2269,7 @@ describe('Processor Tracing Tests', () => {
         }),
       });
 
-      const overriddenModel = new MockLanguageModelV2({
+      const overriddenModel = new MockLanguageModelV4({
         provider: 'smart-provider',
         modelId: 'smart-model',
         doGenerate: async () => ({
@@ -2381,7 +2381,7 @@ describe('Processor Tracing Tests', () => {
      * the MODEL_GENERATION span should retain the original values.
      */
     it('should NOT update MODEL_GENERATION span when processInputStep does not override model', async () => {
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         provider: 'test-provider',
         modelId: 'test-model',
         doGenerate: async () => ({
@@ -2442,7 +2442,7 @@ describe('Processor Tracing Tests', () => {
      * the MODEL_GENERATION span should reflect the overridden model.
      */
     it('should update MODEL_GENERATION span when processInputStep overrides model during stream()', async () => {
-      const originalModel = new MockLanguageModelV2({
+      const originalModel = new MockLanguageModelV4({
         provider: 'original-provider',
         modelId: 'original-model',
         doStream: async () => ({
@@ -2454,7 +2454,7 @@ describe('Processor Tracing Tests', () => {
         }),
       });
 
-      const overriddenModel = new MockLanguageModelV2({
+      const overriddenModel = new MockLanguageModelV4({
         provider: 'stream-provider',
         modelId: 'stream-model',
         doStream: async () => ({
@@ -2564,7 +2564,7 @@ describe('Processor Tracing Tests', () => {
      */
     it('should record a tripwire on a processor span when the abort happens after a tool step', async () => {
       let call = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           call++;
           if (call === 1) {
@@ -2656,7 +2656,7 @@ describe('Processor Tracing Tests', () => {
 
     it("should nest each step's stream processor span under that step, including its tool results", async () => {
       let call = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           call++;
           if (call === 1) {
@@ -2749,7 +2749,7 @@ describe('Processor Tracing Tests', () => {
 
     it("should keep a failing step's stream processor spans under that step and end them", async () => {
       let call = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           call++;
           if (call === 1) {
@@ -2833,7 +2833,7 @@ describe('Processor Tracing Tests', () => {
 
     it("should nest the next step's stream processor span under that step after a tool approval resume", async () => {
       let call = 0;
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => {
           call++;
           if (call === 1) {
@@ -2924,7 +2924,7 @@ describe('Processor Tracing Tests', () => {
     });
 
     it("should end the resumed tool result's stream processor span when no step follows the approval", async () => {
-      const model = new MockLanguageModelV2({
+      const model = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'response-metadata', id: '1' },

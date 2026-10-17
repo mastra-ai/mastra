@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import type { Processor } from '../../processors';
 import { Agent } from '../agent';
@@ -59,7 +59,7 @@ function createMockSpan(name: string, instance: Record<string, any>, parentSpan?
 
 function createModel(chunkCount: number, text: string) {
   const size = text.length / chunkCount;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],

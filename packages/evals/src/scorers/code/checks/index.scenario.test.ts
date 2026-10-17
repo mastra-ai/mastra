@@ -7,7 +7,7 @@
  * This validates that checks work end-to-end: AIMock scripted responses →
  * OpenAI v6 provider → Agent → runEvals → checks score correctly.
  */
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { Agent } from '@mastra/core/agent';
 import { runEvals } from '@mastra/core/evals';

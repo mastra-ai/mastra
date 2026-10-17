@@ -1,8 +1,8 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 import { injectBackgroundTaskPrompt } from './inject-background-task-prompt';
 
-function makePrompt(): LanguageModelV2Prompt {
+function makePrompt(): LanguageModelV4Prompt {
   return [
     { role: 'system', content: 'You are a helpful assistant.' },
     { role: 'user', content: [{ type: 'text', text: 'hello' }] },
@@ -108,7 +108,7 @@ describe('injectBackgroundTaskPrompt', () => {
   });
 
   it('only injects into the leading system message, never user/assistant', () => {
-    const inputMessages: LanguageModelV2Prompt = [
+    const inputMessages: LanguageModelV4Prompt = [
       { role: 'system', content: 'System A' },
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
       { role: 'system', content: 'System B' },

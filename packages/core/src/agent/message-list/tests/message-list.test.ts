@@ -1,4 +1,4 @@
-import type { ModelMessage as CoreMessage, UIMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage as CoreMessage, UIMessage } from '@internal/ai-v7';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage, UIMessageWithMetadata } from '../';
 import type { MastraMessageV1 } from '../../../memory';
@@ -61,7 +61,7 @@ describe('MessageList', () => {
       );
 
       // Check what's in response messages
-      const responseMessages = messageList.get.response.aiV5.model();
+      const responseMessages = messageList.get.response.aiSdk.model();
 
       // We expect 3 messages: tool-call assistant, tool result, final assistant
       expect(responseMessages).toHaveLength(3);
@@ -171,7 +171,7 @@ describe('MessageList', () => {
       expect(secondRs.type).toBe('reasoning');
       expect(secondRs.providerMetadata.openai.itemId).toBe('rs_TWO');
 
-      const modelMessages = list.get.all.aiV5.model();
+      const modelMessages = list.get.all.aiSdk.model();
       expect(modelMessages).toHaveLength(1);
       const content = modelMessages[0].content;
       expect(Array.isArray(content)).toBe(true);
@@ -202,9 +202,9 @@ describe('MessageList', () => {
         'memory',
       );
 
-      expect(list.get.all.aiV5.ui()).toHaveLength(0);
-      expect(list.get.all.aiV5.model()).toHaveLength(0);
-      expect(list.get.all.aiV5.ui()).toHaveLength(0);
+      expect(list.get.all.aiSdk.ui()).toHaveLength(0);
+      expect(list.get.all.aiSdk.model()).toHaveLength(0);
+      expect(list.get.all.aiSdk.ui()).toHaveLength(0);
       expect(list.get.all.v1()).toHaveLength(0);
       expect(list.get.all.db()).toHaveLength(0);
 
@@ -220,17 +220,17 @@ describe('MessageList', () => {
 
       list.addSystem(`test system message`, `memory`);
 
-      expect(list.get.all.aiV5.ui()).toHaveLength(1);
-      expect(list.get.all.aiV5.model()).toHaveLength(1);
-      expect(list.get.all.aiV5.ui()).toHaveLength(1);
+      expect(list.get.all.aiSdk.ui()).toHaveLength(1);
+      expect(list.get.all.aiSdk.model()).toHaveLength(1);
+      expect(list.get.all.aiSdk.ui()).toHaveLength(1);
       expect(list.get.all.v1()).toHaveLength(1);
       expect(list.get.all.db()).toHaveLength(1);
 
       expect(list.getSystemMessages(`memory`)).toHaveLength(1);
-      expect(list.get.all.aiV5.prompt()).toHaveLength(2); // system message + user message
-      expect(await list.get.all.aiV5.llmPrompt()).toHaveLength(2); // system message + user message
-      expect(list.get.all.aiV5.prompt()).toHaveLength(2); // system message + user message
-      expect(await list.get.all.aiV5.llmPrompt()).toHaveLength(2); // system message + user message
+      expect(list.get.all.aiSdk.prompt()).toHaveLength(2); // system message + user message
+      expect(await list.get.all.aiSdk.llmPrompt()).toHaveLength(2); // system message + user message
+      expect(list.get.all.aiSdk.prompt()).toHaveLength(2); // system message + user message
+      expect(await list.get.all.aiSdk.llmPrompt()).toHaveLength(2); // system message + user message
     });
 
     it('should correctly convert and add a Vercel UIMessage', () => {
@@ -316,7 +316,7 @@ describe('MessageList', () => {
 
       list.add(messageThree, 'response');
 
-      expect(list.get.all.aiV5.ui()).toMatchObject([
+      expect(list.get.all.aiSdk.ui()).toMatchObject([
         {
           id: expect.any(String),
           role: 'user',
@@ -405,7 +405,7 @@ describe('MessageList', () => {
       ]);
 
       // Check UI messages preserve args
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages).toHaveLength(1);
       expect(uiMessages[0].parts.find(p => p.type === 'tool-searchTool')).toMatchObject({
         input: { query: 'mastra framework' },
@@ -495,7 +495,7 @@ describe('MessageList', () => {
       ]);
 
       // Check that the args are preserved in the final UI messages
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages).toHaveLength(2);
 
       const assistantMessage = uiMessages[1];
@@ -505,7 +505,7 @@ describe('MessageList', () => {
       expect(toolParts[0]).toMatchObject({ input: { location: 'Paris' } });
 
       // Check that args are preserved in Core messages (used by LLM)
-      const coreMessages = list.get.all.aiV5.model();
+      const coreMessages = list.get.all.aiSdk.model();
       // Note: Core messages may include the tool message separately
       expect(coreMessages.length).toBeGreaterThanOrEqual(2);
 
@@ -1138,7 +1138,7 @@ describe('MessageList', () => {
       const result = (toolCallId: string, toolName: string) =>
         ({ type: 'tool-result', toolCallId, toolName, output: { type: 'json', value: {} } }) as const;
       const describePrompt = (list: MessageList) =>
-        list.get.all.aiV5
+        list.get.all.aiSdk
           .model()
           .map(
             m =>
@@ -1200,7 +1200,7 @@ describe('MessageList', () => {
         );
         const restored = new MessageList({ threadId, resourceId }).add(list.get.all.db(), 'memory');
 
-        expect(restored.get.all.aiV5.ui()[0]?.parts).toEqual([
+        expect(restored.get.all.aiSdk.ui()[0]?.parts).toEqual([
           expect.objectContaining({ type: 'file', filename: 'leads.csv', mediaType: 'text/csv' }),
         ]);
       },
@@ -1872,7 +1872,7 @@ describe('MessageList', () => {
         expect(systemMessages[0]?.content).toBe(systemMsgContent);
 
         expect(list.get.all.db().length).toBe(0); // Should not be in MastraDBMessage list
-        expect(list.get.all.aiV5.ui().length).toBe(0); // Should not be in UI messages
+        expect(list.get.all.aiSdk.ui().length).toBe(0); // Should not be in UI messages
       });
 
       it('should not add duplicate system messages based on content', () => {
@@ -1912,7 +1912,7 @@ describe('MessageList', () => {
         expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
 
         expect(list.get.all.db().length).toBe(2); // user and assistant
-        expect(list.get.all.aiV5.ui().length).toBe(2); // user and assistant
+        expect(list.get.all.aiSdk.ui().length).toBe(2); // user and assistant
       });
     });
 
@@ -2432,7 +2432,7 @@ describe('MessageList', () => {
       list.add(userMessage, 'input');
       list.add(assistantMessageWithOrphanedCall, 'response');
 
-      const coreMessages = await list.get.all.aiV5.llmPrompt();
+      const coreMessages = await list.get.all.aiSdk.llmPrompt();
 
       expect(coreMessages.length).toBe(2);
       const assistantMsg = coreMessages.find(m => m.role === 'assistant');
@@ -2465,7 +2465,7 @@ describe('MessageList', () => {
       list.add(assistantMessage, 'response');
       list.add(toolMessageResult, 'response');
 
-      const coreMessages = await list.get.all.aiV5.llmPrompt();
+      const coreMessages = await list.get.all.aiSdk.llmPrompt();
       expect(coreMessages.length).toBe(3); // Assistant message and Tool message for valid-1
 
       const finalAssistantMsg = [...coreMessages].reverse().find(m => m.role === 'assistant');
@@ -2574,7 +2574,7 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithCallState, 'response');
 
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
@@ -2586,7 +2586,7 @@ describe('MessageList', () => {
         { type: 'tool-getLuckyNumber', toolCallId: 'call-1', state: 'input-available', input: {} },
       ]);
       // The prompt sent to the model drops the unanswered call
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       expect(prompt.flatMap(m => (Array.isArray(m.content) ? m.content : [])).some(p => p.type === 'tool-call')).toBe(
         false,
       );
@@ -2630,7 +2630,7 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithResultState, 'response');
 
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
@@ -2694,7 +2694,7 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithMixedStates, 'response');
 
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       const uiMessage = uiMessages[0];
 
       // Only the result state carries output
@@ -2703,7 +2703,7 @@ describe('MessageList', () => {
       );
       expect(completed).toMatchObject([{ type: 'tool-calculateTool', toolCallId: 'call-4', output: 30 }]);
 
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       const promptCallIds = prompt
         .flatMap(m => (Array.isArray(m.content) ? m.content : []))
         .filter(p => p.type === 'tool-call')
@@ -2754,7 +2754,7 @@ describe('MessageList', () => {
       list.add(assistantCallMessage, 'memory');
 
       // When converting to UI messages (what the client sees)
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
@@ -2766,7 +2766,7 @@ describe('MessageList', () => {
         { type: 'tool-getLuckyNumber', toolCallId: 'call-lucky-1', state: 'input-available', input: {} },
       ]);
       // The prompt sent to the model drops the unanswered call
-      const prompt = await list.get.all.aiV5.llmPrompt();
+      const prompt = await list.get.all.aiSdk.llmPrompt();
       expect(prompt.flatMap(m => (Array.isArray(m.content) ? m.content : [])).some(p => p.type === 'tool-call')).toBe(
         false,
       );
@@ -2808,7 +2808,7 @@ describe('MessageList', () => {
 
       list.add(assistantResultMessage, 'memory');
 
-      const uiMessages2 = list.get.all.aiV5.ui();
+      const uiMessages2 = list.get.all.aiSdk.ui();
       expect(uiMessages2.length).toBe(2);
 
       // Tool invocations with "result" state are preserved with their output
@@ -2866,7 +2866,7 @@ describe('MessageList', () => {
         const list = new MessageList({ threadId, resourceId }).add(v2Message, 'response');
 
         // Convert to UI and back to v2
-        const uiMessages = list.get.all.aiV5.ui();
+        const uiMessages = list.get.all.aiSdk.ui();
         const newList = new MessageList({ threadId, resourceId }).add(uiMessages, 'response');
         const v2Messages = newList.get.all.db();
 
@@ -3042,7 +3042,7 @@ describe('MessageList', () => {
         expect(savedUserMessage?.content.metadata).toEqual(userMetadata);
 
         // Convert back to UI messages (for client display)
-        const uiMessages = list.get.all.aiV5.ui();
+        const uiMessages = list.get.all.aiSdk.ui();
         const uiUserMessage = uiMessages.find(m => m.id === 'user-msg-flow') as UIMessageWithMetadata | undefined;
         expect(uiUserMessage).toBeDefined();
         expect(uiUserMessage?.metadata).toMatchObject(userMetadata);
@@ -3077,7 +3077,7 @@ describe('MessageList', () => {
         expect(v2Messages[0].content.metadata).toMatchObject(onlookMessage.metadata);
 
         // Verify it roundtrips back to UI format
-        const uiMessages = list.get.all.aiV5.ui();
+        const uiMessages = list.get.all.aiSdk.ui();
         expect((uiMessages[0] as UIMessageWithMetadata).metadata).toMatchObject(onlookMessage.metadata);
       });
     });
@@ -3138,7 +3138,7 @@ describe('MessageList', () => {
       newMessageList.add(v2Messages, 'memory');
 
       // Get back as UI messages
-      const uiMessages = newMessageList.get.all.aiV5.ui();
+      const uiMessages = newMessageList.get.all.aiSdk.ui();
 
       // Verify metadata is still preserved after round trip
       expect(uiMessages[0].metadata).toMatchObject({
@@ -3260,7 +3260,7 @@ describe('MessageList', () => {
       );
 
       // Step 6: Get prompt messages (what's sent to LLM)
-      const promptMessages = returnList.get.all.aiV5.prompt();
+      const promptMessages = returnList.get.all.aiSdk.prompt();
 
       // Verify the tool history is preserved
       // Check if tool calls are present
@@ -3433,7 +3433,7 @@ describe('MessageList', () => {
         // Add a user message to avoid empty message list error
         messageList.add({ role: 'user', content: 'Hello' }, 'input');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'system');
 
         expect(retrievedMessage).toBeDefined();
@@ -3457,7 +3457,7 @@ describe('MessageList', () => {
 
         messageList.add(userMessage, 'input');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
 
         expect(retrievedMessage).toBeDefined();
@@ -3485,7 +3485,7 @@ describe('MessageList', () => {
 
         messageList.add(userMessage, 'input');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
 
         expect(retrievedMessage).toBeDefined();
@@ -3523,7 +3523,7 @@ describe('MessageList', () => {
 
         messageList.add(userMessage, 'input');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
 
         expect(retrievedMessage).toBeDefined();
@@ -3558,7 +3558,7 @@ describe('MessageList', () => {
 
         messageList.add(assistantMessage, 'memory');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'assistant');
 
         expect(retrievedMessage).toBeDefined();
@@ -3583,7 +3583,7 @@ describe('MessageList', () => {
 
         messageList.add(coreMessage, 'input');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
@@ -3615,7 +3615,7 @@ describe('MessageList', () => {
 
         messageList.add(coreMessage, 'input');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
 
         expect(retrievedMessage).toBeDefined();
@@ -3679,7 +3679,7 @@ describe('MessageList', () => {
         // Assistant message with cache
         messageList.add(assistantResponseMessage, 'memory');
 
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const llmPrompt = await messageList.get.all.aiSdk.llmPrompt();
 
         // System message should have providerOptions at message level
         const systemMsg = llmPrompt.find((msg: any) => msg.role === 'system');
@@ -3709,7 +3709,7 @@ describe('MessageList', () => {
     it('should pass through empty message list unchanged when calling prompt()', () => {
       const list = new MessageList();
 
-      const prompt = list.get.all.aiV5.prompt();
+      const prompt = list.get.all.aiSdk.prompt();
       expect(prompt).toHaveLength(0);
     });
 
@@ -3718,7 +3718,7 @@ describe('MessageList', () => {
       list.addSystem('You are a helpful assistant');
       list.addSystem('Follow these rules');
 
-      const prompt = list.get.all.aiV5.prompt();
+      const prompt = list.get.all.aiSdk.prompt();
       expect(prompt).toHaveLength(2);
       expect(prompt[0].role).toBe('system');
       expect(prompt[1].role).toBe('system');
@@ -3727,7 +3727,7 @@ describe('MessageList', () => {
     it('should pass through empty message list unchanged when calling llmPrompt()', async () => {
       const list = new MessageList();
 
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const llmPrompt = await list.get.all.aiSdk.llmPrompt();
       expect(llmPrompt).toHaveLength(0);
     });
 
@@ -3735,7 +3735,7 @@ describe('MessageList', () => {
       const list = new MessageList();
       list.addSystem('You are a helpful assistant');
 
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const llmPrompt = await list.get.all.aiSdk.llmPrompt();
       expect(llmPrompt).toHaveLength(1);
       expect(llmPrompt[0].role).toBe('system');
     });
@@ -3855,9 +3855,9 @@ describe('MessageList', () => {
 
       // This should not throw "Cannot read properties of undefined (reading 'reduce')"
       // or "Cannot read properties of undefined (reading 'length')"
-      expect(() => list.get.all.aiV5.ui()).not.toThrow();
+      expect(() => list.get.all.aiSdk.ui()).not.toThrow();
 
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages).toHaveLength(1);
       expect(uiMessages[0].parts).toEqual([
         expect.objectContaining({ type: 'text', text: 'This is text content without parts' }),
@@ -3879,9 +3879,9 @@ describe('MessageList', () => {
       const list = new MessageList();
       list.add(messageWithNullParts, 'response');
 
-      expect(() => list.get.all.aiV5.ui()).not.toThrow();
+      expect(() => list.get.all.aiSdk.ui()).not.toThrow();
 
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages).toHaveLength(1);
       expect(uiMessages[0].parts).toEqual([expect.objectContaining({ type: 'text', text: 'Assistant response' })]);
     });
@@ -3901,9 +3901,9 @@ describe('MessageList', () => {
       const list = new MessageList();
       list.add(messageWithEmptyParts, 'input');
 
-      expect(() => list.get.all.aiV5.ui()).not.toThrow();
+      expect(() => list.get.all.aiSdk.ui()).not.toThrow();
 
-      const uiMessages = list.get.all.aiV5.ui();
+      const uiMessages = list.get.all.aiSdk.ui();
       expect(uiMessages).toHaveLength(1);
       expect(uiMessages[0].parts).toEqual([
         expect.objectContaining({ type: 'text', text: 'Content with empty parts' }),

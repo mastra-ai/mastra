@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { handleChatStream } from '../chat-route';
 import { toAISdkStream } from '../convert-streams';
-import type { V6UIMessage } from '../public-types';
+import type { UIMessage } from '../public-types';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
@@ -29,7 +29,7 @@ type ApprovalRequest = {
   input: { value: string };
 };
 
-function approvalMessage(request: ApprovalRequest, approved?: boolean): V6UIMessage {
+function approvalMessage(request: ApprovalRequest, approved?: boolean): UIMessage {
   const part =
     approved === undefined
       ? {
@@ -91,7 +91,6 @@ describe('v6 whole-request tool approval extraction (e2e)', { timeout: 180_000 }
       const chunks = await collectChunks(
         toAISdkStream(result, {
           from: 'agent',
-          version: 'v6',
         }),
       );
       const approval = chunks.find(chunk => chunk.type === 'tool-approval-request');
@@ -110,7 +109,7 @@ describe('v6 whole-request tool approval extraction (e2e)', { timeout: 180_000 }
     const firstResponse = await handleChatStream({
       mastra,
       agentId: agent.id,
-      version: 'v6',
+
       params: {
         messages: [approvalMessage(approvalA, true), approvalMessage(approvalB)],
       },
@@ -126,7 +125,7 @@ describe('v6 whole-request tool approval extraction (e2e)', { timeout: 180_000 }
     const secondResponse = await handleChatStream({
       mastra,
       agentId: agent.id,
-      version: 'v6',
+
       params: {
         messages: [approvalMessage(approvalA, true), approvalMessage(approvalB, true)],
       },

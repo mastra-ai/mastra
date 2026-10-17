@@ -1,5 +1,4 @@
-import type { Schema as SchemaV5 } from '@internal/ai-sdk-v5';
-import type { Schema as SchemaV6 } from '@internal/ai-v6';
+import type { Schema as SchemaV5, Schema as SchemaV6 } from '@internal/ai-v7';
 import type { JSONSchema7 } from 'json-schema';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';

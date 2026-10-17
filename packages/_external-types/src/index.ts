@@ -1,5 +1,7 @@
-export type { Tool, ToolCallOptions as ToolExecutionOptions, Schema } from 'ai';
-export type { Tool as ToolV5, ToolCallOptions, FlexibleSchema } from '@ai-sdk/provider-utils';
+import type { ToolExecutionOptions as BaseToolExecutionOptions } from '@ai-sdk/provider-utils';
+export type { Tool, Tool as ToolV5, FlexibleSchema, Schema } from '@ai-sdk/provider-utils';
+export type ToolExecutionOptions<CONTEXT = any> = BaseToolExecutionOptions<CONTEXT>;
+export type ToolCallOptions<CONTEXT = any> = BaseToolExecutionOptions<CONTEXT>;
 
 /**
  * @public

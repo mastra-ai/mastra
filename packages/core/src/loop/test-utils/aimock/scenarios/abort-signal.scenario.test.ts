@@ -12,8 +12,8 @@
  * - finishReason indicates the run was aborted
  */
 
-import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect } from 'vitest';
+import { stepCountIs } from '@internal/ai-v7';
+import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
@@ -93,6 +93,45 @@ describeForAllEngines(
       // The output stream should indicate it was aborted/terminated
       const finishReason = await output.finishReason;
       expect(finishReason).toMatch(/abort|cancelled|error|tripwire/i);
+    });
+
+    it('calls onAbort and not onError when aborted in the second step', async () => {
+      const abortController = new AbortController();
+      const onAbort = vi.fn();
+      const onError = vi.fn();
+
+      const getData = createTool({
+        id: 'get_data',
+        description: 'Get data and trigger abort',
+        inputSchema: z.object({}),
+        execute: async () => {
+          abortController.abort();
+          return { value: 'DATA_VALUE' };
+        },
+      });
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Get data and then continue.',
+        tools: { get_data: getData },
+        stopWhen: stepCountIs(10),
+        abortSignal: abortController.signal,
+        onAbort,
+        onError,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_data', name: 'get_data', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'unreachable' });
+        },
+      });
+
+      await output.consumeStream();
+      expect(onAbort).toHaveBeenCalledTimes(1);
+      expect(onError).not.toHaveBeenCalled();
+      expect(await output.text).not.toContain('unreachable');
     });
   },
   {},

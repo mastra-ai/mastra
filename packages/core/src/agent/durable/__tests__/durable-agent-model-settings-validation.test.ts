@@ -11,7 +11,7 @@
  * than as `turn()` throwing, so it is compared like any other turn. Every engine
  * must preserve the validation `TypeError` and reject with the same message.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
@@ -28,7 +28,7 @@ const VALID_TIMEOUT = { totalMs: 60_000, stepMs: 30_000 };
 /** Matches the harness check `/modelSettings\.timeout/` on either surface. */
 const TIMEOUT_ERROR = /modelSettings\.timeout/;
 
-function t17Agent({ model }: { model: LanguageModelV2 }) {
+function t17Agent({ model }: { model: LanguageModelV4 }) {
   return new Agent({
     id: 't17-agent',
     name: 't17',

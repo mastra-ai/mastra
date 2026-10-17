@@ -1,4 +1,4 @@
-import type { ModelMessage, StopCondition, ToolSet } from '@internal/ai-sdk-v5';
+import type { ModelMessage, StopCondition, ToolSet } from '@internal/ai-v7';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -171,7 +171,7 @@ export class MastraLLMVNext extends MastraBase {
       stopWhenToUse = stopWhen ?? llmStepCountIs(5);
     }
 
-    const messages = messageList.get.all.aiV5.model();
+    const messages = messageList.get.all.aiSdk.model();
 
     const firstModel = this.#firstModel.model;
 

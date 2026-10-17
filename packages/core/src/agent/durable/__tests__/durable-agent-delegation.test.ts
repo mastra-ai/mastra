@@ -11,9 +11,9 @@
  * fresh worker degrades to default delegation behaviour.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { ModelMessage } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import type { ModelMessage } from '@internal/ai-v7';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -35,7 +35,7 @@ import { createDurableToolCallStep } from '../workflows/steps/tool-call';
 
 /** Sub-agent: streams a single text response */
 function makeSubAgentModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -60,7 +60,7 @@ function makeSubAgentModel(text: string) {
  */
 function makeSupervisorModel(agentKey: string, prompt: string, toolName = `agent-${agentKey}`) {
   let calls = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       if (calls === 1) {
@@ -106,7 +106,7 @@ function makeSupervisorModel(agentKey: string, prompt: string, toolName = `agent
   });
 }
 
-function makeSubAgent(id: string, text: string, model: LanguageModelV2 = makeSubAgentModel(text)) {
+function makeSubAgent(id: string, text: string, model: LanguageModelV4 = makeSubAgentModel(text)) {
   return new Agent({
     id,
     name: id,
@@ -140,7 +140,7 @@ describe('DurableAgent delegation hooks', () => {
       id: 'supervisor-delegation-start',
       name: 'supervisor-delegation-start',
       instructions: 'You orchestrate sub-agents.',
-      model: makeSupervisorModel('researchAgent', 'research dolphins') as LanguageModelV2,
+      model: makeSupervisorModel('researchAgent', 'research dolphins') as LanguageModelV4,
       agents: { researchAgent: subAgent },
     });
 
@@ -549,7 +549,7 @@ describe('DurableAgent delegation hooks', () => {
       id: 'supervisor-delegation-complete',
       name: 'supervisor-delegation-complete',
       instructions: 'You orchestrate sub-agents.',
-      model: makeSupervisorModel('writerAgent', 'write a report') as LanguageModelV2,
+      model: makeSupervisorModel('writerAgent', 'write a report') as LanguageModelV4,
       agents: { writerAgent: subAgent },
     });
 
@@ -583,7 +583,7 @@ describe('DurableAgent delegation hooks', () => {
       id: 'supervisor-delegation-identity',
       name: 'supervisor-delegation-identity',
       instructions: 'You orchestrate sub-agents.',
-      model: makeSupervisorModel('researchAgent', 'research dolphins') as LanguageModelV2,
+      model: makeSupervisorModel('researchAgent', 'research dolphins') as LanguageModelV4,
       agents: { researchAgent: subAgent },
     });
 
@@ -621,14 +621,14 @@ describe('DurableAgent delegation hooks', () => {
         subAgentSawSpecialty = requestContext.get('specialty');
         return 'You are a helpful sub-agent.';
       },
-      model: makeSubAgentModel('Task done.') as LanguageModelV2,
+      model: makeSubAgentModel('Task done.') as LanguageModelV4,
     });
 
     const supervisor = new Agent({
       id: 'supervisor-delegation-context',
       name: 'supervisor-delegation-context',
       instructions: 'You orchestrate sub-agents.',
-      model: makeSupervisorModel('specialistAgent', 'do specialized work') as LanguageModelV2,
+      model: makeSupervisorModel('specialistAgent', 'do specialized work') as LanguageModelV4,
       agents: { specialistAgent: subAgent },
     });
 

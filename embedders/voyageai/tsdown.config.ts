@@ -11,6 +11,6 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v5']));
+    await generateTypes(process.cwd(), new Set());
   },
 });

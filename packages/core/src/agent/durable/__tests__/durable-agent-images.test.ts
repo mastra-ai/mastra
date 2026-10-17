@@ -5,8 +5,8 @@
  * HTTP URLs, and attachments in durable execution.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -20,7 +20,7 @@ import { createDurableAgent } from '../create-durable-agent';
  * Creates a simple text model
  */
 function createTextModel(text: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -68,7 +68,7 @@ describe('DurableAgent image handling', () => {
         id: 'base64-image-agent',
         name: 'Base64 Image Agent',
         instructions: 'Describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -93,7 +93,7 @@ describe('DurableAgent image handling', () => {
         id: 'data-uri-image-agent',
         name: 'Data URI Image Agent',
         instructions: 'Describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -119,7 +119,7 @@ describe('DurableAgent image handling', () => {
         id: 'url-image-agent',
         name: 'URL Image Agent',
         instructions: 'Describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -143,7 +143,7 @@ describe('DurableAgent image handling', () => {
         id: 'https-image-agent',
         name: 'HTTPS Image Agent',
         instructions: 'Describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -169,7 +169,7 @@ describe('DurableAgent image handling', () => {
         id: 'mixed-images-agent',
         name: 'Mixed Images Agent',
         instructions: 'Describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -195,7 +195,7 @@ describe('DurableAgent image handling', () => {
         id: 'interleaved-images-agent',
         name: 'Interleaved Images Agent',
         instructions: 'Describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -224,7 +224,7 @@ describe('DurableAgent image handling', () => {
         id: 'serialize-image-agent',
         name: 'Serialize Image Agent',
         instructions: 'Process images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -255,7 +255,7 @@ describe('DurableAgent image handling', () => {
         id: 'large-image-agent',
         name: 'Large Image Agent',
         instructions: 'Process images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -285,7 +285,7 @@ describe('DurableAgent image handling', () => {
         id: 'image-memory-agent',
         name: 'Image Memory Agent',
         instructions: 'Remember and describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -319,7 +319,7 @@ describe('DurableAgent image handling', () => {
     const GS_URI = 'gs://devtest-petcircle-assets/add-pet-details/dog.png';
 
     function createCapturingModel(prompts: unknown[], supportedUrls?: Record<string, RegExp[]>) {
-      return new MockLanguageModelV2({
+      return new MockLanguageModelV4({
         supportedUrls,
         doStream: async (options: any) => {
           prompts.push(options.prompt);
@@ -356,7 +356,7 @@ describe('DurableAgent image handling', () => {
         id: 'gs-image-agent',
         name: 'GS Image Agent',
         instructions: 'Describe images.',
-        model: mockModel as LanguageModelV2,
+        model: mockModel as LanguageModelV4,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -407,7 +407,7 @@ describe('DurableAgent image edge cases', () => {
       id: 'empty-image-agent',
       name: 'Empty Image Agent',
       instructions: 'Process images.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -431,7 +431,7 @@ describe('DurableAgent image edge cases', () => {
       id: 'only-image-agent',
       name: 'Only Image Agent',
       instructions: 'Describe images.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
@@ -452,7 +452,7 @@ describe('DurableAgent image edge cases', () => {
       id: 'special-url-agent',
       name: 'Special URL Agent',
       instructions: 'Process images.',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 

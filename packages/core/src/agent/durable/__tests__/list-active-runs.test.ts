@@ -8,8 +8,8 @@
  * contract and would drag in far more setup.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
@@ -53,8 +53,8 @@ function makeSnapshot(
   } as WorkflowRunState;
 }
 
-function makeMockModel(): LanguageModelV2 {
-  return new MockLanguageModelV2({
+function makeMockModel(): LanguageModelV4 {
+  return new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'text-delta', textDelta: 'ok' },
@@ -62,7 +62,7 @@ function makeMockModel(): LanguageModelV2 {
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
     }),
-  }) as unknown as LanguageModelV2;
+  }) as unknown as LanguageModelV4;
 }
 
 function createDurableWithStore(agentId: string): {

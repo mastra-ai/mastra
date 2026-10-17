@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai';
 import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';

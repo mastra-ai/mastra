@@ -31,7 +31,7 @@
  *   conversation from the persisted snapshot); no T85 claim depends on memory.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../memory/mock';
@@ -311,7 +311,7 @@ describe('T85 detail usage counters', () => {
 
 // A fresh in-process script model per graph; `modelCalls` counts calls per generation.
 function createRecoveryModel(variant: Variant, modelCalls: Map<number, number>, generation: number) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       modelCalls.set(generation, (modelCalls.get(generation) ?? 0) + 1);
       let completed = 0;

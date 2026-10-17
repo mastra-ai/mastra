@@ -1,4 +1,4 @@
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import type { MessageList } from '../message-list/index';
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
-const openai_v5 = createOpenAIV5();
+const openai = createOpenAI();
 
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
@@ -31,7 +31,7 @@ describe('OpenAI reasoning summary streaming (e2e)', { timeout: 120_000 }, () =>
           id: 'openai-reasoning-summaries-e2e-agent',
           name: 'OpenAI Reasoning Summaries E2E Agent',
           instructions: 'You are a concise assistant.',
-          model: openai_v5('gpt-5.4'),
+          model: openai('gpt-5.4'),
         });
 
         const prompt =

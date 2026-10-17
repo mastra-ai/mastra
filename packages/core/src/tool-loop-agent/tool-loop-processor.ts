@@ -4,7 +4,7 @@ import type {
   ModelMessage,
   StepResult,
   ToolLoopAgentSettings,
-} from '@internal/ai-v6';
+} from '@internal/ai-v7';
 import { isSupportedLanguageModel } from '../agent';
 import type { AgentExecutionOptions, AgentInstructions } from '../agent';
 import { resolveModelConfig } from '../llm/model/resolve-model';
@@ -29,12 +29,12 @@ type PrepareCallInput = AgentCallParameters<never> &
     | 'headers'
     | 'instructions'
     | 'stopWhen'
-    | 'experimental_telemetry'
     | 'activeTools'
     | 'providerOptions'
-    | 'experimental_context'
     | 'experimental_download'
   >;
+
+type PrepareStepInput = Parameters<NonNullable<ToolLoopAgentSettings<never, any, any>['prepareStep']>>[0];
 
 export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-processor'> {
   readonly id = 'tool-loop-agent-processor';
@@ -250,10 +250,6 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
         stopSequences: modelSettings?.stopSequences,
         seed: modelSettings?.seed,
 
-        // Experimental options
-        // experimental_telemetry: this.settings.experimental_telemetry,
-        // experimental_context: this.settings.experimental_context,
-        // experimental_download: this.settings.experimental_download,
       };
 
       // Call prepareCall and apply any returned overrides
@@ -280,36 +276,19 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
       // Note: We pass messages and steps in Mastra format rather than converting to AI SDK format.
       // This is intentional - most prepareStep callbacks only return overrides and don't inspect
       // the message content. The type casts handle the format difference at runtime.
-      const prepareStepInputArgs: {
-        /**
-         * The steps that have been executed so far.
-         */
-        steps: Array<StepResult<NoInfer<any>>>;
-        /**
-         * The number of the step that is being executed.
-         */
-        stepNumber: number;
-        /**
-         * The model instance that is being used for this step.
-         */
-        model: MastraLanguageModel;
-        /**
-         * The messages that will be sent to the model for the current step.
-         * Note: These are in Mastra format (MastraDBMessage[]), not AI SDK ModelMessage format.
-         */
-        messages: Array<ModelMessage>;
-        /**
-         * The context passed via the experimental_context setting (experimental).
-         */
-        experimental_context: unknown;
-      } = {
+      const prepareStepInputArgs: PrepareStepInput = {
         model,
         // Messages are in Mastra format (MastraDBMessage[])
         messages: messages as any,
+        initialMessages: [],
+        responseMessages: [],
+        instructions: this.settings.instructions,
+        initialInstructions: this.settings.instructions,
         // Steps may have minor type differences in usage properties (inputTokenDetails/outputTokenDetails)
         steps: steps as any,
         stepNumber,
-        experimental_context: undefined,
+        toolsContext: {},
+        runtimeContext: {},
       };
 
       const prepareStepResult = await this.settings.prepareStep(prepareStepInputArgs);

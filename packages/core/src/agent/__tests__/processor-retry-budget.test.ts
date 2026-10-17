@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../logger';
 import type { Processor } from '../../processors';
@@ -29,7 +29,7 @@ function createAlwaysFailingModel() {
       isRetryable: false,
     });
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       throw failure();
@@ -46,7 +46,7 @@ function createAlwaysFailingModel() {
 function createSucceedOnRetryModel(responseText: string, failuresBeforeSuccess: number) {
   let callCount = 0;
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doGenerate: async () => {
       callCount++;
       if (callCount <= failuresBeforeSuccess) {

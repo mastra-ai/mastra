@@ -4,8 +4,8 @@
  * memory rows; each step restores them, and a recovering process restores
  * them from memory storage.
  */
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { z } from 'zod';
@@ -35,8 +35,8 @@ const engines: Engine[] = ['default', 'evented'];
 // Decides from the transcript, so a recovering process makes the same call
 // the original one made: `toolRounds` tool rounds, then text.
 function createModel(prompts: string[], toolRounds = 1) {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }: { prompt: LanguageModelV2Prompt }) => {
+  return new MockLanguageModelV4({
+    doStream: async ({ prompt }: { prompt: LanguageModelV4Prompt }) => {
       prompts.push(JSON.stringify(prompt));
       const answered = prompt.filter(message => message.role === 'tool').length >= toolRounds;
       const parts = answered

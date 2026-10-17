@@ -1,11 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+import { convertArrayToReadableStream, MockLanguageModelV4, convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v7/test';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -30,13 +26,13 @@ import { Agent } from '../agent';
 // Tests only run for v2 and v3
 function workspaceToolContextTest(version: 'v2' | 'v3') {
   let tempDir: string;
-  let mockModel: MockLanguageModelV2 | MockLanguageModelV3;
+  let mockModel: MockLanguageModelV4 | MockLanguageModelV4;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-tool-test-'));
 
     {
-      mockModel = new MockLanguageModelV2({
+      mockModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'tool-calls',
@@ -306,9 +302,9 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
         const workspace = createWorkspace('fs-workspace');
 
         // Create a mock model that calls fileTool (not workspaceTool)
-        let fileToolMockModel: MockLanguageModelV2 | MockLanguageModelV3;
+        let fileToolMockModel: MockLanguageModelV4 | MockLanguageModelV4;
         {
-          fileToolMockModel = new MockLanguageModelV2({
+          fileToolMockModel = new MockLanguageModelV4({
             doGenerate: async () => ({
               rawCall: { rawPrompt: null, rawSettings: {} },
               finishReason: 'tool-calls',
@@ -424,7 +420,7 @@ describe('Dynamic workspace configuration', () => {
   };
 
   const createMockModel = () =>
-    new MockLanguageModelV2({
+    new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'tool-calls',
@@ -630,7 +626,7 @@ describe('Workspace tools receive workspace via ToolOptions fallback (GH-14203)'
       filesystem,
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -702,7 +698,7 @@ describe('Read-before-write records survive across listWorkspaceTools calls (GH-
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -775,7 +771,7 @@ describe('Read-before-write records survive across listWorkspaceTools calls (GH-
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -859,7 +855,7 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
     });
 
     // Mock model that calls mastra_workspace_read_file
-    const readFileMockModel = new MockLanguageModelV2({
+    const readFileMockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'tool-calls',
@@ -914,7 +910,7 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
     });
 
     // Mock model that calls mastra_workspace_write_file
-    const writeFileMockModel = new MockLanguageModelV2({
+    const writeFileMockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'tool-calls',

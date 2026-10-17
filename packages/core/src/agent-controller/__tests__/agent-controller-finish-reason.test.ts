@@ -14,7 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 
 import { AgentController } from '../agent-controller';
 import { SessionStartupCancelledError } from '../errors';
@@ -47,7 +47,7 @@ async function buildController(id: string, stream: () => ReadableStream) {
     id: `agent-${id}`,
     name: `Agent ${id}`,
     instructions: 'You are a helpful assistant.',
-    model: new MastraLanguageModelV2Mock({
+    model: new MastraLanguageModelV4Mock({
       doStream: async () => ({ stream: stream() }),
     }),
   });

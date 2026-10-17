@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../tools';
@@ -72,7 +72,7 @@ const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
 
 function createToolCallingModel() {
   let step = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       step++;
       const chunks =
@@ -101,7 +101,7 @@ function createToolCallingModel() {
 }
 
 function createTextOnlyModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -119,7 +119,7 @@ function createTextOnlyModel() {
 
 function createIncompleteUsageModel() {
   let step = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       step++;
       return {
@@ -247,7 +247,7 @@ describe('MODEL_GENERATION span output tool calls (#24291)', () => {
         id: 'aborted-incomplete-usage-span-agent',
         name: 'Aborted Incomplete Usage Span Agent',
         instructions: 'test',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doStream: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             warnings: [],

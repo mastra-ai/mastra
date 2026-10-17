@@ -1,4 +1,4 @@
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError } from '@mastra/core/ai';
 import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
 import {

@@ -14,7 +14,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
   return { name: data.name, email: 'dero@mail.com' };
@@ -34,7 +34,7 @@ function createFindUserTool() {
 
 function createMockModel() {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -156,7 +156,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     });
 
     let supCallCount = 0;
-    const supervisorModel = new MockLanguageModelV2({
+    const supervisorModel = new MockLanguageModelV4({
       doStream: async () => {
         supCallCount++;
         if (supCallCount === 1) {
@@ -250,7 +250,7 @@ describe('agentic-loop snapshot lifecycle', () => {
       id: 'plain-agent',
       name: 'Plain Agent',
       instructions: 'You answer.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -335,7 +335,7 @@ describe('agentic-loop snapshot lifecycle', () => {
       id: 'failing-agent',
       name: 'Failing Agent',
       instructions: 'You answer.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => {
           throw new Error('model exploded');
         },
@@ -369,7 +369,7 @@ describe('agentic-loop snapshot lifecycle', () => {
       id: 'cleanup-fail-agent',
       name: 'Cleanup Fail Agent',
       instructions: 'You answer.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],

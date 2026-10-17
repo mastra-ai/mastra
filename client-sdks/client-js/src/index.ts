@@ -45,7 +45,6 @@ export type {
   QueryTracesKeysetInput,
   QueryTracesPaginatedInput,
 } from './resources/observability';
-export type { UIMessageWithMetadata } from '@mastra/core/agent';
 export type { GetMetricTimeSeriesResponse } from './types';
 export type {
   AggregateTracesArgs,

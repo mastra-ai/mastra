@@ -1,5 +1,5 @@
-import { anthropic } from '@ai-sdk/anthropic-v5';
-import { openai } from '@ai-sdk/openai-v6';
+import { anthropic } from '@ai-sdk/anthropic';
+import { openai } from '@ai-sdk/openai';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { noopLogger } from '../../logger';

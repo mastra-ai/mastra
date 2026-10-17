@@ -588,7 +588,7 @@ describe('aiV5UIMessagesToAIV5ModelMessages — hosted tool_search replay', () =
     messageList.add(assistantMsg, 'response');
     messageList.add({ id: 'msg-user-2', role: 'user', content: 'now use it' }, 'user');
 
-    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const prompt = await messageList.get.all.aiSdk.llmPrompt();
 
     const itemIds: string[] = [];
     for (const msg of prompt) {

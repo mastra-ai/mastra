@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
@@ -24,12 +24,12 @@ function createRateLimitedModel(headers: Record<string, string>, isRetryable = t
   };
 
   return {
-    model: new MockLanguageModelV2({ doGenerate: throwRateLimited, doStream: throwRateLimited }),
+    model: new MockLanguageModelV4({ doGenerate: throwRateLimited, doStream: throwRateLimited }),
     getCallCount: () => callCount,
   };
 }
 
-function createAgent(model: MockLanguageModelV2, maxRetries?: number) {
+function createAgent(model: MockLanguageModelV4, maxRetries?: number) {
   return new Agent({
     id: 'model-retry-after',
     name: 'model-retry-after',

@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -12,7 +12,7 @@ import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function createConcurrentWorkflowModel() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async options => {
       const hasToolResult = JSON.stringify(options.prompt).includes('"type":"tool-result"');
       const parts = hasToolResult

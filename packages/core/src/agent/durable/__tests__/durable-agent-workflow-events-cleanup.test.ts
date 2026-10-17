@@ -6,8 +6,8 @@
  * cleanup must clear that topic itself (alongside `agent.stream.<runId>`),
  * otherwise a persistent CachingPubSub orphans a no-TTL counter key per run.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
@@ -18,7 +18,7 @@ describe('DurableAgent workflow.events.v2 topic cleanup (#20786)', () => {
   it('clears workflow.events.v2.<runId> when cleanup() runs', async () => {
     const pubsub = new EventEmitterPubSub();
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -40,7 +40,7 @@ describe('DurableAgent workflow.events.v2 topic cleanup (#20786)', () => {
       id: 'cleanup-agent',
       name: 'Cleanup Agent',
       instructions: 'test',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
     });
     const durableAgent = createDurableAgent({
       agent: baseAgent,

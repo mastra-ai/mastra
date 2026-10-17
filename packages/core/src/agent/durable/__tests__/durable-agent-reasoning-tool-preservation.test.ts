@@ -20,8 +20,8 @@
  * (and its itemId) are preserved before the follow-up call.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -51,7 +51,7 @@ function assistantPartsFromPrompt(prompt: unknown): Array<Record<string, any>> {
  */
 function createReasoningThenToolModel(finalText: string, prompts: unknown[]) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async (options: any) => {
       prompts.push(options.prompt);
       callCount++;
@@ -140,7 +140,7 @@ describe('DurableAgent — reasoning + tool call preservation (#19365)', () => {
       id: 'durable-reasoning-tool-agent',
       name: 'Durable Reasoning Tool Agent',
       instructions: 'Use the echo tool.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { echo: echoTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -178,7 +178,7 @@ describe('DurableAgent — reasoning + tool call preservation (#19365)', () => {
   it('preserves reasoning text content and ordering when reasoning precedes a tool-call in the same step', async () => {
     const prompts: unknown[] = [];
     let callCount = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async (options: any) => {
         prompts.push(options.prompt);
         callCount++;
@@ -245,7 +245,7 @@ describe('DurableAgent — reasoning + tool call preservation (#19365)', () => {
       id: 'durable-reasoning-text-agent',
       name: 'Durable Reasoning Text Agent',
       instructions: 'Think, then use the echo tool.',
-      model: model as LanguageModelV2,
+      model: model as LanguageModelV4,
       tools: { echo: echoTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });

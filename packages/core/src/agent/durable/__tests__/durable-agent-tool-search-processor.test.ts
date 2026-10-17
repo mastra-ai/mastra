@@ -14,8 +14,8 @@
  * and regular paths produce the same tool results.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -34,7 +34,7 @@ type ScriptedCall = { toolName: string; args: Record<string, unknown> };
  */
 function createScriptedToolCallModel(script: ScriptedCall[]) {
   let turn = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       const call = script[turn];
       turn++;
@@ -109,7 +109,7 @@ function makeAgent(id: string, script: ScriptedCall[]) {
     id,
     name: id,
     instructions: 'Discover tools with search_tools, then load them with load_tool.',
-    model: createScriptedToolCallModel(script) as LanguageModelV2,
+    model: createScriptedToolCallModel(script) as LanguageModelV4,
     tools: {}, // no eager tools — only the processor-injected meta-tools exist
     inputProcessors: [new ToolSearchProcessor({ tools: makeSearchableTools() })],
   });
@@ -253,7 +253,7 @@ describe('DurableAgent ToolSearchProcessor keeps resolved catalog across steps (
       warnings: [],
     });
 
-    return new MockLanguageModelV2({
+    return new MockLanguageModelV4({
       doStream: async options => {
         const visible = (options.tools ?? []).map((t: any) => t.name);
         visibleToolsByStep.push(visible);
@@ -280,7 +280,7 @@ describe('DurableAgent ToolSearchProcessor keeps resolved catalog across steps (
       id,
       name: id,
       instructions: 'Search for the echo tool, call it, then answer.',
-      model: createCatalogRecordingModel(visibleToolsByStep) as LanguageModelV2,
+      model: createCatalogRecordingModel(visibleToolsByStep) as LanguageModelV4,
       // `echo` is a regular agent tool; the processor discovers it via
       // includeResolvedTools and withholds it until search auto-loads it.
       tools: { echo },

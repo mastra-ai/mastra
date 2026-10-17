@@ -4,7 +4,6 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '@mastra/core/agent';
-import type { CoreMessageV4 } from '@mastra/core/agent/message-list';
 import type { ScoringSamplingConfig } from '@mastra/core/evals';
 import type { OutputType, SystemMessage } from '@mastra/core/llm';
 import type { ReasoningLevel } from '@mastra/core/loop';

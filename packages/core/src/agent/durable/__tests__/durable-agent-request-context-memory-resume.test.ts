@@ -4,8 +4,8 @@
  * own memory store, any other caller the shared store. An approval that passes
  * no request context resumes with the context the run started with.
  */
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -25,8 +25,8 @@ const memoryOption = { thread: threadId, resource: resourceId };
 const historyText = (i: number) => `history turn ${i}: ${'h'.repeat(200)}`;
 
 function createModel(prompts: string[]) {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }: { prompt: LanguageModelV2Prompt }) => {
+  return new MockLanguageModelV4({
+    doStream: async ({ prompt }: { prompt: LanguageModelV4Prompt }) => {
       prompts.push(JSON.stringify(prompt));
       const answered = prompt.some(message => message.role === 'tool');
       const parts = answered

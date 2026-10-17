@@ -1,4 +1,4 @@
-import { jsonSchema } from '@internal/ai-sdk-v5';
+import { jsonSchema } from '@internal/ai-v7';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
@@ -153,7 +153,7 @@ describe('prepareToolsAndToolChoice', () => {
 
     it('should detect real AI SDK v6 provider tools', async () => {
       // Import the actual AI SDK v6 openai package to test real provider tools
-      const { openai: openaiV6 } = await import('@ai-sdk/openai-v6');
+      const { openai: openaiV6 } = await import('@ai-sdk/openai');
       const tool = openaiV6.tools.webSearch({});
 
       // Verify the actual tool structure

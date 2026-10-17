@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http';
 
 class MockServerResponse {
   writtenChunks: any[] = [];
-  headers = {};
+  headers: Record<string, string> = {};
   statusCode = 0;
   statusMessage = '';
   ended = false;
@@ -24,7 +24,14 @@ class MockServerResponse {
     this.emit('close');
   }
 
-  writeHead(statusCode: number, headers: Record<string, string>): void;
+  setHeaders(headers: Headers): this {
+    headers.forEach((value, key) => {
+      this.headers[key] = value;
+    });
+    return this;
+  }
+
+  writeHead(statusCode: number, headers?: Record<string, string>): void;
   writeHead(statusCode: number, statusMessage: string, headers: Record<string, string>): void;
   writeHead(
     statusCode: number,
@@ -34,9 +41,9 @@ class MockServerResponse {
     this.statusCode = statusCode;
     if (typeof statusMessageOrHeaders === 'string') {
       this.statusMessage = statusMessageOrHeaders;
-      this.headers = headers ?? {};
+      Object.assign(this.headers, headers);
     } else {
-      this.headers = statusMessageOrHeaders ?? {};
+      Object.assign(this.headers, statusMessageOrHeaders);
     }
   }
 

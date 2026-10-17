@@ -1,5 +1,5 @@
-import { tool } from '@internal/ai-sdk-v5';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { tool } from '@internal/ai-v7';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
@@ -216,7 +216,7 @@ describe('MCP v1/v2 registry boundaries', () => {
       id: 'helper',
       name: 'helper',
       instructions: 'help',
-      model: new MockLanguageModelV2({}),
+      model: new MockLanguageModelV4({}),
     });
     const workflow = new Workflow({
       id: 'flow',

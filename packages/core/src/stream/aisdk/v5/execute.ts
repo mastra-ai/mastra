@@ -1,7 +1,7 @@
-import { injectJsonInstructionIntoMessages as injectJsonInstructionIntoMessagesV3 } from '@ai-sdk/provider-utils-v6';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { APICallError } from '@internal/ai-sdk-v5';
-import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { injectJsonInstructionIntoMessages as injectJsonInstructionIntoMessagesV3 } from '@ai-sdk/provider-utils';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { APICallError } from '@internal/ai-v7';
+import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-v7';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
@@ -19,7 +19,7 @@ import {
 import type { LoopOptions } from '../../../loop/types';
 import { DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../../../utils/retry-after';
 import { getResponseFormat } from '../../base/schema';
-import type { LanguageModelV2StreamResult, OnResult } from '../../types';
+import type { LanguageModelV4StreamResult, OnResult } from '../../types';
 import { attachModelStreamTransport, readModelStreamTransport } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import type { ModelSpecVersion } from './compat';
@@ -171,16 +171,16 @@ export function sendsNativeResponseFormat(
 type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
 
 /**
- * Typed V2 wrapper for the `@ai-sdk/provider-utils-v6` helper, which only reads and rewrites the
+ * Typed V2 wrapper for the `@ai-sdk/provider-utils` helper, which only reads and rewrites the
  * leading system message's string content — a shape shared by V2 and V3 prompts.
  */
 function injectJsonInstructionIntoMessages(
-  args: Omit<InjectJsonInstructionArgs, 'messages'> & { messages: LanguageModelV2Prompt },
-): LanguageModelV2Prompt {
+  args: Omit<InjectJsonInstructionArgs, 'messages'> & { messages: LanguageModelV4Prompt },
+): LanguageModelV4Prompt {
   return injectJsonInstructionIntoMessagesV3({
     ...args,
     messages: args.messages as unknown as InjectJsonInstructionArgs['messages'],
-  }) as unknown as LanguageModelV2Prompt;
+  }) as unknown as LanguageModelV4Prompt;
 }
 
 /**
@@ -203,15 +203,15 @@ function injectJsonInstructionIntoLatestUserMessage({
   schema,
   instructions,
 }: {
-  messages: LanguageModelV2Prompt;
+  messages: LanguageModelV4Prompt;
   schema: unknown;
   instructions?: string;
-}): LanguageModelV2Prompt {
+}): LanguageModelV4Prompt {
   const instruction = buildJsonInstruction(schema, instructions);
   const prompt = messages.map(message => ({
     ...message,
     content: Array.isArray(message.content) ? [...message.content] : message.content,
-  })) as LanguageModelV2Prompt;
+  })) as LanguageModelV4Prompt;
 
   for (let i = prompt.length - 1; i >= 0; i--) {
     const message = prompt[i];
@@ -228,7 +228,7 @@ function injectJsonInstructionIntoLatestUserMessage({
     return prompt;
   }
 
-  return [...prompt, { role: 'user', content: [{ type: 'text', text: instruction }] }] as LanguageModelV2Prompt;
+  return [...prompt, { role: 'user', content: [{ type: 'text', text: instruction }] }] as LanguageModelV4Prompt;
 }
 
 function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
@@ -243,7 +243,7 @@ type ExecutionProps<OUTPUT = undefined> = {
   runId: string;
   model: MastraLanguageModel;
   providerOptions?: SharedProviderOptions;
-  inputMessages: LanguageModelV2Prompt;
+  inputMessages: LanguageModelV4Prompt;
   tools?: ToolSet;
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
@@ -467,7 +467,7 @@ export function execute<OUTPUT = undefined>({
                 );
 
                 // We have to cast this because doStream is missing the warnings property in its return type even though it exists
-                return streamResult as unknown as LanguageModelV2StreamResult;
+                return streamResult as unknown as LanguageModelV4StreamResult;
               } catch (error) {
                 cleanupFirstChunkTimeout();
                 throw error;
@@ -523,7 +523,7 @@ export function execute<OUTPUT = undefined>({
         const guardedResult = {
           ...retryResult,
           stream: guardStreamWithAbort(firstChunkGuardedStream, abortSignal, cleanupStepTimeout),
-        } as unknown as LanguageModelV2StreamResult;
+        } as unknown as LanguageModelV4StreamResult;
         // The router attaches its stream transport as a non-enumerable symbol,
         // which object spread drops. Re-attach it so transport handles survive
         // the step-timeout wrapper.

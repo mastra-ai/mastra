@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV4 } from '@mastra/core/ai/test';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -872,7 +872,7 @@ describe('AcpAgent', () => {
       id: 'supervisor',
       name: 'supervisor',
       instructions: 'Delegate coding work.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doGenerate: async () => {
           callCount++;
           if (callCount === 1) {

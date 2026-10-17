@@ -28,7 +28,7 @@
  *     status after the abort; the parity snapshot has no equivalent field, so
  *     that check is not expressed here.
  */
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../memory/mock';
@@ -108,7 +108,7 @@ async function runT14(variant: Variant): Promise<{
 
   const scenario: EngineParityScenario = {
     model: stepScript(STEP_COUNT),
-    buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV2 }) => {
+    buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV4 }) => {
       const parked = deferred<void>();
       const release = deferred<void>();
       const toolLog: number[] = [];

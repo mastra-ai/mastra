@@ -1,7 +1,7 @@
 /**
  * V3-specific Agent Tests
  *
- * These tests verify that AI SDK v6 (LanguageModelV3) specific features
+ * These tests verify that AI SDK v6 (LanguageModelV4) specific features
  * surface correctly through the Agent API:
  * - Reasoning stream parts
  * - Sources stream parts
@@ -9,11 +9,11 @@
  * - V3 usage format normalization
  */
 
-import type { LanguageModelV3Usage } from '@ai-sdk/provider-v6';
+import type { LanguageModelV4Usage } from '@ai-sdk/provider';
 import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  MockLanguageModelV3,
-} from '@internal/ai-v6/test';
+  MockLanguageModelV4,
+} from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 
@@ -26,7 +26,7 @@ const testUsageV3 = {
 describe('V3 Agent Features', () => {
   describe('Reasoning', () => {
     it('should stream reasoning parts from V3 model', async () => {
-      const modelWithReasoning = new MockLanguageModelV3({
+      const modelWithReasoning = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStreamV3([
             {
@@ -95,7 +95,7 @@ describe('V3 Agent Features', () => {
     });
 
     it('should return reasoning in generate result from V3 model', async () => {
-      const modelWithReasoning = new MockLanguageModelV3({
+      const modelWithReasoning = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [
             { type: 'reasoning' as const, text: 'Let me analyze this step by step...' },
@@ -139,7 +139,7 @@ describe('V3 Agent Features', () => {
     it('should handle empty reasoning with provider metadata (OpenAI item_reference)', async () => {
       // This tests the scenario where OpenAI sends reasoning with just provider metadata
       // but no actual reasoning text (for item_reference tracking)
-      const modelWithEmptyReasoning = new MockLanguageModelV3({
+      const modelWithEmptyReasoning = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStreamV3([
             {
@@ -200,7 +200,7 @@ describe('V3 Agent Features', () => {
 
   describe('Sources', () => {
     it('should stream source parts from V3 model', async () => {
-      const modelWithSources = new MockLanguageModelV3({
+      const modelWithSources = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStreamV3([
             {
@@ -302,7 +302,7 @@ describe('V3 Agent Features', () => {
     });
 
     it('should include sources in generate result from V3 model', async () => {
-      const modelWithSources = new MockLanguageModelV3({
+      const modelWithSources = new MockLanguageModelV4({
         doGenerate: async () => ({
           content: [
             {
@@ -344,7 +344,7 @@ describe('V3 Agent Features', () => {
 
   describe('Files', () => {
     it('should stream file parts from V3 model', async () => {
-      const modelWithFiles = new MockLanguageModelV3({
+      const modelWithFiles = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStreamV3([
             {
@@ -419,12 +419,12 @@ describe('V3 Agent Features', () => {
 
   describe('Usage Normalization', () => {
     it('should normalize V3 usage format to standard format', async () => {
-      const v3UsageWithDetails: LanguageModelV3Usage = {
+      const v3UsageWithDetails: LanguageModelV4Usage = {
         inputTokens: { total: 100, noCache: 80, cacheRead: 20, cacheWrite: undefined },
         outputTokens: { total: 50, text: 30, reasoning: 20 },
       };
 
-      const modelWithV3Usage = new MockLanguageModelV3({
+      const modelWithV3Usage = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStreamV3([
             {
@@ -476,12 +476,12 @@ describe('V3 Agent Features', () => {
     });
 
     it('should preserve detailed V3 usage information including cached and reasoning tokens', async () => {
-      const v3UsageWithAllDetails: LanguageModelV3Usage = {
+      const v3UsageWithAllDetails: LanguageModelV4Usage = {
         inputTokens: { total: 200, noCache: 150, cacheRead: 50, cacheWrite: 10 },
         outputTokens: { total: 100, text: 60, reasoning: 40 },
       };
 
-      const modelWithDetailedUsage = new MockLanguageModelV3({
+      const modelWithDetailedUsage = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStreamV3([
             {

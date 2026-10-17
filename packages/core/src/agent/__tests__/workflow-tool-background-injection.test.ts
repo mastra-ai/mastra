@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../schema';
@@ -44,7 +44,7 @@ describe('workflow tool _background schema injection', () => {
       id: 'wf-agent',
       name: 'wf-agent',
       instructions: 'Run workflows.',
-      model: new MockLanguageModelV2(),
+      model: new MockLanguageModelV4(),
       workflows: { myWorkflow: buildWorkflow() },
       // Note: `resolveAgentToolConfig` strips the `workflow-` prefix, so the
       // whitelist key is the bare workflow name.
@@ -63,7 +63,7 @@ describe('workflow tool _background schema injection', () => {
       id: 'wf-agent-2',
       name: 'wf-agent-2',
       instructions: 'Run workflows.',
-      model: new MockLanguageModelV2(),
+      model: new MockLanguageModelV4(),
       workflows: { myWorkflow: buildWorkflow() },
       tools: {
         greet: createTool({

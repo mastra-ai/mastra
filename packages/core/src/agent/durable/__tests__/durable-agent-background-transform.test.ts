@@ -12,8 +12,8 @@
  * registry entry may be rebuilt after a process restart.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -39,7 +39,7 @@ vi.mock('../../../loop/shared/steps/background-task-result-core', async importOr
 
 function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       callCount++;
       if (callCount === 1) {
@@ -137,7 +137,7 @@ describe('DurableAgent background tool-result transcript transforms (L22)', () =
       id: 'bg-transform-agent',
       name: 'BG Transform Agent',
       instructions: 'Research when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
       memory,
@@ -210,7 +210,7 @@ describe('DurableAgent background tool-result transcript transforms (L22)', () =
       id: 'bg-genid-agent',
       name: 'BG GenId Agent',
       instructions: 'Research when asked',
-      model: mockModel as LanguageModelV2,
+      model: mockModel as LanguageModelV4,
       tools: { research: researchTool },
       backgroundTasks: { tools: { research: true } },
     });

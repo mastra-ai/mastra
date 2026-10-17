@@ -11,8 +11,8 @@
  *
  * @see https://github.com/mastra-ai/mastra/issues/4296
  */
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MockMemory } from '../../memory/mock';
@@ -21,10 +21,10 @@ import { Agent } from '../index';
 
 describe('RequestContext reserved keys for resourceId and threadId', () => {
   describe('v2 - generate', () => {
-    let dummyModel: MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV4;
 
     beforeEach(() => {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -145,10 +145,10 @@ describe('RequestContext reserved keys for resourceId and threadId', () => {
   });
 
   describe('v2 - stream', () => {
-    let dummyModel: MockLanguageModelV2;
+    let dummyModel: MockLanguageModelV4;
 
     beforeEach(() => {
-      dummyModel = new MockLanguageModelV2({
+      dummyModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',

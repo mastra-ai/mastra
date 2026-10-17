@@ -3,10 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { Memory } from './index';
 
 // Mock embedMany across AI SDK versions so constructing Memory does no network I/O.
-vi.mock('@internal/ai-v6', () => ({
+vi.mock('@internal/ai-v7', () => ({
   embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
 }));
-vi.mock('@internal/ai-sdk-v5', () => ({
+vi.mock('@internal/ai-v7', () => ({
   embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
 }));
 

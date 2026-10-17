@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
@@ -200,7 +200,7 @@ describe('remote step execution for nested workflows', () => {
 
   it('runs an evented agent whose model and tool steps execute remotely', async () => {
     const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         const hasToolResult = JSON.stringify(prompt).includes('"type":"tool-result"');
         return {

@@ -1,5 +1,5 @@
-import { APICallError } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { APICallError } from '@internal/ai-v7';
+import { convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
@@ -51,9 +51,9 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   const createIterationInput = (): IterationData => ({
     messageId: 'msg-0',
     messages: {
-      all: messageList.get.all.aiV5.model(),
-      user: messageList.get.input.aiV5.model(),
-      nonUser: messageList.get.response.aiV5.model(),
+      all: messageList.get.all.aiSdk.model(),
+      user: messageList.get.input.aiSdk.model(),
+      nonUser: messageList.get.response.aiSdk.model(),
     },
     output: {
       usage: testUsage,
@@ -1321,7 +1321,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         }),
       ]),
     );
-    expect(messageList.get.input.aiV5.model()).toEqual(
+    expect(messageList.get.input.aiSdk.model()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'user',
@@ -1530,7 +1530,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         }),
       ]),
     );
-    expect(messageList.get.response.aiV5.model()).toEqual(
+    expect(messageList.get.response.aiSdk.model()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'assistant',
@@ -2687,9 +2687,9 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
   const createIterationInput = (): IterationData => ({
     messageId: 'msg-0',
     messages: {
-      all: messageList.get.all.aiV5.model(),
-      user: messageList.get.input.aiV5.model(),
-      nonUser: messageList.get.response.aiV5.model(),
+      all: messageList.get.all.aiSdk.model(),
+      user: messageList.get.input.aiSdk.model(),
+      nonUser: messageList.get.response.aiSdk.model(),
     },
     output: {
       usage: testUsage,
@@ -3399,9 +3399,9 @@ describe('per-step modelSettings precedence (call-time < per-model < processor)'
   const createIterationInput = (): IterationData => ({
     messageId: 'msg-0',
     messages: {
-      all: messageList.get.all.aiV5.model(),
-      user: messageList.get.input.aiV5.model(),
-      nonUser: messageList.get.response.aiV5.model(),
+      all: messageList.get.all.aiSdk.model(),
+      user: messageList.get.input.aiSdk.model(),
+      nonUser: messageList.get.response.aiSdk.model(),
     },
     output: {
       usage: testUsage,

@@ -1,5 +1,5 @@
-import { simulateReadableStream } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { simulateReadableStream } from '@internal/ai-v7';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -22,7 +22,7 @@ describe('Stream ID Consistency', () => {
   });
 
   it('should return stream response IDs that can fetch saved messages from database', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -87,7 +87,7 @@ describe('Stream ID Consistency', () => {
     let customIdCounter = 0;
     const customIdGenerator = vi.fn(() => `custom-v2-id-${++customIdCounter}`);
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -171,7 +171,7 @@ describe('Stream ID Consistency', () => {
       },
     } satisfies Processor;
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -226,7 +226,7 @@ describe('Stream ID Consistency', () => {
   });
 
   it('should return generate response IDs that match database-saved message IDs (V2 model)', async () => {
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -341,7 +341,7 @@ describe('Stream ID Consistency', () => {
       },
     ]);
 
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -411,7 +411,7 @@ describe('Stream ID Consistency', () => {
         id: 'test-structured-output-persisted-text',
         name: 'Test Structured Output Persisted Text',
         instructions: 'You are a helpful assistant.',
-        model: new MockLanguageModelV2({
+        model: new MockLanguageModelV4({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -476,7 +476,7 @@ describe('Stream ID Consistency', () => {
     });
 
     it('should include object field in onFinish callback when using structured output', async () => {
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -558,7 +558,7 @@ describe('Stream ID Consistency', () => {
   });
 
   it('should include object field in onFinish callback when using structuredOutput key', async () => {
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -589,7 +589,7 @@ describe('Stream ID Consistency', () => {
       }),
     });
 
-    const structuringModel = new MockLanguageModelV2({
+    const structuringModel = new MockLanguageModelV4({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',

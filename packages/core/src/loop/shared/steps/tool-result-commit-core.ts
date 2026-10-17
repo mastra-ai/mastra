@@ -1,4 +1,4 @@
-import type { JSONValue, ToolModelMessage } from '@internal/ai-sdk-v5';
+import type { JSONValue, ToolModelMessage } from '@internal/ai-v7';
 
 import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
@@ -20,7 +20,7 @@ export interface ToolMappingParentSpan {
  * Shared `toModelOutput` computation for the tool-result commit.
  *
  * Runs the tool's `toModelOutput` mapper under a MAPPING child span, normalizes
- * media parts into the AI SDK's LanguageModelV2ToolResultOutput shape, and
+ * media parts into the AI SDK's LanguageModelV4ToolResultOutput shape, and
  * merges the mapped output into `providerMetadata.mastra.modelOutput`.
  *
  * A nullish mapping result means "no special mapping needed" — the raw result

@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
@@ -11,7 +11,7 @@ import { createMockWorkspace } from './test-utils';
 import type { AgentControllerEvent } from './types';
 
 function createTextStreamModel(responseText: string) {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -37,7 +37,7 @@ function createGatedAgent(prompts: unknown[], releases: Array<() => void>) {
     id: 'gated-agent',
     name: 'gated-agent',
     instructions: 'You are a test agent.',
-    model: new MockLanguageModelV2({
+    model: new MockLanguageModelV4({
       doStream: async ({ prompt }) => {
         callCount += 1;
         const callIndex = callCount;
@@ -1313,7 +1313,7 @@ describe('AgentController signal messages', () => {
       id: 'repeated-idle-controller-agent',
       name: 'repeated-idle-controller-agent',
       instructions: 'You are a test agent.',
-      model: new MockLanguageModelV2({
+      model: new MockLanguageModelV4({
         doStream: async ({ prompt }) => {
           callCount += 1;
           const callIndex = callCount;

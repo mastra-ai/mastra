@@ -3,7 +3,7 @@
  * controller: no gate is armed there, so the answer goes through the stored
  * suspended run.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -20,7 +20,7 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const ids = { id: 'approval-session', ownerId: 'owner', resourceId: 'approval-user', threadId: 'approval-thread' };
 
 function model() {
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const answered = JSON.stringify(prompt).includes('"type":"tool-result"');
       const parts = answered

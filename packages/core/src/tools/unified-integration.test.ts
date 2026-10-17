@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -60,8 +60,8 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
     it('should pass raw input and agent context when tool is called by agent', async () => {
       const { tool, executeSpy } = createTestTool();
 
-      // Create a mock model using MockLanguageModelV2 with doStream
-      const mockModel = new MockLanguageModelV2({
+      // Create a mock model using MockLanguageModelV4 with doStream
+      const mockModel = new MockLanguageModelV4({
         doGenerate: async () => {
           return {
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -148,7 +148,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
     it.skip('should handle multiple tool calls from agent with consistent structure', async () => {
       const { tool, executeSpy } = createTestTool();
 
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = new MockLanguageModelV4({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },

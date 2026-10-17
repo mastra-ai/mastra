@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../../test-utils/llm-mock';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
@@ -77,7 +77,7 @@ async function createHarness(id: string) {
     id: `${id}-agent`,
     name: `${id} agent`,
     instructions: 'You reply to the user.',
-    model: new MastraLanguageModelV2Mock({
+    model: new MastraLanguageModelV4Mock({
       doStream: async () => {
         callCount++;
         if (callCount === 1) signalFirstCall();

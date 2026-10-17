@@ -3,8 +3,8 @@
  * on every observation path (sync, async buffering, resource scope). Composition still builds on
  * the full stored text, so nothing is dropped from memory.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { setThreadOMMetadata } from '@mastra/core/memory';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -174,7 +174,7 @@ describe('observation.previousObserverTokens reaches the Observer', () => {
     const prompts: string[] = [];
     const text = '<observations>\n* New observation\n</observations>';
     const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doGenerate: async ({ prompt }) => {
         prompts.push(JSON.stringify(prompt));
         return {

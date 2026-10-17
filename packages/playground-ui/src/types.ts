@@ -1,4 +1,4 @@
-import type { GetAgentResponse, UIMessageWithMetadata } from '@mastra/client-js';
+import type { GetAgentResponse } from '@mastra/client-js';
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { AiMessageType } from '@mastra/core/memory';
@@ -51,7 +51,6 @@ export interface ChatProps {
   agentVersionId?: string;
   threadId: string;
   initialMessages?: MastraDBMessage[];
-  initialLegacyMessages?: UIMessageWithMetadata[];
   memory?: boolean;
   refreshThreadList?: () => void;
   settings?: AgentSettingsType;

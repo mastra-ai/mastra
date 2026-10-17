@@ -1,4 +1,4 @@
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v5';
+import type { ModelMessage as CoreMessageV4 } from '@internal/ai-v7';
 
 import type { MessageList } from '../agent/message-list/index';
 import type { ProcessInputStepArgs } from '../processors/index';

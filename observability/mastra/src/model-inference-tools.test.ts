@@ -5,9 +5,9 @@
  * each MODEL_INFERENCE span against the tools the provider received on that
  * call, after per-step changes from input processors and `toolChoice`.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@mastra/core/ai/test';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import type { Processor } from '@mastra/core/processors';
@@ -23,7 +23,7 @@ const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
 /** Calls tool `a` on every call except the last, which answers with text. Records the tool names the provider received per call. */
 function createModel(providerTools: string[][], calls: number) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async options => {
       call++;
       providerTools.push((options.tools ?? []).map(t => t.name));

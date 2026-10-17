@@ -1,4 +1,4 @@
-import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider-v7';
+import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../../../agent/message-list';
 import { MastraError } from '../../../../error';
@@ -127,7 +127,7 @@ describe('AISDKV7LanguageModel', () => {
         'input',
       );
 
-      const prompt = await messageList.get.all.aiV6.llmPrompt();
+      const prompt = await messageList.get.all.aiSdk.llmPrompt();
       const legacyFilePart =
         prompt[0]?.role === 'user' ? prompt[0].content.find(part => part.type === 'file') : undefined;
 

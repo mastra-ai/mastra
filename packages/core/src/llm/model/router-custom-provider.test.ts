@@ -2,22 +2,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
 
-// Mock the @ai-sdk/openai-compatible-v6 module BEFORE importing it
-vi.mock('@ai-sdk/openai-compatible-v6', async () => {
+// Mock the @ai-sdk/openai-compatible module BEFORE importing it
+vi.mock('@ai-sdk/openai-compatible', async () => {
   return {
     createOpenAICompatible: vi.fn(),
   };
 });
 
 // Now import the mocked module
-const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v6');
+const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
 
 describe('ModelRouter - Custom Provider Support', () => {
   beforeEach(() => {
     // Setup mock implementation to return a MockProvider instance
     vi.mocked(createOpenAICompatible).mockReturnValue({
       chatModel: vi.fn((_modelId: string) => {
-        // Return a mock LanguageModelV2 instance
+        // Return a mock LanguageModelV4 instance
         return createMockModel({
           mockText: 'Hello from mock!',
         });

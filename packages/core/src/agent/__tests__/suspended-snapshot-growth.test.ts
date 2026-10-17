@@ -15,7 +15,7 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from './mock-model';
 
 // Large enough that the message mirrors dominate the snapshot, the way a real
 // tool result payload does.
@@ -45,7 +45,7 @@ function createApprovalTool() {
 // cannot mask the growth being measured here.
 function createSteppingModel(stepsBeforeSuspend: number) {
   let call = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doStream: async () => {
       call++;
       const isLast = call > stepsBeforeSuspend;

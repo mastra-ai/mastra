@@ -87,8 +87,6 @@
   },
   "devDependencies": {
     "@hono/node-server": "^2.0.0",
-    "@internal/ai-sdk-v5": "workspace:*",
-    "@internal/ai-v6": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",

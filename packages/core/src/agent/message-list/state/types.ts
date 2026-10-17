@@ -1,4 +1,4 @@
-import type * as AIV5 from '@internal/ai-sdk-v5';
+import type * as AIV5 from '@internal/ai-v7';
 import type { AIV5Type } from '../types';
 import type { LegacyCoreMessage, LegacyUIMessage, LegacyUIPart } from './legacy-shapes';
 

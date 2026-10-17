@@ -1,5 +1,5 @@
-import { convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils-v6';
-import type { DataContent } from '@internal/ai-sdk-v5';
+import { convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils';
+import type { DataContent } from '@internal/ai-v7';
 
 /**
 Converts data content to a base64-encoded string.

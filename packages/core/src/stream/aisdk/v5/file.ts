@@ -1,4 +1,4 @@
-import { convertBase64ToUint8Array, convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils-v6';
+import { convertBase64ToUint8Array, convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils';
 import { isUrlString } from './compat/content';
 
 /**

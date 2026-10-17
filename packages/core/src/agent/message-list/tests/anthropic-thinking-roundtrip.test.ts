@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
@@ -15,7 +15,7 @@ const anthropicThinkingPart = {
   },
 };
 
-function getAssistantReasoningParts(prompt: LanguageModelV2Prompt) {
+function getAssistantReasoningParts(prompt: LanguageModelV4Prompt) {
   return prompt
     .filter(message => message.role === 'assistant')
     .flatMap(message => (Array.isArray(message.content) ? message.content : []))
@@ -42,7 +42,7 @@ describe('Anthropic signed thinking round-trip', () => {
     list.add(dbMessage, 'memory');
     list.add({ role: 'user', content: 'Continue.' }, 'input');
 
-    const reasoning = getAssistantReasoningParts(list.get.all.aiV5.prompt());
+    const reasoning = getAssistantReasoningParts(list.get.all.aiSdk.prompt());
     expect(reasoning).toHaveLength(1);
     expect(reasoning[0]).toEqual(anthropicThinkingPart);
   });
@@ -60,7 +60,7 @@ describe('Anthropic signed thinking round-trip', () => {
     );
     list.add({ role: 'user', content: 'Use that context.' }, 'input');
 
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
     const result = await new ProviderHistoryCompat().processLLMRequest({
       prompt,
       model: { provider: 'anthropic.messages' },
@@ -78,7 +78,7 @@ describe('Anthropic signed thinking round-trip', () => {
   });
 
   it('does not forward legacy empty Anthropic thinking with a non-empty signature', async () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'Hi' }] },
       {
         role: 'assistant',
@@ -147,7 +147,7 @@ describe('Anthropic signed thinking round-trip', () => {
     list.add(anthropicDbMessage, 'memory');
     list.add({ role: 'user', content: 'Continue.' }, 'input');
 
-    const prompt = list.get.all.aiV5.prompt();
+    const prompt = list.get.all.aiSdk.prompt();
     const result = await new ProviderHistoryCompat().processLLMRequest({
       prompt,
       model: { provider: 'anthropic.messages' },
@@ -177,7 +177,7 @@ describe('Anthropic signed thinking round-trip', () => {
   });
 
   it('does not change Gemini provider metadata on non-Anthropic replay', async () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'Draw a cat' }] },
       {
         role: 'assistant',

@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { noopLogger } from '../../logger';
@@ -225,9 +225,9 @@ function runStreamTest(version: 'v2' | 'v3' | 'v4') {
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
-      let errorModel: MockLanguageModelV2;
+      let errorModel: MockLanguageModelV4;
       {
-        errorModel = new MockLanguageModelV2({
+        errorModel = new MockLanguageModelV4({
           doStream: async () => {
             const stream = new ReadableStream({
               pull() {
@@ -293,7 +293,7 @@ runStreamTest('v4');
 describe('stream text resolution without memory', () => {
   it('resolves stream.text to the final step text when the model narrates between tool calls', async () => {
     let callCount = 0;
-    const model = new MockLanguageModelV2({
+    const model = new MockLanguageModelV4({
       doStream: async () => {
         callCount++;
         if (callCount === 1) {

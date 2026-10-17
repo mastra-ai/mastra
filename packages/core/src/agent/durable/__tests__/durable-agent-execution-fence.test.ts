@@ -16,8 +16,8 @@
  * don't).
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { MockLanguageModelV4, convertArrayToReadableStream } from '@internal/ai-v7/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
@@ -64,7 +64,7 @@ function gatedModel(text: string) {
     signalEntered = resolve;
   });
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       signalEntered();
@@ -92,7 +92,7 @@ function gatedModel(text: string) {
  */
 function recordingModel(gates: Array<Promise<void> | undefined>, firstCalls?: string) {
   const prompts: string[] = [];
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async ({ prompt }) => {
       const call = prompts.push(JSON.stringify(prompt));
       await gates[call - 1];
@@ -166,7 +166,7 @@ function collect(stream: ReadableStream<any>) {
 /** A model that calls `toolName` on its first call and answers with `text` afterwards. */
 function toolCallThenTextModel(toolName: string, input: Record<string, unknown>, text: string) {
   let calls = 0;
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV4({
     doStream: async () => {
       calls++;
       const body =
@@ -337,7 +337,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
     /** A durable agent registered on a Mastra that persists `running` checkpoints, which recover() reads. */
     function buildAgent(args: {
-      model: MockLanguageModelV2;
+      model: MockLanguageModelV4;
       storage: InMemoryStore;
       memory?: MockMemory;
       tools?: Record<string, any>;
@@ -350,7 +350,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           id: 'fence-agent',
           name: 'Fence Agent',
           instructions: 'You are a helpful agent.',
-          model: args.model as LanguageModelV2,
+          model: args.model as LanguageModelV4,
           ...(args.memory ? { memory: args.memory } : {}),
           ...(args.tools ? { tools: args.tools } : {}),
           ...(args.agents ? { agents: args.agents } : {}),
@@ -389,7 +389,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         id: 'fence-agent',
         name: 'Fence Agent',
         instructions: 'You are a helpful agent.',
-        model: model.model as LanguageModelV2,
+        model: model.model as LanguageModelV4,
         memory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
@@ -693,7 +693,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           id: 'fence-agent',
           name: 'Fence Agent',
           instructions: 'You are a helpful agent.',
-          model: stuck.model as LanguageModelV2,
+          model: stuck.model as LanguageModelV4,
           memory,
         }),
         pubsub,
@@ -788,7 +788,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           id: 'fence-agent',
           name: 'Fence Agent',
           instructions: 'You are a helpful agent.',
-          model: next.model as LanguageModelV2,
+          model: next.model as LanguageModelV4,
         }),
         pubsub,
       });
@@ -1370,7 +1370,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         name: 'researchAgent',
         description: 'Researches a topic',
         instructions: 'You are a helpful sub-agent.',
-        model: subAgentModel.model as LanguageModelV2,
+        model: subAgentModel.model as LanguageModelV4,
       });
       const durableAgent = buildAgent({ model: supervisorModel.model, storage, memory, agents: { researchAgent } });
 
@@ -1407,7 +1407,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           id: 'fence-agent',
           name: 'Fence Agent',
           instructions: 'You are a helpful agent.',
-          model: model.model as LanguageModelV2,
+          model: model.model as LanguageModelV4,
           memory,
         }),
       });
@@ -1486,7 +1486,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           id: 'fence-agent',
           name: 'Fence Agent',
           instructions: 'You are a helpful agent.',
-          model: model as LanguageModelV2,
+          model: model as LanguageModelV4,
           memory,
         }),
       });
@@ -1586,7 +1586,7 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
         id: 'fence-agent',
         name: 'Fence Agent',
         instructions: 'You are a helpful agent.',
-        model: toolCallThenTextModel('lookup', { query: 'the answer' }, 'looked it up').model as LanguageModelV2,
+        model: toolCallThenTextModel('lookup', { query: 'the answer' }, 'looked it up').model as LanguageModelV4,
         tools: { lookup },
         memory: new MockMemory({ storage }),
       }),

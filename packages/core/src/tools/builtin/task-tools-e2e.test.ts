@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV4 } from '@internal/ai-v7/test';
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
@@ -47,7 +47,7 @@ function stepParts(call: number) {
 function multiStepTaskModel() {
   let streamCall = 0;
   let genCall = 0;
-  return new MockLanguageModelV2({
+  return new MockLanguageModelV4({
     doGenerate: async () => {
       genCall++;
       const parts = stepParts(genCall);

@@ -1,6 +1,6 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { stepCountIs } from '@internal/ai-sdk-v5';
-import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
+import { stepCountIs } from '@internal/ai-v7';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-v7/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -8,14 +8,14 @@ import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
 import { EventEmitterPubSub } from '../../events';
 import { loop } from '../../loop/loop';
-import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
+import { MastraLanguageModelV4Mock } from '../../loop/test-utils/MastraLanguageModelV4Mock';
 import { toolCallFilterProvider } from '../../processor-provider/providers';
 import { InMemoryStore } from '../../storage';
 import type { Processor } from '../index';
 
 import { ToolCallFilter } from './tool-call-filter';
 
-async function runFilter(filter: Processor, prompt: LanguageModelV2Prompt): Promise<LanguageModelV2Prompt> {
+async function runFilter(filter: Processor, prompt: LanguageModelV4Prompt): Promise<LanguageModelV4Prompt> {
   const result = await filter.processLLMRequest?.({
     prompt,
     model: 'test-model' as any,
@@ -45,7 +45,7 @@ function explicitModelOutputPart(toolCallId: string, toolName: string, output: a
   };
 }
 
-function toolCallIdsIn(prompt: LanguageModelV2Prompt): string[] {
+function toolCallIdsIn(prompt: LanguageModelV4Prompt): string[] {
   return prompt.flatMap(message =>
     typeof message.content === 'string'
       ? []
@@ -53,7 +53,7 @@ function toolCallIdsIn(prompt: LanguageModelV2Prompt): string[] {
   );
 }
 
-function textsIn(prompt: LanguageModelV2Prompt): string[] {
+function textsIn(prompt: LanguageModelV4Prompt): string[] {
   return prompt.flatMap(message =>
     typeof message.content === 'string'
       ? [message.content]
@@ -64,7 +64,7 @@ function textsIn(prompt: LanguageModelV2Prompt): string[] {
 describe('ToolCallFilter', () => {
   describe('exclude all tool calls (default)', () => {
     it('should exclude all tool calls and tool results', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'user', content: [{ type: 'text', text: 'What is the weather?' }] },
         {
           role: 'assistant',
@@ -83,7 +83,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('should leave the prompt untouched when there are no tool calls', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'system', content: 'You are helpful.' },
         { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
         { role: 'assistant', content: [{ type: 'text', text: 'Hi there!' }] },
@@ -100,7 +100,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('should exclude multiple tool calls in sequence', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'user', content: [{ type: 'text', text: 'Compare NYC and Boston' }] },
         { role: 'assistant', content: [toolCallPart('call-1', 'weather', { city: 'NYC' })] },
         { role: 'tool', content: [toolResultPart('call-1', 'weather')] },
@@ -116,7 +116,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('should drop a tool result that has no matching tool call', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'user', content: [{ type: 'text', text: 'Hi' }] },
         { role: 'tool', content: [toolResultPart('orphan-call', 'weather')] },
       ];
@@ -129,7 +129,7 @@ describe('ToolCallFilter', () => {
   });
 
   describe('exclude specific tool calls', () => {
-    const mixedPrompt = (): LanguageModelV2Prompt => [
+    const mixedPrompt = (): LanguageModelV4Prompt => [
       { role: 'user', content: [{ type: 'text', text: 'Weather and math please' }] },
       {
         role: 'assistant',
@@ -148,7 +148,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('should exclude multiple specified tools', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         ...mixedPrompt(),
         { role: 'assistant', content: [toolCallPart('call-search', 'search')] },
         { role: 'tool', content: [toolResultPart('call-search', 'search')] },
@@ -183,7 +183,7 @@ describe('ToolCallFilter', () => {
   });
 
   describe('preserveModelOutput', () => {
-    const searchPrompt = (): LanguageModelV2Prompt => [
+    const searchPrompt = (): LanguageModelV4Prompt => [
       { role: 'user', content: [{ type: 'text', text: 'Search and summarize' }] },
       {
         role: 'assistant',
@@ -214,7 +214,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('does not preserve a raw fallback result without explicit model output provenance', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'assistant', content: [toolCallPart('call-raw', 'rawTool')] },
         {
           role: 'tool',
@@ -229,7 +229,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('does not preserve a raw result when explicit model output is nullish', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'assistant', content: [toolCallPart('call-nullish', 'nullishTool')] },
         {
           role: 'tool',
@@ -253,7 +253,7 @@ describe('ToolCallFilter', () => {
 
     it('distinguishes equal outputs by explicit model output provenance', async () => {
       const output = { type: 'text' as const, value: 'SAME_OUTPUT' };
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         {
           role: 'assistant',
           content: [toolCallPart('call-explicit', 'explicitTool'), toolCallPart('call-raw', 'rawTool')],
@@ -288,7 +288,7 @@ describe('ToolCallFilter', () => {
 
     it('requires modelOutput to be an own property', async () => {
       const inheritedMetadata = Object.create({ modelOutput: { type: 'text', value: 'INHERITED_OUTPUT' } });
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'assistant', content: [toolCallPart('call-inherited', 'inheritedTool')] },
         {
           role: 'tool',
@@ -307,7 +307,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('preserves model output only for the tools being filtered', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         ...searchPrompt(),
         { role: 'assistant', content: [toolCallPart('call-calc', 'calculator')] },
         { role: 'tool', content: [toolResultPart('call-calc', 'calculator', { type: 'text', value: '42' })] },
@@ -320,7 +320,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('supports text, primitive, array, and json output shapes', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'user', content: [{ type: 'text', text: 'Run everything' }] },
         {
           role: 'assistant',
@@ -358,7 +358,7 @@ describe('ToolCallFilter', () => {
       const circular: any = { name: 'CIRCULAR' };
       circular.self = circular;
 
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'assistant', content: [toolCallPart('call-circular', 'circularTool')] },
         {
           role: 'tool',
@@ -375,7 +375,7 @@ describe('ToolCallFilter', () => {
   });
 
   describe('current-run detection when step content is empty (observational memory pruning)', () => {
-    const prompt: LanguageModelV2Prompt = [
+    const prompt: LanguageModelV4Prompt = [
       { role: 'user', content: [{ type: 'text', text: 'Search' }] },
       { role: 'assistant', content: [toolCallPart('old-1', 'search')] },
       { role: 'tool', content: [toolResultPart('old-1', 'search')] },
@@ -435,7 +435,7 @@ describe('ToolCallFilter', () => {
   });
 
   describe('filterAfterToolSteps', () => {
-    const threeStepPrompt = (): LanguageModelV2Prompt => [
+    const threeStepPrompt = (): LanguageModelV4Prompt => [
       { role: 'user', content: [{ type: 'text', text: 'Check three cities' }] },
       { role: 'assistant', content: [toolCallPart('call-1', 'weather')] },
       { role: 'tool', content: [toolResultPart('call-1', 'weather')] },
@@ -464,7 +464,7 @@ describe('ToolCallFilter', () => {
     });
 
     it('only preserves recent steps for tools that are being excluded', async () => {
-      const prompt: LanguageModelV2Prompt = [
+      const prompt: LanguageModelV4Prompt = [
         { role: 'assistant', content: [toolCallPart('call-1', 'weather')] },
         { role: 'tool', content: [toolResultPart('call-1', 'weather')] },
         { role: 'assistant', content: [toolCallPart('call-2', 'calculator')] },
@@ -483,7 +483,7 @@ describe('ToolCallFilter', () => {
   });
 
   describe('processor provider config', () => {
-    const prompt = (): LanguageModelV2Prompt => [
+    const prompt = (): LanguageModelV4Prompt => [
       { role: 'assistant', content: [toolCallPart('call-search', 'search', { query: 'SECRET_QUERY' })] },
       {
         role: 'tool',
@@ -548,7 +548,7 @@ describe('ToolCallFilter', () => {
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MastraLanguageModelV2Mock({
+            model: new MastraLanguageModelV4Mock({
               doStream: async ({ prompt }: { prompt: unknown }) => {
                 stepInputs.push(prompt);
 
@@ -711,7 +711,7 @@ describe('ToolCallFilter', () => {
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MastraLanguageModelV2Mock({
+            model: new MastraLanguageModelV4Mock({
               doStream: async ({ prompt }: { prompt: unknown }) => {
                 stepInputs.push(prompt);
                 const currentResponse = responseCount++;
@@ -850,7 +850,7 @@ describe('ToolCallFilter', () => {
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MastraLanguageModelV2Mock({
+            model: new MastraLanguageModelV4Mock({
               doStream: async ({ prompt }: { prompt: unknown }) => {
                 stepInputs.push(prompt);
 

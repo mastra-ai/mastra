@@ -2,7 +2,7 @@ import { ChunkFrom } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
-import { toAISdkV5Stream } from '../convert-streams';
+import { toAISdkStream } from '../convert-streams';
 import { WorkflowStreamToAISDKTransformer } from '../transformers';
 
 describe('WorkflowStreamToAISDKTransformer', () => {

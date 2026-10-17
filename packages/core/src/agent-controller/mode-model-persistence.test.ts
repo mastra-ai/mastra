@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
+import { MastraLanguageModelV4Mock } from '../test-utils/llm-mock';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { AgentController } from './agent-controller';
 import { migratePersistedModelSelection, type Session } from './session';
@@ -237,7 +237,7 @@ describe('AgentController single-model persistence across restarts', () => {
         id: 'plan-agent',
         name: 'plan-agent',
         instructions: 'You plan work.',
-        model: new MastraLanguageModelV2Mock({
+        model: new MastraLanguageModelV4Mock({
           doStream: async () => {
             planCalls += 1;
             return {
@@ -258,7 +258,7 @@ describe('AgentController single-model persistence across restarts', () => {
         id: 'build-agent',
         name: 'build-agent',
         instructions: 'You implement work.',
-        model: new MastraLanguageModelV2Mock({
+        model: new MastraLanguageModelV4Mock({
           doStream: async () => {
             buildCalls += 1;
             return { stream: createTextStream('Implementation complete.') };
