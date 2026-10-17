@@ -52,8 +52,13 @@ async function writeTemporalWorkflowShim(projectRoot: string): Promise<void> {
     path.join(temporalWorkflowDir, 'index.js'),
     `
       const getMock = () => globalThis.__temporalWorkflowMock;
+      export const ApplicationFailure = { nonRetryable: (...args) => getMock().nonRetryable(...args) };
+      export const condition = (...args) => getMock().condition(...args);
+      export const defineQuery = (...args) => getMock().defineQuery(...args);
+      export const defineSignal = (...args) => getMock().defineSignal(...args);
       export const executeChild = (...args) => getMock().executeChild(...args);
       export const proxyActivities = (...args) => getMock().proxyActivities(...args);
+      export const setHandler = (...args) => getMock().setHandler(...args);
       export const sleep = (...args) => getMock().sleep(...args);
       export const log = { info: (...args) => getMock().log.info(...args) };
     `,
@@ -75,6 +80,14 @@ afterEach(async () => {
   await Promise.all(tempDirs.map(tempDir => rm(tempDir, { recursive: true, force: true })));
   tempDirs.length = 0;
 });
+
+const succeeded = (output: unknown) =>
+  expect.objectContaining({
+    status: 'success',
+    output,
+    startedAt: expect.any(Number),
+    endedAt: expect.any(Number),
+  });
 
 describe('MastraPlugin', () => {
   it('retries prebuild after a failed build', async () => {
@@ -246,8 +259,13 @@ describe('Temporal prebuild integration', () => {
     const logInfo = vi.fn();
     let workflowModule: Record<string, unknown>;
     (globalThis as typeof globalThis & { __temporalWorkflowMock: unknown }).__temporalWorkflowMock = {
+      condition: vi.fn(async () => true),
+      nonRetryable: vi.fn((message: string) => Object.assign(new Error(message), { nonRetryable: true })),
+      defineQuery: vi.fn((name: string) => name),
+      defineSignal: vi.fn((name: string) => name),
       executeChild,
       proxyActivities,
+      setHandler: vi.fn(),
       sleep,
       log: {
         info: logInfo,
@@ -268,11 +286,11 @@ describe('Temporal prebuild integration', () => {
       result: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
       state: undefined,
       steps: {
-        step1: { value: 'test-step1' },
-        innerWorkflow: { value: 'test-step1-inner' },
-        step2: { step2: 'test-step1-inner-step2' },
-        step3: { step3: 'test-step1-inner-step3' },
-        step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        step1: succeeded({ value: 'test-step1' }),
+        innerWorkflow: succeeded({ value: 'test-step1-inner' }),
+        step2: succeeded({ step2: 'test-step1-inner-step2' }),
+        step3: succeeded({ step3: 'test-step1-inner-step3' }),
+        step4: succeeded({ result: 'test-step1-inner-step2|test-step1-inner-step3|final' }),
       },
     });
     const mappedWorkflow = workflowModule.mappedWorkflow;
@@ -287,7 +305,7 @@ describe('Temporal prebuild integration', () => {
       result: { doubled: 42 },
       state: undefined,
       steps: {
-        'mapping_mapped-workflow_0': { doubled: 42 },
+        'mapping_mapped-workflow_0': succeeded({ doubled: 42 }),
       },
     });
 

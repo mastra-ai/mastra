@@ -94,6 +94,27 @@ describe('activity transform', () => {
     expect(output).not.toContain('createWorkflow');
   });
 
+  it('generates Standard Schema suspend-payload validation', async () => {
+    const output = await transform(`
+      import { createStep } from '@mastra/core/workflows';
+
+      export const approval = createStep({
+        id: 'approval',
+        suspendSchema: {
+          '~standard': {
+            version: 1,
+            vendor: 'test',
+            validate: value => ({ value }),
+          },
+        },
+        execute: async ({ suspend }) => suspend({ reason: 'approval' }),
+      });
+    `);
+
+    expect(output).toContain("schema['~standard'].validate(value)");
+    expect(output).toContain("'issues' in result");
+  });
+
   it('uses a local mastra binding in the injected helper', async () => {
     const output = await transform(`
       import { createStep } from '@mastra/core/workflows';
@@ -102,7 +123,9 @@ describe('activity transform', () => {
       export const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({ ok: true }) });
     `);
 
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(
+      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params, args\),[\s\S]*mastra[\s\S]*\}\)/,
+    );
     expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('const fetchWeather = createStep({');
   });
@@ -258,6 +281,8 @@ describe('activity transform', () => {
 
     expect(output).toContain('const mastra =');
     expect(output).not.toMatch(/export\s+(const|\{)\s*mastra/);
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(
+      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params, args\),[\s\S]*mastra[\s\S]*\}\)/,
+    );
   });
 });
