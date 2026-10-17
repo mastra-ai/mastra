@@ -5,7 +5,7 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { GripVertical } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
 
 type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
@@ -13,7 +13,7 @@ type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
 export interface AgentMetadataModelListProps {
   modelList: AgentMetadataModelListType;
   updateModelInModelList: AgentMetadataModelListItemProps['updateModelInModelList'];
-  reorderModelList: (params: ReorderModelListParams) => void;
+  reorderModelList: (params: ReorderModelListParams) => Promise<{ message: string }>;
 }
 
 export const AgentMetadataModelList = ({
@@ -25,7 +25,11 @@ export const AgentMetadataModelList = ({
   const hasMultipleModels = modelConfigs.length > 1;
   const enabledCount = modelConfigs.filter(m => m.enabled !== false).length;
 
-  const handleDragEnd = (result: DropResult) => {
+  useEffect(() => {
+    setModelConfigs(modelList);
+  }, [modelList]);
+
+  const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) {
       return;
     }
@@ -35,10 +39,15 @@ export const AgentMetadataModelList = ({
     items.splice(result.destination.index, 0, reorderedItem);
 
     setModelConfigs(items);
-    reorderModelList({ reorderedModelIds: items.map(item => item.id) });
+    try {
+      await reorderModelList({ reorderedModelIds: items.map(item => item.id) });
+    } catch {
+      setModelConfigs(modelConfigs);
+    }
   };
 
-  const updateModel = (params: UpdateModelInModelListParams) => {
+  const updateModel = async (params: UpdateModelInModelListParams) => {
+    const previousModelConfigs = modelConfigs;
     setModelConfigs(prev =>
       prev.map(modelConfig =>
         modelConfig.id === params.modelConfigId
@@ -55,7 +64,12 @@ export const AgentMetadataModelList = ({
           : modelConfig,
       ),
     );
-    return updateModelInModelList(params);
+    try {
+      return await updateModelInModelList(params);
+    } catch (error) {
+      setModelConfigs(previousModelConfigs);
+      throw error;
+    }
   };
 
   return (
@@ -101,8 +115,6 @@ const AgentMetadataModelListItem = ({
   dragHandleProps,
   isLastEnabled,
 }: AgentMetadataModelListItemProps) => {
-  const [enabled, setEnabled] = useState(() => modelConfig.enabled);
-
   return (
     <div className="state-layer rounded-lg bg-sidebar">
       <div className="flex items-center gap-2 p-2">
@@ -126,7 +138,7 @@ const AgentMetadataModelListItem = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="shrink-0">
-                  <Switch checked={enabled} disabled className="pointer-events-none" />
+                  <Switch checked={modelConfig.enabled} disabled className="pointer-events-none" />
                 </span>
               </TooltipTrigger>
               <TooltipContent>
@@ -136,10 +148,9 @@ const AgentMetadataModelListItem = ({
           </TooltipProvider>
         ) : (
           <Switch
-            checked={enabled}
+            checked={modelConfig.enabled}
             onCheckedChange={checked => {
-              setEnabled(checked);
-              void updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+              void updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked }).catch(() => undefined);
             }}
             className="shrink-0"
           />
