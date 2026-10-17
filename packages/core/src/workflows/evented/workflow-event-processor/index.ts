@@ -103,6 +103,42 @@ export type ParentWorkflow = {
   };
 };
 
+type ParentWorkflowRef = { workflowId: string; runId: string; parentWorkflow?: ParentWorkflowRef };
+
+function toParentWorkflowRef(parent: ParentWorkflow): ParentWorkflowRef {
+  return {
+    workflowId: parent.workflowId,
+    runId: parent.runId,
+    ...(parent.parentWorkflow ? { parentWorkflow: toParentWorkflowRef(parent.parentWorkflow) } : {}),
+  };
+}
+
+/**
+ * Builds the `workflows-finish` payload. Its only consumer is the
+ * execution-engine waiter of a top-level `run.start()`/`resume()`, which reads
+ * `stepResults`, `state`, `prevResult` and `requestContext`. Nested runs have
+ * no waiter (the parent is driven by the `workflows` topic), so they carry only
+ * identities, the outcome and the ancestor chain the pubsub proxy walks for
+ * `localOnly` routing — not the cumulative step history, which for durable
+ * agent loop iterations is several MB per event (#27245).
+ */
+function buildFinishEventData(args: ProcessorArgs, state: Record<string, any>) {
+  const { workflowId, runId, prevResult, requestContext, parentWorkflow, stepResults } = args;
+  if (parentWorkflow) {
+    // `payload` is the last step's input — for a loop iteration that is the
+    // whole carried-over loop state, so it is dropped along with the history.
+    const { payload: _payload, ...outcome } = (prevResult ?? {}) as Record<string, any>;
+    return {
+      workflowId,
+      runId,
+      prevResult: outcome,
+      requestContext,
+      parentWorkflow: toParentWorkflowRef(parentWorkflow),
+    };
+  }
+  return { workflowId, runId, prevResult, requestContext, stepResults, state };
+}
+
 /**
  * A foreach step stores its per-iteration state in a shape that layers on top
  * of {@link StepResult}: the `payload` is the input array and `output` is the
@@ -1035,7 +1071,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.end',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: buildFinishEventData(args, finalState),
     });
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1132,7 +1168,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.suspend',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: buildFinishEventData(args, finalState),
     });
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1236,7 +1272,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.fail',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: buildFinishEventData(args, finalState),
     });
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)

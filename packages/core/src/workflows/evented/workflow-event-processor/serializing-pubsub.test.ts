@@ -167,6 +167,101 @@ describe('evented workflows over a serializing pubsub', () => {
   });
 });
 
+describe('workflows-finish payloads (#27245)', () => {
+  function finishEvents(publish: { mock: { calls: any[][] } }) {
+    return publish.mock.calls.filter(([topic]) => topic === 'workflows-finish').map(([, event]) => event);
+  }
+
+  function buildNestedWorkflows(execute: () => Promise<any>) {
+    const inner = createInnerWorkflow(execute);
+    const mid = createWorkflow({ id: 'mid_stage', inputSchema: z.any(), outputSchema: z.any() }).then(inner).commit();
+    const root = createWorkflow({
+      id: 'finish_root',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      stateSchema: z.object({ marker: z.string().default('') }),
+    })
+      .then(
+        createStep({
+          id: 'big_step',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          stateSchema: z.object({ marker: z.string().default('') }),
+          execute: async ({ setState }) => {
+            await setState({ marker: 'set' });
+            return { blob: 'x'.repeat(10_000) };
+          },
+        }),
+      )
+      .then(mid)
+      .commit();
+    return { root, workflows: { finish_root: root, mid_stage: mid, inner_stage: inner } };
+  }
+
+  it('nested runs publish finish events without step history, top-level keeps what the waiter reads', async () => {
+    const { root, workflows } = buildNestedWorkflows(async () => ({ done: true }));
+    const pubsub = new SerializingPubSub();
+    const publish = vi.spyOn(pubsub, 'publish');
+
+    const result = await runWorkflow(root, workflows, pubsub);
+
+    expect(result.status).toBe('success');
+    expect(result.status === 'success' && result.result).toEqual({ done: true });
+    expect(result.steps.big_step).toMatchObject({ status: 'success', output: { blob: 'x'.repeat(10_000) } });
+    expect(result.steps.mid_stage).toMatchObject({ status: 'success', output: { done: true } });
+    const events = finishEvents(publish);
+    const top = events.find(e => e.data.workflowId === 'finish_root');
+    const mid = events.find(e => e.data.workflowId === 'mid_stage');
+    const inner = events.find(e => e.data.workflowId === 'inner_stage');
+
+    expect(top?.type).toBe('workflow.end');
+    expect(top?.data.parentWorkflow).toBeUndefined();
+    expect(top?.data.stepResults.big_step.output.blob).toHaveLength(10_000);
+    expect(top?.data.state).toEqual({ marker: 'set' });
+
+    for (const nested of [mid, inner]) {
+      expect(nested?.type).toBe('workflow.end');
+      expect(nested?.data.stepResults).toBeUndefined();
+      expect(nested?.data.state).toBeUndefined();
+      expect(nested?.data.prevResult.status).toBe('success');
+      expect(JSON.stringify(nested?.data)).not.toContain('x'.repeat(100));
+    }
+
+    // The ancestor chain is kept as bare identities so the pubsub proxy can
+    // still route nested finish events of internal workflows as localOnly.
+    expect(inner?.data.parentWorkflow).toEqual({
+      workflowId: 'mid_stage',
+      runId: mid?.runId,
+      parentWorkflow: { workflowId: 'finish_root', runId: top?.runId },
+    });
+  });
+
+  it('nested failures publish slim finish events and the top-level run still reports the error', async () => {
+    const { root, workflows } = buildNestedWorkflows(async () => {
+      throw new Error('inner boom');
+    });
+    const pubsub = new SerializingPubSub();
+    const publish = vi.spyOn(pubsub, 'publish');
+
+    const result = await runWorkflow(root, workflows, pubsub);
+
+    expect(result.status).toBe('failed');
+    expect(result.status === 'failed' && String((result.error as Error)?.message ?? result.error)).toContain(
+      'inner boom',
+    );
+    expect(result.steps.big_step).toMatchObject({ status: 'success' });
+
+    const events = finishEvents(publish);
+    const top = events.find(e => e.data.workflowId === 'finish_root');
+    const inner = events.find(e => e.data.workflowId === 'inner_stage');
+    expect(top?.type).toBe('workflow.fail');
+    expect(top?.data.stepResults.big_step.status).toBe('success');
+    expect(inner?.type).toBe('workflow.fail');
+    expect(inner?.data.stepResults).toBeUndefined();
+    expect(inner?.data.parentWorkflow?.stepResults).toBeUndefined();
+  });
+});
+
 class TestWorkflowEventProcessor extends WorkflowEventProcessor {
   callProcessWorkflowEnd(args: any) {
     return this.processWorkflowEnd(args);
