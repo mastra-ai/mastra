@@ -16,6 +16,7 @@ import type { LeaseProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
 import { Mastra } from '../../mastra';
 import type { Agent } from '../agent';
+import { leaseOwnerRunId } from '../run-ownership';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
@@ -156,7 +157,7 @@ describe('registerRun thread lease', () => {
     // A plain (non-signal) run must own the cross-process thread lease once
     // registration settles — otherwise remote liveness checks treat it as a
     // ghost and contending instances start competing runs.
-    expect(pubsub.owners.get(key)).toBe(runId);
+    expect(leaseOwnerRunId(pubsub.owners.get(key))).toBe(runId);
 
     finish();
     // Release is fire-and-forget inside the completion watcher's finally —
@@ -212,7 +213,8 @@ describe('registerRun thread lease', () => {
       await iterator.next();
       await waitForCondition(() => pubsub.publishedTypes.includes('run-suspended'));
       expect(originRuntime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
-      expect(pubsub.owners.get(key)).toBe(runId);
+      const originOwner = pubsub.owners.get(key);
+      expect(leaseOwnerRunId(originOwner)).toBe(runId);
 
       let now = Date.now();
       dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now);
@@ -228,7 +230,10 @@ describe('registerRun thread lease', () => {
         { memory: { thread: threadId, resource: resourceId }, resumeData: { approved: true } } as any,
         pubsub,
       );
-      expect(pubsub.owners.get(key)).toBe(runId);
+      // The resuming process takes the lease over under its own owner token.
+      const resumeOwner = pubsub.owners.get(key);
+      expect(leaseOwnerRunId(resumeOwner)).toBe(runId);
+      expect(resumeOwner).not.toBe(originOwner);
 
       const publishedBeforeSweep = pubsub.publishedTypes.length;
       now += Mastra.INTERNAL_WORKFLOW_TTL_MS + 1;
@@ -245,8 +250,8 @@ describe('registerRun thread lease', () => {
       );
       await pubsub.flush();
 
-      expect(pubsub.releaseCalls).not.toContainEqual({ key, owner: runId });
-      expect(pubsub.owners.get(key)).toBe(runId);
+      expect(pubsub.releaseCalls.filter(call => call.key === key)).toEqual([]);
+      expect(pubsub.owners.get(key)).toBe(resumeOwner);
       expect(pubsub.publishedTypes.slice(publishedBeforeSweep)).not.toContain('run-completed');
     } finally {
       subscription.unsubscribe();
@@ -311,12 +316,12 @@ describe('registerRun thread lease', () => {
     expect(pubsub.owners.get(key)).toBeUndefined();
 
     const second = await register('strict-rollback-run-2');
-    expect(pubsub.owners.get(key)).toBe('strict-rollback-run-2');
+    expect(leaseOwnerRunId(pubsub.owners.get(key))).toBe('strict-rollback-run-2');
     expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
     await second.rollback({ releaseLease: false });
     expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
-    expect(pubsub.owners.get(key)).toBe('strict-rollback-run-2');
-    await pubsub.releaseLease(key, 'strict-rollback-run-2');
+    expect(leaseOwnerRunId(pubsub.owners.get(key))).toBe('strict-rollback-run-2');
+    await pubsub.releaseLease(key, pubsub.owners.get(key)!);
   });
 
   it('rolls strict registration back and releases its lease when publishing fails', async () => {

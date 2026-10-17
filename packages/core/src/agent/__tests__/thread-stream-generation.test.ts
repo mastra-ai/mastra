@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '../agent';
+import { leaseOwnerRunId } from '../run-ownership';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
@@ -263,7 +264,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     await nextTicks(40);
 
     // The recovery still holds the thread, and gets the follow-up exactly once.
-    expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+    expect(leaseOwnerRunId(await pubsub.getLeaseOwner(threadKey))).toBe('run-1');
     const other = controlledOutput('run-2');
     await expect(
       new AgentThreadStreamRuntime().registerRun(agent, other.output, options, pubsub, { strict: true }),
@@ -326,7 +327,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       async (successor, registers) => {
         const { pubsub, successorRuntime, b, subscription } = await takeOver(successor, registers);
 
-        expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+        expect(leaseOwnerRunId(await pubsub.getLeaseOwner(threadKey))).toBe('run-1');
         expect(successorRuntime.drainPendingSignals('run-1', pubsub).map(signal => signal.contents)).toEqual([
           'follow-up',
         ]);
@@ -392,7 +393,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
           const renewLease = vi.spyOn(pubsub, 'renewLease');
 
           vi.advanceTimersByTime(15_000);
-          expect(renewLease).toHaveBeenCalledWith(threadKey, 'run-1', expect.any(Number));
+          expect(renewLease).toHaveBeenCalledWith(threadKey, expect.stringMatching(/\/run-1$/), expect.any(Number));
 
           b.push(finish);
           b.end();
@@ -468,7 +469,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       await nextTicks(40);
 
       // The execution that took the run over died before registering it; its thread lease lapses.
-      expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+      expect(leaseOwnerRunId(await pubsub.getLeaseOwner(threadKey))).toBe('run-1');
       pubsub.owners.delete(threadKey);
 
       const next = controlledOutput('run-2');
@@ -510,7 +511,7 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       await nextTicks(10);
       renewLease.mockClear();
       vi.advanceTimersByTime(15_000);
-      expect(renewLease).toHaveBeenCalledWith(threadKey, 'run-1', expect.any(Number));
+      expect(renewLease).toHaveBeenCalledWith(threadKey, expect.stringMatching(/\/run-1$/), expect.any(Number));
 
       b.push(finish);
       b.end();

@@ -209,7 +209,10 @@ describe('suspended run in-memory TTL', () => {
     });
     expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('run-1');
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('active');
-    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).not.toHaveBeenCalledWith(
+      threadKey(RESOURCE_ID, 'thread-1'),
+      expect.stringMatching(/\/run-1$/),
+    );
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
   });
 
@@ -224,7 +227,10 @@ describe('suspended run in-memory TTL', () => {
     // instance may have resumed the same run and taken the lease, so releasing it
     // here — or telling subscribers the run completed — would cut that resume off
     // mid-flight. An abandoned lease expires on its own once renewal stops.
-    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).not.toHaveBeenCalledWith(
+      threadKey(RESOURCE_ID, 'thread-1'),
+      expect.stringMatching(/\/run-1$/),
+    );
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
   });
 
@@ -235,7 +241,11 @@ describe('suspended run in-memory TTL', () => {
     // While the record is warm, the runtime keeps the thread owned: that renewal is
     // the only reason an abandoned lease could outlive its 15s TTL.
     await vi.waitFor(() =>
-      expect(renewLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000),
+      expect(renewLease).toHaveBeenCalledWith(
+        threadKey(RESOURCE_ID, 'thread-1'),
+        expect.stringMatching(/\/run-1$/),
+        15_000,
+      ),
     );
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
@@ -279,7 +289,10 @@ describe('suspended run in-memory TTL', () => {
     // stream nobody is draining fast) must keep its record and its thread slot.
     expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('run-1');
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('active');
-    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).not.toHaveBeenCalledWith(
+      threadKey(RESOURCE_ID, 'thread-1'),
+      expect.stringMatching(/\/run-1$/),
+    );
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
     expect(didPublishTerminal?.()).toBe(false);
 
@@ -333,7 +346,10 @@ describe('suspended run in-memory TTL', () => {
     // released underneath it and subscribers told the run had completed.
     expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('run-1');
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('active');
-    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).not.toHaveBeenCalledWith(
+      threadKey(RESOURCE_ID, 'thread-1'),
+      expect.stringMatching(/\/run-1$/),
+    );
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
 
     // The resumed run still owns its own teardown when it finishes for real.

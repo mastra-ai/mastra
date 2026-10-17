@@ -21,6 +21,7 @@ import { createNotificationInboxTool } from '../../notifications/tool';
 import { RequestContext } from '../../request-context';
 import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
+import { leaseOwnerRunId } from '../run-ownership';
 import {
   createMessageSignal,
   createSignal,
@@ -5319,7 +5320,7 @@ describe('Agent signals', () => {
         expect(owner.cancelQueuedMessages(agent, { ...scope, signalIds: [survivor.signal.id] }, pubsub)).toEqual({
           cancelledSignalIds: [survivor.signal.id],
         });
-        expect(pubsub.owners.get(key)).toBe('new-clear-run');
+        expect(leaseOwnerRunId(pubsub.owners.get(key))).toBe('new-clear-run');
       } finally {
         release();
         finish();
@@ -6320,9 +6321,13 @@ describe('Agent signals', () => {
         releaseFirst();
         await transferring;
         expect(getStreamCount()).toBe(1);
+        let winnerRegistered: Promise<unknown> | undefined;
         if (ownership === 'lose') {
+          // A process still on bare runId lease owners won the thread. The winner
+          // takes that lease over under its own owner token through the same
+          // (gated) transfer, so it registers once the gate opens.
           pubsub.owners.set(key, winnerRunId);
-          await winner.registerRun(
+          winnerRegistered = winner.registerRun(
             agent,
             {
               runId: winnerRunId,
@@ -6335,6 +6340,7 @@ describe('Agent signals', () => {
           );
         }
         releaseTransfer();
+        await winnerRegistered;
         if (ownership === 'lose') {
           await vi.waitFor(() =>
             expect(
@@ -6359,7 +6365,7 @@ describe('Agent signals', () => {
           ]);
           expect(winner.drainPendingSignals(winnerRunId, pubsub)).toEqual([]);
           expect(getStreamCount()).toBe(1);
-          expect(pubsub.owners.get(key)).toBe(winnerRunId);
+          expect(leaseOwnerRunId(pubsub.owners.get(key))).toBe(winnerRunId);
           finishWinner();
         }
         await stream.text;
@@ -8222,8 +8228,7 @@ describe('Agent signals', () => {
     // Run registration fails open on lease acquisition, so "a fresh run can
     // start" would pass even without the release. Assert the release call
     // directly, with the FAILED run's id (its renewal timer is keyed by it).
-    await waitForCondition(() => releaseSpy.mock.calls.some(call => call[1] === nextRunId));
-    expect(releaseSpy).toHaveBeenCalledWith(expect.stringContaining(threadId), nextRunId);
+    await waitForCondition(() => releaseSpy.mock.calls.some(call => leaseOwnerRunId(call[1]) === nextRunId));
   });
 
   it('restores the signal when the lease transfer step throws', async () => {
@@ -8434,8 +8439,8 @@ describe('Agent signals', () => {
     // does release the finished previous run's id unconditionally (an
     // owner-guarded no-op here), so assert ownership rather than call count:
     // the continuation's lease must survive, and nothing may release its runId.
-    expect(releaseSpy.mock.calls.some(call => call[1] === continuation.runId)).toBe(false);
-    expect([...pubsub.owners.values()]).toContain(continuation.runId);
+    expect(releaseSpy.mock.calls.some(call => leaseOwnerRunId(call[1]) === continuation.runId)).toBe(false);
+    expect([...pubsub.owners.values()].map(leaseOwnerRunId)).toContain(continuation.runId);
 
     // The failed steer signal is still queued for a later drain, untouched by
     // the continuation handoff.
@@ -9838,7 +9843,6 @@ describe('Agent signals', () => {
       releaseTransfer = resolve;
     });
     pubsub.onTransferLease = signalTransferStarted;
-    pubsub.owners.set(key, oldRunId);
 
     const agent = { id: 'drained-reservation-agent' } as Agent<any, any, any, any>;
     agent.stream = vi.fn(async (_signal, options) => ({ runId: options.runId })) as any;
@@ -9998,7 +10002,6 @@ describe('Agent signals', () => {
       releaseTransfer = resolve;
     });
     pubsub.onTransferLease = signalTransferStarted;
-    pubsub.owners.set(key, oldRunId);
 
     const agent = {
       id: 'continuation-reservation-agent',
@@ -10541,7 +10544,7 @@ describe('Agent signals', () => {
     expect(pubsub.publishedData.some(data => data?.type === 'run-abort-requested')).toBe(false);
     // The owner still holds the live lease, so a real abort from this follower
     // would have been forwarded — the suppression above is what kept it alive.
-    expect(pubsub.owners.get(key)).toBe(runId);
+    expect(leaseOwnerRunId(pubsub.owners.get(key))).toBe(runId);
 
     ownerSubscription.unsubscribe();
     followerSubscription.unsubscribe();
@@ -10613,7 +10616,7 @@ describe('Agent signals', () => {
       await nextTick();
       expect(pubsub.publishedData.some(data => data?.type === 'run-aborted')).toBe(false);
       expect(ownerRuntime.hasThreadRun(runId, pubsub)).toBe(true);
-      expect(pubsub.owners.get(key)).toBe(runId);
+      expect(leaseOwnerRunId(pubsub.owners.get(key))).toBe(runId);
 
       // The real remote abort releases the parked run on the owner.
       expect(followerSubscription.abort()).toBe(true);
@@ -11045,7 +11048,7 @@ describe('Agent signals', () => {
           ownerPubSub,
         );
         await withTimeout(firstPart, 'Timed out waiting for owner run to start');
-        await expect(followerPubSub.getLeaseOwner(threadKey)).resolves.toBe(runId);
+        expect(leaseOwnerRunId(await followerPubSub.getLeaseOwner(threadKey))).toBe(runId);
 
         const followerSubscription = await followerRuntime.subscribeToThread(
           follower,

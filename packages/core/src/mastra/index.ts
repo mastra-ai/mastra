@@ -7739,6 +7739,10 @@ export class Mastra<
     // the next boot recovers it right away. Storage must still be open.
     await abandonDurableAgentExecutions(this);
 
+    // Thread leases of runs this process drove would otherwise block their
+    // threads for the lease TTL. Release them while pubsub is still open.
+    await agentThreadStreamRuntime.releaseHeldThreadLeases();
+
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still
     // available so it can abort active tasks, preserve retry recovery, and
