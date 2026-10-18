@@ -89,6 +89,8 @@ describeForAllEngines(
       });
 
       let toolResults: any[] | undefined;
+      let toolCalls: any[] | undefined;
+      let steps: any[] | undefined;
 
       await runLoopScenario({
         engine,
@@ -98,6 +100,8 @@ describeForAllEngines(
         stopWhen: stepCountIs(3),
         onFinish: (result: any) => {
           toolResults = result.toolResults;
+          toolCalls = result.toolCalls;
+          steps = result.steps;
         },
         fixtures: llm => {
           llm.on(
@@ -112,6 +116,57 @@ describeForAllEngines(
       expect(toolResults).toBeDefined();
       expect(Array.isArray(toolResults)).toBe(true);
       expect(toolResults!.length).toBeGreaterThan(0);
+
+      // Every engine exposes tool results/calls as stream chunks (#27428).
+      const resultChunk = {
+        type: 'tool-result',
+        payload: expect.objectContaining({ toolCallId: 'call_tick', toolName: 'tick', result: { count: 1 } }),
+      };
+      const callChunk = {
+        type: 'tool-call',
+        payload: expect.objectContaining({ toolCallId: 'call_tick', toolName: 'tick' }),
+      };
+      expect(toolResults).toEqual([expect.objectContaining(resultChunk)]);
+      expect(toolCalls).toEqual([expect.objectContaining(callChunk)]);
+      expect(steps!.flatMap(s => s.toolResults)).toEqual([expect.objectContaining(resultChunk)]);
+      expect(steps!.flatMap(s => s.toolCalls)).toEqual([expect.objectContaining(callChunk)]);
+    });
+
+    it('onFinish toolResults omit failed tool calls', async () => {
+      const boomTool = createTool({
+        id: 'boom',
+        description: 'Always fails.',
+        inputSchema: z.object({}),
+        execute: async () => {
+          throw new Error('boom failed');
+        },
+      });
+
+      let finishResult: any;
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Call tool.',
+        tools: { boom: boomTool },
+        stopWhen: stepCountIs(3),
+        onFinish: (result: any) => {
+          finishResult = result;
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_boom', name: 'boom', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+        },
+      });
+
+      expect(finishResult).toBeDefined();
+      expect(finishResult.toolResults).toEqual([]);
+      expect(finishResult.toolCalls).toEqual([
+        expect.objectContaining({ type: 'tool-call', payload: expect.objectContaining({ toolName: 'boom' }) }),
+      ]);
     });
   },
   {},

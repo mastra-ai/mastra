@@ -101,6 +101,7 @@ export function createRunGenerationFilter({
 async function withBufferedStepResponses(
   runSteps: unknown[] | undefined,
   output: { steps: Promise<unknown[]> },
+  runId: string,
 ): Promise<unknown[]> {
   const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
   if (!runSteps?.length) return buffered;
@@ -111,12 +112,61 @@ async function withBufferedStepResponses(
   const offset = runSteps.length - (trailingAborted ? 1 : 0) - buffered.length;
   return runSteps.map((step, i) => {
     const match = i >= offset ? buffered[i - offset] : undefined;
-    if (!match) return step;
+    const record = step as Record<string, unknown>;
     return {
-      ...(step as Record<string, unknown>),
-      ...(match.response !== undefined ? { response: match.response } : {}),
-      ...(match.content !== undefined ? { content: match.content } : {}),
+      ...record,
+      toolCalls: toToolCallChunks(record.toolCalls, runId),
+      toolResults: toToolResultChunks(record.toolResults, runId),
+      ...(match?.response !== undefined ? { response: match.response } : {}),
+      ...(match?.content !== undefined ? { content: match.content } : {}),
     };
+  });
+}
+
+/**
+ * Run steps carry serialized tool calls/results; callbacks expose them as the
+ * `tool-call`/`tool-result` chunks the default engine passes (#27428).
+ */
+function toToolCallChunks(calls: unknown, runId: string): unknown[] {
+  return ((calls as Record<string, any>[] | undefined) ?? []).map(call =>
+    call?.type === 'tool-call'
+      ? call
+      : {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: call.toolCallId,
+            toolName: call.toolName,
+            args: call.args,
+            providerMetadata: call.providerMetadata,
+            providerExecuted: call.providerExecuted,
+            output: call.output,
+          },
+        },
+  );
+}
+
+function toToolResultChunks(results: unknown, runId: string): unknown[] {
+  return ((results as Record<string, any>[] | undefined) ?? []).flatMap(result => {
+    if (result?.type === 'tool-result') return [result];
+    // These outcomes never emit a tool-result chunk, so the default engine doesn't list them.
+    if (result.error || result.aborted || result.resultBlocked || result.approval?.approved === false) return [];
+    return [
+      {
+        type: 'tool-result',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: result.toolCallId,
+          toolName: result.toolName,
+          args: result.args,
+          result: result.result,
+          providerMetadata: result.providerMetadata,
+          providerExecuted: result.providerExecuted,
+        },
+      },
+    ];
   });
 }
 
@@ -565,7 +615,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // consume the stream (for example, resume() with a delay-only wait).
           if (finishReason === 'abort') {
             try {
-              const steps = onAbort ? await withBufferedStepResponses(data.output?.steps, output) : [];
+              const steps = onAbort ? await withBufferedStepResponses(data.output?.steps, output, runId) : [];
               await onAbort?.({
                 steps,
                 text: (data.output?.text ?? '') as string,
@@ -592,7 +642,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           } else if (onFinish) {
             try {
-              const steps = (await withBufferedStepResponses(data.output?.steps, output)) as any[];
+              const steps = (await withBufferedStepResponses(data.output?.steps, output, runId)) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               // The structured object is parsed while the output drains the (now closed) chunk

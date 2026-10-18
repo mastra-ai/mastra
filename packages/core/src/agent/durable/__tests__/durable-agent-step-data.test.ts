@@ -271,8 +271,14 @@ describe('DurableAgent step data (#26780)', () => {
     await vi.waitFor(() => expect(finish).toBeDefined());
 
     expect(finish.steps).toHaveLength(3);
-    expect(finish.toolCalls.map((c: any) => c.payload?.toolName ?? c.toolName)).toEqual(['free', 'gated']);
-    expect(finish.toolResults).toHaveLength(2);
+    expect(finish.toolCalls.map((c: any) => [c.type, c.payload.toolName])).toEqual([
+      ['tool-call', 'free'],
+      ['tool-call', 'gated'],
+    ]);
+    expect(finish.toolResults.map((r: any) => [r.type, r.payload.toolName])).toEqual([
+      ['tool-result', 'free'],
+      ['tool-result', 'gated'],
+    ]);
     expect(finish.steps.at(-1).response?.modelId).toBe('resume-model');
     expect(finish.steps.at(-1).response?.messages?.length).toBeGreaterThan(0);
   }, 30000);
