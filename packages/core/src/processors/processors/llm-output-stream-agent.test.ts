@@ -92,18 +92,14 @@ describe('LLM-backed output processors in agent.stream (#13644)', () => {
     expect(moderator.inputs.length).toBeLessThanOrEqual(3);
   });
 
-  it('checks once per buffered sentence and restores per-chunk checks with bufferSize: 0', async () => {
+  it('checks once per buffered sentence', async () => {
     const buffered = countingDetector(cleanScrub);
-    const perChunk = countingDetector(cleanModeration);
     const agent = new Agent({
       id: 'buffer-size-agent',
       name: 'buffer-size-agent',
       instructions: 'You are helpful.',
       model: streamingModel(),
-      outputProcessors: [
-        new SystemPromptScrubber({ model: buffered.model }),
-        new ModerationProcessor({ model: perChunk.model, bufferSize: 0 }),
-      ],
+      outputProcessors: [new SystemPromptScrubber({ model: buffered.model })],
     });
 
     const text = await streamText(agent);
@@ -115,8 +111,34 @@ describe('LLM-backed output processors in agent.stream (#13644)', () => {
       // processOutputResult still checks the final message once.
       fullText,
     ]);
-    // ModerationProcessor runs after the scrubber, so it sees the two flushed sentences as two chunks.
-    expect(perChunk.inputs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each([
+    [
+      'SystemPromptScrubber',
+      (model: MockLanguageModelV1) => new SystemPromptScrubber({ model, bufferSize: 0 }),
+      cleanScrub,
+    ],
+    [
+      'ModerationProcessor',
+      (model: MockLanguageModelV1) => new ModerationProcessor({ model, bufferSize: 0 }),
+      cleanModeration,
+    ],
+  ] as const)('%s restores one check per text-delta with bufferSize: 0', async (_name, create, clean) => {
+    const detector = countingDetector(clean);
+    const agent = new Agent({
+      id: 'per-chunk-agent',
+      name: 'per-chunk-agent',
+      instructions: 'You are helpful.',
+      model: streamingModel(),
+      outputProcessors: [create(detector.model)],
+    });
+
+    const text = await streamText(agent);
+
+    expect(text).toBe(fullText);
+    // One check per text-delta, plus processOutputResult checking the final message.
+    expect(detector.inputs.length).toBe(words.length + 1);
   });
 
   it('SystemPromptScrubber still redacts leaked prompt text before it reaches the stream', async () => {
@@ -170,5 +192,26 @@ describe('LLM-backed output processors in agent.stream (#13644)', () => {
 
     expect(text).not.toContain('lazy dog');
     expect(output.tripwire).toBeTruthy();
+  });
+});
+
+describe('LLM stream buffering without a stream writer', () => {
+  it('emits every part when text is followed by text-end and finish', async () => {
+    const detector = countingDetector(cleanScrub);
+    const scrubber = new SystemPromptScrubber({ model: detector.model });
+    const state: Record<string, unknown> = {};
+    const parts = [
+      { type: 'text-delta', payload: { id: 'text-1', text: 'Hello' }, runId: 'run-1', from: 'AGENT' },
+      { type: 'text-end', payload: { id: 'text-1' }, runId: 'run-1', from: 'AGENT' },
+      { type: 'finish', payload: {}, runId: 'run-1', from: 'AGENT' },
+    ] as any[];
+
+    const emitted = [];
+    for (const part of parts) {
+      emitted.push(await scrubber.processOutputStream({ part, streamParts: [], state, abort: vi.fn() as any } as any));
+    }
+
+    expect(emitted.map(part => part?.type)).toEqual(['text-delta', 'text-end', 'finish']);
+    expect(emitted[0]?.payload.text).toBe('Hello');
   });
 });

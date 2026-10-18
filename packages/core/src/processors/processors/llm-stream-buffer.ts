@@ -14,7 +14,6 @@ interface LLMStreamBufferState {
   text: string;
   id?: string;
   runId?: string;
-  pending: ChunkType[];
 }
 
 /**
@@ -25,6 +24,11 @@ interface LLMStreamBufferState {
  * part to emit (possibly redacted) or null to drop it. Buffered text is always
  * flushed before any non-text part, so text never crosses a step or finish
  * boundary.
+ *
+ * Emitting flushed text and the non-text part that triggered the flush needs
+ * the runner to re-drive the second part, which it only does when a writer is
+ * present. Without one, every text-delta is checked on its own so no part can
+ * be held back past the end of the stream.
  */
 export async function processBufferedTextStream({
   part,
@@ -39,26 +43,17 @@ export async function processBufferedTextStream({
   writer?: unknown;
   check: (part: TextDeltaPart) => Promise<ChunkType | null>;
 }): Promise<ChunkType | null> {
-  const buffer: LLMStreamBufferState = (state[STATE_KEY] ??= { text: '', pending: [] });
+  if (part.type === 'text-delta' && !(part as TextDeltaPart).payload.text) return part;
+  if (!writer) return part.type === 'text-delta' ? check(part as TextDeltaPart) : part;
 
-  // Without a writer the runner cannot re-drive a second part, so a non-text
-  // part that triggered a flush is emitted on the next call instead.
-  if (buffer.pending.length > 0) {
-    const pending = buffer.pending.shift()!;
-    if (part.type === 'text-delta') append(buffer, part as TextDeltaPart);
-    else buffer.pending.push(part);
-    return pending;
-  }
+  const buffer: LLMStreamBufferState = (state[STATE_KEY] ??= { text: '' });
 
   if (part.type !== 'text-delta') {
     const flushed = await flush(buffer, check);
     if (!flushed) return part;
-    if (writer) state[REPROCESS_PART_KEY] = part;
-    else buffer.pending.push(part);
+    state[REPROCESS_PART_KEY] = part;
     return flushed;
   }
-
-  if (!(part as TextDeltaPart).payload.text) return part;
 
   append(buffer, part as TextDeltaPart);
   if (buffer.text.length >= bufferSize || SENTENCE_END.test(buffer.text)) {
