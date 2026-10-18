@@ -94,7 +94,8 @@ describe('custom boards', () => {
         board: boardId,
         title: 'Sneaky card',
       });
-      expect(foreign.status).toBeGreaterThanOrEqual(400);
+      expect(foreign.status).toBe(422);
+      expect(await foreign.json()).toMatchObject({ error: 'invalid_board' });
 
       const { workItem } = await s.json('POST', `/web/factory/projects/${ops.id}/work-items`, {
         board: boardId,

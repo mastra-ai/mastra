@@ -4,7 +4,13 @@ import type { FactoryStageRuleContext } from '../rules/types.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { BoardDefinitionError } from './define-board.js';
 import { boardAvailableTo, createBoardRegistry } from './registry.js';
-import { buildStoredBoard, debouncedStoredBoardReload, newStoredBoardId, parseStoredBoard } from './stored-board.js';
+import {
+  buildStoredBoard,
+  debouncedStoredBoardReload,
+  loadStoredBoards,
+  newStoredBoardId,
+  parseStoredBoard,
+} from './stored-board.js';
 
 const INPUT = {
   title: 'Ops',
@@ -115,5 +121,20 @@ describe('stored board reload across replicas', () => {
     expect(reload).not.toHaveBeenCalled();
     expect(replica.get('custom-gone')).toBeUndefined();
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops a reload snapshot read before a local board write', async () => {
+    const registry = createBoardRegistry();
+    const boardId = newStoredBoardId();
+    let release!: (records: []) => void;
+    const reload = loadStoredBoards(registry, { listAll: () => new Promise(resolve => (release = resolve)) });
+
+    registry.install(buildStoredBoard({ boardId, ...parseStoredBoard(INPUT) }), 'fp-1');
+    release([]);
+    await reload;
+
+    expect(registry.get(boardId)?.title).toBe('Ops');
+    await loadStoredBoards(registry, { listAll: async () => [] });
+    expect(registry.has(boardId)).toBe(false);
   });
 });

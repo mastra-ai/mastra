@@ -142,6 +142,9 @@ describe('FactoryBoardsSection', () => {
     expect(writes.at(-1)).toEqual({ method: 'PUT', path: `${board.id}/${phase.id}`, body: { skillName: 'my-build' } });
 
     await user.click(screen.getByRole('button', { name: 'Delete my-build' }));
+    const skillConfirm = await screen.findByRole('dialog');
+    expect(writes.at(-1)?.method).toBe('PUT');
+    await user.click(within(skillConfirm).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(trigger).toHaveTextContent('Board default'));
     expect(writes.at(-1)).toEqual({ method: 'DELETE', path: 'skill-library/my-build' });
     await waitFor(() => expect(trigger).toHaveTextContent('Board default'));
@@ -213,8 +216,31 @@ describe('FactoryBoardsSection', () => {
     expect(await screen.findByRole('region', { name: 'Operations board' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Delete Operations board' }));
+    const boardConfirm = await screen.findByRole('dialog');
+    expect(writes.at(-1)?.method).toBe('PUT');
+    await user.click(within(boardConfirm).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Operations board' })).not.toBeInTheDocument());
     expect(writes.at(-1)).toEqual({ method: 'DELETE', path: 'boards/custom-1' });
     expect(screen.queryByRole('button', { name: /Edit Work board/ })).not.toBeInTheDocument();
+  });
+
+  it('drops outgoing transitions from a phase changed to terminal', async () => {
+    const writes = mockServer();
+    const user = userEvent.setup();
+    renderWithProviders(<FactoryBoardsSection factoryId="fp-1" />);
+
+    await user.click(await screen.findByRole('button', { name: /New board/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Board title' }), 'Ops');
+    await user.click(within(dialog).getByRole('combobox', { name: 'Phase 2 kind' }));
+    await user.click(await screen.findByRole('option', { name: 'terminal' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(writes.at(-1)).toMatchObject({
+      method: 'POST',
+      path: 'boards',
+      body: { phases: [{}, { id: 'working', kind: 'terminal', next: [] }, {}] },
+    });
+    expect((writes.at(-1)?.body as { phases: object[] }).phases[1]).not.toHaveProperty('role');
   });
 });

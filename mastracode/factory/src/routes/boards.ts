@@ -63,10 +63,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
   async #parse(context: Context) {
     const body: unknown = await context.req.json().catch(() => undefined);
     try {
-      const parsed = parseStoredBoard(body);
-      // Building validates the whole board the same way a code-defined board is validated.
-      buildStoredBoard({ boardId: 'custom-check', ...parsed });
-      return parsed;
+      return parseStoredBoard(body);
     } catch (error) {
       if (error instanceof BoardDefinitionError) {
         return { response: context.json({ error: 'invalid_board', message: error.message }, 400) };

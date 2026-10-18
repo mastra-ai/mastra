@@ -25,8 +25,13 @@ export interface LiveBoardRegistry extends BoardRegistry {
   install(board: InstalledBoard, factoryProjectId: string): void;
   /** Removes a stored board. */
   uninstall(id: string): void;
-  /** Replaces every stored board, e.g. after reloading them from storage. */
-  replaceStored(boards: readonly StoredBoardEntry[]): void;
+  /** Bumped by every local `install` and `uninstall`, so a reload can tell its snapshot went stale. */
+  readonly generation: number;
+  /**
+   * Replaces every stored board, e.g. after reloading them from storage. Pass the `generation` read
+   * before the snapshot was loaded: if a local write happened since, the stale snapshot is dropped.
+   */
+  replaceStored(boards: readonly StoredBoardEntry[], loadedAtGeneration?: number): void;
   /** Sets how stored boards are reloaded; a lookup that misses a stored board id triggers it in the background. */
   setStoredReloader(reload: () => Promise<void>): void;
   /** Reloads stored boards (e.g. ones created on another replica); a no-op until a reloader is set. */
@@ -70,6 +75,7 @@ export function createBoardRegistry(
   const registry = new Map(codeDefined);
   const owners = new Map<string, string>();
   let reloader: (() => Promise<void>) | undefined;
+  let generation = 0;
   const reloadOnMiss = (id: string) => {
     if (reloader && id.startsWith(STORED_BOARD_ID_PREFIX)) void reloader();
   };
@@ -81,6 +87,9 @@ export function createBoardRegistry(
   return Object.freeze({
     get size() {
       return registry.size;
+    },
+    get generation() {
+      return generation;
     },
     get(id: string) {
       const board = registry.get(id);
@@ -102,13 +111,16 @@ export function createBoardRegistry(
       assertStored(board.id);
       registry.set(board.id, board);
       owners.set(board.id, factoryProjectId);
+      generation++;
     },
     uninstall(id: string) {
       assertStored(id);
+      generation++;
       registry.delete(id);
       owners.delete(id);
     },
-    replaceStored(entries: readonly StoredBoardEntry[]) {
+    replaceStored(entries: readonly StoredBoardEntry[], loadedAtGeneration?: number) {
+      if (loadedAtGeneration !== undefined && loadedAtGeneration !== generation) return;
       for (const { board } of entries) assertStored(board.id);
       for (const id of owners.keys()) registry.delete(id);
       owners.clear();

@@ -168,8 +168,40 @@ function PromptDialog({
   );
 }
 
+function ConfirmDeleteDialog({
+  title,
+  description,
+  pending,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  description: string;
+  pending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={open => !open && !pending && onClose()} pending={pending}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction disabled={pending} onConfirm={onConfirm}>
+            Delete
+          </DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function SkillLibrary({ factoryId, skills }: { factoryId: string; skills: LibrarySkillInfo[] }) {
   const [editing, setEditing] = useState<LibrarySkillInfo | 'new'>();
+  const [deleting, setDeleting] = useState<string>();
   const remove = useDeleteLibrarySkillMutation();
 
   return (
@@ -213,7 +245,7 @@ function SkillLibrary({ factoryId, skills }: { factoryId: string; skills: Librar
                     tooltip="Delete skill"
                     aria-label={`Delete ${skill.name}`}
                     disabled={remove.isPending}
-                    onClick={() => remove.mutate({ factoryId, name: skill.name })}
+                    onClick={() => setDeleting(skill.name)}
                   >
                     <Trash2 />
                   </Button>
@@ -227,6 +259,15 @@ function SkillLibrary({ factoryId, skills }: { factoryId: string; skills: Librar
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {errorText(remove.error, 'Failed to delete skill')}
         </Txt>
+      )}
+      {deleting && (
+        <ConfirmDeleteDialog
+          title={`Delete ${deleting}?`}
+          description="This removes the skill's instructions and clears every phase that runs it. This can't be undone."
+          pending={remove.isPending}
+          onConfirm={() => remove.mutate({ factoryId, name: deleting }, { onSettled: () => setDeleting(undefined) })}
+          onClose={() => setDeleting(undefined)}
+        />
       )}
       {editing && (
         <SkillDialog
@@ -316,6 +357,7 @@ function BoardDialog({
     if (!ready || mutation.isPending) return;
     const phases = draft.phases.map(phase => {
       const { role, ...rest } = phase;
+      if (phase.kind === 'terminal') return { ...rest, next: [] };
       return phase.kind === 'working' ? { ...rest, role: role?.trim() || 'work' } : rest;
     });
     try {
@@ -360,7 +402,7 @@ function BoardDialog({
           </Select>
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {draft.phases.map((phase, index) => (
-              <li key={phase.id} className="flex flex-col gap-2 rounded-md border border-border1 p-3">
+              <li key={phase.id} className="border-border1 flex flex-col gap-2 rounded-md border p-3">
                 <div className="flex items-center gap-2">
                   <Input
                     aria-label={`Phase ${index + 1} title`}
@@ -574,6 +616,7 @@ function BoardCard({
 }) {
   const phases = board.phases.filter(phase => phase.kind === 'working');
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const remove = useDeleteBoardMutation();
   return (
     <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
@@ -596,7 +639,7 @@ function BoardCard({
               tooltip="Delete board"
               aria-label={`Delete ${board.title} board`}
               disabled={remove.isPending}
-              onClick={() => remove.mutate({ factoryId, boardId: board.id })}
+              onClick={() => setConfirmingDelete(true)}
             >
               <Trash2 />
             </Button>
@@ -607,6 +650,17 @@ function BoardCard({
         <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
           {errorText(remove.error, 'Failed to delete board')}
         </Txt>
+      )}
+      {confirmingDelete && (
+        <ConfirmDeleteDialog
+          title={`Delete the ${board.title} board?`}
+          description="This removes the board with its phases, transitions, and kickoff settings. This can't be undone."
+          pending={remove.isPending}
+          onConfirm={() =>
+            remove.mutate({ factoryId, boardId: board.id }, { onSettled: () => setConfirmingDelete(false) })
+          }
+          onClose={() => setConfirmingDelete(false)}
+        />
       )}
       {editing && <BoardDialog factoryId={factoryId} board={board} onClose={() => setEditing(false)} />}
       <SettingsContainer>

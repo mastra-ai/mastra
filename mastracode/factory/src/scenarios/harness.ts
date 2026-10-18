@@ -187,9 +187,10 @@ export async function startFactoryScenario(options: FactoryScenarioOptions = {})
 
   const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
+    const origin = URL.canParse(url) ? new URL(url).origin : '';
     const body = input instanceof Request ? await input.clone().text() : String(init?.body ?? '');
-    if (url.startsWith('https://api.linear.app/graphql')) return linearGraphql(body, linearIssues);
-    if (url.startsWith('https://api.github.com')) {
+    if (origin === 'https://api.linear.app') return linearGraphql(body, linearIssues);
+    if (origin === 'https://api.github.com') {
       if (/\/app\/installations\/\d+\/access_tokens$/.test(new URL(url).pathname)) {
         return Response.json(
           { token: 'ghs_scenario', expires_at: new Date(Date.now() + 3_600_000).toISOString() },
@@ -199,7 +200,8 @@ export async function startFactoryScenario(options: FactoryScenarioOptions = {})
       // Outbound GitHub writes (comments, labels, reconcile sweeps) are not under test here.
       return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
     }
-    if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return realFetch(input, init);
+    if (origin.startsWith('http://') && ['127.0.0.1', 'localhost'].includes(new URL(url).hostname))
+      return realFetch(input, init);
     throw new Error(`Unexpected external request: ${url}`);
   });
 
@@ -229,28 +231,41 @@ export async function startFactoryScenario(options: FactoryScenarioOptions = {})
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
   });
 
-  const args = await factory.prepare();
-  const mastra = new Mastra(args);
-  await factory.finalize();
   const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser', { workosId: USER, organizationId: ORG });
     await next();
   });
-  const routes = args.server?.apiRoutes ?? [];
-  mountApiRoutes(app, routes);
-  // Integration routes (GitHub, Linear, ...) are built per Mastra instance.
-  for (const route of routes) {
-    if ('createHandler' in route && typeof route.createHandler === 'function')
-      app.on(route.method, route.path, (await route.createHandler({ mastra })) as never);
+  let args!: Awaited<ReturnType<MastraFactory['prepare']>>;
+  let mastra!: Mastra;
+  try {
+    args = await factory.prepare();
+    mastra = new Mastra(args);
+    await factory.finalize();
+    const routes = args.server?.apiRoutes ?? [];
+    mountApiRoutes(app, routes);
+    // Integration routes (GitHub, Linear, ...) are built per Mastra instance.
+    for (const route of routes) {
+      if ('createHandler' in route && typeof route.createHandler === 'function')
+        app.on(route.method, route.path, (await route.createHandler({ mastra })) as never);
+    }
+    await storage
+      .getDomain<ModelCredentialsStorage>('model-credentials')
+      .setCredential({ orgId: ORG }, 'openai', { type: 'api_key', key: 'sk-scenario' });
+    // A signed-in person's own sessions run on their personal key.
+    await storage
+      .getDomain<ModelCredentialsStorage>('model-credentials')
+      .setCredential({ orgId: ORG, userId: USER }, 'openai', { type: 'api_key', key: 'sk-scenario-user' });
+  } catch (error) {
+    // A half-built scenario never reaches close(); undo the global stubs here so later tests
+    // see the original error instead of "Unexpected external request".
+    await factory.shutdown().catch(() => {});
+    await storage.close().catch(() => {});
+    fetchSpy.mockRestore();
+    await aimock.stop();
+    vi.unstubAllEnvs();
+    throw error;
   }
-  await storage
-    .getDomain<ModelCredentialsStorage>('model-credentials')
-    .setCredential({ orgId: ORG }, 'openai', { type: 'api_key', key: 'sk-scenario' });
-  // A signed-in person's own sessions run on their personal key.
-  await storage
-    .getDomain<ModelCredentialsStorage>('model-credentials')
-    .setCredential({ orgId: ORG, userId: USER }, 'openai', { type: 'api_key', key: 'sk-scenario-user' });
 
   const workItems = storage.getDomain<WorkItemsStorage>('work-items');
   const api = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) =>

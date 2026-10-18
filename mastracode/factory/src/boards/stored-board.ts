@@ -115,7 +115,8 @@ export function buildStoredBoard(record: {
 }
 
 /**
- * Replaces the registry's stored boards with what storage holds. A board that no longer builds
+ * Replaces the registry's stored boards with what storage holds, unless a local install or
+ * uninstall landed while storage was being read (that snapshot would undo the write). A board that no longer builds
  * (for example after a validation rule tightened) is skipped and reported, not fatal.
  */
 export async function loadStoredBoards(
@@ -124,6 +125,7 @@ export async function loadStoredBoards(
   onError: (boardId: string, error: unknown) => void = () => {},
 ): Promise<void> {
   const boards: StoredBoardEntry[] = [];
+  const loadedAtGeneration = registry.generation;
   for (const record of await storage.listAll()) {
     try {
       boards.push({ board: buildStoredBoard(record), factoryProjectId: record.factoryProjectId });
@@ -131,7 +133,7 @@ export async function loadStoredBoards(
       onError(record.boardId, error);
     }
   }
-  registry.replaceStored(boards);
+  registry.replaceStored(boards, loadedAtGeneration);
 }
 
 /** Other API replicas only see a board once they reload; stored boards reload at most this often. */
