@@ -1034,6 +1034,8 @@ describe('workspace_grep host-side fallback', () => {
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'foo' }, { workspace });
 
     expect(result).toContain('search incomplete: host-side search stopped after 60s');
+    expect(result).toMatch(/\d+ files? scanned/);
+    expect(result).toContain('narrow the path or pattern');
     expect(filesystem.readFileCalls).toBeGreaterThan(0);
     expect(filesystem.readFileCalls).toBeLessThan(30);
   });

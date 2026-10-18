@@ -113,6 +113,7 @@ Usage:
       // from a genuinely empty one. In `strict` mode these throw instead.
       let skippedReadErrorCount = 0;
       let targetNotFound = false;
+      let scannedFileCount = 0;
 
       // The host-side walk stops early (returning partial results) when the run
       // is aborted or, for directory walks, once the time budget is spent.
@@ -462,6 +463,7 @@ Usage:
               if (shouldStop()) return undefined;
               try {
                 const raw = await filesystem.readFile(filePath, { encoding: 'utf-8' });
+                scannedFileCount++;
                 return typeof raw === 'string' ? raw : undefined;
               } catch (err) {
                 if (strict) throw err;
@@ -515,11 +517,12 @@ Usage:
         if (truncated) {
           summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
         }
-        if (incomplete === 'aborted') {
-          summaryParts.push('(search incomplete: aborted; results are partial)');
-        } else if (incomplete === 'time budget') {
+        if (incomplete) {
+          const scanned = `${scannedFileCount} file${scannedFileCount !== 1 ? 's' : ''} scanned`;
           summaryParts.push(
-            `(search incomplete: host-side search stopped after ${HOST_WALK_BUDGET_MS / 1000}s; results are partial)`,
+            incomplete === 'aborted'
+              ? `(search incomplete: aborted, ${scanned}; results are partial)`
+              : `(search incomplete: host-side search stopped after ${HOST_WALK_BUDGET_MS / 1000}s, ${scanned}; results are partial, narrow the path or pattern to search everything)`,
           );
         }
         if (skippedExtensionCount > 0) {
