@@ -197,4 +197,52 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
     expect(resumedTypes).toContain('finish');
     expect(executions).toBe(1);
   });
+
+  it('requireToolApproval in agent defaultOptions gates tool calls', async () => {
+    let executions = 0;
+    const archiveTool = createTool({
+      id: 'archive',
+      description: 'Archive an item',
+      inputSchema: z.object({ item: z.string() }),
+      execute: async () => {
+        executions += 1;
+        return { archived: true };
+      },
+    });
+
+    const llm = getMock();
+    const memory = new MockMemory();
+    const shared = await createSharedAgent(llm, {
+      tools: { archive: archiveTool },
+      memory,
+      engine,
+      defaultOptions: { requireToolApproval: true },
+    });
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm,
+      sharedAgent: shared,
+      prompt: 'Archive a',
+      memory,
+      threadId: 'default-options-approval-thread',
+      resourceId: 'default-options-approval-resource',
+      collectChunks: true,
+      fixtures: mock => {
+        mock.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_archive', name: 'archive', arguments: { item: 'a' } }] },
+        );
+        mock.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Archived.' });
+      },
+    });
+    expect(chunks!.some(chunk => chunk.type === 'tool-call-approval')).toBe(true);
+    expect(executions).toBe(0);
+
+    const resumed = await shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
+    for await (const _ of resumed.fullStream) {
+      // drain
+    }
+    expect(executions).toBe(1);
+    expect(await resumed.text).toBe('Archived.');
+  });
 });
