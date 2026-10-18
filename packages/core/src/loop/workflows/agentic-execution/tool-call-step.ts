@@ -65,7 +65,7 @@ import {
   eagerToolCallSuspensionIntent,
 } from './eager-tool-execution';
 import type { EagerSuspensionIntent, EagerToolBailout } from './eager-tool-execution';
-import { buildToolApprovalContext, resolveToolApprovalVerdict, runBeforeApprovalHook } from './tool-approval-verdict';
+import { buildToolApprovalContext, resolveToolApprovalVerdict, runBeforeApprovalChecks } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -686,7 +686,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (approvalGated) {
           if (!approvalDecision && isFreshCall) {
-            const rejection = await runBeforeApprovalHook({
+            const rejection = await runBeforeApprovalChecks({
               tool,
               input: args,
               context: {
