@@ -125,15 +125,29 @@ export type BooleanAnswer = {
   probability: number;
 };
 
+/**
+ * The decision model declined to answer the question. Valid for any question type.
+ *
+ * The answer fields are typed as absent so equality checks such as
+ * `answers.route.choice === 'billing'` keep compiling and evaluate to `false` on a refusal.
+ */
+export type RefusalAnswer = {
+  type: 'refusal';
+  choice?: never;
+  score?: never;
+  probability?: never;
+  probabilities?: never;
+};
+
 export type ClassifierAnswer<QUESTION extends ClassifierQuestion> = QUESTION extends {
   type: 'choice';
   criteria: infer CRITERIA extends Readonly<Record<string, DecisionModelV4Input | null>>;
 }
-  ? ChoiceAnswer<Extract<keyof CRITERIA, string>>
+  ? ChoiceAnswer<Extract<keyof CRITERIA, string>> | RefusalAnswer
   : QUESTION extends { type: 'score' }
-    ? ScoreAnswer
+    ? ScoreAnswer | RefusalAnswer
     : QUESTION extends { type: 'boolean' }
-      ? BooleanAnswer
+      ? BooleanAnswer | RefusalAnswer
       : never;
 
 export type ClassifierAnswers<QUESTIONS extends ClassifierQuestions> = {
@@ -550,7 +564,11 @@ function validateProviderResult(
   for (const questionId of questionIds) {
     const question = questions[questionId]!;
     const answer = answers[questionId]!;
-    if (!isPlainObject(answer) || answer.type !== question.type) {
+    if (!isPlainObject(answer)) {
+      throw new TypeError(`Answer '${questionId}' does not match its question type.`);
+    }
+    if (answer.type === 'refusal') continue;
+    if (answer.type !== question.type) {
       throw new TypeError(`Answer '${questionId}' does not match its question type.`);
     }
 
