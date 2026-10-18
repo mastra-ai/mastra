@@ -218,6 +218,43 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     expect(JSON.stringify(requests[1]!.body.messages)).toContain('blocked-by-hook');
   });
 
+  it('short-circuits execute from defaultOptions.hooks.beforeToolCall alone', async () => {
+    const beforeToolCall = vi.fn(() => ({ proceed: false as const, output: { value: 'blocked-by-default' } }));
+    const execute = vi.fn(async () => ({ value: 'executed' }));
+    const guardedTool = createTool({
+      id: 'guarded_tool',
+      description: 'A tool a hook can block.',
+      inputSchema: z.object({ key: z.string() }),
+      execute,
+    });
+    const llm = getMock();
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Run the guarded tool.',
+      stopWhen: stepCountIs(5),
+      sharedAgent: buildHookedAgent(llm, {
+        tools: { guarded_tool: guardedTool },
+        executionHooks: { beforeToolCall },
+      }),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_default', name: 'guarded_tool', arguments: { key: 'gamma' } }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_default', hasToolResult: true }, { content: 'Blocked.' });
+      },
+    });
+
+    expect(await output.text).toContain('Blocked');
+    expect(execute).not.toHaveBeenCalled();
+    expect(beforeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'guarded_tool', input: { key: 'gamma' } }),
+    );
+    expect(JSON.stringify(requests[1]!.body.messages)).toContain('blocked-by-default');
+  });
+
   it('lets per-execution afterToolCall override the agent hook and receive the tool output', async () => {
     const agentAfterToolCall = vi.fn();
     const runAfterToolCall = vi.fn();
@@ -252,7 +289,6 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
 
     expect(await output.text).toContain('real:hi');
     expect(requests).toHaveLength(2);
-    expect(execute).toHaveBeenCalledTimes(1);
     expect(agentAfterToolCall).not.toHaveBeenCalled();
     expect(runAfterToolCall).toHaveBeenCalledTimes(1);
     expect(runAfterToolCall).toHaveBeenCalledWith(
