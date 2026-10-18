@@ -40,6 +40,7 @@ export const discoverySchema = z.strictObject({
 export const employeeIntervalSchema = z
   .strictObject({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative().nullable() })
   .refine(value => value.max === null || value.min <= value.max);
+export type EmployeeInterval = z.infer<typeof employeeIntervalSchema>;
 export const signalSchema = z.strictObject({
   type: z.enum(signalTypes),
   occurredAt: z.iso.datetime({ offset: true }).nullable(),

@@ -1,7 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { evaluateEmployeeCount } from '../research/employee-count';
 import { qualificationConfigSchema } from '../config/qualification';
-import { employeeIntervalSchema, factsSchema, identitySchema, scoreSchema, signalSchema } from '../research/contracts';
+import { factsSchema, identitySchema, scoreSchema, signalSchema } from '../research/contracts';
 
 const scoreInputSchema = z.strictObject({
   identity: identitySchema,
@@ -30,25 +31,12 @@ export function scoreCompany(input: z.infer<typeof scoreInputSchema>) {
       : `Business model: ${typeof business.value === 'string' ? business.value : 'unknown'}.`,
   );
   const employees = facts.employeeCount;
-  const interval = employeeIntervalSchema.safeParse(employees.value);
-  const size =
-    employees.disposition !== 'accepted' ||
-    !interval.success ||
-    (employees.basis === 'inferred' && rules.employeeCount.estimates === 'review')
-      ? 'unknown'
-      : interval.data.min >= rules.employeeCount.min &&
-          interval.data.max !== null &&
-          interval.data.max <= rules.employeeCount.max
-        ? 'matched'
-        : (interval.data.max !== null && interval.data.max < rules.employeeCount.min) ||
-            interval.data.min > rules.employeeCount.max
-          ? 'mismatched'
-          : 'unknown';
+  const { interval, state: size } = evaluateEmployeeCount(employees, rules.employeeCount);
   add(
     'employeeCount',
     size,
-    interval.success
-      ? `${employees.basis === 'inferred' ? 'Inferred employee estimate' : 'Observed employee interval'} ${interval.data.min}–${interval.data.max ?? 'open'}; required ${rules.employeeCount.min}–${rules.employeeCount.max}${size === 'unknown' ? (employees.basis === 'inferred' && rules.employeeCount.estimates === 'review' ? '; inferred estimates require review under the captured policy' : '; confirm a count entirely inside or outside the boundary') : ''}.`
+    interval
+      ? `${employees.basis === 'inferred' ? 'Inferred employee estimate' : 'Observed employee interval'} ${interval.min}–${interval.max ?? 'open'}; required ${rules.employeeCount.min}–${rules.employeeCount.max}${size === 'unknown' ? (employees.basis === 'inferred' && rules.employeeCount.estimates === 'review' ? '; inferred estimates require review under the captured policy' : '; confirm a count entirely inside or outside the boundary') : ''}.`
       : `Employee count is ${employees.disposition}; obtain workforce evidence or a grounded estimate.`,
   );
   const country = facts.headquartersCountry;

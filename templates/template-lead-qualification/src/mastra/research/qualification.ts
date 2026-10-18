@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { noopObserve } from '@mastra/core/tools';
 import type { NormalizedEvent } from '../contracts';
-import type { QualificationSnapshot } from '../config/qualification';
 import type { QualificationStore } from '../persistence/qualification-store';
 import { normalizedResearchError, retryWithinBudget } from '../providers/evidence';
 import type { EvidenceProvider, ResearchContext } from '../providers/evidence';
@@ -9,19 +8,17 @@ import { scoreCompanyTool } from '../tools/score-company';
 import {
   assessmentSchema,
   branchResultSchema,
-  evidenceSchema,
   discoverySchema,
   extractionSchema,
-  factSchema,
   identitySchema,
   verificationSchema,
   ResearchError,
   candidatePassages,
-  candidateSchema,
-  employeeIntervalSchema,
 } from './contracts';
-import type { Assessment, BranchResult, Candidate, Evidence, Fact, ResearchBranch, ResearchRound } from './contracts';
+import type { Assessment, BranchResult, Evidence, ResearchBranch, ResearchRound } from './contracts';
 import { approvedUrl, PageRetriever } from './page-retrieval';
+import { collectFacts, gapReason, missingAttributes } from './facts';
+import { createEvidenceBatch, validateCandidates, validateSource } from './evidence-validation';
 
 function resolveIdentity(event: NormalizedEvent) {
   return identitySchema.parse(
@@ -63,141 +60,12 @@ function diagnosticUrl(value: string) {
   url.username = url.password = url.search = url.hash = '';
   return url.href;
 }
-function scopedEvidence(source: Evidence): Evidence {
-  const identity = JSON.stringify([source.providerId, source.id, source.kind, source.source, source.digest]);
-  return { ...source, id: `evidence-${createHash('sha256').update(identity).digest('hex').slice(0, 40)}` };
-}
-function collectFact(
-  attribute: Candidate['attribute'],
-  branches: BranchResult[],
-  snapshot: QualificationSnapshot,
-): Fact {
-  const candidates = branches
-    .flatMap(branch => branch.candidates)
-    .filter(candidate => candidate.attribute === attribute)
-    .sort((a, b) => a.id.localeCompare(b.id));
-  const unsupported = branches.some(branch => branch.rejections.some(rejection => rejection.attribute === attribute));
-  const evidenceIds = [
-    ...new Set(candidates.flatMap(candidate => candidatePassages(candidate).map(passage => passage.evidenceId))),
-  ].sort();
-  const common = {
-    evidenceIds,
-    candidateIds: candidates.map(candidate => candidate.id),
-    freshness: 'current' as const,
-    basis:
-      candidates.length > 0 && candidates.every(candidate => candidate.inference)
-        ? ('inferred' as const)
-        : ('observed' as const),
-  };
-  if (!candidates.length) {
-    const coverage =
-      attribute === 'buyingIntent' &&
-      !unsupported &&
-      branches.some(
-        branch =>
-          branch.branch === 'signals' &&
-          branch.intentCoverageComplete &&
-          branch.evidence.length > 0 &&
-          branch.failures.length === 0,
-      );
-    return factSchema.parse({
-      ...common,
-      value: coverage ? [] : null,
-      disposition: coverage ? 'accepted' : unsupported ? 'unsupported' : 'missing',
-      evidenceIds: coverage
-        ? branches
-            .filter(branch => branch.branch === 'signals')
-            .flatMap(branch => branch.evidence.map(evidence => evidence.id))
-            .sort()
-        : [],
-      freshness: coverage ? 'current' : 'unknown',
-    });
-  }
-  if (
-    attribute !== 'buyingIntent' &&
-    candidates.some(
-      candidate =>
-        candidate.asOf !== null &&
-        (Date.parse(candidate.asOf) > Date.parse(snapshot.assessmentTime) ||
-          Date.parse(snapshot.assessmentTime) - Date.parse(candidate.asOf) >
-            snapshot.config.sources.maxEvidenceAgeDays * 86_400_000),
-    )
-  )
-    return factSchema.parse({ ...common, value: null, disposition: 'stale', freshness: 'stale' });
-  const unique = [...new Map(candidates.map(candidate => [JSON.stringify(candidate.value), candidate.value])).values()];
-  if (attribute === 'employeeCount') {
-    const intersect = (items: Candidate[]) => {
-      const values = items.map(candidate => employeeIntervalSchema.parse(candidate.value));
-      return {
-        min: Math.max(...values.map(value => value.min)),
-        max: values.reduce<number | null>(
-          (max, value) => (value.max === null ? max : Math.min(max ?? value.max, value.max)),
-          null,
-        ),
-      };
-    };
-    const value = intersect(candidates);
-    if (!employeeIntervalSchema.safeParse(value).success)
-      return factSchema.parse({ ...common, value: null, disposition: 'conflicting' });
-    const observed = candidates.filter(candidate => !candidate.inference);
-    const observation = observed.length ? intersect(observed) : null;
-    const rule = snapshot.config.policy.rules.employeeCount;
-    const decisiveObservation =
-      observation &&
-      ((observation.min >= rule.min && observation.max !== null && observation.max <= rule.max) ||
-        observation.min > rule.max ||
-        (observation.max !== null && observation.max < rule.min));
-    const scored = rule.estimates === 'review' && decisiveObservation ? observation : value;
-    const basis = observation && JSON.stringify(observation) === JSON.stringify(scored) ? 'observed' : 'inferred';
-    return factSchema.parse({ ...common, value: scored, basis, disposition: 'accepted' });
-  }
-  if (attribute !== 'buyingIntent' && unique.length > 1)
-    return factSchema.parse({ ...common, value: null, disposition: 'conflicting' });
-  if (attribute === 'buyingIntent' && unsupported)
-    return factSchema.parse({ ...common, value: null, disposition: 'unsupported' });
-  return factSchema.parse({
-    ...common,
-    value: attribute === 'buyingIntent' ? unique : unique[0],
-    disposition: 'accepted',
-  });
-}
-function gapReason(
-  attribute: Candidate['attribute'],
-  branches: BranchResult[],
-  snapshot: QualificationSnapshot,
-  budget: boolean,
-): ResearchRound['diagnostic']['gap'] {
-  if (budget) return 'budget';
-  const fact = collectFact(attribute, branches, snapshot);
-  if (fact.disposition === 'conflicting') return 'conflict';
-  if (fact.disposition === 'stale') return 'stale';
-  if (fact.disposition === 'unsupported') return 'rejected';
-  if (attribute === 'employeeCount' && fact.disposition === 'accepted') {
-    const interval = employeeIntervalSchema.parse(fact.value);
-    const rule = snapshot.config.policy.rules.employeeCount;
-    if (fact.basis === 'inferred' && rule.estimates === 'review') return 'estimate_requires_review';
-    if (interval.min <= rule.max && interval.max === null) return 'lower_bound_only';
-    if (
-      (interval.min < rule.min && interval.max !== null && interval.max >= rule.min) ||
-      (interval.min <= rule.max && interval.max !== null && interval.max > rule.max)
-    )
-      return 'boundary_overlap';
-  }
-  if (fact.disposition === 'accepted') return 'resolved';
-  const relevant = branches.filter(
-    branch => branch.branch === (attribute === 'buyingIntent' ? 'signals' : 'firmographics'),
-  );
-  if (!relevant.some(branch => branch.evidence.length)) return 'content_unavailable';
-  const latest = relevant.findLast(
-    branch => branch.evidence.length || branch.failures.length || branch.analysisComplete,
-  );
-  if (!latest?.analysisComplete || latest.failures.length)
-    return latest?.failures.some(failure =>
-      ['request_budget_exhausted', 'resource_budget_exhausted', 'deadline_exhausted'].includes(failure.code),
-    )
-      ? 'budget'
-      : 'unresolved';
-  return attribute === 'employeeCount' ? 'no_count_observed' : 'unresolved';
+function recordUrl(
+  urls: ResearchRound['diagnostic']['urls'],
+  source: string,
+  outcome: ResearchRound['diagnostic']['urls'][number]['outcome'],
+) {
+  if (urls.length < 100) urls.push({ url: diagnosticUrl(source), outcome });
 }
 export class QualificationService {
   constructor(
@@ -228,16 +96,7 @@ export class QualificationService {
       }
       try {
         const previousMaterial = [...context.round.previousEvidence, ...result.evidence];
-        const providerEvidence: Evidence[] = [];
-        const addMaterial = (source: Evidence) => {
-          const existing = providerEvidence.find(item => item.id === source.id);
-          if (
-            previousMaterial.some(item => item.id === source.id) ||
-            (existing && scopedEvidence(existing).id !== scopedEvidence(source).id)
-          )
-            throw new ResearchError('evidence_id_conflict');
-          if (!existing) providerEvidence.push(source);
-        };
+        const batch = createEvidenceBatch(previousMaterial);
         const discovered = discoverySchema.safeParse(
           await retryWithinBudget(() => provider.search(branch, context), context),
         );
@@ -245,13 +104,8 @@ export class QualificationService {
         const discovery = discovered.data;
         context.round.counters.discoveredUrls += discovery.sourceUrls.length;
         for (const material of discovery.evidence) {
-          const source = evidenceSchema.parse(material);
-          const validDigest = createHash('sha256').update(source.excerpt).digest('hex') === source.digest;
-          const trusted =
-            source.kind === 'website'
-              ? Boolean(approvedUrl(source.source, context.domains))
-              : context.snapshot.config.sources.trustedReferences.includes(source.source);
-          if (validDigest && trusted && source.providerId === providerId) addMaterial(source);
+          const source = validateSource(material, providerId, context.domains, context.snapshot.config.sources);
+          if (source) batch.add(source);
           else result.failures.push({ branch, providerId, code: 'unapproved_source', retryable: false });
         }
         const approved: string[] = [];
@@ -268,8 +122,7 @@ export class QualificationService {
         ]);
         const urls = [...new Set(approved)].filter(url => {
           if (!priorUrls.has(diagnosticUrl(url))) return true;
-          if (context.round.counters.urls.length < 100)
-            context.round.counters.urls.push({ url: diagnosticUrl(url), outcome: 'already_consulted' });
+          recordUrl(context.round.counters.urls, url, 'already_consulted');
           return false;
         });
         {
@@ -304,16 +157,14 @@ export class QualificationService {
                 }),
               context,
             );
-            if (context.round.counters.urls.length < 100)
-              context.round.counters.urls.push({ url: diagnosticUrl(sourceUrl), outcome: 'retrieved' });
+            recordUrl(context.round.counters.urls, sourceUrl, 'retrieved');
             if (!retrievedDigests.has(page.digest)) {
               retrievedDigests.add(page.digest);
-              addMaterial(page);
+              batch.add(page);
               context.round.counters.retrievedPages++;
             }
           } catch (error) {
-            if (context.round.counters.urls.length < 100)
-              context.round.counters.urls.push({ url: diagnosticUrl(sourceUrl), outcome: 'unavailable' });
+            recordUrl(context.round.counters.urls, sourceUrl, 'unavailable');
             const failure = normalizedResearchError(error);
             if (failure.code === 'evidence_id_conflict') throw failure;
             result.failures.push({
@@ -327,16 +178,13 @@ export class QualificationService {
               break;
           }
         }
-        if (!providerEvidence.length && !previousMaterial.length) {
+        const prepared = batch.prepare();
+        if (!prepared.material.length) {
           result.failures.push({ branch, providerId, code: 'no_source_material', retryable: false });
           continue;
         }
-        // Adapters keep their current IDs; previous material uses stable stored IDs.
-        // Only accepted references are remapped, after checking this exact material.
-        const aliases = new Map(providerEvidence.map(source => [source.id, scopedEvidence(source).id]));
-        const remap = (id: string) => aliases.get(id) ?? id;
-        result.evidence.push(...providerEvidence.map(scopedEvidence));
-        const material = [...previousMaterial, ...providerEvidence];
+        result.evidence.push(...prepared.stored);
+        const { material } = prepared;
         const extraction = extractionSchema.safeParse(
           await retryWithinBudget(() => provider.extract(branch, material, context), context),
         );
@@ -356,69 +204,16 @@ export class QualificationService {
         );
         if (!verification.success) throw new ResearchError('provider_verification_invalid');
         const verified = verification.data;
-        for (const candidate of candidates) {
-          const passages = candidatePassages(candidate);
-          const candidateId = `candidate-${createHash('sha256')
-            .update(`${providerId}:${branch}:${context.round.index}:${candidate.id}`)
-            .digest('hex')
-            .slice(0, 24)}`;
-          const normalizedPassages = [
-            ...new Map(
-              passages.map(passage => {
-                const normalized = { ...passage, evidenceId: remap(passage.evidenceId) };
-                return [JSON.stringify(normalized), normalized] as const;
-              }),
-            ).values(),
-          ];
-          const normalizedCandidate = candidateSchema.safeParse({
-            ...candidate,
-            id: candidateId,
-            evidenceId: normalizedPassages[0]!.evidenceId,
-            ...(candidate.inference
-              ? { inference: { ...candidate.inference, additionalPassages: normalizedPassages.slice(1) } }
-              : {}),
-          });
-          const checks = {
-            evidenceKnown: passages.every(passage => material.some(item => item.id === passage.evidenceId)),
-            exactQuotePresent: passages.every(passage =>
-              material.find(item => item.id === passage.evidenceId)?.excerpt.includes(passage.quote),
-            ),
-            semanticSupported: verified.supportedCandidateIds.includes(candidate.id),
-            configuredLabel:
-              candidate.attribute !== 'businessModel' ||
-              context.snapshot.config.policy.rules.businessModel.categories.some(
-                category => category.label === candidate.value,
-              ),
-            provenanceValid: normalizedCandidate.success,
-          };
-          // Exact attribution and semantic support are separate checks.
-          if (
-            checks.exactQuotePresent &&
-            checks.semanticSupported &&
-            checks.configuredLabel &&
-            normalizedCandidate.success
-          )
-            result.candidates.push(normalizedCandidate.data);
-          else {
-            result.rejections.push({
-              branch,
-              candidateId,
-              evidenceId: `evidence-${createHash('sha256').update(candidate.evidenceId).digest('hex').slice(0, 24)}`,
-              attribute: candidate.attribute,
-              value: candidate.value,
-              reason: !checks.evidenceKnown
-                ? 'unknown_evidence_id'
-                : !checks.exactQuotePresent
-                  ? 'exact_quote_absent'
-                  : !checks.configuredLabel
-                    ? 'unconfigured_business_model'
-                    : !checks.provenanceValid
-                      ? 'candidate_provenance_invalid'
-                      : 'semantic_verification_rejected',
-              checks,
-            });
-          }
-        }
+        const accepted = validateCandidates(candidates, verified.supportedCandidateIds, prepared, {
+          providerId,
+          branch,
+          roundIndex: context.round.index,
+          businessModelLabels: context.snapshot.config.policy.rules.businessModel.categories.map(
+            category => category.label,
+          ),
+        });
+        result.candidates.push(...accepted.candidates);
+        result.rejections.push(...accepted.rejections);
         result.analysisComplete = true;
         result.intentCoverageComplete ||= extracted.intentCoverageComplete && verified.intentCoverageComplete;
       } catch (error) {
@@ -427,35 +222,23 @@ export class QualificationService {
       }
     }
     result.evidence.sort((a, b) => a.id.localeCompare(b.id));
-    const parsed = branchResultSchema.parse(result);
-    return parsed;
+    return branchResultSchema.parse(result);
   }
   private async targetedResearch(context: Omit<ResearchContext, 'round'>, branches: BranchResult[]) {
     const plan = context.snapshot.config.research.targeted;
     const rounds: ResearchRound['diagnostic'][] = [];
-    const missing = () =>
-      (['businessModel', 'employeeCount', 'headquartersCountry', 'buyingIntent'] as const).filter(attribute => {
-        const fact = collectFact(attribute, branches, context.snapshot);
-        if (fact.disposition !== 'accepted') return true;
-        if (attribute !== 'employeeCount') return false;
-        const interval = employeeIntervalSchema.parse(fact.value);
-        const rule = context.snapshot.config.policy.rules.employeeCount;
-        if (fact.basis === 'inferred' && rule.estimates === 'review') return true;
-        return (
-          !(interval.min >= rule.min && interval.max !== null && interval.max <= rule.max) &&
-          !((interval.max !== null && interval.max < rule.min) || interval.min > rule.max)
-        );
-      });
+    let facts = collectFacts(branches, context.snapshot);
     for (const [index, target] of plan.order.entries()) {
       const saved = await this.store.round(context.runId, index);
       if (saved) {
         branches.push(saved.result);
+        facts = collectFacts(branches, context.snapshot);
         rounds.push(saved.diagnostic);
         if (saved.diagnostic.reason === 'budget_exhausted') break;
         continue;
       }
       const before = (await this.store.get(context.runId))!.budget;
-      const missingBefore = missing();
+      const missingBefore = missingAttributes(facts, context.snapshot);
       const reason = !missingBefore.includes(target)
         ? 'already_supported'
         : !(await this.hasDiscoveryBudget(context))
@@ -475,7 +258,7 @@ export class QualificationService {
               round: {
                 index,
                 target,
-                gap: gapReason(target, branches, context.snapshot, false),
+                gap: gapReason(target, facts[target], branches, context.snapshot, false),
                 query: plan.queries[target],
                 year: new Date(context.snapshot.assessmentTime).getUTCFullYear(),
                 searchDomains: before.searchCalls === 0 ? [context.domain] : context.domains,
@@ -485,9 +268,7 @@ export class QualificationService {
                 ],
                 missingAttributes: missingBefore,
                 supportedFacts: Object.fromEntries(
-                  (['businessModel', 'employeeCount', 'headquartersCountry', 'buyingIntent'] as const)
-                    .map(attribute => [attribute, collectFact(attribute, branches, context.snapshot)] as const)
-                    .filter(([, fact]) => fact.disposition === 'accepted'),
+                  Object.entries(facts).filter(([, fact]) => fact.disposition === 'accepted'),
                 ),
                 counters,
               },
@@ -507,6 +288,7 @@ export class QualificationService {
           retryable: false,
         });
       branches.push(result);
+      facts = collectFacts(branches, context.snapshot);
       const after = (await this.store.get(context.runId))!.budget;
       const round: ResearchRound = {
         result,
@@ -515,8 +297,8 @@ export class QualificationService {
           target,
           reason,
           missingBefore,
-          missingAfter: missing(),
-          gap: gapReason(target, branches, context.snapshot, reason === 'budget_exhausted'),
+          missingAfter: missingAttributes(facts, context.snapshot),
+          gap: gapReason(target, facts[target], branches, context.snapshot, reason === 'budget_exhausted'),
           ...counters,
           acceptedCandidates: result.candidates.length,
           rejectedCandidates: result.rejections.length,
@@ -528,7 +310,7 @@ export class QualificationService {
       rounds.push(round.diagnostic);
       if (reason === 'budget_exhausted') break;
     }
-    return { branches, rounds };
+    return { branches, rounds, facts };
   }
   async qualify(runId: string, event: NormalizedEvent): Promise<Assessment | null> {
     const stored = await this.store.get(runId);
@@ -540,6 +322,7 @@ export class QualificationService {
     const identity = resolveIdentity(event);
     let branches: BranchResult[] = [];
     let rounds: ResearchRound['diagnostic'][] = [];
+    let facts: ReturnType<typeof collectFacts>;
     if (event.lead.inquiry && identity.status === 'resolved') {
       const { inquiry } = event.lead;
       const excerpt = inquiry.text;
@@ -576,19 +359,15 @@ export class QualificationService {
         deadline,
         store: this.store,
       };
-      ({ branches, rounds } = await this.targetedResearch(context, branches));
+      ({ branches, rounds, facts } = await this.targetedResearch(context, branches));
       if (branches.some(branch => branch.identityAmbiguous)) {
         identity.status = 'ambiguous';
         identity.reason =
           'Retrieved material does not establish a single company identity. Confirm the company domain and legal entity.';
       }
+    } else {
+      facts = collectFacts(branches, snapshot);
     }
-    const facts = {
-      businessModel: collectFact('businessModel', branches, snapshot),
-      employeeCount: collectFact('employeeCount', branches, snapshot),
-      headquartersCountry: collectFact('headquartersCountry', branches, snapshot),
-      buyingIntent: collectFact('buyingIntent', branches, snapshot),
-    };
     const result = await scoreCompanyTool.execute!(
       {
         identity,
