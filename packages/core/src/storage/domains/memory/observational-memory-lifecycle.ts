@@ -2,6 +2,7 @@ export {
   assertActiveObservationsApplied,
   compareObservationalMemoryHeadOrder,
   isAppendOnlySince,
+  conflictsWithBufferedChunks,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,

@@ -16,6 +16,8 @@ export interface ObservationalMemoryConcurrencyTestOptions {
   iterations?: number;
   /** Per-test timeout in ms (default 120s). */
   timeout?: number;
+  /** Run the append-guard races; only adapters that call `conflictsWithBufferedChunks` pass them. */
+  appendGuard?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export function createObservationalMemoryConcurrencyTests({
   createStores,
   iterations = 25,
   timeout = 120_000,
+  appendGuard = false,
 }: ObservationalMemoryConcurrencyTestOptions) {
   describe(`${label} observational memory lifecycle concurrency`, () => {
     let stores: ObservationalMemoryConcurrencyStores;
@@ -206,6 +209,67 @@ export function createObservationalMemoryConcurrencyTests({
       },
       timeout,
     );
+
+    it.runIf(appendGuard)(
+      'overlapping append: two buffers of the same messages store one chunk',
+      async () => {
+        for (let i = 0; i < iterations; i++) {
+          const key = newKey();
+          const snapshot = await seed(key);
+          const shared = `msg-shared-${randomUUID()}`;
+          const a = { ...chunkAt('a', 100), messageIds: [shared] };
+          const b = { ...chunkAt('b', 150), messageIds: [shared, `msg-b-${randomUUID()}`] };
+          const results = await Promise.all([
+            stores.a.appendBufferedObservations({ id: snapshot.id, chunk: a, lastBufferedAtTime: a.lastObservedAt }),
+            stores.b.appendBufferedObservations({ id: snapshot.id, chunk: b, lastBufferedAtTime: b.lastObservedAt }),
+          ]);
+          expect(results.filter(r => r.persisted).length).toBe(1);
+          const buffered = (await head(key)).bufferedObservationChunks ?? [];
+          expect(buffered.filter(c => c.messageIds.includes(shared))).toHaveLength(1);
+        }
+      },
+      timeout,
+    );
+
+    it.runIf(appendGuard)('out-of-order append: a chunk ending before a stored chunk is refused', async () => {
+      const key = newKey();
+      const later = chunkAt('later', 200);
+      const snapshot = await seed(key, [later]);
+      const earlier = chunkAt('earlier', 100);
+      const result = await stores.b.appendBufferedObservations({ id: snapshot.id, chunk: earlier });
+      expect(result.persisted).toBe(false);
+      expect((await head(key)).bufferedObservationChunks?.map(c => c.cycleId)).toEqual([later.cycleId]);
+    });
+
+    it.runIf(appendGuard)(
+      'stale append after sync observe: a chunk re-observing committed messages is refused',
+      async () => {
+        const key = newKey();
+        const snapshot = await seed(key);
+        const synced = `msg-synced-${randomUUID()}`;
+        await stores.a.commitActiveObservations({
+          id: snapshot.id,
+          observations: '- base\n- synced',
+          tokenCount: 20,
+          lastObservedAt: at(50),
+          observedMessageIds: [synced],
+        });
+        const stale = { ...chunkAt('stale', 100), messageIds: [synced, `msg-new-${randomUUID()}`] };
+        const result = await stores.b.appendBufferedObservations({ id: snapshot.id, chunk: stale });
+        expect(result.persisted).toBe(false);
+        expect((await head(key)).bufferedObservationChunks ?? []).toEqual([]);
+      },
+    );
+
+    it('disjoint append: a later chunk over new messages is stored', async () => {
+      const key = newKey();
+      const one = chunkAt('one', 100);
+      const snapshot = await seed(key, [one]);
+      const two = chunkAt('two', 200);
+      const result = await stores.b.appendBufferedObservations({ id: snapshot.id, chunk: two });
+      expect(result.persisted).toBe(true);
+      expect((await head(key)).bufferedObservationChunks?.map(c => c.cycleId)).toEqual([one.cycleId, two.cycleId]);
+    });
 
     it(
       'rollover vs rollover: exactly one reflection applies',

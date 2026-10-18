@@ -196,6 +196,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
               extractionFailures: processed.extractionFailures,
             },
             lastBufferedAtTime: processed.lastObservedAt,
+            expectedLastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : null,
           };
           // Cores older than appendBufferedObservations only offer the void-returning write.
           return typeof this.storage.appendBufferedObservations === 'function'

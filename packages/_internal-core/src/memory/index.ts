@@ -85,6 +85,45 @@ export function isBufferedChunkCoveredByCursor(
   return new Date(cursor).getTime() >= new Date(chunkLastObservedAt).getTime() - 1;
 }
 
+/**
+ * True when a new buffered chunk conflicts with what the record already holds: it re-observes
+ * a message an existing chunk holds or a sync observation already committed
+ * (`observedMessageIds`), or it ends before the newest existing chunk. Each means a concurrent
+ * cycle (another replica, or an interleaved run) covered this range after the buffer read its
+ * messages, so the append must be refused. Refusing is safe: messages unique to the refused
+ * chunk are still past the cursor, so the next buffer picks them up.
+ *
+ * `observedMessageIds` is reset when reflection rolls the record over, so it cannot catch a stale
+ * append across generations. `expectedCursor` closes that gap: when given, the append conflicts if
+ * the record's cursor (`currentCursor`, carried across rollover) moved since the buffer read it.
+ */
+export function conflictsWithBufferedChunks({
+  chunk,
+  existingChunks,
+  observedMessageIds,
+  expectedCursor,
+  currentCursor,
+}: {
+  chunk: { messageIds: string[]; lastObservedAt: Date | string };
+  existingChunks: ReadonlyArray<{ messageIds: string[]; lastObservedAt: Date | string }>;
+  observedMessageIds?: readonly string[] | null;
+  expectedCursor?: Date | string | null;
+  currentCursor?: Date | string | null;
+}): boolean {
+  if (expectedCursor !== undefined) {
+    const expected = expectedCursor ? new Date(expectedCursor).getTime() : null;
+    const current = currentCursor ? new Date(currentCursor).getTime() : null;
+    if (expected !== current) return true;
+  }
+  const chunkEnd = new Date(chunk.lastObservedAt).getTime();
+  const held = new Set<string>(Array.isArray(observedMessageIds) ? observedMessageIds : []);
+  for (const existing of existingChunks) {
+    if (new Date(existing.lastObservedAt).getTime() > chunkEnd) return true;
+    for (const id of existing.messageIds) held.add(id);
+  }
+  return chunk.messageIds.some(id => held.has(id));
+}
+
 /** The later of two cursors; `undefined` only when both are absent. */
 export function maxObservationCursor(
   a: Date | string | null | undefined,

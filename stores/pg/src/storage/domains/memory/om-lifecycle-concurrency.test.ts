@@ -18,6 +18,7 @@ async function createStorePair(schemaName: string) {
 }
 
 createObservationalMemoryConcurrencyTests({
+  appendGuard: true,
   label: 'PostgreSQL (two pools)',
   createStores: async () => {
     const schemaName = newSchemaName('om_life');

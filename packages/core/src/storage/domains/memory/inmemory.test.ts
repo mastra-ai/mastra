@@ -268,3 +268,75 @@ describe('InMemoryMemory swapBufferedReflectionToActive under a takeover', () =>
     expect(history.find(r => r.id === record.id)?.bufferedReflection).toBe('b reflection');
   });
 });
+
+describe('InMemoryMemory appendBufferedObservations guard', () => {
+  const at = (ms: number) => new Date(Date.UTC(2026, 0, 1) + ms);
+  const chunk = (name: string, endMs: number, messageIds = [`msg-${name}`]) => ({
+    cycleId: `cycle-${name}`,
+    observations: `- ${name}`,
+    tokenCount: 10,
+    messageIds,
+    messageTokens: 500,
+    lastObservedAt: at(endMs),
+  });
+  const setup = async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const record = await memory.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: { observationThreshold: 5000, reflectionThreshold: 40000 },
+    });
+    const buffered = async () =>
+      ((await memory.getObservationalMemory('thread-1', 'resource-1'))?.bufferedObservationChunks ?? []).map(
+        c => c.cycleId,
+      );
+    return { memory, id: record.id, buffered };
+  };
+
+  it('refuses a chunk that re-observes a message another chunk holds', async () => {
+    const { memory, id, buffered } = await setup();
+    await memory.appendBufferedObservations({ id, chunk: chunk('a', 100, ['m1']) });
+    const result = await memory.appendBufferedObservations({ id, chunk: chunk('b', 150, ['m1', 'm2']) });
+    expect(result.persisted).toBe(false);
+    expect(await buffered()).toEqual(['cycle-a']);
+  });
+
+  it('refuses a chunk that ends before a stored chunk', async () => {
+    const { memory, id, buffered } = await setup();
+    await memory.appendBufferedObservations({ id, chunk: chunk('later', 200) });
+    const result = await memory.appendBufferedObservations({ id, chunk: chunk('earlier', 100) });
+    expect(result.persisted).toBe(false);
+    expect(await buffered()).toEqual(['cycle-later']);
+  });
+
+  it('refuses a chunk whose read cursor is stale', async () => {
+    const { memory, id, buffered } = await setup();
+    await memory.commitActiveObservations({
+      id,
+      observations: '- synced',
+      tokenCount: 5,
+      lastObservedAt: at(50),
+      observedMessageIds: ['m0'],
+    });
+    const result = await memory.appendBufferedObservations({
+      id,
+      chunk: chunk('stale', 100),
+      expectedLastObservedAt: null,
+    });
+    expect(result.persisted).toBe(false);
+    expect(await buffered()).toEqual([]);
+  });
+
+  it('stores a disjoint later chunk read at the current cursor', async () => {
+    const { memory, id, buffered } = await setup();
+    await memory.appendBufferedObservations({ id, chunk: chunk('one', 100) });
+    const result = await memory.appendBufferedObservations({
+      id,
+      chunk: chunk('two', 200),
+      expectedLastObservedAt: null,
+    });
+    expect(result.persisted).toBe(true);
+    expect(await buffered()).toEqual(['cycle-one', 'cycle-two']);
+  });
+});
