@@ -700,27 +700,43 @@ describe('LSPManager', () => {
       await fsManager.shutdownAll();
     });
 
-    it('falls back to the host filesystem when the workspace filesystem cannot read the file', async () => {
+    async function withHostFile(run: (filePath: string) => Promise<void>) {
       const os = await import('node:os');
       const nodePath = await import('node:path');
       const nodeFs = await import('node:fs/promises');
       const tempDir = await nodeFs.mkdtemp(nodePath.join(os.tmpdir(), 'lsp-manager-test-'));
       const filePath = nodePath.join(tempDir, 'app.ts');
       await nodeFs.writeFile(filePath, 'const host = 1');
-
-      const readFile = vi.fn().mockRejectedValue(new Error('not found'));
-      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
-
       try {
-        const query = await fsManager.prepareQuery(filePath);
-        query?.release();
-
-        expect(readFile).toHaveBeenCalled();
-        expect(mockNotifyOpen).toHaveBeenCalledWith(filePath, 'const host = 1', 'typescript');
+        await run(filePath);
       } finally {
-        await fsManager.shutdownAll();
         await nodeFs.rm(tempDir, { recursive: true, force: true });
       }
+    }
+
+    it('does not read the host file when the workspace filesystem cannot read the path', async () => {
+      await withHostFile(async filePath => {
+        const readFile = vi.fn().mockRejectedValue(new Error('not found'));
+        const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+        const query = await fsManager.prepareQuery(filePath);
+        query?.release();
+        await fsManager.shutdownAll();
+
+        expect(mockNotifyOpen).toHaveBeenCalledWith(filePath, '', 'typescript');
+      });
+    });
+
+    it('reads the host file when there is no workspace filesystem', async () => {
+      await withHostFile(async filePath => {
+        const hostManager = new LSPManager(mockProcessManager, '/fallback');
+
+        const query = await hostManager.prepareQuery(filePath);
+        query?.release();
+        await hostManager.shutdownAll();
+
+        expect(mockNotifyOpen).toHaveBeenCalledWith(filePath, 'const host = 1', 'typescript');
+      });
     });
   });
 

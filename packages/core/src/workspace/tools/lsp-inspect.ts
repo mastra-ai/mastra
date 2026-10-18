@@ -20,9 +20,9 @@ import { startWorkspaceSpan } from './tracing';
 const CURSOR_MARKER = '<<<';
 
 /**
- * Read a file as text. Prefers the workspace filesystem (supports remote
- * sandboxes) and falls back to the host filesystem for paths it can't read,
- * such as files outside a contained local workspace.
+ * Read a file as text through the workspace filesystem (supports remote sandboxes).
+ * The host filesystem is only used when the workspace has no filesystem: on a
+ * remote sandbox, a host file at the same path is unrelated content.
  * Returns null if the file cannot be read.
  */
 async function readText(filesystem: WorkspaceFilesystem | undefined, filePath: string): Promise<string | null> {
@@ -31,7 +31,7 @@ async function readText(filesystem: WorkspaceFilesystem | undefined, filePath: s
       const content = await filesystem.readFile(filePath, { encoding: 'utf-8' });
       return typeof content === 'string' ? content : content.toString('utf-8');
     } catch {
-      // Fall through to host filesystem
+      return null;
     }
   }
   try {

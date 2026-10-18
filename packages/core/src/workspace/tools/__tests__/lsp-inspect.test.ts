@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
 import { LocalFilesystem } from '../../filesystem';
+import { LocalSandbox } from '../../sandbox';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
 
@@ -632,34 +633,119 @@ describe('workspace_lsp_inspect', () => {
       expect(mockLsp.prepareQuery).not.toHaveBeenCalled();
     });
 
-    it('falls back to the host filesystem for paths outside a contained local workspace', async () => {
-      const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lsp-inspect-outside-'));
-      const outsidePath = path.join(outsideDir, 'outside.ts');
-      await fs.writeFile(outsidePath, 'const outside = 1');
-
+    // A host file at the same absolute path as a workspace file is unrelated content
+    // on a remote sandbox, so it must never be read while a workspace filesystem exists.
+    async function withHostFile(content: string, run: (hostPath: string) => Promise<void>) {
+      const hostDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lsp-inspect-host-'));
+      const hostPath = path.join(hostDir, 'app.ts');
+      await fs.writeFile(hostPath, content);
       try {
-        const mockLsp = {
-          root: tempDir,
-          prepareQuery: vi.fn().mockResolvedValue({
-            client: createMockClient(),
-            uri: `file://${outsidePath}`,
-            languageId: 'typescript',
-            serverName: 'typescript',
-            release: vi.fn(),
-          }),
-        };
+        await run(hostPath);
+      } finally {
+        await fs.rm(hostDir, { recursive: true, force: true });
+      }
+    }
+
+    function stubQuery(filePath: string, definitions: unknown[] = []) {
+      return {
+        root: path.dirname(filePath),
+        prepareQuery: vi.fn().mockResolvedValue({
+          client: createMockClient(definitions),
+          uri: `file://${filePath}`,
+          languageId: 'typescript',
+          serverName: 'typescript',
+          release: vi.fn(),
+        }),
+      };
+    }
+
+    it('does not return host content when the workspace filesystem cannot read the file', async () => {
+      await withHostFile('const hostSecret = 1', async hostPath => {
+        useRemoteFilesystem({});
+        const mockLsp = stubQuery(hostPath);
         lspStub = mockLsp;
 
         const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
-          { path: outsidePath, line: 1, match: 'const <<<outside = 1' },
+          { path: hostPath, line: 1, match: 'const <<<hostSecret = 1' },
+          { workspace },
+        );
+
+        expect(result).toEqual({ error: `Could not read file: ${hostPath}` });
+        expect(mockLsp.prepareQuery).not.toHaveBeenCalled();
+      });
+    });
+
+    it('does not read a host file outside a contained local workspace', async () => {
+      await withHostFile('const outside = 1', async hostPath => {
+        const mockLsp = stubQuery(hostPath);
+        lspStub = mockLsp;
+
+        const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+          { path: hostPath, line: 1, match: 'const <<<outside = 1' },
+          { workspace },
+        );
+
+        expect(result).toEqual({ error: `Could not read file: ${hostPath}` });
+        expect(mockLsp.prepareQuery).not.toHaveBeenCalled();
+      });
+    });
+
+    it('does not preview a definition from the host when the workspace filesystem cannot read it', async () => {
+      await withHostFile('export const hostSecret = 1', async hostDefPath => {
+        useRemoteFilesystem({ [remotePath]: 'import { helper } from "./lib"' });
+        lspStub = stubQuery(remotePath, [
+          {
+            uri: `file://${hostDefPath}`,
+            range: { start: { line: 0, character: 13 }, end: { line: 0, character: 23 } },
+          },
+        ]);
+
+        const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+          { path: remotePath, line: 1, match: 'import { <<<helper } from "./lib"' },
+          { workspace },
+        );
+
+        expect(result).toMatchObject({
+          definition: [{ location: expect.stringContaining('app.ts:L1:C14'), preview: null }],
+        });
+      });
+    });
+
+    it('prefers workspace content over a host file at the same path', async () => {
+      await withHostFile('const host = 1', async hostPath => {
+        useRemoteFilesystem({ [hostPath]: 'const workspace = 1' });
+        const mockLsp = stubQuery(hostPath);
+        lspStub = mockLsp;
+
+        const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+          { path: hostPath, line: 1, match: 'const <<<workspace = 1' },
           { workspace },
         );
 
         expect(result).not.toHaveProperty('error');
-        expect(mockLsp.prepareQuery).toHaveBeenCalledWith(outsidePath, 'const outside = 1');
-      } finally {
-        await fs.rm(outsideDir, { recursive: true, force: true });
-      }
+        expect(mockLsp.prepareQuery).toHaveBeenCalledWith(hostPath, 'const workspace = 1');
+      });
+    });
+
+    it('reads the host filesystem when the workspace has no filesystem', async () => {
+      await withHostFile('const host = 1', async hostPath => {
+        const sandboxOnly = new Workspace({
+          id: 'test-ws-sandbox-only',
+          name: 'Sandbox only',
+          sandbox: new LocalSandbox({ workingDirectory: path.dirname(hostPath) }),
+        });
+        const mockLsp = stubQuery(hostPath);
+        Object.defineProperty(sandboxOnly, 'lsp', { get: () => mockLsp, configurable: true });
+
+        expect(sandboxOnly.filesystem).toBeUndefined();
+        const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+          { path: hostPath, line: 1, match: 'const <<<host = 1' },
+          { workspace: sandboxOnly },
+        );
+
+        expect(result).not.toHaveProperty('error');
+        expect(mockLsp.prepareQuery).toHaveBeenCalledWith(hostPath, 'const host = 1');
+      });
     });
   });
 });

@@ -96,8 +96,11 @@ export class LSPManager {
 
   /**
    * Read file content for opening in the language server.
-   * Prefers the workspace filesystem (supports remote filesystems), falls back
-   * to the host filesystem, and returns an empty string if neither can read it.
+   * Reads through the workspace filesystem when it can read files (supports
+   * remote filesystems) and never falls back to the host there, since a host
+   * file at the same path is unrelated content. The host filesystem is used
+   * only without a readable workspace filesystem. Returns an empty string if
+   * the file cannot be read.
    */
   private async readFileContent(filePath: string): Promise<string> {
     if (this.filesystem?.readFile) {
@@ -105,7 +108,7 @@ export class LSPManager {
         const content = await this.filesystem.readFile(filePath, { encoding: 'utf-8' });
         return typeof content === 'string' ? content : content.toString('utf-8');
       } catch {
-        // Fall through to host filesystem
+        return '';
       }
     }
     try {

@@ -214,7 +214,7 @@ Direct client positions are 0-indexed. A leaked lease can prevent an idle client
 
 ### Remote sandboxes
 
-The language-server command runs through the remote sandbox process manager. The `lsp_inspect` tool reads the inspected file and definition previews through the workspace filesystem, so files that exist only in the remote sandbox are inspected with their real content. If the workspace filesystem can't read a path, Mastra falls back to the host filesystem. If neither can read the inspected file, the tool returns an error.
+The language-server command runs through the remote sandbox process manager. The `lsp_inspect` tool reads the inspected file and definition previews through the workspace filesystem, so files that exist only in the remote sandbox are inspected with their real content. If the workspace filesystem can't read the inspected file, the tool returns a `Could not read file` error. It doesn't read the host file at the same path, because on a remote sandbox that file is unrelated content. Mastra reads from the host filesystem only when the workspace has no filesystem.
 
 Binary discovery still runs on the Mastra host. Use remote LSP only when all of these conditions are met:
 
