@@ -406,12 +406,13 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
   return {};
 }
 
-const SEPARATE_SYSTEM_MESSAGE_PROVIDERS = ['anthropic', 'google', 'vertex', 'bedrock', 'amazon-bedrock'];
+const SEPARATE_SYSTEM_MESSAGE_PROVIDERS = ['anthropic', 'google', 'vertex', 'bedrock', 'amazon-bedrock', 'azure'];
 
 function keepsSeparateSystemMessages(targetProvider: string): boolean {
-  // The OpenAI Responses API accepts system/developer items anywhere in the input.
-  if (targetProvider === 'openai.responses') return true;
   const vendor = targetProvider.split('.')[0]!.toLowerCase();
+  // OpenAI's own APIs accept system messages anywhere. Matched exactly so `openai-compatible`
+  // (the fallback id for custom endpoints) still gets normalized.
+  if (vendor === 'openai') return true;
   return SEPARATE_SYSTEM_MESSAGE_PROVIDERS.some(p => vendor === p || vendor.startsWith(`${p}-`));
 }
 
@@ -429,7 +430,7 @@ function systemText(message: ModelMessage): string {
  * Strict chat templates (e.g. Qwen3.x served by vLLM) reject any `system` message that is not the
  * single first message. Leading system messages are merged in order; any system message appearing
  * after conversation content is demoted to a user message wrapped in `<system-reminder>`.
- * Providers with native multi-block system prompts (Anthropic cache control, Google, Bedrock, OpenAI Responses) are untouched.
+ * Providers that accept multiple system messages (OpenAI, Azure, Anthropic, Google, Bedrock) are untouched.
  *
  * @see https://github.com/mastra-ai/mastra/issues/25435
  */
