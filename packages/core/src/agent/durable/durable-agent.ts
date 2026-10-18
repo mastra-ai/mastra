@@ -2533,9 +2533,11 @@ export class DurableAgent<
    * the run's topics are shared with the new owner's consumers, which must not
    * see this execution's chunks or the `finish` its abort produces.
    *
-   * The evented engine publishes on `mastra.pubsub` instead of this pubsub, so
-   * nothing could drop that `finish`. Its runs are not aborted and fail at
-   * their next ownership check.
+   * The evented engine publishes on `mastra.pubsub` instead of this pubsub.
+   * Its shared workflow controller must not be aborted on ownership loss:
+   * that would publish a cancellation to the recovering execution. Durable
+   * step guards instead cancel invocation-local work and suppress its stream
+   * publications, leaving engine failure and settlement events untouched.
    *
    * @internal
    */
