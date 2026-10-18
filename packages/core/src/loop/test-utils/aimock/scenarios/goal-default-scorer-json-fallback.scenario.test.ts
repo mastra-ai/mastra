@@ -59,6 +59,42 @@ describeForAllEngines(
       expect(record?.status).toBe('done');
       expect(record?.runsUsed).toBe(1);
     });
+
+    it('falls back to JSON text when the judge stream produces no text', async () => {
+      const llm = getMock();
+      const openai = createOpenAI({
+        apiKey: 'aimock-test-key',
+        baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+      });
+      const THREAD = 'goal-json-fallback-thread-2';
+
+      const { agent, chunks, requests } = await runLoopScenario({
+        engine,
+        llm,
+        prompt: 'Implement feature X',
+        memory: new MockMemory(),
+        threadId: THREAD,
+        resourceId: 'user-1',
+        goal: { judge: openai(SCENARIO_MODEL_ID), maxRuns: 5 },
+        objective: 'Implement feature X',
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'I have implemented feature X.' });
+          // The judge's structured-output stream yields no text at all...
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: '' });
+          // ...so the scorer's JSON-text fallback is what decides the verdict.
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 2 },
+            { content: JSON.stringify({ decision: 'done', reason: 'stream fallback' }) },
+          );
+        },
+      });
+
+      expect(requests).toHaveLength(3);
+      const resultChunks = (chunks ?? []).filter((c: any) => c.type === 'goal' && !c.payload?.pending) as any[];
+      expect(resultChunks.at(-1)?.payload).toMatchObject({ status: 'done', reason: 'stream fallback' });
+      expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('done');
+    });
   },
   { skip: ['durable', 'evented'] },
 );

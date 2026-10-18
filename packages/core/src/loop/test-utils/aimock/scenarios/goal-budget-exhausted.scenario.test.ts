@@ -67,11 +67,14 @@ describeForAllEngines(
         status: 'paused',
         maxRunsReached: true,
       });
+      expect(budgetExhaustedChunk.payload.pausedReason).toContain('budget');
+      expect(goalChunks.every(c => c.payload.passed === false)).toBe(true);
 
       // Verify objective is marked as paused (not done).
       const record = await agent.getObjective({ threadId: THREAD });
       expect(record?.status).toBe('paused');
       expect(record?.runsUsed).toBe(2); // Should match maxRuns
+      expect(record?.pausedReason).toContain('budget');
     });
   },
   {},
