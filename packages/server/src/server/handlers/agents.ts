@@ -94,6 +94,7 @@ import {
   getContextResourceId,
   requireEffectiveResourceId,
   getEffectiveThreadId,
+  applyEffectiveThreadId,
   enforceThreadAccess,
   mergeBodyRequestContext,
   validateThreadOwnership,
@@ -1541,7 +1542,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -1941,7 +1942,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -2588,7 +2589,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -3105,7 +3106,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId ? { thread: applyEffectiveThreadId(memoryOption?.thread, effectiveThreadId) } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
@@ -3310,7 +3311,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId ? { thread: applyEffectiveThreadId(memoryOption?.thread, effectiveThreadId) } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.15.0-alpha.2",
+  "version": "1.15.0-alpha.3",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -37,8 +37,8 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:acp": "vitest run --config vitest.acp.config.ts",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "build:acp:dev": "node scripts/build-acp-dev.mjs",
     "test:acp:conformance": "node scripts/run-acp-conformance.mjs",
     "check:acp": "tsc --noEmit -p tsconfig.acp.json"
@@ -95,11 +95,9 @@
     "@internal/workspace-test-utils": "workspace:*",
     "@libsql/client": "^0.18.0",
     "@types/node": "22.20.1",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
-    "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },
   "engines": {
