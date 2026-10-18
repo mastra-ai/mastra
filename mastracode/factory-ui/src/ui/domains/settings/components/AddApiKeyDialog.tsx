@@ -1,21 +1,29 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import type { ProviderInfo } from '../../../../api/types';
 import { useOrgKeyAdminQuery, useSaveProviderKey } from '../../../../hooks/use-providers';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
+
+type KeyScope = 'user' | 'org';
+
+const SCOPED_KEY_ACCESS: Record<KeyScope, string> = {
+  org: 'Everyone in your organization can use this key.',
+  user: 'Only you can use this key. Shared organization access stays unchanged.',
+};
 
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
@@ -26,8 +34,8 @@ interface AddApiKeyDialogProps {
    * `'user'` default. An existing org key always wins so edits don't silently
    * narrow a shared key.
    */
-  defaultScope?: 'user' | 'org';
-  fixedScope?: 'user' | 'org';
+  defaultScope?: KeyScope;
+  fixedScope?: KeyScope;
   onClose: () => void;
 }
 
@@ -45,16 +53,18 @@ export function AddApiKeyDialog({
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const preferredScope = provider.source === 'stored-org' ? 'org' : defaultScope;
   const [keyDraft, setKeyDraft] = useState('');
-  const [scope, setScope] = useState<'user' | 'org'>(fixedScope ?? (canWriteOrgKey ? preferredScope : 'user'));
+  const [chosenScope, setChosenScope] = useState<KeyScope>();
+  const writableScope = canWriteOrgKey ? (chosenScope ?? preferredScope) : 'user';
+  const scope: KeyScope = fixedScope ?? writableScope;
 
+  const fixedScopeCredential = fixedScope === 'org' ? provider.orgCredential : provider.userCredential;
+  const replacesSignIn = fixedScope !== undefined && fixedScopeCredential === 'oauth';
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
-  // A shared context wanted an org-wide key but this caller can't write one —
-  // tell them up front instead of letting teammates find out at run time.
   const personalOnlyWarning = authEnabled && preferredScope === 'org' && !canWriteOrgKey;
 
   const saveKey = async () => {
     const key = keyDraft.trim();
-    if (!key) return;
+    if (!key || saveKeyMutation.isPending) return;
     try {
       await saveKeyMutation.mutateAsync({
         provider: provider.provider,
@@ -63,9 +73,7 @@ export function AddApiKeyDialog({
         ...(authEnabled ? { scope } : {}),
       });
       onClose();
-    } catch {
-      // Mutation error is rendered below.
-    }
+    } catch {}
   };
 
   const close = () => {
@@ -73,19 +81,24 @@ export function AddApiKeyDialog({
   };
 
   return (
-    <Dialog open onOpenChange={open => !open && close()}>
+    <Dialog open onOpenChange={open => !open && close()} pending={saveKeyMutation.isPending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>API key for {displayName}</DialogTitle>
-          <DialogDescription>The key is stored securely and never displayed again.</DialogDescription>
+          <DialogDescription>
+            The key is stored securely and never displayed again.
+            {fixedScope && ` ${SCOPED_KEY_ACCESS[fixedScope]}`}
+            {replacesSignIn && ' Saving replaces the provider sign-in at this scope.'}
+          </DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-4">
+        <DialogBody>
           <Input
             autoFocus
             type="password"
             aria-label={`API key for ${displayName}`}
             placeholder="Paste API key"
             value={keyDraft}
+            disabled={saveKeyMutation.isPending}
             onChange={event => setKeyDraft(event.target.value)}
             onKeyDown={event => {
               if (event.key === 'Enter') void saveKey();
@@ -94,58 +107,43 @@ export function AddApiKeyDialog({
           />
           {authEnabled && !fixedScope && (
             <div className="flex items-center justify-between gap-4">
-              <Txt as="span" variant="ui-sm" className="text-icon4">
+              <Txt as="span" variant="caption" tone="muted">
                 Who can use this key
               </Txt>
-              <ButtonsGroup spacing="close" role="group" aria-label="API key access">
-                {(
-                  [
-                    { value: 'user', label: 'Just me' },
-                    { value: 'org', label: 'Everyone in org' },
-                  ] as const
-                ).map(option => (
-                  <Button
-                    key={option.value}
-                    variant={scope === option.value ? 'primary' : 'outline'}
-                    size="sm"
-                    aria-pressed={scope === option.value}
-                    disabled={saveKeyMutation.isPending || (option.value === 'org' && !canWriteOrgKey)}
-                    title={
-                      option.value === 'org' && !canWriteOrgKey
-                        ? 'Only org admins can share a key with everyone'
-                        : undefined
-                    }
-                    onClick={() => setScope(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </ButtonsGroup>
+              <SegmentedControl
+                aria-label="API key access"
+                value={scope}
+                onValueChange={setChosenScope}
+                disabled={saveKeyMutation.isPending}
+              >
+                <SegmentedControlItem value="user">Just me</SegmentedControlItem>
+                <SegmentedControlItem
+                  value="org"
+                  disabled={!canWriteOrgKey}
+                  title={canWriteOrgKey ? undefined : 'Only org admins can share a key with everyone'}
+                >
+                  Everyone in org
+                </SegmentedControlItem>
+              </SegmentedControl>
             </div>
           )}
           {personalOnlyWarning && (
-            <Txt as="p" variant="ui-sm" className="text-icon4" role="note">
+            <Txt as="p" variant="caption" tone="muted" role="note">
               Only you will be able to use this key. Ask an org admin to add a shared {displayName} key so teammates can
               use it too.
             </Txt>
           )}
           {error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {error}
             </Txt>
           )}
         </DialogBody>
         <DialogFooter>
-          <Button disabled={saveKeyMutation.isPending} onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            disabled={saveKeyMutation.isPending || !keyDraft.trim()}
-            onClick={() => void saveKey()}
-          >
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction disabled={!keyDraft.trim()} onConfirm={() => void saveKey()}>
             {saveKeyMutation.isPending ? 'Saving…' : 'Save'}
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

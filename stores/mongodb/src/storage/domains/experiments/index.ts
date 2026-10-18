@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ExperimentsStorage,
@@ -8,6 +6,7 @@ import {
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   normalizePerPage,
+  resolveListOrderBy,
   calculatePagination,
   safelyParseJSON,
 } from '@mastra/core/storage';
@@ -310,7 +309,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   // -------------------------------------------------------------------------
 
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
-    const id = input.id ?? randomUUID();
+    const id = input.id ?? globalThis.crypto.randomUUID();
     const now = new Date();
 
     const doc = {
@@ -433,6 +432,10 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
       const { page, perPage: perPageInput } = args.pagination;
 
@@ -484,7 +487,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
       const docs = await collection
         .find(filter)
-        .sort({ createdAt: -1, id: 1 })
+        .sort({ [orderBy.field]: orderBy.direction === 'DESC' ? -1 : 1, id: 1 })
         .skip(offset)
         .limit(limitValue)
         .toArray();
@@ -548,7 +551,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   // -------------------------------------------------------------------------
 
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
-    const id = input.id ?? randomUUID();
+    const id = input.id ?? globalThis.crypto.randomUUID();
     const now = new Date();
 
     try {
@@ -627,7 +630,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
               ...(marker ? { comment: null } : {}),
             },
             $setOnInsert: {
-              id: randomUUID(),
+              id: globalThis.crypto.randomUUID(),
               createdAt: new Date(),
             },
           },
@@ -746,6 +749,10 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+        field: 'startedAt',
+        direction: 'ASC',
+      });
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
       const { page, perPage: perPageInput } = args.pagination;
 
@@ -785,7 +792,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
       const limitValue = perPageInput === false ? total : normalizedPerPage;
 
-      const docs = await collection.find(filter).sort({ startedAt: 1, id: 1 }).skip(offset).limit(limitValue).toArray();
+      const docs = await collection
+        .find(filter)
+        .sort({ [orderBy.field]: orderBy.direction === 'DESC' ? -1 : 1, id: 1 })
+        .skip(offset)
+        .limit(limitValue)
+        .toArray();
 
       return {
         results: docs.map(d => transformExperimentResultRow(d as unknown as Record<string, unknown>)),

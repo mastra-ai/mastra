@@ -16,7 +16,7 @@ const VectorStoreFileSchema = z.object({
   id: z.string(),
   object: z.string(),
   vector_store_id: z.string(),
-  status: z.enum(['in_progress', 'completed', 'failed', 'cancelled']),
+  status: z.enum(['in_progress', 'completed', 'failed', 'cancelled']).or(z.string()),
   created_at: z.number(),
   usage_bytes: z.number(),
 });

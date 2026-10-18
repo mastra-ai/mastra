@@ -48,6 +48,36 @@ function splitTextWithRegex(text: string, separator: string, separatorPosition?:
   return result.filter(s => s !== '');
 }
 
+/**
+ * Splits `text` on a regex `separator` and records the text each match consumed.
+ * `joiners[i]` is the original text that preceded `splits[i]`, so merged chunks can
+ * be rejoined with what was actually in the document rather than the pattern source.
+ */
+function splitTextWithMatchedSeparators(text: string, separator: string): { splits: string[]; joiners: string[] } {
+  const splits: string[] = [];
+  const joiners: string[] = [];
+  let pending = '';
+  let lastIndex = 0;
+
+  const push = (piece: string) => {
+    if (piece !== '') {
+      splits.push(piece);
+      joiners.push(pending);
+      pending = '';
+    }
+  };
+
+  for (const match of text.matchAll(new RegExp(separator, 'g'))) {
+    if (match[0] === '' && (match.index === 0 || match.index === text.length)) continue;
+    push(text.slice(lastIndex, match.index));
+    pending += match[0];
+    lastIndex = match.index + match[0].length;
+  }
+  push(text.slice(lastIndex));
+
+  return { splits, joiners };
+}
+
 export class CharacterTransformer extends TextTransformer {
   protected separator: string;
   protected isSeparatorRegex: boolean;
@@ -172,19 +202,27 @@ export class RecursiveCharacterTransformer extends TextTransformer {
 
     const _separator = this.isSeparatorRegex ? separator : separator?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    const splits = splitTextWithRegex(text, _separator, this.separatorPosition);
+    // Regex separators are rejoined with the text each match consumed, since the
+    // pattern source (e.g. `\n#{1,6} `) is not the text that was in the document.
+    const useMatchedSeparators = this.isSeparatorRegex && !this.separatorPosition && !!_separator;
+    const { splits, joiners } = useMatchedSeparators
+      ? splitTextWithMatchedSeparators(text, _separator)
+      : { splits: splitTextWithRegex(text, _separator, this.separatorPosition), joiners: undefined };
 
     const goodSplits: string[] = [];
+    const goodJoiners: string[] = [];
     const mergeSeparator = this.separatorPosition ? '' : separator;
+    const merge = () => this.mergeSplits(goodSplits, mergeSeparator, joiners ? goodJoiners : undefined);
 
-    for (const s of splits) {
+    splits.forEach((s, index) => {
       if (this.lengthFunction(s) < this.maxSize) {
         goodSplits.push(s);
+        goodJoiners.push(joiners?.[index] ?? '');
       } else {
         if (goodSplits.length > 0) {
-          const mergedText = this.mergeSplits(goodSplits, mergeSeparator);
-          finalChunks.push(...mergedText);
+          finalChunks.push(...merge());
           goodSplits.length = 0;
+          goodJoiners.length = 0;
         }
         if (newSeparators.length === 0) {
           finalChunks.push(s);
@@ -193,11 +231,10 @@ export class RecursiveCharacterTransformer extends TextTransformer {
           finalChunks.push(...otherInfo);
         }
       }
-    }
+    });
 
     if (goodSplits.length > 0) {
-      const mergedText = this.mergeSplits(goodSplits, mergeSeparator);
-      finalChunks.push(...mergedText);
+      finalChunks.push(...merge());
     }
 
     return finalChunks;

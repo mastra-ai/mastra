@@ -1,6 +1,30 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deriveLocalWorkdir, repoDirUnder, resolveContainedLocalWorkdir, sanitizeSegment } from './workdir.js';
+import {
+  deriveLocalWorkdir,
+  repoDirUnder,
+  repositoryDirectoryName,
+  resolveContainedLocalWorkdir,
+  sanitizeSegment,
+} from './workdir.js';
+
+describe('repositoryDirectoryName', () => {
+  // The same fixtures the platform template's private `repoDirName` is
+  // tested with (`workspaces/platform-workspace/src/repo-template.ts`):
+  // the boot hook's per-repo marker path must land on the directory the
+  // template cloned into, so the two rules have to agree for every slug.
+  it('derives the directory the repo templates clone into', () => {
+    expect(repositoryDirectoryName('acme/widgets')).toBe('widgets');
+    expect(repositoryDirectoryName('acme/my.repo')).toBe('my.repo');
+    expect(repositoryDirectoryName('acme/odd name')).toBe('odd-name');
+    expect(repositoryDirectoryName('acme/.hidden')).toBe('hidden');
+    expect(repositoryDirectoryName('CalebBarnes/mastra-channels-serverless-test')).toBe(
+      'mastra-channels-serverless-test',
+    );
+    expect(repositoryDirectoryName('group/sub/app')).toBe('app');
+    expect(repositoryDirectoryName('no-slash')).toBe('repo');
+  });
+});
 
 describe('sanitizeSegment', () => {
   it('keeps safe characters and replaces separators and traversal', () => {
@@ -27,6 +51,7 @@ describe('repoDirUnder', () => {
   it('nests the sanitized repo name under the probed home', () => {
     expect(repoDirUnder('/home/user', 'acme/api')).toBe('/home/user/api');
     expect(repoDirUnder('/home/daytona', 'acme/api')).toBe('/home/daytona/api');
+    expect(repoDirUnder('/home/user', 'group/subgroup/api')).toBe('/home/user/api');
   });
 
   it('tolerates a trailing slash on the probed home', () => {
@@ -46,6 +71,7 @@ describe('deriveLocalWorkdir', () => {
   it('nests the repo under a local sandbox workingDirectory so the marker sits beside the clone', () => {
     const sandbox = { provider: 'local', workingDirectory: path.join(root, 'sess-1') };
     expect(deriveLocalWorkdir(sandbox, 'acme/api')).toBe(path.join(root, 'sess-1', 'api'));
+    expect(deriveLocalWorkdir(sandbox, 'group/subgroup/api')).toBe(path.join(root, 'sess-1', 'api'));
   });
 
   it('keeps same-name repos apart when callbacks use per-session directories', () => {

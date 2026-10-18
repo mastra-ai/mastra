@@ -1,4 +1,4 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
+import type { LightSpanRecord } from '../types';
 
 /**
  * Filter a flat span list down to the spans matching `predicate`, plus every

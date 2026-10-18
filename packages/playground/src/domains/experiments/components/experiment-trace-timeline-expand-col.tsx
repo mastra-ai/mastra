@@ -1,3 +1,5 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDownIcon, ChevronsDownIcon, ChevronsUpIcon, ChevronUpIcon } from 'lucide-react';
 
@@ -24,22 +26,25 @@ export function ExperimentTraceTimelineExpandCol({
 }: ExperimentTraceTimelineExpandColProps) {
   return (
     <div
-      className={cn('flex items-center justify-end h-full px-3', {
+      className={cn('flex h-full items-center justify-end px-3', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
-        'bg-surface4': isSelected,
+        'bg-fill-hover': isSelected,
       })}
     >
       {numOfChildren && numOfChildren > 0 ? (
         <div className="flex gap-1">
-          <ExpandButton onClick={() => toggleChildren?.()}>
-            {allDescendantsExpanded ? totalDescendants : numOfChildren}{' '}
-            {isExpanded ? allDescendantsExpanded ? <ChevronsUpIcon /> : <ChevronUpIcon /> : <ChevronDownIcon />}
-          </ExpandButton>
+          <ExpandButton
+            onClick={() => toggleChildren?.()}
+            count={allDescendantsExpanded ? totalDescendants : numOfChildren}
+            icon={isExpanded ? allDescendantsExpanded ? <ChevronsUpIcon /> : <ChevronUpIcon /> : <ChevronDownIcon />}
+          />
 
           {totalDescendants > (numOfChildren ?? 0) && !allDescendantsExpanded && (
-            <ExpandButton onClick={() => expandAllDescendants?.()}>
-              {totalDescendants} <ChevronsDownIcon />
-            </ExpandButton>
+            <ExpandButton
+              onClick={() => expandAllDescendants?.()}
+              count={totalDescendants}
+              icon={<ChevronsDownIcon />}
+            />
           )}
         </div>
       ) : null}
@@ -49,21 +54,27 @@ export function ExperimentTraceTimelineExpandCol({
 
 type ExpandButtonProps = {
   onClick?: () => void;
-  children?: React.ReactNode;
+  count: number;
+  icon: React.ReactNode;
   className?: string;
 };
 
-function ExpandButton({ onClick, children, className }: ExpandButtonProps) {
+function ExpandButton({ onClick, count, icon, className }: ExpandButtonProps) {
   return (
     <button onClick={onClick} className={cn('h-full', className)}>
       <div
         className={cn(
-          'flex items-center gap-[0.1rem] text-ui-sm text-neutral5 border border-border1 pl-2 pr-1 rounded-lg transition-all',
-          'hover:text-yellow-500',
-          '[&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:w-4 [&>svg]:h-4 [&>svg]:transition-all',
+          'text-foreground',
+          'flex items-center gap-[0.1rem] rounded-lg border border-border pr-1 pl-2',
+          controlStateColorTransition,
+          'hover:text-badge-amber-indicator',
+          '[&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:transition-all',
         )}
       >
-        {children}
+        <Txt as="span" variant="caption">
+          {count}
+        </Txt>
+        {icon}
       </div>
     </button>
   );

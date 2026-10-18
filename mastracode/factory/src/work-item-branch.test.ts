@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { pullRequestNumberFromBranch, workItemBranch, workItemBranchSource } from './work-item-branch.js';
+import {
+  mergeRequestNumberFromBranch,
+  pullRequestNumberFromBranch,
+  workItemBranch,
+  workItemBranchSource,
+} from './work-item-branch.js';
 
 describe('workItemBranchSource', () => {
   it('maps stored provenance onto the branch vocabulary', () => {
@@ -8,7 +13,9 @@ describe('workItemBranchSource', () => {
     expect(workItemBranchSource({ integrationId: 'github', type: 'issue', externalId: '1' })).toBe('github-issue');
     expect(workItemBranchSource({ integrationId: 'github', type: 'pull-request', externalId: '2' })).toBe('github-pr');
     expect(workItemBranchSource({ integrationId: 'linear', type: 'issue', externalId: '3' })).toBe('linear-issue');
-    expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '4' })).toBe('manual');
+    expect(workItemBranchSource({ integrationId: 'jira', type: 'issue', externalId: '4' })).toBe('jira-issue');
+    expect(workItemBranchSource({ integrationId: 'gitlab', type: 'issue', externalId: '4' })).toBe('gitlab-issue');
+    expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '5' })).toBe('manual');
   });
 });
 
@@ -35,9 +42,33 @@ describe('workItemBranch', () => {
     );
   });
 
-  it('lowercases the linear identifier', () => {
+  it('lowercases provider issue identifiers', () => {
     expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: 'ENG-42' } })).toBe(
       'factory/linear-eng-42',
+    );
+    expect(workItemBranch({ id, source: 'jira-issue', metadata: { identifier: 'OPS-17' } })).toBe(
+      'factory/jira-ops-17',
+    );
+  });
+
+  it('sanitizes the GitLab identifier into a bounded branch name', () => {
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: 'Acme/App #42' } })).toBe(
+      'factory/gitlab-acme-app-42-000000000001',
+    );
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: '  ' } })).toBe(`factory/item-${id}`);
+    const longPrefix = 'group/'.repeat(30);
+    expect(
+      workItemBranch({
+        id: 'aaaaaaaa-0000-4000-8000-000000000002',
+        source: 'gitlab-issue',
+        metadata: { identifier: longPrefix + '#42' },
+      }),
+    ).not.toBe(
+      workItemBranch({
+        id: 'aaaaaaaa-0000-4000-8000-000000000003',
+        source: 'gitlab-issue',
+        metadata: { identifier: longPrefix + '#43' },
+      }),
     );
   });
 
@@ -63,5 +94,15 @@ describe('pullRequestNumberFromBranch', () => {
     expect(pullRequestNumberFromBranch('factory/pr-0')).toBeUndefined();
     expect(pullRequestNumberFromBranch('factory/pr-7x')).toBeUndefined();
     expect(pullRequestNumberFromBranch('feat/pr-7')).toBeUndefined();
+  });
+});
+
+describe('mergeRequestNumberFromBranch', () => {
+  it('accepts only Factory GitLab MR review branches with safe numeric IIDs', () => {
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6-2c3b494988ac')).toBe(6);
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-0-2c3b494988ac')).toBeUndefined();
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6')).toBeUndefined();
+    expect(mergeRequestNumberFromBranch('factory/gitlab-mr-6-unsafe!')).toBeUndefined();
+    expect(mergeRequestNumberFromBranch('factory/pr-6')).toBeUndefined();
   });
 });

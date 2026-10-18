@@ -20,6 +20,7 @@ import {
 import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from './submit-plan-source';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /**
  * The `submit_plan` approval and history card.
@@ -95,20 +96,24 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
         </PlanIntro>
         <PlanMain>
           {loading ? (
-            <p aria-label="Loading plan" className="text-ui-sm text-neutral3 my-2">
+            <Txt variant="caption" tone="muted" aria-label="Loading plan" className="my-2">
               Loading plan…
-            </p>
+            </Txt>
           ) : unavailable ? (
-            <p role="note" className="text-ui-sm text-neutral3 my-2">
+            <Txt variant="caption" tone="muted" role="note" className="my-2">
               The plan could not be loaded from {path ?? 'its file'}. You can still respond below.
-            </p>
+            </Txt>
           ) : (
             <PlanContent>{plan}</PlanContent>
           )}
           {inline.feedback ? (
-            <div role="note" aria-label="Plan feedback" className="border-accent1 mt-4 border-l-2 pl-3">
-              <p className="text-ui-xs text-neutral3 mb-1">Feedback</p>
-              <p className="text-ui-sm text-neutral5 whitespace-pre-wrap">{inline.feedback}</p>
+            <div role="note" aria-label="Plan feedback" className="border-badge-green-indicator mt-4 border-l-2 pl-3">
+              <Txt variant="meta" tone="muted" className="mb-1">
+                Feedback
+              </Txt>
+              <Txt variant="caption" tone="ink" className="whitespace-pre-wrap">
+                {inline.feedback}
+              </Txt>
             </div>
           ) : null}
           {onRespond ? (
@@ -120,7 +125,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
                     size="sm"
                     variant="primary"
                     className="whitespace-nowrap"
-                    aria-label="Approve the plan and switch to build"
+                    aria-label="Approve the plan and build it"
                     disabled={approveDisabled}
                     onClick={() => respond({ action: 'approved' })}
                   >

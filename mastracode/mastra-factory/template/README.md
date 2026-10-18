@@ -16,7 +16,7 @@ Before connecting a model provider, check for `FACTORY_CREDENTIAL_ENCRYPTION_KEY
 openssl rand -base64 32
 ```
 
-Save the output as `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env`. Preserve the key across restarts and deployments, and keep a protected backup. See [credential encryption](https://factory.mastra.ai/reference/configuration#stored-credential-encryption) for details.
+Save the output as `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env`. Preserve the key across restarts and deployments, and keep a protected backup. Outside development the server refuses to start without it. To store credentials unencrypted instead, set `FACTORY_CREDENTIAL_ENCRYPTION=plaintext`. See [credential encryption](https://factory.mastra.ai/reference/configuration#stored-credential-encryption) for details.
 
 From the Factory project directory, start the server:
 
@@ -45,6 +45,7 @@ Choose authentication, storage, and sandboxes independently. Model providers and
 | [Models](https://factory.mastra.ai/configure/models)       | Provider access, personal or organization credentials, and the default model. |
 | [GitHub](https://factory.mastra.ai/configure/github)       | Repository access and personal issue intake.                                  |
 | [Linear](https://factory.mastra.ai/configure/linear)       | Workspace connection, project selection, and routing issues to a Factory.     |
+| [Jira](https://factory.mastra.ai/configure/jira)           | Site connections, project selection, and routing issues to a Factory.         |
 | [Slack](https://factory.mastra.ai/configure/slack)         | App setup, account linking, and starting sessions from Slack.                 |
 | [Auth](https://factory.mastra.ai/configure/auth)           | Mastra platform sign-in or another provider with Server and Studio support.   |
 | [Storage](https://factory.mastra.ai/configure/storage)     | The database connection or Factory storage adapter.                           |
@@ -58,7 +59,7 @@ Mastra platform sandboxes use `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM
 FACTORY_SANDBOX_PROVIDER=local
 ```
 
-Install Git and your repository's build tools on that machine. Authentication and storage can continue to use Mastra platform. The separate `SANDBOX_PROVIDER` setting selects the backend used by Mastra platform sandboxes.
+Local commands run as the server's OS user without isolation. Outside development the server refuses to start without Mastra platform or E2B sandbox credentials unless this override is set. Install Git and your repository's build tools on that machine. Authentication and storage can continue to use Mastra platform. The separate `SANDBOX_PROVIDER` setting selects the backend used by Mastra platform sandboxes.
 
 ## Deploy
 

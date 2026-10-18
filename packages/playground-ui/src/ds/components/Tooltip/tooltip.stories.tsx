@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Info, SaveIcon } from 'lucide-react';
 import { Button } from '../Button';
+import { InfoTooltip } from './info-tooltip';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
 
 const meta: Meta<typeof Tooltip> = {
@@ -22,7 +23,7 @@ export default meta;
 type Story = StoryObj<typeof Tooltip>;
 
 const KbdHint = ({ children }: { children: React.ReactNode }) => (
-  <kbd className="bg-surface5 text-ui-xs leading-ui-xs text-neutral4 ml-1 inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 font-mono">
+  <kbd className="ml-1 inline-flex items-center justify-center rounded-sm bg-muted px-1.5 py-0.5 font-mono text-meta text-muted-foreground">
     {children}
   </kbd>
 );
@@ -31,7 +32,7 @@ export const Default: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Hover me</Button>
+        <Button>Hover me</Button>
       </TooltipTrigger>
       <TooltipContent>This is a tooltip</TooltipContent>
     </Tooltip>
@@ -42,7 +43,7 @@ export const WithKeyboardShortcut: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline" size="icon-md" aria-label="Save changes">
+        <Button size="icon-md" aria-label="Save changes">
           <SaveIcon />
         </Button>
       </TooltipTrigger>
@@ -58,8 +59,8 @@ export const WithIcon: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button className="hover:bg-surface2 rounded p-1" aria-label="More information">
-          <Info className="text-neutral3 size-4" />
+        <button className="rounded p-1 hover:bg-fill-subtle" aria-label="More information">
+          <Info className="size-4 text-muted-foreground" />
         </button>
       </TooltipTrigger>
       <TooltipContent>More information</TooltipContent>
@@ -67,10 +68,30 @@ export const WithIcon: Story = {
   ),
 };
 
+export const InfoTooltipDefault: Story = {
+  render: () => (
+    <div className="flex items-center gap-1">
+      <span className="text-label text-foreground">Version</span>
+      <InfoTooltip aria-label="Version information" side="bottom" align="start">
+        Each save creates a version you can switch back to.
+      </InfoTooltip>
+    </div>
+  ),
+};
+
+export const InfoTooltipRichContent: Story = {
+  render: () => (
+    <InfoTooltip aria-label="What is trace intelligence?" contentClassName="max-w-sm space-y-3 p-4">
+      <p>Every trace is analyzed for signals, and similar traces are clustered into themes.</p>
+      <p className="text-muted-foreground">Snapshots show how themes appear, grow, and fade.</p>
+    </InfoTooltip>
+  ),
+};
+
 export const UsingRenderProp: Story = {
   render: () => (
     <Tooltip>
-      <TooltipTrigger render={<Button variant="outline">Render prop</Button>} />
+      <TooltipTrigger render={<Button>Render prop</Button>} />
       <TooltipContent>
         Uses Base UI&apos;s native <code>render</code> prop instead of <code>asChild</code>.
       </TooltipContent>
@@ -84,9 +105,7 @@ export const AllSides: Story = {
       {(['top', 'right', 'bottom', 'left'] as const).map(side => (
         <Tooltip key={side}>
           <TooltipTrigger asChild>
-            <Button variant="outline" className="capitalize">
-              {side}
-            </Button>
+            <Button className="capitalize">{side}</Button>
           </TooltipTrigger>
           <TooltipContent side={side}>Tooltip on {side}</TooltipContent>
         </Tooltip>
@@ -99,7 +118,7 @@ export const TopSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Top tooltip</Button>
+        <Button>Top tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="top">Tooltip on top</TooltipContent>
     </Tooltip>
@@ -110,7 +129,7 @@ export const RightSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Right tooltip</Button>
+        <Button>Right tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="right">Tooltip on right</TooltipContent>
     </Tooltip>
@@ -121,7 +140,7 @@ export const BottomSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Bottom tooltip</Button>
+        <Button>Bottom tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">Tooltip on bottom</TooltipContent>
     </Tooltip>
@@ -132,7 +151,7 @@ export const LeftSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Left tooltip</Button>
+        <Button>Left tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="left">Tooltip on left</TooltipContent>
     </Tooltip>
@@ -143,7 +162,7 @@ export const LongContent: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Hover for details</Button>
+        <Button>Hover for details</Button>
       </TooltipTrigger>
       <TooltipContent className="max-w-50">
         This is a longer tooltip that contains more detailed information about the element.

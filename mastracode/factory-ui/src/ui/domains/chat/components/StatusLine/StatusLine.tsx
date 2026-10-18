@@ -2,12 +2,12 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
 import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import { isPullRequestSource } from '../../../factory/services/workItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
 import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
-import { ModesSelection } from './ModesSelection';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
@@ -36,16 +36,15 @@ export function StatusLine() {
   return (
     <div
       aria-label="Session status line"
-      className="text-ui-sm text-icon3 flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+      className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
-      <ModesSelection />
       <ModelPicker />
       <OperationalMemoryStatus />
       <RuntimeActivity />
       <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
-      {!workItemsPending && currentItem?.source !== 'github-pr' ? (
+      {!workItemsPending && (!currentItem || !isPullRequestSource(currentItem.source)) ? (
         <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
     </div>

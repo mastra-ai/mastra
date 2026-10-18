@@ -8,6 +8,7 @@
  * one executor would apply or not depending on how the agent happened to run
  * its processors.
  */
+import type { ProcessorSpanPayloadPhase } from '../observability';
 import type { Processor, ProcessorSpanPhase } from './index';
 
 /**
@@ -52,11 +53,24 @@ export function resolveProcessorSpanName(
   return declared ?? fallback;
 }
 
-/** Resolve a processor's declared span attributes for this phase. */
+/**
+ * Resolve a processor's declared span attributes for this phase, with the phase
+ * itself recorded alongside them.
+ *
+ * The phase is applied last so a declaration cannot misreport which phase ran:
+ * readers narrow a processor span's payloads on this attribute, and a processor
+ * naming itself into another phase would hand them the wrong shape.
+ */
 export function resolveProcessorSpanAttributes(
-  processor: Pick<Processor, 'spanAttributes'>,
-  phase: ProcessorSpanPhase,
+  processor: Pick<Processor, 'spanAttributes'> | undefined,
+  phase: ProcessorSpanPayloadPhase,
 ) {
-  const declared = processor.spanAttributes;
-  return typeof declared === 'function' ? declared(phase) : declared;
+  const declared = processor?.spanAttributes;
+  // The declaration callback keeps seeing the coarser phase it was written
+  // against; only the recorded attribute distinguishes the two output hooks.
+  const declarationPhase = toProcessorSpanPhase(phase);
+  return {
+    ...(typeof declared === 'function' ? declared(declarationPhase) : declared),
+    processorPhase: phase,
+  };
 }

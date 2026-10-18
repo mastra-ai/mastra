@@ -307,7 +307,7 @@ const testWorkflow = mastra.getWorkflow('testWorkflow')
 1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
 1. It provides full TypeScript type inference for workflow input and output schemas
 
-Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it doesn't provide the same level of type inference.
+Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). `getWorkflowById()` retrieves workflows by their `id` property, but it doesn't provide the same level of type inference.
 :::
 
 ## Running workflows
@@ -505,6 +505,8 @@ Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a wo
 ```typescript
 workflow.restartAllActiveWorkflowRuns()
 ```
+
+Runs restart concurrently, up to `recovery.workflowConcurrency` at a time (default `5`). Set it to `1` in the Mastra config if your runs share side effects that must not run in parallel.
 
 To exclude a workflow from automatic boot-time restarts triggered by `Mastra.restartAllActiveWorkflowRuns()`, set `autoRestartActiveRuns: false` in the workflow's `options`. This is useful for workflows with side effects that must not be re-driven by a blanket restart. Durable agent workflows set this automatically because their recovery is owned by the opt-in `recovery.durableAgents: 'auto'` path.
 

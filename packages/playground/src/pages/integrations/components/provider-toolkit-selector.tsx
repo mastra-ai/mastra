@@ -1,3 +1,8 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import type { ProviderItem, ToolkitItem } from '../types';
 
 interface ProviderToolkitSelectorProps {
@@ -38,81 +43,65 @@ export function ProviderToolkitSelector({
   onConnect,
 }: ProviderToolkitSelectorProps) {
   return (
-    <div className="space-y-4 border rounded p-4">
-      <div className="space-y-1">
-        <label className="block font-medium" htmlFor="provider-select">
-          Provider
-        </label>
-        <select
-          id="provider-select"
-          className="border rounded px-2 py-1 w-full"
-          value={providerId}
-          onChange={event => onProviderChange(event.target.value)}
-          disabled={providersLoading}
-        >
-          <option value="">— select provider —</option>
-          {providers.map(provider => (
-            <option key={provider.id} value={provider.id}>
-              {provider.displayName ?? provider.name} ({provider.id})
-            </option>
-          ))}
-        </select>
-        {providersLoading && <span className="text-gray-500">Loading providers…</span>}
-        {providersError ? <span className="text-red-600">{String(providersError)}</span> : null}
-      </div>
+    <div className="space-y-4 rounded border p-4">
+      <Field invalid={Boolean(providersError)} disabled={providersLoading}>
+        <FieldLabel>Provider</FieldLabel>
+        <Select value={providerId} onValueChange={onProviderChange}>
+          <SelectTrigger>
+            <SelectValue placeholder={providersLoading ? 'Loading providers…' : 'Select provider'} />
+          </SelectTrigger>
+          <SelectContent>
+            {providers.map(provider => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {`${provider.displayName ?? provider.name} (${provider.id})`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldError>{providersError ? String(providersError) : undefined}</FieldError>
+      </Field>
 
-      <div className="space-y-1">
-        <label className="block font-medium" htmlFor="toolkit-select">
-          Toolkit
-        </label>
-        <select
-          id="toolkit-select"
-          className="border rounded px-2 py-1 w-full"
-          value={toolkit}
-          onChange={event => onToolkitChange(event.target.value)}
-          disabled={!providerId || toolkitsLoading}
-        >
-          <option value="">— select toolkit —</option>
-          {toolkits.map(item => (
-            <option key={item.slug} value={item.slug}>
-              {item.name} ({item.slug})
-            </option>
-          ))}
-        </select>
-        {toolkitsLoading && <span className="text-gray-500">Loading toolkits…</span>}
-        {toolkitsError ? <span className="text-red-600">{String(toolkitsError)}</span> : null}
-      </div>
+      <Field invalid={Boolean(toolkitsError)} disabled={!providerId || toolkitsLoading}>
+        <FieldLabel>Toolkit</FieldLabel>
+        <Select value={toolkit} onValueChange={onToolkitChange}>
+          <SelectTrigger>
+            <SelectValue placeholder={toolkitsLoading ? 'Loading toolkits…' : 'Select toolkit'} />
+          </SelectTrigger>
+          <SelectContent>
+            {toolkits.map(item => (
+              <SelectItem key={item.slug} value={item.slug}>
+                {`${item.name} (${item.slug})`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldError>{toolkitsError ? String(toolkitsError) : undefined}</FieldError>
+      </Field>
 
-      <div className="space-y-1">
-        <label className="block font-medium" htmlFor="label-input">
-          Label (optional)
-        </label>
-        <input
-          id="label-input"
-          type="text"
-          className="border rounded px-2 py-1 w-full"
-          placeholder="My personal Gmail"
-          value={label}
-          onChange={event => onLabelChange(event.target.value)}
-          disabled={!providerId || !toolkit}
-        />
-      </div>
+      <Field disabled={!providerId || !toolkit}>
+        <FieldLabel>Label (optional)</FieldLabel>
+        <Input placeholder="My personal Gmail" value={label} onChange={event => onLabelChange(event.target.value)} />
+      </Field>
 
-      <button
+      <Button
         type="button"
-        className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
+        variant="primary"
         onClick={onConnect}
         disabled={!providerId || !toolkit || authorizePending}
       >
         {authorizePending ? 'Authorizing…' : 'Connect'}
-      </button>
+      </Button>
 
-      {authorizeError ? <p className="text-red-600">{String(authorizeError)}</p> : null}
-      {authorizedConnection && (
-        <p className="text-green-700">
+      {authorizeError ? (
+        <div role="alert">
+          <Notice variant="destructive">{String(authorizeError)}</Notice>
+        </div>
+      ) : null}
+      {authorizedConnection ? (
+        <Notice variant="success">
           Authorized: {authorizedConnection.connectionId} (status: {authorizedConnection.status})
-        </p>
-      )}
+        </Notice>
+      ) : null}
     </div>
   );
 }

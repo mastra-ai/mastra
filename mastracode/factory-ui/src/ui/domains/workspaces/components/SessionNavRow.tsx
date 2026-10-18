@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { MainSidebar, useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
@@ -10,12 +10,12 @@ import type { RefObject } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionRowStatus } from '../services/sessionStatus';
-import { SessionActivityBelt } from './SessionActivity';
+import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 /**
- * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
+ * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
  * so every session list (work, review, user) renders with identical density,
  * hover, and active states. Lifecycle lives on the left as an activity belt;
  * the trailing slot beside the label is left to the spinner, the merge badge
@@ -33,6 +33,7 @@ export function SessionNavRow({
   loading,
   status,
   merged,
+  changeRequestProvider = 'github',
   preview: previewDetails,
   pinned = false,
   onSelect,
@@ -49,8 +50,10 @@ export function SessionNavRow({
   disabled: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
-  /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
+  /** Merged change request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
+  /** Names the merged badge: GitHub pull requests or GitLab merge requests. */
+  changeRequestProvider?: 'github' | 'gitlab';
   status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
@@ -79,24 +82,27 @@ export function SessionNavRow({
       }}
       title={preview ? undefined : title}
     >
-      <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
+      <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
       {pinned && !loading ? (
-        <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
+        <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
     </button>
   );
   const belt = loading ? undefined : status;
   const trailing = trailingKind({ loading, status, merged });
+  const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
   const action = (
     <>
-      {belt ? <SessionActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
-        {trailing === 'loading' ? <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" /> : null}
+        {trailing === 'loading' ? (
+          <Spinner size="sm" aria-label={`Opening ${name}`} className="text-muted-foreground" />
+        ) : null}
         {trailing === 'merged' ? (
           <span
             role="img"
-            aria-label={`Pull request merged for ${name}`}
-            title="Pull request merged"
+            aria-label={`${mergedLabel} for ${name}`}
+            title={mergedLabel}
             className={cn('flex', yieldsToActions)}
           >
             <PullRequestStatusIcon status="merged" className="size-3!" decorative />
@@ -118,7 +124,7 @@ export function SessionNavRow({
     </>
   );
   const row = (
-    <MainSidebar.NavLink
+    <Sidebar.NavLink
       ref={anchor}
       link={{ name, url }}
       isActive={active}
@@ -139,7 +145,7 @@ export function SessionNavRow({
   );
 }
 
-const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
+const trailingSlot = 'size-control-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
 
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =

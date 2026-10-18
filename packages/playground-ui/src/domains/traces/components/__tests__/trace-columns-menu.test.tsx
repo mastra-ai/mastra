@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '../../trace-list-columns';
 import { TraceColumnsMenu } from '../trace-columns-menu';
 
 const defaultProps = {
-  preferences: {
-    visibleColumns: ['input', 'entity'] as const,
-    metadataKeys: [],
-  },
+  preferences: DEFAULT_TRACE_COLUMN_PREFERENCES,
   onToggleColumn: vi.fn(),
+  onAddCustomColumn: vi.fn(),
+  onRemoveCustomColumn: vi.fn(),
   onAddMetadataColumn: vi.fn(),
   onRemoveMetadataColumn: vi.fn(),
   onReset: vi.fn(),
@@ -41,9 +42,13 @@ describe('TraceColumnsMenu', () => {
       const checked = async (name: string) =>
         (await screen.findByRole('menuitemcheckbox', { name })).getAttribute('aria-checked');
 
+      expect(await checked('Primitive type')).toBe('true');
       expect(await checked('Input')).toBe('true');
-      expect(await checked('Entity')).toBe('true');
-      expect(await checked('Duration')).toBe('false');
+      expect(await checked('Output')).toBe('true');
+      expect(await checked('Duration')).toBe('true');
+      expect(await checked('Estimated cost')).toBe('true');
+      expect(await checked('Input tokens')).toBe('false');
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Entity' })).toBeNull();
     });
 
     it('reports the column the user toggled', async () => {
@@ -55,6 +60,15 @@ describe('TraceColumnsMenu', () => {
       expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('duration');
     });
 
+    it('lets the user toggle the Output column', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Output' }));
+
+      expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('output');
+    });
+
     it('resets on request', async () => {
       render(<TraceColumnsMenu {...defaultProps} />);
 
@@ -62,6 +76,54 @@ describe('TraceColumnsMenu', () => {
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset to defaults' }));
 
       expect(defaultProps.onReset).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when opened', () => {
+    it('lists the environment and end time columns alongside the standard ones', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'End' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Environment' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Total tokens' })).toBeTruthy();
+    });
+  });
+
+  describe('the custom columns', () => {
+    it('offers every pinnable trace property and reports the one toggled on', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+
+      const threadId = await screen.findByRole('menuitemcheckbox', { name: 'Thread ID' });
+      expect(threadId.getAttribute('aria-checked')).toBe('false');
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Resource ID' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Trace ID' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Primitive ID' })).toBeTruthy();
+      // Start is already a fixed column, so it is not offered again as a custom one.
+      expect(screen.queryByRole('menuitemcheckbox', { name: /start/i })).toBeNull();
+
+      fireEvent.click(threadId);
+      expect(defaultProps.onAddCustomColumn).toHaveBeenCalledWith('threadId');
+    });
+
+    it('ticks the ones already showing and removes one on click', async () => {
+      render(
+        <TraceColumnsMenu
+          {...defaultProps}
+          preferences={{ visibleColumns: [], customColumns: ['threadId'], metadataKeys: [] }}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+
+      const threadId = await screen.findByRole('menuitemcheckbox', { name: 'Thread ID' });
+      expect(threadId.getAttribute('aria-checked')).toBe('true');
+
+      fireEvent.click(threadId);
+      expect(defaultProps.onRemoveCustomColumn).toHaveBeenCalledWith('threadId');
     });
   });
 
@@ -91,11 +153,36 @@ describe('TraceColumnsMenu', () => {
   });
 
   describe('the metadata columns', () => {
+    const openAddDialog = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
+      return screen.getByRole<HTMLInputElement>('combobox', { name: 'Metadata key' });
+    };
+
+    // The key field searches in itself: a click opens the list, typing filters it.
+    const openKeyList = async () => {
+      const field = screen.getByRole('combobox', { name: 'Metadata key' });
+      await userEvent.click(field);
+      return field;
+    };
+
+    const pickOption = async (name: string) => {
+      const option = await screen.findByRole('option', { name });
+      fireEvent.pointerDown(option, { pointerType: 'mouse' });
+      fireEvent.click(option, { detail: 1 });
+    };
+
+    const typeCustomKey = async (text: string) => {
+      await openKeyList();
+      await userEvent.keyboard(text);
+      await pickOption(`Use “${text.trim()}”`);
+    };
+
     it('lists the keys already showing, ticked, and removes one on click', async () => {
       render(
         <TraceColumnsMenu
           {...defaultProps}
-          preferences={{ visibleColumns: ['input'], metadataKeys: ['tenantId', 'region'] }}
+          preferences={{ visibleColumns: ['input'], customColumns: [], metadataKeys: ['tenantId', 'region'] }}
         />,
       );
 
@@ -111,114 +198,158 @@ describe('TraceColumnsMenu', () => {
       expect(defaultProps.onRemoveMetadataColumn).toHaveBeenCalledWith('tenantId');
     });
 
+    describe('when metadata keys were discovered', () => {
+      it('lists the discovered keys as options', async () => {
+        render(<TraceColumnsMenu {...defaultProps} availableMetadataKeys={['region', 'tenantId']} />);
+
+        await openAddDialog();
+        await openKeyList();
+
+        expect(await screen.findByRole('option', { name: 'region' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'tenantId' })).toBeTruthy();
+      });
+
+      it('hides keys that are already visible columns', async () => {
+        render(
+          <TraceColumnsMenu
+            {...defaultProps}
+            availableMetadataKeys={['region', 'tenantId']}
+            preferences={{ visibleColumns: [], customColumns: [], metadataKeys: ['tenantId'] }}
+          />,
+        );
+
+        await openAddDialog();
+        await openKeyList();
+
+        expect(await screen.findByRole('option', { name: 'region' })).toBeTruthy();
+        expect(screen.queryByRole('option', { name: 'tenantId' })).toBeNull();
+      });
+
+      it('adds the selected key', async () => {
+        render(<TraceColumnsMenu {...defaultProps} availableMetadataKeys={['region', 'tenantId']} />);
+
+        await openAddDialog();
+        await openKeyList();
+        await pickOption('region');
+        fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+
+        expect(defaultProps.onAddMetadataColumn).toHaveBeenCalledWith('region');
+      });
+    });
+
+    describe('when no metadata keys were discovered', () => {
+      it('still lets the user type a custom key', async () => {
+        render(<TraceColumnsMenu {...defaultProps} />);
+
+        await openAddDialog();
+        await typeCustomKey('tenantId');
+        fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+
+        expect(defaultProps.onAddMetadataColumn).toHaveBeenCalledWith('tenantId');
+      });
+
+      it('shows the typed key in the field before it is added', async () => {
+        render(<TraceColumnsMenu {...defaultProps} />);
+
+        const field = await openAddDialog();
+        await typeCustomKey('tenantId');
+
+        await waitFor(() => expect(field.value).toBe('tenantId'));
+      });
+    });
+
     it('refuses a key that is already showing', async () => {
       render(
-        <TraceColumnsMenu {...defaultProps} preferences={{ visibleColumns: ['input'], metadataKeys: ['tenantId'] }} />,
+        <TraceColumnsMenu
+          {...defaultProps}
+          preferences={{ visibleColumns: ['input'], customColumns: [], metadataKeys: ['tenantId'] }}
+        />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-
-      fireEvent.change(screen.getByLabelText('Metadata key'), { target: { value: 'tenantId' } });
+      await openAddDialog();
+      await typeCustomKey('tenantId');
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
 
       expect(screen.getByRole('alert').textContent).toBe('That metadata column is already visible.');
       expect(defaultProps.onAddMetadataColumn).not.toHaveBeenCalled();
     });
 
+    it('refuses an empty key', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      await openAddDialog();
+      fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+
+      expect(screen.getByRole('alert').textContent).toBe('Enter a metadata key.');
+      expect(defaultProps.onAddMetadataColumn).not.toHaveBeenCalled();
+    });
+
     it('points the field at its own error message while one stands', async () => {
       render(<TraceColumnsMenu {...defaultProps} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-
-      const field = screen.getByLabelText('Metadata key');
+      const field = await openAddDialog();
       expect(field.getAttribute('aria-describedby')).toBeNull();
-      expect(field.getAttribute('aria-invalid')).toBe('false');
+      expect(field.getAttribute('aria-invalid')).toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
-      expect(field.getAttribute('aria-describedby')).toBe('trace-metadata-key-error');
-      expect(field.getAttribute('aria-invalid')).toBe('true');
-      expect(screen.getByRole('alert').getAttribute('id')).toBe('trace-metadata-key-error');
+      const invalidField = screen.getByRole('combobox', { name: 'Metadata key' });
+      expect(invalidField.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByRole('alert').id);
+      expect(invalidField.getAttribute('aria-invalid')).toBe('true');
     });
 
-    it('clears the error as soon as the user types again', async () => {
-      render(<TraceColumnsMenu {...defaultProps} />);
+    it('clears the error as soon as a key is picked', async () => {
+      render(<TraceColumnsMenu {...defaultProps} availableMetadataKeys={['region']} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-
+      await openAddDialog();
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
       expect(screen.getByRole('alert')).toBeTruthy();
 
-      fireEvent.change(screen.getByLabelText('Metadata key'), { target: { value: 't' } });
+      await openKeyList();
+      await pickOption('region');
       expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('closes the dialog once the column is added', async () => {
-      render(<TraceColumnsMenu {...defaultProps} />);
+      render(<TraceColumnsMenu {...defaultProps} availableMetadataKeys={['region']} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-
-      fireEvent.change(screen.getByLabelText('Metadata key'), { target: { value: 'tenantId' } });
+      await openAddDialog();
+      await openKeyList();
+      await pickOption('region');
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
 
-      await waitFor(() => expect(screen.queryByLabelText('Metadata key')).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Metadata key' })).toBeNull());
     });
 
     it('forgets the complaint it made when the dialog is dismissed', async () => {
       render(<TraceColumnsMenu {...defaultProps} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-
+      await openAddDialog();
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
       expect(screen.getByRole('alert')).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      await waitFor(() => expect(screen.queryByLabelText('Metadata key')).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Metadata key' })).toBeNull());
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
+      const field = await openAddDialog();
 
       // A fresh attempt starts without last time's complaint still standing.
       expect(screen.queryByRole('alert')).toBeNull();
-      expect(screen.getByLabelText('Metadata key').getAttribute('aria-describedby')).toBeNull();
+      expect(field.getAttribute('aria-describedby')).toBeNull();
     });
 
-    it('forgets what was typed when the dialog is dismissed', async () => {
-      render(<TraceColumnsMenu {...defaultProps} />);
+    it('forgets what was picked when the dialog is dismissed', async () => {
+      render(<TraceColumnsMenu {...defaultProps} availableMetadataKeys={['region']} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-
-      fireEvent.change(screen.getByLabelText('Metadata key'), { target: { value: 'half typed' } });
+      await openAddDialog();
+      await openKeyList();
+      await pickOption('region');
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      await waitFor(() => expect(screen.queryByLabelText('Metadata key')).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Metadata key' })).toBeNull());
 
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
+      const field = await openAddDialog();
 
-      expect((screen.getByLabelText('Metadata key') as HTMLInputElement).value).toBe('');
+      expect(field.textContent).not.toContain('region');
       expect(screen.queryByRole('alert')).toBeNull();
-    });
-  });
-
-  describe('when a metadata column is added', () => {
-    it('validates and normalizes the metadata key', async () => {
-      render(<TraceColumnsMenu {...defaultProps} />);
-
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-
-      fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
-      expect(screen.getByRole('alert').textContent).toBe('Enter a metadata key.');
-
-      fireEvent.change(screen.getByLabelText('Metadata key'), { target: { value: ' tenantId ' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
-
-      expect(defaultProps.onAddMetadataColumn).toHaveBeenCalledWith('tenantId');
     });
   });
 });

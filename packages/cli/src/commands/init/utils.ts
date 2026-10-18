@@ -670,7 +670,7 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   /**
    * If people skip entering an API key (because they e.g. have it in their environment already), we write to .env.example instead of .env so that they can immediately run Mastra without having to delete an .env file with an invalid key.
    */
-  const envFileName = apiKey ? '.env' : '.env.example';
+  const envFileName = path.join(process.cwd(), apiKey ? '.env' : '.env.example');
 
   const key = await getAPIKey(provider);
   await fs.appendFile(

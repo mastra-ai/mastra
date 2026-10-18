@@ -1,83 +1,11 @@
-import { json } from '@codemirror/lang-json';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import type { Extension } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Code } from '@/ds/components/Code/code';
 import { CopyButton } from '@/ds/components/CopyButton';
-import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
-
-function buildDarkTheme(): Extension {
-  return draculaInit({
-    settings: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-sm)',
-      lineHighlight: 'transparent',
-      gutterBackground: 'transparent',
-      gutterForeground: '#939393',
-      background: 'transparent',
-    },
-    styles: [{ tag: [t.className, t.propertyName] }],
-  });
-}
-
-function buildLightTheme(): Extension {
-  const editorTheme = EditorView.theme({
-    '&': {
-      backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-sm)',
-    },
-    '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
-    },
-    '.cm-gutters': {
-      backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
-      borderRight: 'none',
-    },
-    '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
-    },
-    '.cm-activeLine': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
-    },
-  });
-
-  const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
-    {
-      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
-    },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
-  ]);
-
-  return [editorTheme, syntaxHighlighting(highlightStyle)];
-}
-
-const useCodemirrorTheme = (): Extension => {
-  const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
-};
 
 export interface DataDetailsPanelCodeSectionProps {
   title: React.ReactNode;
@@ -85,6 +13,8 @@ export interface DataDetailsPanelCodeSectionProps {
   codeStr?: string;
   simplified?: boolean;
   className?: string;
+  /** Extra controls rendered in the header, before the built-in copy button. */
+  actions?: React.ReactNode;
 }
 
 export function DataDetailsPanelCodeSection({
@@ -93,8 +23,8 @@ export function DataDetailsPanelCodeSection({
   icon,
   simplified = false,
   className,
+  actions,
 }: DataDetailsPanelCodeSectionProps) {
-  const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const hasMultilineText = useMemo(() => {
     try {
@@ -115,38 +45,40 @@ export function DataDetailsPanelCodeSection({
       <div className="flex items-center justify-between">
         <div
           className={cn(
-            'flex items-center gap-1.5 text-ui-xs tracking-widest text-neutral2 uppercase',
+            'flex items-center gap-1.5 text-meta tracking-widest text-placeholder uppercase',
             '[&>svg]:size-3.5',
           )}
         >
           {icon}
           {title}
         </div>
-        <ButtonsGroup>
-          <CopyButton content={codeStr || 'No content'} size="sm" />
-          {hasMultilineText && (
-            <Button
-              size="sm"
-              aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
-              onClick={() => setShowAsMultilineText(v => !v)}
-            >
-              {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-            </Button>
-          )}
-        </ButtonsGroup>
+        <div className="flex items-center gap-2">
+          {actions}
+          <ButtonsGroup size="sm">
+            <CopyButton content={codeStr || 'No content'} />
+            {hasMultilineText && (
+              <Button
+                aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+                onClick={() => setShowAsMultilineText(v => !v)}
+              >
+                {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+              </Button>
+            )}
+          </ButtonsGroup>
+        </div>
       </div>
-      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div
+        className={cn(
+          raisedSurfaceStyle,
+          'max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
+        )}
+      >
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="font-mono break-all text-muted-foreground">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
-          <ReactCodeMirror
-            extensions={[json(), EditorView.lineWrapping]}
-            theme={theme}
-            value={codeStr}
-            editable={false}
-          />
+          <Code code={codeStr} lang="json" className="font-mono text-caption break-all whitespace-pre-wrap" />
         )}
       </div>
     </div>

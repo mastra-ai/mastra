@@ -26,11 +26,19 @@ describe('IntegrationsPage', () => {
 
   it('groups connections by authorId for admins with shared connections last', async () => {
     const onDisconnect = vi.fn();
+    const onProviders = vi.fn();
+    const onToolkits = vi.fn();
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'me', permissions: ['tool-providers:admin'] })),
-      http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json(composioProviders)),
-      http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/toolkits`, () => HttpResponse.json(composioToolkits)),
+      http.get(`${BASE_URL}/api/tool-providers`, () => {
+        onProviders();
+        return HttpResponse.json(composioProviders);
+      }),
+      http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/toolkits`, () => {
+        onToolkits();
+        return HttpResponse.json(composioToolkits);
+      }),
       http.get(`${BASE_URL}/api/tool-providers/${PROVIDER}/connections`, () => HttpResponse.json(adminConnections)),
       http.delete(`${BASE_URL}/api/tool-providers/${PROVIDER}/connections/conn_a`, ({ request }) => {
         onDisconnect(new URL(request.url).searchParams.get('force'));
@@ -38,24 +46,25 @@ describe('IntegrationsPage', () => {
       }),
     );
 
-    const { findByTestId, findByLabelText, container } = render(
+    const { findByTestId, findByRole, container } = render(
       <Wrap>
         <IntegrationsPage />
       </Wrap>,
     );
 
-    await waitFor(async () => {
-      const providerSelect = (await findByLabelText('Provider')) as HTMLSelectElement;
-      expect(providerSelect.disabled).toBe(false);
-      expect(providerSelect.querySelector(`option[value="${PROVIDER}"]`)).not.toBeNull();
-    });
-    fireEvent.change(await findByLabelText('Provider'), { target: { value: PROVIDER } });
+    const providerSelect = await findByRole('combobox', { name: 'Provider' });
+    await waitFor(() => expect(onProviders).toHaveBeenCalled());
+    fireEvent.click(providerSelect);
+    const providerOption = await findByRole('option', { name: 'Composio (composio)' });
+    fireEvent.pointerDown(providerOption, { pointerType: 'mouse' });
+    fireEvent.click(providerOption, { detail: 1 });
 
-    await waitFor(async () => {
-      const toolkitSelect = (await findByLabelText('Toolkit')) as HTMLSelectElement;
-      expect(toolkitSelect.querySelector(`option[value="${TOOLKIT}"]`)).not.toBeNull();
-    });
-    fireEvent.change(await findByLabelText('Toolkit'), { target: { value: TOOLKIT } });
+    const toolkitSelect = await findByRole('combobox', { name: 'Toolkit' });
+    await waitFor(() => expect(onToolkits).toHaveBeenCalled());
+    fireEvent.click(toolkitSelect);
+    const toolkitOption = await findByRole('option', { name: 'Gmail (gmail)' });
+    fireEvent.pointerDown(toolkitOption, { pointerType: 'mouse' });
+    fireEvent.click(toolkitOption, { detail: 1 });
 
     const groupA = await findByTestId('integration-author-group-user_A');
     expect(groupA.textContent).toContain('Owned by user_A');
@@ -65,8 +74,8 @@ describe('IntegrationsPage', () => {
     expect(sharedGroup.textContent).toContain('Shared');
     expect(sharedGroup.parentElement?.textContent).toContain('Unknown author');
 
-    const headings = Array.from(container.querySelectorAll('[data-testid^="integration-author-group-"]')).map(
-      element => element.getAttribute('data-testid'),
+    const headings = Array.from(container.querySelectorAll('[data-testid^="integration-author-group-"]')).map(element =>
+      element.getAttribute('data-testid'),
     );
     expect(headings).toEqual([
       'integration-author-group-user_A',

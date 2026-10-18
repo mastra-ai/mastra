@@ -23,7 +23,7 @@
 
 .shimmer-text {
   --shimmer-travel: 300%;
-  --shimmer-dim: color-mix(in oklab, currentcolor 55%, transparent);
+  --shimmer-dim: var(--placeholder);
 
   background-image: linear-gradient(90deg, var(--shimmer-dim) 42%, currentcolor 50%, var(--shimmer-dim) 58%);
   background-size: var(--shimmer-travel) 100%;

@@ -7,7 +7,7 @@ description: "Browse SiliconFlow (China) model IDs, capabilities, context window
 
 # <img src="https://models.dev/logos/siliconflow-cn.svg" alt="SiliconFlow (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SiliconFlow (China)
 
-Access 47 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_CN_API_KEY` environment variable.
+Access 44 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_CN_API_KEY` environment variable.
 
 Learn more in the [SiliconFlow (China) documentation](https://cloud.siliconflow.com/models).
 
@@ -45,18 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "siliconflow-cn/baidu/ERNIE-4.5-300B-A47B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131000,
-    "maxOutput": 131000,
-    "inputCost": 0.28,
-    "outputCost": 1.1
-  },
   {
     "model": "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct",
     "imageInput": false,
@@ -392,30 +380,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262000,
     "inputCost": 0.25,
     "outputCost": 1
-  },
-  {
-    "model": "siliconflow-cn/Qwen/Qwen3-VL-235B-A22B-Instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262000,
-    "maxOutput": 262000,
-    "inputCost": 0.3,
-    "outputCost": 1.5
-  },
-  {
-    "model": "siliconflow-cn/Qwen/Qwen3-VL-235B-A22B-Thinking",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 262000,
-    "inputCost": 0.45,
-    "outputCost": 3.5
   },
   {
     "model": "siliconflow-cn/Qwen/Qwen3-VL-30B-A3B-Instruct",

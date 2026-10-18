@@ -7,6 +7,7 @@ import type {
   LogicalOperatorValueMap,
   BlacklistedRootOperators,
   VectorFieldValue,
+  OperatorCondition,
 } from '@mastra/core/vector/filter';
 
 type MongoDBOperatorValueMap = Omit<OperatorValueMap, '$options'> & {
@@ -21,6 +22,15 @@ export type MongoDBVectorFilter = VectorFilter<
   MongoDBBlacklisted,
   VectorFieldValue | RegExp
 >;
+
+/**
+ * Condition applied to a single field: an operator object such as `{ $eq: 'text' }` or
+ * `{ $regex: /text/ }`, or a plain value for an equality match.
+ */
+export type MongoDBFieldCondition =
+  | OperatorCondition<keyof MongoDBOperatorValueMap, MongoDBOperatorValueMap>
+  | VectorFieldValue
+  | RegExp;
 
 /**
  * Translator for MongoDB filter queries.

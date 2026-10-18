@@ -7,7 +7,7 @@ description: "Browse SCNet Token Plan model IDs, capabilities, and context windo
 
 # <img src="https://models.dev/logos/scnet-token-plan.svg" alt="SCNet Token Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SCNet Token Plan
 
-Access 18 SCNet Token Plan models through Mastra's model router. Authentication is handled automatically using the `SCNET_API_KEY` environment variable.
+Access 19 SCNet Token Plan models through Mastra's model router. Authentication is handled automatically using the `SCNET_API_KEY` environment variable.
 
 Learn more in the [SCNet Token Plan documentation](https://www.scnet.cn/ac/openapi/doc/2.0/moduleapi/plans/token-plan.html).
 
@@ -83,6 +83,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "scnet-token-plan/DeepSeek-V4-Pro-0813",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "scnet-token-plan/DeepSeek-V4.1-Flash",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,

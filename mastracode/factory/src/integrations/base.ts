@@ -23,13 +23,13 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
+import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -39,13 +39,27 @@ import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-syn
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
+/** A push to a repository linked to a project, as a version-control integration reports it. */
+export interface RepositoryPushEvent {
+  orgId: string;
+  factoryProjectId: string;
+  projectRepository: { id: string; inEnvironment: boolean };
+  /** The pushed git ref, for example `refs/heads/main`. */
+  ref: string;
+  /** The repository's default branch as the provider reports it. */
+  defaultBranch: string;
+}
+
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
+  /** Hand a push off for an environment build; never blocks the webhook and never throws. */
+  onRepositoryPush?: (event: RepositoryPushEvent) => void;
 }
 
 /**
@@ -77,7 +91,7 @@ export interface IntegrationContext {
    * sandboxes. Absent when no sandbox is configured — sandbox-backed
    * routes respond 503.
    */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.
@@ -110,6 +124,8 @@ export interface IntegrationContext {
      * Absent when no source-control owner is registered.
      */
     sourceControlOwner?: SourceControlStorageHandle;
+    /** Every registered source-control partition, for project-aware provider selection. */
+    sourceControls: readonly SourceControlStorageHandle[];
     /** Factory projects domain — e.g. resolving a project's default model. */
     projects: FactoryProjectsStorage;
     /**
@@ -117,6 +133,12 @@ export interface IntegrationContext {
      * adopts the same memory configuration the web kickoff applies.
      */
     memorySettings: MemorySettingsStorage;
+    /**
+     * Per-user default model. A channel integration reads the linked sender's
+     * default to start a session on the model that user chose rather than the
+     * factory's shared default.
+     */
+    modelDefaults: ModelDefaultsStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
     /**
@@ -191,7 +213,14 @@ export interface FactoryIntegration {
    * agent tools, intake capability calls — reach storage without a service
    * locator. Mirrors `sourceControl.initialize`.
    */
-  initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void;
+  initialize?(args: {
+    storage: IntegrationStorageHandle;
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+    /** Cross-integration intake selection/binding domain, for per-request authorization. */
+    intake: IntakeStorage;
+    sourceControl?: SourceControlStorageHandle;
+  }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

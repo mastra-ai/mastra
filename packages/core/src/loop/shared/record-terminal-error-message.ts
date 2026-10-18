@@ -20,8 +20,6 @@
  * deterministic, JSON-safe and safe to hand to clients.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import type { MastraDBMessage, MastraErrorPart, MessageList } from '../../agent/message-list';
 
 const FALLBACK_ERROR_NAME = 'Error';
@@ -117,7 +115,7 @@ export function recordTerminalErrorMessage({
   // tracking sets, so only reuse an id that is actually free.
   const id = [activeId, attemptId].find(candidate => candidate && !messages.some(message => message.id === candidate));
   const message: MastraDBMessage = {
-    id: id ?? randomUUID(),
+    id: id ?? globalThis.crypto.randomUUID(),
     role: 'assistant',
     createdAt: new Date(),
     content: { format: 2, parts: [errorPart] },

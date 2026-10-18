@@ -10,17 +10,16 @@ const baseProps: SpanDataPanelViewProps = {
   traceId: 'trace-1',
   spanId: 'span-1',
   span: spanFixture,
-  onClose: vi.fn(),
 };
 
 afterEach(cleanup);
 
 describe('SpanDataPanelView — header summary', () => {
-  it('shows started, ended and duration in the header, not in the details list', () => {
+  it('shows started and duration in the header (end is implied), not in the details list', () => {
     render(<SpanDataPanelView {...baseProps} />);
 
     expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
-    expect(screen.getByLabelText(/^Ended at/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
     // Same `X.XXX s` format as the timeline timing column.
     expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
     expect(screen.queryByText('Started')).toBeNull();
@@ -114,5 +113,17 @@ describe('SpanDataPanelView — tabs', () => {
     render(<SpanDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+  });
+});
+
+describe('SpanDataPanelView — close', () => {
+  it('renders a close button only when onClose is provided, and calls it', () => {
+    const { rerender } = render(<SpanDataPanelView {...baseProps} />);
+    expect(screen.queryByRole('button', { name: 'Close span' })).toBeNull();
+
+    const onClose = vi.fn();
+    rerender(<SpanDataPanelView {...baseProps} onClose={onClose} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

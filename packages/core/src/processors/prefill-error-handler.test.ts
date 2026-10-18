@@ -75,6 +75,19 @@ function createQwenThinkingPrefillErrorInBodyOnly() {
   });
 }
 
+function createGeminiTrailingModelTurnError() {
+  return new APICallError({
+    message: 'Requests ending with a model turn are not supported.',
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',
+    requestBodyValues: {},
+    statusCode: 400,
+    responseBody: JSON.stringify({
+      error: { code: 400, message: 'Requests ending with a model turn are not supported.', status: 'INVALID_ARGUMENT' },
+    }),
+    isRetryable: false,
+  });
+}
+
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
   const messageList = new MessageList({ threadId: 'test-thread' });
   messageList.add([createMessage('hello', 'user')], 'input');
@@ -171,6 +184,16 @@ describe('PrefillErrorHandler', () => {
     const result = await handler.processAPIError(args);
 
     expect(result).toEqual({ retry: true });
+  });
+
+  it('should return { retry: true } for Gemini 3 trailing model turn errors', async () => {
+    const handler = new PrefillErrorHandler();
+    const args = makeArgs({ error: createGeminiTrailingModelTurnError() });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(args.messageList.get.all.db().at(-1)).toMatchObject({ role: 'signal' });
   });
 
   it('should return undefined when retryCount > 0', async () => {

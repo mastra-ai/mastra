@@ -53,9 +53,11 @@ describe('AgentController.createSession — cross-session isolation', () => {
 
     await a.mode.switch({ modeId: 'plan' });
 
-    // Only session a moved to plan; b is untouched.
+    // Only session a moved to plan; neither session's model changed.
     expect(a.mode.get()).toBe('plan');
     expect(b.mode.get()).toBe('build');
+    expect(a.model.get()).toBe('openai/gpt-4o');
+    expect(b.model.get()).toBe('openai/gpt-4o');
   });
 
   it('isolates model selection between sessions', async () => {
@@ -65,7 +67,7 @@ describe('AgentController.createSession — cross-session isolation', () => {
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     const b = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
-    await a.model.switch({ modelId: 'cerebras/zai-glm-4.7' });
+    await a.model.switch('cerebras/zai-glm-4.7');
 
     expect(a.model.get()).toBe('cerebras/zai-glm-4.7');
     // b still resolves its mode default, unaffected by a's override.
@@ -95,6 +97,31 @@ describe('AgentController.createSession — cross-session isolation', () => {
 
     expect(a.state.get().counter).toBe(5);
     expect(b.state.get().counter).toBe(0);
+  });
+
+  it('skips a guarded state update when ownership changes before it applies', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    });
+    const controller = new AgentController<{ counter: number }>({
+      workspace: createMockWorkspace(),
+      id: 'test-controller',
+      storage,
+      initialState: { counter: 0 },
+      modes: [{ id: 'build', name: 'Build', default: true, agent }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    let ownsUpdate = true;
+
+    const update = session.state.setIf({ counter: 5 }, () => ownsUpdate);
+    ownsUpdate = false;
+
+    await expect(update).resolves.toBe(false);
+    expect(session.state.get().counter).toBe(0);
   });
 
   it('isolates event buses between sessions', async () => {
@@ -162,6 +189,94 @@ describe('AgentController.createSession — cross-session isolation', () => {
     const restarted = await restartedController.createSession();
 
     expect(restarted.thread.requireId()).toBe(threadId);
+  });
+
+  it('can defer thread creation when no thread matches', async () => {
+    const storage = new InMemoryStore();
+    const controller = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath: '/tmp/mastra-project' },
+    });
+    await controller.init();
+
+    const session = await controller.createSession({ createInitialThread: false });
+
+    expect(session.thread.getId()).toBeNull();
+    expect(await session.thread.list()).toEqual([]);
+  });
+
+  it('creates a thread when a cached threadless session later requests one', async () => {
+    const storage = new InMemoryStore();
+    const controller = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath: '/tmp/mastra-project' },
+    });
+    await controller.init();
+
+    const threadless = await controller.createSession({ createInitialThread: false });
+    const resumed = await controller.createSession();
+
+    expect(resumed).toBe(threadless);
+    expect(resumed.thread.getId()).not.toBeNull();
+    expect(await resumed.thread.list()).toHaveLength(1);
+  });
+
+  it('creates one shared thread for concurrent ensureId calls on a threadless session', async () => {
+    const controller = createController(new InMemoryStore(), {
+      resourceId: 'current-resource',
+      initialState: { projectPath: '/tmp/mastra-project' },
+    });
+    await controller.init();
+    const session = await controller.createSession({ createInitialThread: false });
+
+    const [first, second] = await Promise.all([session.thread.ensureId(), session.thread.ensureId()]);
+
+    expect(second).toBe(first);
+    expect(session.thread.getId()).toBe(first);
+    expect(await session.thread.ensureId()).toBe(first);
+    expect((await session.thread.list()).map(thread => thread.id)).toEqual([first]);
+  });
+
+  it('still resumes a matching thread when initial thread creation is deferred', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const firstController = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath },
+    });
+    await firstController.init();
+    const first = await firstController.createSession();
+
+    const restartedController = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath },
+    });
+    await restartedController.init();
+    const restarted = await restartedController.createSession({ createInitialThread: false });
+
+    expect(restarted.thread.requireId()).toBe(first.thread.requireId());
+  });
+
+  it('binds request-context thread setting writes to the originating thread', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'user-a' });
+    const originatingThreadId = session.thread.requireId();
+    const requestContext = await (controller as any).buildRequestContext(session, undefined, {
+      threadId: originatingThreadId,
+    });
+    const controllerContext = requestContext.get('controller');
+    expect(controllerContext.isThreadActive()).toBe(true);
+
+    const nextThread = await session.thread.create({ title: 'next' });
+    expect(controllerContext.isThreadActive()).toBe(false);
+    await controllerContext.setThreadSetting({ key: 'delayedSetting', value: 'origin' });
+
+    expect(session.thread.requireId()).toBe(nextThread.id);
+    expect(await session.thread.getSetting({ key: 'delayedSetting' })).toBeUndefined();
+    expect(await controllerContext.getThreadSetting('delayedSetting')).toBe('origin');
+    await session.thread.switch({ threadId: originatingThreadId });
+    expect(await session.thread.getSetting({ key: 'delayedSetting' })).toBe('origin');
   });
 });
 

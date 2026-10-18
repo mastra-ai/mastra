@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { topLevelWorkflowNodes } from '../../__utils__/workflow-nodes';
 
 /**
  * FEATURE: Workflow debug "Run next step" branch selection on the run-detail (:runId) page
@@ -35,7 +36,7 @@ function runNextStepButton(page: Page) {
 }
 
 function nodes(page: Page) {
-  return page.locator('[data-workflow-node]');
+  return topLevelWorkflowNodes(page);
 }
 
 function stepNode(page: Page, stepKey: string) {
@@ -59,8 +60,8 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
       // ARRANGE: start a per-step run with a LONG input so the conditional must take long-text.
       await page.goto('/workflows/complexWorkflow/graph');
       await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       await runButton(page).click();
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
@@ -113,8 +114,8 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
       // the condition-selected arm (long-text), not the first arm in graph order (short-text).
       await page.goto('/workflows/complexWorkflow/graph');
       await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       await runButton(page).click();
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
@@ -165,8 +166,8 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
       // Each advance off a freshly rehydrated snapshot must keep taking the condition-selected arm.
       await page.goto('/workflows/complexWorkflow/graph');
       await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       await runButton(page).click();
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
@@ -225,8 +226,8 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
       // separate from snapshot rehydration on the :runId page.
       await page.goto('/workflows/complexWorkflow/graph');
       await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       await runButton(page).click();
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
@@ -265,8 +266,8 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
       // whole run reaches `success` (after the suspend boundary is resumed).
       await page.goto('/workflows/complexWorkflow/graph');
       await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       await runButton(page).click();
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
@@ -320,8 +321,8 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
 
       const edgeMap = page.locator(`[data-edge-from="${mapBranch}"][data-edge-to="nested-text-processor"]`).first();
       // The workflow-output boundary edge carries no step ids, so target it by its
-      // domain-prefixed React Flow id: edge-boundary-<sourceNodeId>-boundary-end.
-      const finalEdge = page.locator('[id="edge-boundary-node-final-step-boundary-end"]').first();
+      // React Flow id: edge-<sourceNodeId>-boundary-end.
+      const finalEdge = page.locator('[id="edge-node-final-step-boundary-end"]').first();
 
       await expect(edgeMap).toHaveAttribute('data-edge-status', 'success', { timeout: 20000 });
       await expect(finalEdge).toHaveAttribute('data-edge-status', 'success', { timeout: 20000 });

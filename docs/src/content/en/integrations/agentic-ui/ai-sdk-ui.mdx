@@ -251,11 +251,71 @@ export default function Chat() {
 
 Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent.
 
+### Client tools with `useChat()`
+
+A tool without an `execute` function runs on the client. When the model calls it, the agent's run ends at that step and the stream finishes with a `tool-{toolKey}` part in the `input-available` state. To let the agent continue, run the tool in the browser, add its result with `addToolOutput()`, and send the conversation back. `sendAutomaticallyWhen` sends the next request once every tool call in the last assistant message has a result:
+
+```tsx title="src/components/chat.tsx" oxfmt:false
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai'
+
+export default function Chat() {
+  const { messages, sendMessage, addToolOutput } = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    async onToolCall({ toolCall }) {
+      if (toolCall.toolName === 'addToCart') {
+        const input = toolCall.input as { productId: string }
+        const cart = await addToCartInBrowser(input.productId)
+
+        // Don't await addToolOutput inside onToolCall to avoid deadlocks
+        addToolOutput({ tool: 'addToCart', toolCallId: toolCall.toolCallId, output: cart })
+      }
+    },
+  })
+
+  // ...render messages and call sendMessage()
+}
+```
+
+If the client only needs to render the tool call and the model doesn't need a result, give the tool an `execute` that returns a short acknowledgement instead. The agent then keeps generating in the same request. See [tools that run on the client](/docs/agents/tools#tools-that-run-on-the-client).
+
+Subagents can't run client tools: the browser never sees a subagent's tool calls. Define client tools on the agent the chat route talks to.
+
+### Resuming a suspended tool from `useChat()`
+
+When a tool calls `suspend()`, the stream includes a `data-tool-call-suspended` part with the `runId`, `toolCallId`, and `suspendPayload`. To resume, send `resumeData` (matching the tool's `resumeSchema`) and the `runId` in the request body. `handleChatStream()` and `chatRoute()` then call `agent.resumeStream()` instead of starting a new run:
+
+```tsx title="src/components/chat.tsx" oxfmt:false
+const { messages, sendMessage } = useChat({
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+    prepareSendMessagesRequest: ({ messages, body }) => {
+      const resume = body?.resume as { runId: string; resumeData: unknown } | undefined
+      if (resume) {
+        return { body: { messages, runId: resume.runId, resumeData: resume.resumeData } }
+      }
+      return { body: { messages } }
+    },
+  }),
+})
+
+// When the user confirms the suspended tool call:
+sendMessage(
+  { text: 'Confirmed' },
+  { body: { resume: { runId: suspended.runId, resumeData: { confirmed: true } } } },
+)
+```
+
+`suspended` is the `data` of the latest `data-tool-call-suspended` part in `messages`.
+
 ## Using Mastra Memory
 
 When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
 
-Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database.
+Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database. Mastra filters echoed history before loading stored messages and keeps the stored copy as the base when message IDs match, so the stored timestamps, provider metadata, and reasoning are preserved and only new tool results are layered on top.
 
 ```typescript
 import { useChat } from '@ai-sdk/react'
@@ -1296,6 +1356,14 @@ For a complete implementation, see the [workflow-suspend-resume example](https:/
 
 Tools can call agents internally and stream the agent's output back to the UI. This creates compact `data-tool-agent` snapshots while the nested step is still running, `data-tool-agent-step` parts when a nested step finishes, and one full `data-tool-agent` snapshot when the nested run finishes.
 
+Both part types include delegation metadata for nested supervisor chains:
+
+- `ancestry`: The delegation path in outer-to-inner order. Each entry contains a `toolCallId` and may include the `toolName` and normalized `agentId`.
+- `depth`: The number of known agent delegation boundaries. A direct subagent has depth `1`.
+- `parentAgentId`: The immediate parent agent ID for a nested agent. This field is omitted for a direct subagent because the root supervisor ID isn't part of the tool envelope.
+
+The part `id` remains the nested agent run ID, so progressive snapshots replace the same UI state as the run continues.
+
 The pattern uses:
 
 - `context.mastra.getAgent()` - Get an agent instance from within a tool
@@ -1391,10 +1459,12 @@ The pattern uses:
                   return <p key={index}>{part.text}</p>
                 }
                 if (part.type === 'data-tool-agent') {
-                  const { id, data } = part as AgentDataPart
+                  const { id, data, depth, parentAgentId } = part as AgentDataPart
                   return (
                     <div key={index} className="nested-agent">
                       <strong>Nested Agent: {id}</strong>
+                      <p>Delegation depth: {depth}</p>
+                      {parentAgentId && <p>Parent agent: {parentAgentId}</p>}
                       {data.text && <p>{data.text}</p>}
                       {data.toolErrors?.map(toolError => (
                         <p key={toolError.toolCallId} className="nested-agent-error">
@@ -1428,6 +1498,7 @@ Key points:
 
 - Piping `fullStream` to `context.writer` creates `data-tool-agent` parts
 - Read `data-tool-agent-step` when you need the full payload for the nested step that finished
+- `AgentDataPart` and `AgentStepDataPart` include the same `ancestry`, `depth`, and optional `parentAgentId` fields
 - The `AgentDataPart` has `id` (on the part) and `data.text` (the current nested-agent text snapshot)
 - A tool that throws inside the nested agent is reported in `data.toolErrors`, each entry `{ toolCallId, toolName, args?, errorText, providerExecuted? }`. `errorText` is a JSON-safe string, so the failure survives serialization to the client instead of arriving as `{}`
 - `toolErrors` resets at each nested step boundary, like `toolCalls` and `toolResults`. For a finished step, read it from `data-tool-agent-step` (`data.step.toolErrors`) or from `data.steps[]` on the final snapshot

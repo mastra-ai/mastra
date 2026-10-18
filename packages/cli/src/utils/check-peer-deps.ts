@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
-import { satisfies, gtr, validRange } from 'semver';
+import { satisfies, gtr, valid, validRange } from 'semver';
 
 import type { MastraPackageInfo } from './mastra-packages.js';
 
@@ -56,10 +56,11 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
           continue;
         }
 
-        // Skip non-semver ranges like `workspace:^` or `catalog:` (seen when the
-        // package resolves to monorepo source) - they can't be compared and would
-        // make getUpdateCommand's gtr() throw.
-        if (!validRange(requiredRange)) {
+        // Skip unresolved installed versions (manifest-specifier fallbacks like
+        // `workspace:^`, `catalog:`, or ranges) and non-semver required ranges
+        // (seen when the package resolves to monorepo source) - they can't be
+        // compared and would make getUpdateCommand's gtr() throw.
+        if (!valid(installedVersion) || !validRange(requiredRange)) {
           continue;
         }
 
@@ -112,10 +113,15 @@ export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
     return null;
   }
 
-  const pm = detectPackageManager();
   const packagesToUpdate = new Set<string>();
 
   for (const m of mismatches) {
+    // Defensively skip non-comparable entries (e.g. unresolved installed
+    // versions like `workspace:^` or invalid ranges) - gtr() would throw.
+    if (!valid(m.installedVersion) || !validRange(m.requiredRange)) {
+      continue;
+    }
+
     // Check if installed version is above the range (too new) or below (too old)
     const isAboveRange = gtr(m.installedVersion, m.requiredRange, { includePrerelease: true });
 
@@ -128,6 +134,11 @@ export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
     }
   }
 
+  if (packagesToUpdate.size === 0) {
+    return null;
+  }
+
+  const pm = detectPackageManager();
   const packagesWithLatest = [...packagesToUpdate].map(pkg => `${pkg}@latest`);
   return `${pm} add ${packagesWithLatest.join(' ')}`;
 }

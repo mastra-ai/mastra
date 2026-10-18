@@ -7,7 +7,7 @@ description: "Browse Volcengine Ark model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/volcengine.svg" alt="Volcengine Ark logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Volcengine Ark
 
-Access 15 Volcengine Ark models through Mastra's model router. Authentication is handled automatically using the `ARK_API_KEY` environment variable.
+Access 16 Volcengine Ark models through Mastra's model router. Authentication is handled automatically using the `ARK_API_KEY` environment variable.
 
 Learn more in the [Volcengine Ark documentation](https://www.volcengine.com/docs/82379/1330310).
 
@@ -224,6 +224,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.18747,
     "outputCost": 4.15615
+  },
+  {
+    "model": "volcengine/glm-5-3-flash-260828",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.11875,
+    "outputCost": 0.41563
   }
 ]}
 />
@@ -258,7 +270,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "volcengine/glm-5-2-260617"
+      ? "volcengine/glm-5-3-flash-260828"
       : "volcengine/deepseek-v4-flash-ga-260731";
   }
 });

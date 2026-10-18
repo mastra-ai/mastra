@@ -46,6 +46,22 @@ export interface BackgroundTask {
   suspendedAt?: Date;
   completedAt?: Date;
 
+  /**
+   * Identity of the worker process that currently owns execution of this task.
+   * Set when a worker acquires the execution lease and cleared when the task
+   * reaches a terminal state, suspends, or is cancelled. Combined with
+   * `leaseExpiresAt` so recovery can prove whether the previous owner is dead
+   * before reclaiming a `running` task.
+   */
+  ownerId?: string;
+  /**
+   * Wall-clock expiry of the current owner's execution lease. While this is in
+   * the future the owner is considered alive and no other worker may reclaim
+   * the task. Renewed by the owner's heartbeat; recovery may only reclaim a
+   * `running` task once its lease has expired.
+   */
+  leaseExpiresAt?: Date;
+
   // Retry
   retryCount: number;
   maxRetries: number;
@@ -73,6 +89,24 @@ export type UpdateBackgroundTask = Partial<
     'id' | 'createdAt' | 'threadId' | 'resourceId' | 'runId' | 'agentId' | 'toolCallId' | 'toolName' | 'args'
   >
 >;
+
+/**
+ * Optional conditions for `updateTask`. When provided, the update is applied
+ * only if the stored row still matches every supplied condition — a
+ * compare-and-set that fences writes from superseded owners.
+ *
+ * `expectedOwnerId` / `expectedLeaseExpiresAt` use `string | null` /
+ * `Date | null` because "expect the column to be unset" (null) is a meaningful
+ * condition distinct from "don't check it" (undefined).
+ */
+export interface UpdateBackgroundTaskOptions {
+  /** Apply only if the stored status equals this value. */
+  expectedStatus?: BackgroundTaskStatus;
+  /** Apply only if the stored owner equals this value (null = unowned). */
+  expectedOwnerId?: string | null;
+  /** Apply only if the stored lease expiry equals this value (null = unset). */
+  expectedLeaseExpiresAt?: Date | null;
+}
 
 /**
  * Payload accepted by `BackgroundTaskManager.enqueue()`.
@@ -186,10 +220,21 @@ export interface BackgroundTaskManagerConfig {
   cleanup?: CleanupConfig;
   /**
    * Whether to recover running and pending tasks during manager startup.
-   * Disable this when multiple live managers share storage until recovery can
-   * be fenced by persisted worker ownership and leases. Default: true.
+   * Recovery is fenced by persisted execution leases: a running task is only
+   * reclaimed once its owner's lease has expired, so it is safe when multiple
+   * live managers share storage. Set to false to skip recovery entirely.
+   * Default: true.
    */
   recoverStaleTasksOnStart?: boolean;
+  /**
+   * Duration of the execution lease each worker acquires before running a task,
+   * in ms. While the lease is valid no other worker may recover the task; once
+   * it expires an unresponsive owner is treated as dead and the task becomes
+   * reclaimable. The owner renews the lease at `leaseDurationMs / 3`. Must be at
+   * least 3000ms so the lease can be renewed before it lapses — the manager
+   * throws at construction for anything lower. Default: 30_000 (30 seconds).
+   */
+  leaseDurationMs?: number;
   /**
    * Minimum delay between chunk-based progress output events for each task, in ms.
    * Default: undefined (publish every progress chunk).
@@ -213,6 +258,28 @@ export interface BackgroundTaskManagerConfig {
 // --- Tool-level and agent-level config ---
 
 export type BackgroundExecutionDisposition = 'foreground' | 'deferred' | 'awaited';
+
+/**
+ * A process-local operation started by a tool and adopted by its native
+ * background task. The operation handle is never persisted or published.
+ */
+export interface BackgroundTaskOperation<TResult = unknown> {
+  /** Resolves with the task's terminal result after the complete operation and cleanup finish. */
+  completion: Promise<TResult>;
+  /** Cancels the operation when the native background task is cancelled or times out. */
+  cancel?: (reason?: unknown) => void | Promise<void>;
+}
+
+/** Runtime bridge exposed only while a tool executes as a native background task. */
+export interface BackgroundTaskAdoptionContext {
+  taskId: string;
+  disposition: Exclude<BackgroundExecutionDisposition, 'foreground'>;
+  /**
+   * Transfers lifecycle ownership of an already-started process-local operation
+   * to the native background task. A tool may adopt at most one operation.
+   */
+  adopt<TResult>(operation: BackgroundTaskOperation<TResult>): void;
+}
 
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
@@ -350,6 +417,8 @@ export interface ToolExecutor {
        * execution.
        */
       resumeData?: unknown;
+      /** Framework-resolved delegated run ID recovered from persisted suspension state. */
+      suspendedToolRunId?: string;
     },
   ): Promise<unknown>;
 }
@@ -440,6 +509,7 @@ export interface CheckIfSuspendedPayload {
 }
 
 export type CheckIfRunningPayload = CheckIfSuspendedPayload;
+export type CheckIfExistingPayload = CheckIfSuspendedPayload;
 
 /**
  * A handle returned by `createBackgroundTask()`.
@@ -452,6 +522,8 @@ export interface BackgroundTaskHandle {
   dispatch(): Promise<EnqueueResult>;
   /** Check if the task is suspended */
   checkIfSuspended(args: CheckIfSuspendedPayload): Promise<boolean>;
+  /** Adopt one persisted task matching this invocation, regardless of status. */
+  checkIfExisting(args: CheckIfExistingPayload): Promise<BackgroundTask | undefined>;
   /** Check if the task is running */
   checkIfRunning(args: CheckIfRunningPayload): Promise<boolean>;
   /** Resume the task */

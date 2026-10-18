@@ -39,7 +39,45 @@ const TRANSIENT_MESSAGE_SUBSTRINGS = [
   'request timeout',
   'connection reset',
   'connection closed',
+  // Core raises this when a stream closes with finishReason 'other' before any output.
+  'finished with finishreason "other"',
 ];
+
+const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown']);
+
+/**
+ * A model reply that ended before the model finished. Carries the AI SDK's
+ * `isRetryable` flag, which `isTransientLLMError` and core's error processors
+ * already recognize.
+ *
+ * @internal
+ */
+export class OmIncompleteResponseError extends Error {
+  readonly isRetryable = true;
+
+  constructor(
+    label: string,
+    readonly finishReason: string,
+  ) {
+    super(`${label} response ended early (finishReason: ${finishReason})`);
+    this.name = 'OmIncompleteResponseError';
+  }
+}
+
+/**
+ * OM calls are single-step (`maxSteps: 1`). A step that ends with `other` or
+ * `unknown` means the stream closed before the model finished, so its text is
+ * partial. Throw a retryable error so `withRetry` re-runs the whole call
+ * instead of saving it.
+ *
+ * @internal
+ */
+export function assertCompleteModelResponse<T extends { finishReason?: string }>(output: T, label: string): T {
+  if (output.finishReason && INCOMPLETE_FINISH_REASONS.has(output.finishReason)) {
+    throw new OmIncompleteResponseError(label, output.finishReason);
+  }
+  return output;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -82,6 +120,29 @@ function hasIsRetryableFlag(value: unknown): boolean {
 }
 
 /**
+ * Returns true when a user-initiated cancellation appears anywhere in the
+ * error's `cause`/`error` wrapper chain, so a wrapped abort can never be
+ * mistaken for a retryable or survivable provider failure.
+ *
+ * @internal
+ */
+export function hasAbortInChain(error: unknown): boolean {
+  const seen = new Set<object>();
+
+  function visit(candidate: unknown): boolean {
+    if (isAbortError(candidate)) return true;
+    if (!isRecord(candidate)) return false;
+    if (seen.has(candidate)) return false;
+    seen.add(candidate);
+    // Both wrapper shapes are traversed: some libraries nest under `cause`,
+    // others under `error`, and an error can carry both.
+    return visit(candidate.cause) || visit(candidate.error);
+  }
+
+  return visit(error);
+}
+
+/**
  * Returns true when the given error looks like a transient transport-class
  * failure that's worth retrying — undici `terminated`, `fetch failed`,
  * `UND_ERR_*` codes, AI SDK `APICallError` with `isRetryable: true`, and
@@ -93,7 +154,7 @@ function hasIsRetryableFlag(value: unknown): boolean {
  * @internal
  */
 export function isTransientLLMError(error: unknown): boolean {
-  if (isAbortError(error)) return false;
+  if (hasAbortInChain(error)) return false;
 
   const visited = new WeakSet<object>();
 
@@ -163,6 +224,8 @@ export interface WithRetryOptions {
   label: string;
   /** Optional abort signal — cancels both in-flight attempts and backoff waits. */
   abortSignal?: AbortSignal;
+  /** Internal retry override. Omit to use the shared retry schedule. */
+  maxRetries?: number;
 }
 
 /**
@@ -174,7 +237,7 @@ export interface WithRetryOptions {
  * @internal
  */
 export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions): Promise<T> {
-  const { label, abortSignal } = opts;
+  const { label, abortSignal, maxRetries = RETRY_CONFIG.maxRetries } = opts;
   let attempt = 0;
   // total tries = maxRetries + 1 (the initial attempt isn't a "retry")
   while (true) {
@@ -184,8 +247,8 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions)
     try {
       return await fn();
     } catch (error) {
-      if (isAbortError(error) || abortSignal?.aborted) throw error;
-      if (attempt >= RETRY_CONFIG.maxRetries || !isTransientLLMError(error)) {
+      if (hasAbortInChain(error) || abortSignal?.aborted) throw error;
+      if (attempt >= maxRetries || !isTransientLLMError(error)) {
         if (attempt > 0) {
           omDebug(
             `[OM:retry:${label}] giving up after ${attempt} retry/retries: ${

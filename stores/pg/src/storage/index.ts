@@ -2,7 +2,6 @@ import type { ConnectionOptions } from 'node:tls';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import {
   validateConfig,
@@ -14,6 +13,7 @@ import {
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { parseSchemaName } from '../shared/schema-name';
 import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
 import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
@@ -26,7 +26,7 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
-import { KnowledgePG } from './domains/knowledge';
+import { getPgKnowledgeIsolationKey, KnowledgePG } from './domains/knowledge';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -218,7 +218,7 @@ export class PostgresStore extends MastraCompositeStore {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit, retention: config.retention });
       // Validate schema name to prevent SQL injection
-      this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
+      this.schema = parseSchemaName(config.schemaName || 'public');
 
       if (isPoolConfig(config)) {
         this.#writePool = config.pool;
@@ -250,7 +250,10 @@ export class PostgresStore extends MastraCompositeStore {
         workflows: new WorkflowsPG(domainConfig),
         workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
-        knowledge: new KnowledgePG(domainConfig),
+        knowledge: new KnowledgePG({
+          ...domainConfig,
+          storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config),
+        }),
         notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
@@ -363,7 +366,15 @@ export class PostgresStore extends MastraCompositeStore {
       // asking the server ~350 times over this one serialized connection.
       // Cleared in the finally: the snapshot never outlives init().
       this.#db.setSchemaSnapshot(await loadSchemaSnapshot(pinned, this.schema));
-      await super.init();
+      // Knowledge activates lazily through getStore('knowledge'). Published Core
+      // releases without the knowledge-v2 feature still init every domain in
+      // super.init(), which would make ordinary storage fail on them, so the
+      // remaining domains are initialized here instead of delegating.
+      await Promise.all(
+        Object.entries(this.stores)
+          .filter(([name, store]) => name !== 'knowledge' && store)
+          .map(([, store]) => store.init()),
+      );
       // Only mark initialized after schema creation actually finishes so a
       // racing second init() caller can't return early and issue runtime
       // queries against tables that aren't yet created.

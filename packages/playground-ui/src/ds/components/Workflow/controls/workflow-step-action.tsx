@@ -2,7 +2,7 @@ import {
   AlertCircleIcon,
   BracesIcon,
   Clock3Icon,
-  LayersIcon,
+  PanelRightIcon,
   PlayIcon,
   RotateCcwIcon,
   ShieldAlertIcon,
@@ -11,7 +11,7 @@ import {
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 
 const actions = {
-  nested: { icon: LayersIcon, label: 'View nested graph', activeLabel: 'Hide nested graph' },
+  nested: { icon: PanelRightIcon, label: 'View nested graph', activeLabel: 'Hide nested graph' },
   map: { icon: BracesIcon, label: 'Map config', activeLabel: 'Hide map config' },
   timeTravel: { icon: Clock3Icon, label: 'Time travel' },
   runStep: { icon: PlayIcon, label: 'Run step' },
@@ -32,7 +32,7 @@ export function WorkflowStepAction({ action, isActive, onSelect }: WorkflowStepA
   const ActionIcon = definition.icon;
   const label = isActive && 'activeLabel' in definition ? definition.activeLabel : definition.label;
   return (
-    <DropdownMenu.Item onSelect={onSelect} className={action === 'tripwire' ? 'text-amber-400' : undefined}>
+    <DropdownMenu.Item onSelect={onSelect} className={action === 'tripwire' ? 'text-warning-foreground' : undefined}>
       <ActionIcon />
       <span>{label}</span>
     </DropdownMenu.Item>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TaskList } from './task-list';
 import type { TaskListItem } from './task-list';
@@ -12,156 +12,147 @@ const mixedTasks: TaskListItem[] = [
 
 const completedTasks: TaskListItem[] = mixedTasks.map(task => ({ ...task, status: 'completed' }));
 
-afterEach(cleanup);
+const longTasks: TaskListItem[] = Array.from({ length: 6 }, (_, index) => ({
+  id: `task-${index}`,
+  content: `Task ${index}`,
+  activeForm: `Doing task ${index}`,
+  status: index < 5 ? 'completed' : 'in_progress',
+}));
+
+const collapse = () => fireEvent.click(screen.getByRole('button', { name: 'Collapse tasks' }));
+const expand = () => fireEvent.click(screen.getByRole('button', { name: 'Show all tasks' }));
+const visibleRows = () => within(screen.getByRole('list')).getAllByRole('listitem');
+
+const originalScrollTo = Element.prototype.scrollTo;
+
+afterEach(() => {
+  Element.prototype.scrollTo = originalScrollTo;
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('TaskList', () => {
   beforeEach(() => {
-    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.scrollTo = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', (step: FrameRequestCallback) => {
+      step(performance.now() + 1000);
+      return 0;
+    });
   });
 
-  describe('when tasks have mixed statuses', () => {
-    it('renders progress for the completed tasks', () => {
+  describe('when expanded', () => {
+    it('shows every task and no progress bars', () => {
       render(<TaskList tasks={mixedTasks} />);
 
-      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
-      expect(screen.getByRole('progressbar').getAttribute('aria-valuemax')).toBe('3');
+      expect(visibleRows()).toHaveLength(3);
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Collapse tasks' }).getAttribute('aria-expanded')).toBe('true');
     });
 
-    it('renders one progress bar per task, colored by status', () => {
+    it('reads out the active form instead of the task content', () => {
       render(<TaskList tasks={mixedTasks} />);
+      const list = within(screen.getByRole('list'));
 
-      const bars = Array.from(screen.getByRole('progressbar').children).map(bar => bar.className);
-      expect(bars).toHaveLength(3);
-      expect(bars[0]).toContain('bg-positive1');
-      expect(bars[1]).toContain('bg-warning1');
-      expect(bars[2]).toContain('bg-surface6');
+      expect(list.getByText('Adding tests').closest('[aria-hidden="true"]')).toBeNull();
+      expect(list.getByText('Add tests').closest('[aria-hidden="true"]')).not.toBeNull();
+    });
+
+    it('renders an accessible label for each task status', () => {
+      render(<TaskList tasks={mixedTasks} />);
+      const list = within(screen.getByRole('list'));
+
+      expect(list.getByLabelText('Completed')).toBeTruthy();
+      expect(list.getByLabelText('In progress')).toBeTruthy();
+      expect(list.getByLabelText('Pending')).toBeTruthy();
+    });
+
+    it('scrolls the list just far enough to reveal the active task', () => {
+      render(<TaskList tasks={longTasks} />);
+
+      expect(Element.prototype.scrollTo).toHaveBeenLastCalledWith({ top: 42 });
+    });
+
+    it('scrolls again only when the active task changes', () => {
+      const firstTaskActive: TaskListItem[] = longTasks.map((task, index) => ({
+        ...task,
+        status: index === 0 ? 'in_progress' : 'pending',
+      }));
+      const { rerender } = render(<TaskList tasks={firstTaskActive} />);
+      expect(Element.prototype.scrollTo).toHaveBeenCalledOnce();
+
+      rerender(<TaskList tasks={[...firstTaskActive]} />);
+      expect(Element.prototype.scrollTo).toHaveBeenCalledOnce();
+
+      rerender(<TaskList tasks={longTasks} />);
+      expect(Element.prototype.scrollTo).toHaveBeenLastCalledWith({ top: 42 });
+    });
+  });
+
+  describe('when collapsed', () => {
+    it('shows only the active task, with the progress bars', () => {
+      render(<TaskList tasks={mixedTasks} />);
+      collapse();
+
+      expect(visibleRows()).toHaveLength(1);
+      expect(visibleRows()[0]?.textContent).toContain('Adding tests');
+      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
+      expect(screen.getByRole('progressbar').children).toHaveLength(3);
+    });
+
+    it('scrolls the active task into the one-row window', () => {
+      render(<TaskList tasks={longTasks} defaultOpen={false} />);
+
+      expect(Element.prototype.scrollTo).toHaveBeenLastCalledWith({ top: 140 });
+    });
+
+    it('slides the active task into the one-row window when collapsing', () => {
+      render(<TaskList tasks={longTasks} />);
+      collapse();
+
+      expect(Element.prototype.scrollTo).toHaveBeenLastCalledWith({ top: 140 });
+    });
+
+    it('shows the next pending task when nothing is in progress', () => {
+      render(<TaskList tasks={mixedTasks.map(task => ({ ...task, status: 'pending' }))} defaultOpen={false} />);
+
+      expect(visibleRows()[0]?.textContent).toContain('Inspect code');
+    });
+
+    it('shows the last task when every task is completed', () => {
+      render(<TaskList tasks={completedTasks} hideWhenComplete={false} defaultOpen={false} />);
+
+      expect(visibleRows()[0]?.textContent).toContain('Build package');
+      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('3');
     });
 
     it('reveals the exact count on hover', async () => {
-      render(<TaskList tasks={mixedTasks} />);
+      render(<TaskList tasks={mixedTasks} defaultOpen={false} />);
 
       fireEvent.mouseEnter(screen.getByRole('progressbar'));
 
       expect((await screen.findByRole('tooltip')).textContent).toBe('1/3 completed');
     });
 
-    it('renders the active form instead of the task content', () => {
-      render(<TaskList tasks={mixedTasks} />);
-
-      expect(screen.getByText('Adding tests')).toBeTruthy();
-      expect(screen.queryByText('Add tests')).toBeNull();
-    });
-
-    it('renders an accessible label for each task status', () => {
-      render(<TaskList tasks={mixedTasks} />);
-
-      expect(screen.getByLabelText('Completed')).toBeTruthy();
-      expect(screen.getByLabelText('In progress')).toBeTruthy();
-      expect(screen.getByLabelText('Pending')).toBeTruthy();
-    });
-
-    it('marks each task with an icon of its own', () => {
-      render(<TaskList tasks={mixedTasks} />);
-
-      for (const label of ['Completed', 'In progress', 'Pending']) {
-        expect(screen.getByLabelText(label).querySelector('svg')).toBeTruthy();
-      }
-
-      const icons = ['Completed', 'In progress', 'Pending'].map(
-        label => screen.getByLabelText(label).querySelector('svg')?.getAttribute('class') ?? '',
-      );
-      expect(new Set(icons).size).toBe(3);
-    });
-
-    it('strikes a completed task through and leans on the one in progress', () => {
-      render(<TaskList tasks={mixedTasks} />);
-
-      const labelOf = (status: string) => screen.getByLabelText(status).nextElementSibling as HTMLElement;
-
-      expect(labelOf('Completed').classList.contains('line-through')).toBe(true);
-      expect(labelOf('In progress').classList.contains('font-medium')).toBe(true);
-      expect(labelOf('Pending').classList.contains('line-through')).toBe(false);
-      expect(labelOf('Pending').classList.contains('font-medium')).toBe(false);
-    });
-
-    it('brings the active task no further into view than it needs', () => {
-      render(<TaskList tasks={mixedTasks} />);
-
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
-    });
-
-    it('scrolls the active task into view only when its identity changes', () => {
-      const { rerender } = render(<TaskList tasks={mixedTasks} />);
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledOnce();
-
-      rerender(<TaskList tasks={[...mixedTasks]} />);
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledOnce();
-
-      rerender(
-        <TaskList
-          tasks={mixedTasks.map(task =>
-            task.id === 'active'
-              ? { ...task, status: 'completed' }
-              : task.id === 'pending'
-                ? { ...task, status: 'in_progress' }
-                : task,
-          )}
-        />,
-      );
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe('when the list is collapsed', () => {
-    const collapse = () => fireEvent.click(screen.getByRole('button'));
-
-    it('hides the tasks while keeping the progress bars', () => {
-      render(<TaskList tasks={mixedTasks} />);
-      collapse();
-
-      expect(screen.queryByText('Inspect code')).toBeNull();
-      expect(screen.queryByText('Build package')).toBeNull();
-      expect(screen.getByRole('progressbar').children).toHaveLength(3);
-      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
-    });
-
-    it('summarizes the active task in place of the title', () => {
-      render(<TaskList tasks={mixedTasks} />);
-      collapse();
-
-      expect(screen.getByText('Adding tests')).toBeTruthy();
-      expect(screen.getByLabelText('In progress')).toBeTruthy();
-      expect(screen.queryByText('Tasks')).toBeNull();
-    });
-
-    it('summarizes the next pending task when nothing is in progress', () => {
-      render(<TaskList tasks={mixedTasks.map(task => ({ ...task, status: 'pending' }))} />);
-      collapse();
-
-      expect(screen.getByText('Inspect code')).toBeTruthy();
-      expect(screen.queryByText('Add tests')).toBeNull();
-    });
-
-    it('keeps the title when every task is completed', () => {
-      render(<TaskList tasks={completedTasks} hideWhenComplete={false} />);
-      collapse();
-
-      expect(screen.getByText('Tasks')).toBeTruthy();
-    });
-
-    it('restores the tasks when expanded again', () => {
+    it('expands when the collapsed card itself is clicked', () => {
       render(<TaskList tasks={mixedTasks} defaultOpen={false} />);
-      expect(screen.queryByText('Inspect code')).toBeNull();
 
-      fireEvent.click(screen.getByRole('button'));
+      fireEvent.click(screen.getByText('Adding tests'));
 
-      expect(screen.getByText('Inspect code')).toBeTruthy();
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+      expect(visibleRows()).toHaveLength(3);
+    });
+
+    it('shows every task again when expanded', () => {
+      render(<TaskList tasks={mixedTasks} defaultOpen={false} />);
+      expand();
+
+      expect(visibleRows()).toHaveLength(3);
+      expect(screen.getByRole('button', { name: 'Collapse tasks' }).getAttribute('aria-expanded')).toBe('true');
     });
   });
 
   describe('when the task list is empty', () => {
-    it('hides the list by default', () => {
+    it('renders nothing', () => {
       const { container } = render(<TaskList tasks={[]} />);
 
       expect(container.firstChild).toBeNull();
@@ -173,22 +164,6 @@ describe('TaskList', () => {
       const { container } = render(<TaskList tasks={completedTasks} />);
 
       expect(container.firstChild).toBeNull();
-    });
-  });
-
-  describe('when empty lists are configured to remain visible', () => {
-    it('renders no progress bar', () => {
-      render(<TaskList tasks={[]} hideWhenEmpty={false} />);
-
-      expect(screen.getByRole('progressbar').children).toHaveLength(0);
-    });
-  });
-
-  describe('when completed lists are configured to remain visible', () => {
-    it('renders every bar as completed', () => {
-      render(<TaskList tasks={completedTasks} hideWhenComplete={false} />);
-
-      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('3');
     });
   });
 });

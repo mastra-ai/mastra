@@ -65,6 +65,7 @@ createTestSuite(
     id: 'redis-test-store',
     ...TEST_CONFIG,
   }),
+  { workflowResultsNoopWhenRunMissing: false },
 );
 
 // Configuration validation tests

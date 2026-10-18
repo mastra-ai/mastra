@@ -1,6 +1,7 @@
 import type { BackgroundTaskManager } from './manager';
 import type {
   BackgroundTaskHandle,
+  CheckIfExistingPayload,
   CheckIfRunningPayload,
   CheckIfSuspendedPayload,
   CreateBackgroundTaskOptions,
@@ -71,6 +72,29 @@ export function createBackgroundTask(
       }
 
       return false;
+    },
+
+    async checkIfExisting(args: CheckIfExistingPayload) {
+      const result = await manager.listTasks({
+        toolCallId: args.toolCallId,
+        runId: args.runId,
+        agentId: args.agentId,
+        threadId: args.threadId,
+        resourceId: args.resourceId,
+        toolName: args.toolName,
+      });
+      if (result.total > 1) {
+        throw new Error(`Multiple background tasks found for run "${args.runId}" and tool call "${args.toolCallId}"`);
+      }
+
+      const task = result.tasks[0];
+      if (task) {
+        taskId = task.id;
+        if (task.status === 'pending' || task.status === 'running' || task.status === 'suspended') {
+          manager.registerTaskContext(task.id, context);
+        }
+      }
+      return task;
     },
 
     async checkIfRunning(args: CheckIfRunningPayload) {

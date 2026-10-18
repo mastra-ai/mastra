@@ -118,11 +118,14 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           return;
         }
 
-        if (thread.resourceId !== currentResourceId) {
-          await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
+        if (state.local && thread.resourceId !== currentResourceId) {
+          await state.local.controller.setResourceId(state.local.session, { resourceId: thread.resourceId });
         }
         try {
           await state.session.thread.switch({ threadId: thread.id });
+          if (state.options.backgroundToolsEnabled) {
+            await state.waitForAgentControllerEvents?.();
+          }
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);

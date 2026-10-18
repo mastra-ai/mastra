@@ -1,6 +1,11 @@
-import { randomUUID } from 'node:crypto';
-
-import { NotificationsStorage, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import {
+  createStorageErrorId,
+  NotificationsStorage,
+  TABLE_CONFIGS,
+  TABLE_NOTIFICATIONS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
   CreateNotificationInput,
@@ -19,10 +24,14 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
+
+const COMPOSITE_PRIMARY_KEY = TABLE_CONFIGS[TABLE_NOTIFICATIONS]!.compositePrimaryKey!;
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
@@ -140,9 +149,77 @@ export class NotificationsPG extends NotificationsStorage {
     await this.#db.createTable({
       tableName: TABLE_NOTIFICATIONS,
       schema: TABLE_SCHEMAS[TABLE_NOTIFICATIONS],
+      compositePrimaryKey: COMPOSITE_PRIMARY_KEY,
     });
+    await this.ensurePrimaryKey();
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  async #hasPrimaryKey(): Promise<boolean> {
+    const row = await this.#db.client.oneOrNone<{ exists: boolean }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM pg_index i
+        JOIN pg_class c ON c.oid = i.indrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = $1 AND n.nspname = $2 AND i.indisprimary
+      ) AS exists`,
+      [TABLE_NOTIFICATIONS, this.#schema],
+    );
+    return !!row?.exists;
+  }
+
+  /**
+   * Tables created before the composite primary key was declared have no key at
+   * all, which allows duplicate ids and leaves the table without a replica
+   * identity (UPDATE/DELETE fail under logical replication). `createTable` is a
+   * no-op for existing tables, so add the key here. If duplicate rows already
+   * exist, or the role does not own the table, the key cannot be added; warn with
+   * remediation instead of blocking init.
+   */
+  private async ensurePrimaryKey(): Promise<void> {
+    if (await this.#hasPrimaryKey()) return;
+
+    const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName: getSchemaName(this.#schema) });
+    const keyColumns = COMPOSITE_PRIMARY_KEY.map(column => `"${parseSqlIdentifier(column, 'column name')}"`).join(', ');
+
+    const remediation = `ALTER TABLE ${tableName} ADD PRIMARY KEY (${keyColumns});`;
+
+    const duplicate = await this.#db.client.oneOrNone(
+      `SELECT 1 FROM ${tableName} GROUP BY ${keyColumns} HAVING count(*) > 1 LIMIT 1`,
+    );
+    if (duplicate) {
+      this.logger?.warn?.(
+        `${tableName} contains duplicate (${keyColumns}) rows, so its PRIMARY KEY could not be added. ` +
+          `Remove the duplicates, then run: ${remediation}`,
+      );
+      return;
+    }
+
+    try {
+      await this.#db.client.none(`ALTER TABLE ${tableName} ADD PRIMARY KEY (${keyColumns})`);
+      this.logger?.info?.(`Added PRIMARY KEY (${keyColumns}) to ${tableName}`);
+    } catch (error) {
+      // Another process may have added the key concurrently.
+      if (await this.#hasPrimaryKey()) return;
+      // Least-privilege roles that don't own the table can still use it; only the owner can add the key.
+      if ((error as { code?: string })?.code === '42501') {
+        this.logger?.warn?.(
+          `Insufficient privilege to add PRIMARY KEY (${keyColumns}) to ${tableName}. ` +
+            `Ask the table owner to run: ${remediation}`,
+        );
+        return;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'ADD_NOTIFICATIONS_PRIMARY_KEY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -155,7 +232,7 @@ export class NotificationsPG extends NotificationsStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema && this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(NotificationsPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -203,7 +280,7 @@ export class NotificationsPG extends NotificationsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     statements.push(
@@ -211,6 +288,7 @@ export class NotificationsPG extends NotificationsStorage {
         tableName: TABLE_NOTIFICATIONS,
         schema: TABLE_SCHEMAS[TABLE_NOTIFICATIONS],
         schemaName,
+        compositePrimaryKey: COMPOSITE_PRIMARY_KEY,
         includeAllConstraints: true,
       }),
     );
@@ -223,7 +301,7 @@ export class NotificationsPG extends NotificationsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return NotificationsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -262,7 +340,7 @@ export class NotificationsPG extends NotificationsStorage {
     const setColumns = entries.map(([key], index) => `"${parseSqlIdentifier(key, 'column name')}" = $${index + 1}`);
     const values = entries.map(([key, value]) => {
       const columnSchema = TABLE_SCHEMAS[TABLE_NOTIFICATIONS][key];
-      if (columnSchema?.type === 'jsonb' && value !== null) return JSON.stringify(value);
+      if (columnSchema?.type === 'jsonb' && value !== null) return toPgJson(value);
       return value;
     });
 
@@ -301,7 +379,7 @@ export class NotificationsPG extends NotificationsStorage {
 
     const now = input.createdAt ?? new Date();
     const record: NotificationRecord = {
-      id: input.id ?? randomUUID(),
+      id: input.id ?? globalThis.crypto.randomUUID(),
       threadId: input.threadId,
       source: input.source,
       kind: input.kind,

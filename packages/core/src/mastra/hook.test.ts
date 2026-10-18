@@ -188,6 +188,64 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it('falls back to the mastra-registered scorer when the workflow is not registered (#26790)', async () => {
+    const mockScorer = { id: 'politeness', name: 'politeness', run: vi.fn().mockResolvedValue({ score: 1 }) };
+    mockMastra.getWorkflowById.mockImplementation(() => {
+      throw new Error('Workflow with id child-workflow not found');
+    });
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: 'politeness' },
+      input: {},
+      output: { reply: 'please' },
+      source: 'LIVE',
+      entity: { id: 'child-workflow', stepId: 'draft-reply' },
+      entityType: 'WORKFLOW',
+    });
+
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+      expect.objectContaining({ scorerId: 'politeness', entityId: 'child-workflow', entityType: 'WORKFLOW', score: 1 }),
+    );
+  });
+
+  it('does not save a score when the scorer declares the run not scorable', async () => {
+    const debug = vi.fn();
+    mockMastra.getLogger.mockReturnValue({ debug, error: vi.fn(), warn: vi.fn(), trackException: vi.fn() });
+
+    const hookData = {
+      runId: 'test-run',
+      scorer: { id: 'refund-judge' },
+      input: [{ message: 'test' }],
+      output: { result: 'test' },
+      source: 'LIVE' as const,
+      entity: { id: 'test-entity' },
+      entityType: 'AGENT' as const,
+    };
+
+    const mockScorer = {
+      id: 'refund-judge',
+      name: 'refund-judge',
+      run: vi.fn().mockResolvedValue({
+        runId: 'scorer-run-1',
+        notScorable: { step: 'preprocess', reason: 'refundCustomer was not called' },
+      }),
+    };
+
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ 'refund-judge': { scorer: mockScorer } }),
+    });
+
+    await hook(hookData);
+
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+    expect(mockMastra.getLogger().trackException).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('refundCustomer was not called'));
+  });
+
   it('should extract a trajectory from live agent output for trajectory scorers', async () => {
     const output = [
       {

@@ -6,7 +6,7 @@ import { useId } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
 import { externalLinkLabel } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
@@ -77,7 +77,7 @@ export function WorkItemDetailsPanel({
                   target="_blank"
                   rel="noreferrer"
                   aria-label={identifier === undefined ? undefined : `${externalLinkLabel(item.source)}: ${identifier}`}
-                  className={buttonVariants({ variant: 'ghost', size: 'xs' })}
+                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
                 >
                   <SourceIcon source={item.source} />
                   {identifier ?? externalLinkLabel(item.source)}
@@ -86,7 +86,7 @@ export function WorkItemDetailsPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 aria-label={`Collapse ${item.title}`}
                 onClick={morph.closeDetails}
               >
@@ -95,7 +95,7 @@ export function WorkItemDetailsPanel({
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
-                    <Button type="button" variant="ghost" size="icon-xs" aria-label={`All actions for ${item.title}`}>
+                    <Button type="button" variant="ghost" size="icon-sm" aria-label={`All actions for ${item.title}`}>
                       <EllipsisVertical size={13} aria-hidden />
                     </Button>
                   }

@@ -1,3 +1,4 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type {
   LanguageModelV4,
   LanguageModelV4CallOptions,
@@ -5,9 +6,11 @@ import type {
   LanguageModelV4FilePart,
   LanguageModelV4StreamPart,
 } from '@ai-sdk/provider-v7';
+import { aiV5PromptToAIV7Prompt } from '../../../../agent/message-list/conversion';
 import { convertToDataContent } from '../../../../stream/aisdk/v5/compat/content';
 import type { MastraLanguageModelV4 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
+import { toSingleSystemMessage } from '../single-system-message';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV4['doStream']>>;
 type GenerateResult = Awaited<ReturnType<LanguageModelV4['doGenerate']>>;
@@ -109,8 +112,19 @@ function remapFilePartsToV4(options: LanguageModelV4CallOptions): LanguageModelV
   return promptModified ? { ...options, prompt: prompt as typeof options.prompt } : options;
 }
 
+/**
+ * ModelRouter exposes a V2 interface, so prompts prepared upstream may contain
+ * V2 tool-result media parts even when the resolved provider implements V4.
+ */
+function remapToolResultMediaPartsToV4(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
+  return {
+    ...options,
+    prompt: aiV5PromptToAIV7Prompt(options.prompt as LanguageModelV2Prompt) as typeof options.prompt,
+  };
+}
+
 function remapCallOptionsToV4(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
-  return remapToolsToV4(remapFilePartsToV4(options));
+  return remapToolsToV4(remapFilePartsToV4(remapToolResultMediaPartsToV4(options)));
 }
 
 /**
@@ -192,6 +206,8 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
    * Provider-specific model ID for logging purposes.
    */
   readonly modelId: string;
+  /** Full `provider/model` ID this model was resolved from, when known. */
+  id?: string;
   /**
    * Supported URL patterns by media type for the provider.
    *
@@ -202,6 +218,11 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
    * @returns A map of supported URL patterns by media type (as a promise or a plain object).
    */
   supportedUrls: PromiseLike<Record<string, RegExp[]>> | Record<string, RegExp[]>;
+  /**
+   * Whether the wrapped provider model sends native structured output (for example
+   * `@ai-sdk/openai-compatible` models created with `supportsStructuredOutputs: true`).
+   */
+  readonly supportsStructuredOutputs?: boolean;
 
   #model: LanguageModelV4;
 
@@ -210,10 +231,14 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
     this.provider = this.#model.provider;
     this.modelId = this.#model.modelId;
     this.supportedUrls = this.#model.supportedUrls;
+    const supportsStructuredOutputs = (config as { supportsStructuredOutputs?: unknown }).supportsStructuredOutputs;
+    if (typeof supportsStructuredOutputs === 'boolean') {
+      this.supportsStructuredOutputs = supportsStructuredOutputs;
+    }
   }
 
   async doGenerate(options: LanguageModelV4CallOptions) {
-    const result = await this.#model.doGenerate(remapCallOptionsToV4(options));
+    const result = await this.#model.doGenerate(remapCallOptionsToV4(this.#withSingleSystemMessage(options)));
     const content = untagResponseFileContent(result.content);
     const untaggedResult = content === result.content ? result : { ...result, content };
 
@@ -226,12 +251,17 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   }
 
   async doStream(options: LanguageModelV4CallOptions) {
-    const result = await this.#model.doStream(remapCallOptionsToV4(options));
+    const result = await this.#model.doStream(remapCallOptionsToV4(this.#withSingleSystemMessage(options)));
 
     return {
       ...result,
       stream: untagFileStreamParts(result.stream),
     };
+  }
+
+  #withSingleSystemMessage(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
+    const prompt = toSingleSystemMessage(this.provider, options.prompt);
+    return prompt === options.prompt ? options : { ...options, prompt };
   }
 
   /**

@@ -1,6 +1,5 @@
+import { useAllProviderTools, useToolProviders } from '@mastra/react/hooks/tool-providers';
 import { useMemo, useState } from 'react';
-import { useAllProviderTools } from '../../../../tool-providers/hooks/use-all-provider-tools';
-import { useToolProviders } from '../../../../tool-providers/hooks/use-tool-providers';
 import type { AgentTool } from '../../../types/agent-tool';
 import { ToolGrid, ToolListEmptyState } from './tool-grid';
 import { getEmptyStateDetails, getVisibleTools } from './tool-visibility';
@@ -81,6 +80,7 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
         editable={editable}
         onlySelected={onlySelected}
         onOnlySelectedChange={setOnlySelected}
+        search={search}
         onSearch={setSearch}
         emptyStateDetails={emptyStateDetails}
         onToggle={toggle}

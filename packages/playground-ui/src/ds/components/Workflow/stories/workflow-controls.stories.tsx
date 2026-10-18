@@ -5,7 +5,7 @@ import { WorkflowDebugControls } from '../controls/workflow-debug-controls';
 const meta = {
   title: 'Workflows/Debug controls',
   component: WorkflowDebugControls,
-  args: { canRunNextStep: true, onRunNextStep: fn(), onContinueRun: fn() },
+  args: { nextStepLabel: 'check-inventory', canRunNextStep: true, onRunNextStep: fn(), onContinueRun: fn() },
   decorators: [
     Story => (
       <div className="w-72">
@@ -19,4 +19,5 @@ type Story = StoryObj<typeof meta>;
 
 export const Paused: Story = {};
 export const Streaming: Story = { args: { isStreaming: true } };
-export const NoNextStep: Story = { args: { canRunNextStep: false } };
+export const NoNextStep: Story = { args: { canRunNextStep: false, nextStepLabel: undefined } };
+export const Cancelling: Story = { args: { disabled: true } };

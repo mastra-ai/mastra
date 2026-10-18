@@ -28,8 +28,8 @@ describe('ToolMockReportSection', () => {
       expect(screen.getByText(/did not match an available mock/)).toBeDefined();
       expect(screen.getByText(/TOOL_MOCK_MISMATCH/)).toBeDefined();
       // The called args and the unconsumed mock args are surfaced so the mismatch is legible.
-      expect(screen.getByText(/Called with: {"city":"Paris"}/)).toBeDefined();
-      expect(screen.getByText(/Unconsumed mocks: {"city":"Seattle"}/)).toBeDefined();
+      expect(screen.getByText(/Called with:/).textContent).toBe('Called with: {"city":"Paris"}');
+      expect(screen.getByText(/Unconsumed mocks:/).textContent).toBe('Unconsumed mocks: {"city":"Seattle"}');
     });
   });
 

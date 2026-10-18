@@ -3,6 +3,7 @@ title: "Storing embeddings in a vector database | RAG"
 description: "After generating embeddings, you need to store them in a database that supports vector similarity search."
 packages:
   - "@mastra/astra"
+  - "@mastra/azure-ai-search"
   - "@mastra/chroma"
   - "@mastra/core"
   - "@mastra/couchbase"
@@ -76,6 +77,29 @@ After generating embeddings, you need to store them in a database that supports 
     ```
 
     See the [MongoDB vector reference](/reference/vectors/mongodb) for details on `createSearchIndex()`, `textQuery()`, and `hybridQuery()`.
+
+    <h3>Automated Embedding</h3>
+
+    MongoDB can generate the embeddings itself, so you don't need an embedding provider in your application. Create the index with `autoEmbed` and a Voyage AI model, write plain text, and search with a query string:
+
+    ```ts
+    await store.createIndex({
+      indexName: 'myCollection',
+      autoEmbed: { model: 'voyage-4' },
+    })
+    await store.upsert({
+      indexName: 'myCollection',
+      documents: chunks.map(chunk => chunk.text),
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    const results = await store.query({
+      indexName: 'myCollection',
+      queryText: 'search terms',
+      topK: 10,
+    })
+    ```
+
+    Automated Embedding is a MongoDB Preview feature and needs a deployment where it's available. See the [MongoDB vector reference](/reference/vectors/mongodb#automated-embedding) for the supported options and requirements.
   </TabItem>
 
   <TabItem value="pg-vector" label="PgVector">
@@ -231,7 +255,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   <TabItem value="libsql" label="libSQL">
     ```ts title="vector-store.ts"
-    import { LibSQLVector } from '@mastra/core/vector/libsql'
+    import { LibSQLVector } from '@mastra/libsql'
 
     const store = new LibSQLVector({
       id: 'libsql-vector',
@@ -368,6 +392,29 @@ After generating embeddings, you need to store them in a database that supports 
     <h3>Using Elasticsearch</h3>
 
     For detailed setup instructions and best practices, see the [official Elasticsearch documentation](https://www.elastic.co/docs/solutions/search/get-started).
+  </TabItem>
+
+  <TabItem value="azure-ai-search" label="Azure AI Search">
+    ```ts title="vector-store.ts"
+    import { AzureAISearchVector } from '@mastra/azure-ai-search'
+
+    const store = new AzureAISearchVector({
+      id: 'azure-search-vectors',
+      endpoint: process.env.AZURE_AI_SEARCH_ENDPOINT!,
+      credential: process.env.AZURE_AI_SEARCH_CREDENTIAL!,
+    })
+
+    await store.createIndex({
+      indexName: 'my-collection',
+      dimension: 1536,
+    })
+
+    await store.upsert({
+      indexName: 'my-collection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
   </TabItem>
 
   <TabItem value="couchbase" label="Couchbase">
@@ -640,6 +687,17 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `-myindex` isn't valid (begins with hyphen)
     - Example: `myindex-` isn't valid (ends with hyphen)
     - Example: `MyIndex` isn't valid (contains uppercase letters)
+  </TabItem>
+
+  <TabItem value="azure-ai-search" label="Azure AI Search">
+    Index names must:
+
+    - Use only lowercase letters, numbers, dashes (`-`), and underscore (`_`) characters
+    - Not start or end with a dash
+    - Be between 2 and 128 characters long
+    - Example: `my-index-123` and `my_index` are valid
+    - Example: `MyIndex` isn't valid (contains uppercase letters)
+    - Example: `my-index-` isn't valid (ends with a dash)
   </TabItem>
 </Tabs>
 

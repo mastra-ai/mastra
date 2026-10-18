@@ -32,8 +32,7 @@ export function deriveLocalWorkdir(
 ): string | undefined {
   const wd = sandbox.workingDirectory;
   if (sandbox.provider === 'local' && typeof wd === 'string' && wd.length > 0) {
-    const [, name] = repoFullName.split('/', 2);
-    return resolveContainedLocalWorkdir(wd, sanitizeSegment(name || 'repo'));
+    return resolveContainedLocalWorkdir(wd, repositoryDirectoryName(repoFullName));
   }
   return undefined;
 }
@@ -52,10 +51,23 @@ export function deriveRemoteRepoDir(
 
 /** Join a parent directory and sanitized repository name. */
 export function repoDirUnder(parent: string, repoFullName: string): string {
-  const [, name] = repoFullName.split('/', 2);
   let end = parent.length;
   while (end > 0 && parent[end - 1] === '/') end--;
-  return `${parent.slice(0, end)}/${sanitizeSegment(name || 'repo')}`;
+  return `${parent.slice(0, end)}/${repositoryDirectoryName(repoFullName)}`;
+}
+
+/**
+ * The directory a repository checks out into, under the workspace root. Must
+ * agree with the repo templates' private `repoDirName`
+ * (`workspaces/platform-workspace/src/repo-template.ts`): the last segment
+ * of the clone URL, `[^A-Za-z0-9._-]` replaced by `-`, leading dots dropped,
+ * `repo` when nothing is left. A repository slug never ends in `.git`, so
+ * both derive the same name for every slug; `workdir.test.ts` pins the
+ * template's own fixtures.
+ */
+export function repositoryDirectoryName(repoFullName: string): string {
+  const segments = repoFullName.split('/');
+  return sanitizeSegment(segments.length > 1 ? segments.at(-1) || 'repo' : 'repo');
 }
 
 /** Resolve a workdir under `root`, refusing any path that escapes the configured root. */

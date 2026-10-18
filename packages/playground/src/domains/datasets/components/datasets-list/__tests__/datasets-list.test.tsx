@@ -1,5 +1,5 @@
-import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DatasetsList } from '../datasets-list';
 import type { DatasetsListProps } from '../datasets-list';
@@ -11,7 +11,7 @@ import { renderWithProviders } from '@/test/render';
 const renderList = (props: Partial<DatasetsListProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <DatasetsList datasets={datasets} experiments={experiments} isLoading={false} {...props} />
+      <DatasetsList datasets={datasets} experiments={experiments} {...props} />
     </TestLinkProvider>,
   );
 
@@ -46,8 +46,13 @@ describe('DatasetsList', () => {
       renderList();
       const row = screen.getByRole('link', { name: /Dataset A/ });
       expect(row.getAttribute('href')).toBe('/datasets/ds-a');
-      expect(within(row).getByText('Customer support examples')).toBeTruthy();
       expect(within(row).getByText('v3')).toBeTruthy();
+    });
+
+    it('does not render the Description column or dataset descriptions', () => {
+      renderList();
+      expect(screen.queryByText('Description')).toBeNull();
+      expect(screen.queryByText('Customer support examples')).toBeNull();
     });
 
     it('shows the first two tags with an overflow count', () => {
@@ -72,6 +77,16 @@ describe('DatasetsList', () => {
     it('counts only its own experiments and rounds the completion percentage', () => {
       renderList({ experiments: mixedExperiments });
       expect(screen.getByRole('link', { name: '3 (67%)' }).getAttribute('href')).toBe('/experiments?dataset=ds-a');
+    });
+  });
+
+  describe('when the caller supplies a trailing cell for a navigable row', () => {
+    it('shows that cell instead of the experiments action and keeps dataset navigation', () => {
+      renderList({ renderTrailingCell: ds => (ds.id === 'ds-a' ? <span>Summary unavailable</span> : null) });
+
+      expect(screen.getByText('Summary unavailable')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: '2 (100%)' })).toBeNull();
+      expect(screen.getByRole('link', { name: /Dataset A/ }).getAttribute('href')).toBe('/datasets/ds-a');
     });
   });
 
@@ -111,6 +126,51 @@ describe('DatasetsList', () => {
     it('does not show dataset links', () => {
       renderList({ tagFilter: 'missing' });
       expect(screen.queryAllByRole('link')).toHaveLength(0);
+    });
+  });
+
+  describe('when no loaded dataset matches and more pages can still load', () => {
+    it('does not claim that no dataset matches', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: true });
+      expect(screen.queryByText('No datasets match your filters')).toBeNull();
+    });
+  });
+
+  describe('when no dataset matches and every page is loaded', () => {
+    it('says that no dataset matches the filters', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: false });
+      expect(screen.getByText('No datasets match your filters')).toBeTruthy();
+    });
+  });
+
+  describe('when an onSelectDataset handler is provided', () => {
+    it('renders rows as buttons instead of links and reports the clicked dataset', () => {
+      const onSelectDataset = vi.fn();
+      renderList({ onSelectDataset });
+      expect(screen.queryAllByRole('link')).toHaveLength(0);
+      fireEvent.click(screen.getByRole('button', { name: /Dataset A/ }));
+      expect(onSelectDataset).toHaveBeenCalledWith(expect.objectContaining({ id: 'ds-a' }));
+    });
+
+    it('keeps the experiments badge as plain text inside the row', () => {
+      renderList({ onSelectDataset: vi.fn() });
+      const row = screen.getByRole('button', { name: /Dataset A/ });
+      expect(within(row).getByText('2 (100%)')).toBeTruthy();
+    });
+
+    it('marks the selected dataset row as featured', () => {
+      renderList({ onSelectDataset: vi.fn(), selectedDatasetId: 'ds-a' });
+      expect(screen.getByRole('button', { name: /Dataset A/ }).dataset.featured).toBe('true');
+      expect(screen.getByRole('button', { name: /Dataset B/ }).dataset.featured).toBeUndefined();
+    });
+
+    it('lets the caller override the trailing cell per dataset', () => {
+      renderList({
+        onSelectDataset: vi.fn(),
+        renderTrailingCell: ds => (ds.id === 'ds-a' ? <span>Generating...</span> : null),
+      });
+      expect(within(screen.getByRole('button', { name: /Dataset A/ })).getByText('Generating...')).toBeTruthy();
+      expect(within(screen.getByRole('button', { name: /Dataset A/ })).queryByText('2 (100%)')).toBeNull();
     });
   });
 });

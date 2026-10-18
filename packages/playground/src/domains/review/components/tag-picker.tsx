@@ -1,6 +1,9 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Plus } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
@@ -57,10 +60,16 @@ export function TagPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="text-neutral3 hover:text-neutral5 hover:bg-surface3 text-ui-xs inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors"
+            className={cn(
+              quietTextHover,
+              controlStateColorTransition,
+              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-fill-subtle',
+            )}
           >
             <Plus className="h-3 w-3" />
-            tag
+            <Txt as="span" variant="meta" className="block">
+              tag
+            </Txt>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-52 p-2" align="start">
@@ -70,7 +79,7 @@ export function TagPicker({
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="text-ui-sm mb-1 h-7"
+            className="mb-1 h-7 text-caption"
             autoFocus
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
@@ -79,22 +88,26 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="hover:bg-surface3 text-neutral4 text-ui-sm w-full rounded px-2 py-1 text-left"
+                className="w-full rounded px-2 py-1 text-left text-muted-foreground hover:bg-fill-subtle"
               >
-                {tag}
+                <Txt as="span" variant="caption" className="block">
+                  {tag}
+                </Txt>
               </button>
             ))}
             {canCreate && (
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="hover:bg-surface3 text-accent1 text-ui-sm w-full rounded px-2 py-1 text-left"
+                className="w-full rounded px-2 py-1 text-left text-info-indicator hover:bg-fill-subtle"
               >
-                Create &quot;{search.trim()}&quot;
+                <Txt as="span" variant="caption" className="block">
+                  Create &quot;{search.trim()}&quot;
+                </Txt>
               </button>
             )}
             {filtered.length === 0 && !canCreate && (
-              <Txt variant="ui-xs" className="text-neutral3 block px-2 py-1">
+              <Txt variant="meta" tone="muted" className="block px-2 py-1">
                 No tags available
               </Txt>
             )}

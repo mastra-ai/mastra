@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 /**
  * In-memory registry of subagent results produced during a single supervisor
  * run. Powers `delegation.enableResultReferences`: each successful, non-empty
@@ -84,7 +82,8 @@ export function resolveDelegationRefs(
       missing.push(ref);
       continue;
     }
-    const tag = `delegation_result_${randomBytes(6).toString('hex')}`;
+    const random = globalThis.crypto.getRandomValues(new Uint8Array(6));
+    const tag = `delegation_result_${Array.from(random, byte => byte.toString(16).padStart(2, '0')).join('')}`;
     const attrs = [`ref="${escapeAttribute(ref)}"`, `from="${escapeAttribute(entry.agentName)}"`];
     if (as) attrs.push(`as="${escapeAttribute(as)}"`);
     if (note) attrs.push(`note="${escapeAttribute(note)}"`);

@@ -65,9 +65,11 @@ function createContext(threads: AgentControllerThread[]) {
     assistantRenderRegistry,
     assistantSegment,
     pendingNewThread: false,
+    options: { backgroundToolsEnabled: false },
     projectInfo: { rootPath: '/repo', gitBranch: 'main' },
     threadPreviewCache: new Map<string, { preview: string; updatedAt: number }>(),
     attemptedThreadPreviewIds: new Set<string>(),
+    waitForAgentControllerEvents: undefined as undefined | (() => Promise<void>),
     ui: {
       showOverlay,
       hideOverlay: vi.fn(),
@@ -85,8 +87,8 @@ function createContext(threads: AgentControllerThread[]) {
       thread: {
         getId: vi.fn(() => null),
         list: vi.fn(async () => threads),
-        switch: vi.fn(async () => {}),
         firstUserMessages: vi.fn(async () => new Map()),
+        switch: vi.fn(async () => {}),
       },
       mode: { get: vi.fn(() => 'build') },
     },
@@ -192,18 +194,44 @@ describe('handleThreadsCommand thread listing', () => {
     await commandPromise;
   });
 
-  it('disposes assistant render ownership when switching threads', async () => {
+  it('waits for thread-change rendering when background tools are enabled', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
-    const { ctx, state } = createContext(threads);
+    const { ctx, state, showOverlay } = createContext(threads);
+    const rendered = vi.fn();
+    state.options.backgroundToolsEnabled = true;
+    state.waitForAgentControllerEvents = vi.fn(async () => rendered());
 
     const commandPromise = handleThreadsCommand(ctx);
     await Promise.resolve();
+    expect(showOverlay).toHaveBeenCalledTimes(1);
+
     await selectorInstances[0].options.onSelect(threads[0]);
     await commandPromise;
 
+    expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(state.waitForAgentControllerEvents).toHaveBeenCalledTimes(1);
+    expect(rendered).toHaveBeenCalledTimes(1);
     expect(state.assistantRenderRegistry.size).toBe(0);
     expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
     expect(state.chatContainer.clear).toHaveBeenCalledOnce();
+    expect(ctx.renderExistingMessages).toHaveBeenCalledOnce();
+  });
+
+  it('does not wait for PR-added event draining when background tools are disabled', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state, showOverlay } = createContext(threads);
+    state.waitForAgentControllerEvents = vi.fn(async () => {});
+
+    const commandPromise = handleThreadsCommand(ctx);
+    await Promise.resolve();
+    expect(showOverlay).toHaveBeenCalledTimes(1);
+
+    await selectorInstances[0].options.onSelect(threads[0]);
+    await commandPromise;
+
+    expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(state.waitForAgentControllerEvents).not.toHaveBeenCalled();
+    expect(ctx.renderExistingMessages).toHaveBeenCalledOnce();
   });
 
   it('tracks the thread lock prompt when shown', () => {

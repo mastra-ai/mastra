@@ -34,7 +34,7 @@ afterEach(() => cleanup());
 
 describe('MastraVersionFooter', () => {
   describe('when installed packages include outdated and deprecated versions', () => {
-    it('tells outdated from deprecated by tone, in the trigger and in the dialog', async () => {
+    it('counts them separately in the trigger label and in the dialog', async () => {
       server.use(
         http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackagesWithUpdates)),
         http.get('https://registry.npmjs.org/:packageName', ({ request }) => {
@@ -55,9 +55,7 @@ describe('MastraVersionFooter', () => {
       const outdatedBadge = (await screen.findByText('package outdated')).previousElementSibling;
       const deprecatedBadge = (await screen.findByText('package deprecated')).previousElementSibling;
       expect(outdatedBadge?.textContent).toBe('1');
-      expect(outdatedBadge?.classList.contains('bg-badge-yellow/20')).toBe(true);
       expect(deprecatedBadge?.textContent).toBe('1');
-      expect(deprecatedBadge?.classList.contains('bg-badge-red/20')).toBe(true);
     });
   });
 });

@@ -124,6 +124,56 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "decisions"
     }
   },
+  "GET /web/factory/projects/:id/environment": {
+    "contractKey": "projectEnvironmentGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/environment",
+    "description": "Get the sandbox environment of a Factory project: provider settings and its repositories in order",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/environment/builds": {
+    "contractKey": "projectEnvironmentBuilds",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/environment/builds",
+    "description": "List the environment template builds of a Factory project, newest first, when the provider keeps history",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "builds"
+    }
+  },
+  "GET /web/factory/projects/:id/environment/builds/:buildId": {
+    "contractKey": "projectEnvironmentBuildGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/environment/builds/:buildId",
+    "description": "Get the live status of one environment template build of a Factory project",
+    "pathParams": [
+      "id",
+      "buildId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/health/thresholds": {
     "contractKey": "healthThresholdsGet",
     "method": "GET",
@@ -160,22 +210,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "GET /web/factory/projects/:id/supervisor/health": {
-    "contractKey": "supervisorHealth",
-    "method": "GET",
-    "path": "/web/factory/projects/:id/supervisor/health",
-    "description": "Run the deterministic Factory supervisor health check",
-    "pathParams": [
-      "id"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /web/factory/projects/:id/work-items": {
     "contractKey": "workItemList",
     "method": "GET",
@@ -205,9 +239,34 @@ export const FACTORY_API_ROUTE_METADATA = {
       "autoApprovePlans",
       "autoRunEnabled",
       "defaultModelId",
+      "defaultThinkingLevel",
       "description",
+      "modelScope",
       "name",
-      "slackWorkItemsEnabled"
+      "reviewTestChecksEnabled",
+      "selfReviewEnabled"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /web/factory/projects/:id/environment": {
+    "contractKey": "projectEnvironmentUpdate",
+    "method": "PATCH",
+    "path": "/web/factory/projects/:id/environment",
+    "description": "Update the sandbox environment of a Factory project: provider settings, repository order and setup",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "buildTriggers",
+      "repositories",
+      "sandboxWorkingDirectory",
+      "settings",
+      "workspaceSetupCommand"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -248,10 +307,27 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "description",
+      "modelScope",
       "name"
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /web/factory/projects/:id/apply-default-model": {
+    "contractKey": "projectApplyDefaultModel",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/apply-default-model",
+    "description": "Apply the Factory default model to running work and review threads",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -382,6 +458,22 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /web/factory/projects/:id/environment/build": {
+    "contractKey": "projectEnvironmentBuild",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/environment/build",
+    "description": "Build the sandbox environment template of a Factory project now",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /web/factory/projects/:id/runs/start": {
     "contractKey": "workItemStart",
     "method": "POST",
@@ -401,22 +493,6 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "record"
-    }
-  },
-  "POST /web/factory/projects/:id/supervisor/session": {
-    "contractKey": "supervisorSession",
-    "method": "POST",
-    "path": "/web/factory/projects/:id/supervisor/session",
-    "description": "Get the deterministic Factory supervisor session address",
-    "pathParams": [
-      "id"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
     }
   },
   "POST /web/factory/projects/:id/work-items": {
@@ -628,7 +704,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "automation-proposed",
               "mention",
               "activity",
-              "supervisor-finding",
               "agent-waiting"
             ]
           }
@@ -667,7 +742,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "automation-proposed",
               "mention",
               "activity",
-              "supervisor-finding",
               "agent-waiting"
             ]
           },
@@ -718,7 +792,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -796,13 +869,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "object",
                         "properties": {
                           "outcome": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
+                            "type": [
+                              "string",
+                              "null"
                             ]
                           },
                           "to": {
@@ -891,6 +960,431 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "GET /web/factory/projects/:id/environment": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "object",
+          "properties": {
+            "sandbox": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "settingsSchema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "type": "boolean"
+                    },
+                    "builds": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "history": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "available",
+                        "history"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "template",
+                    "builds"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "settingsSchema",
+                "capabilities"
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "sandboxWorkingDirectory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "workspaceSetupCommand": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateHeads": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "projectRepositoryId": {
+                    "type": "string"
+                  },
+                  "connectionId": {
+                    "type": "string"
+                  },
+                  "repositoryId": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "defaultBranch": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "inEnvironment": {
+                    "type": "boolean"
+                  },
+                  "setupCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "teardownCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuildStatus": {
+                    "type": "string",
+                    "enum": [
+                      "unbuilt",
+                      "configured",
+                      "failed"
+                    ]
+                  },
+                  "lastBuildError": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuiltAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "projectRepositoryId",
+                  "connectionId",
+                  "repositoryId",
+                  "slug",
+                  "defaultBranch",
+                  "position",
+                  "inEnvironment",
+                  "setupCommand",
+                  "teardownCommand",
+                  "lastBuildStatus",
+                  "lastBuildError",
+                  "lastBuiltAt"
+                ]
+              }
+            },
+            "buildTriggers": {
+              "type": "object",
+              "properties": {
+                "schedule": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "cron": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "timezone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scheduleAvailable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "cron",
+                    "timezone",
+                    "scheduleAvailable"
+                  ]
+                },
+                "push": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "debounceMinutes": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "debounceMinutes"
+                  ]
+                }
+              },
+              "required": [
+                "schedule",
+                "push"
+              ]
+            },
+            "build": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "buildId": {
+                      "type": "string"
+                    },
+                    "attemptedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "buildId",
+                    "attemptedAt"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "sandbox",
+            "settings",
+            "sandboxWorkingDirectory",
+            "workspaceSetupCommand",
+            "activeTemplateId",
+            "activeTemplateHeads",
+            "repositories"
+          ]
+        }
+      },
+      "required": [
+        "environment"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/environment/builds": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "builds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "buildId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "building",
+                  "ready",
+                  "failed",
+                  "unknown"
+                ]
+              },
+              "templateId": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": "string"
+              },
+              "finishedAt": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "logs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "buildId",
+              "status"
+            ]
+          }
+        }
+      },
+      "required": [
+        "builds"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/environment/builds/:buildId": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "buildId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "buildId"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": "object",
+          "properties": {
+            "buildId": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "building",
+                "ready",
+                "failed",
+                "unknown"
+              ]
+            },
+            "templateId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": "string"
+            },
+            "finishedAt": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "logs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "buildId",
+            "status"
+          ]
+        }
+      },
+      "required": [
+        "build"
+      ]
+    }
+  },
   "GET /web/factory/projects/:id/health/thresholds": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -961,56 +1455,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "metrics"
-      ]
-    }
-  },
-  "GET /web/factory/projects/:id/supervisor/health": {
-    "path": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "checkedAt": {
-          "type": "string"
-        },
-        "findings": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          }
-        },
-        "counts": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          }
-        }
-      },
-      "required": [
-        "checkedAt",
-        "findings",
-        "counts"
       ]
     }
   },
@@ -1089,14 +1533,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "defaultModelId": {
           "$ref": "#/$defs/__schema2"
         },
-        "slackWorkItemsEnabled": {
+        "modelScope": {
           "$ref": "#/$defs/__schema3"
         },
-        "autoRunEnabled": {
+        "defaultThinkingLevel": {
           "$ref": "#/$defs/__schema4"
         },
-        "autoApprovePlans": {
+        "autoRunEnabled": {
           "$ref": "#/$defs/__schema5"
+        },
+        "autoApprovePlans": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "reviewTestChecksEnabled": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "selfReviewEnabled": {
+          "$ref": "#/$defs/__schema8"
         }
       },
       "$defs": {
@@ -1128,12 +1581,34 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema3": {
-          "type": "boolean"
+          "type": "string",
+          "enum": [
+            "factory",
+            "user",
+            "hybrid"
+          ]
         },
         "__schema4": {
-          "type": "boolean"
+          "type": "string",
+          "enum": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
         },
         "__schema5": {
+          "type": "boolean"
+        },
+        "__schema6": {
+          "type": "boolean"
+        },
+        "__schema7": {
+          "type": "boolean"
+        },
+        "__schema8": {
           "type": "boolean"
         }
       }
@@ -1152,6 +1627,448 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
+      ]
+    }
+  },
+  "PATCH /web/factory/projects/:id/environment": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "sandboxWorkingDirectory": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "settings": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "workspaceSetupCommand": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "buildTriggers": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "repositories": {
+          "$ref": "#/$defs/__schema6"
+        }
+      },
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "$ref": "#/$defs/__schema2"
+            }
+          ]
+        },
+        "__schema1": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "__schema2": {
+          "type": "null"
+        },
+        "__schema3": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema5": {
+          "type": "object",
+          "properties": {
+            "schedule": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "cron": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "timezone": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "enabled"
+              ]
+            },
+            "push": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "debounceMinutes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1440
+                }
+              }
+            }
+          }
+        },
+        "__schema6": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema7"
+          }
+        },
+        "__schema7": {
+          "type": "object",
+          "properties": {
+            "projectRepositoryId": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "position": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "inEnvironment": {
+              "type": "boolean"
+            },
+            "setupCommand": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "teardownCommand": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "projectRepositoryId"
+          ]
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "object",
+          "properties": {
+            "sandbox": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "settingsSchema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "type": "boolean"
+                    },
+                    "builds": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "history": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "available",
+                        "history"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "template",
+                    "builds"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "settingsSchema",
+                "capabilities"
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "sandboxWorkingDirectory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "workspaceSetupCommand": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeTemplateHeads": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "projectRepositoryId": {
+                    "type": "string"
+                  },
+                  "connectionId": {
+                    "type": "string"
+                  },
+                  "repositoryId": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "defaultBranch": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "inEnvironment": {
+                    "type": "boolean"
+                  },
+                  "setupCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "teardownCommand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuildStatus": {
+                    "type": "string",
+                    "enum": [
+                      "unbuilt",
+                      "configured",
+                      "failed"
+                    ]
+                  },
+                  "lastBuildError": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lastBuiltAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "projectRepositoryId",
+                  "connectionId",
+                  "repositoryId",
+                  "slug",
+                  "defaultBranch",
+                  "position",
+                  "inEnvironment",
+                  "setupCommand",
+                  "teardownCommand",
+                  "lastBuildStatus",
+                  "lastBuildError",
+                  "lastBuiltAt"
+                ]
+              }
+            },
+            "buildTriggers": {
+              "type": "object",
+              "properties": {
+                "schedule": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "cron": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "timezone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scheduleAvailable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "cron",
+                    "timezone",
+                    "scheduleAvailable"
+                  ]
+                },
+                "push": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "debounceMinutes": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "debounceMinutes"
+                  ]
+                }
+              },
+              "required": [
+                "schedule",
+                "push"
+              ]
+            },
+            "build": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "buildId": {
+                      "type": "string"
+                    },
+                    "attemptedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "buildId",
+                    "attemptedAt"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "sandbox",
+            "settings",
+            "sandboxWorkingDirectory",
+            "workspaceSetupCommand",
+            "activeTemplateId",
+            "activeTemplateHeads",
+            "repositories"
+          ]
+        }
+      },
+      "required": [
+        "environment"
       ]
     }
   },
@@ -1325,6 +2242,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": "null"
             }
           ]
+        },
+        "modelScope": {
+          "type": "string",
+          "enum": [
+            "factory",
+            "user",
+            "hybrid"
+          ]
         }
       },
       "required": [
@@ -1345,6 +2270,67 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
+      ]
+    }
+  },
+  "POST /web/factory/projects/:id/apply-default-model": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "modelId": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "not-running",
+                  "work-item-missing",
+                  "stage-inactive",
+                  "thread-missing",
+                  "mode-unknown",
+                  "apply-failed"
+                ]
+              }
+            },
+            "required": [
+              "threadId",
+              "reason"
+            ]
+          }
+        }
+      },
+      "required": [
+        "modelId",
+        "applied",
+        "skipped"
       ]
     }
   },
@@ -1384,7 +2370,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -1452,7 +2437,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -1520,7 +2504,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -1713,6 +2696,48 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "decision"
+      ]
+    }
+  },
+  "POST /web/factory/projects/:id/environment/build": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "started",
+            "skipped",
+            "unavailable",
+            "failed"
+          ]
+        },
+        "buildId": {
+          "type": "string"
+        },
+        "templateId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome"
       ]
     }
   },
@@ -1914,42 +2939,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "type": "string"
       },
       "additionalProperties": {}
-    }
-  },
-  "POST /web/factory/projects/:id/supervisor/session": {
-    "path": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "sessionId": {
-          "type": "string"
-        },
-        "threadId": {
-          "type": "string"
-        },
-        "factoryProjectId": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        }
-      },
-      "required": [
-        "sessionId",
-        "threadId",
-        "factoryProjectId"
-      ]
     }
   },
   "POST /web/factory/projects/:id/work-items": {
@@ -2269,13 +3258,17 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "attentionList": "GET /web/factory/projects/:id/attention",
   "boardCatalog": "GET /web/factory/projects/:id/boards",
   "decisionList": "GET /web/factory/projects/:id/decisions",
+  "projectEnvironmentGet": "GET /web/factory/projects/:id/environment",
+  "projectEnvironmentBuilds": "GET /web/factory/projects/:id/environment/builds",
+  "projectEnvironmentBuildGet": "GET /web/factory/projects/:id/environment/builds/:buildId",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
-  "supervisorHealth": "GET /web/factory/projects/:id/supervisor/health",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "projectUpdate": "PATCH /web/factory/projects/:id",
+  "projectEnvironmentUpdate": "PATCH /web/factory/projects/:id/environment",
   "workItemUpdate": "PATCH /web/factory/work-items/:id",
   "projectCreate": "POST /web/factory/projects",
+  "projectApplyDefaultModel": "POST /web/factory/projects/:id/apply-default-model",
   "attentionArchive": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive",
   "attentionRead": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/read",
   "attentionRestore": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/restore",
@@ -2283,8 +3276,8 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "decisionApprove": "POST /web/factory/projects/:id/decisions/:decisionId/approve",
   "decisionDismiss": "POST /web/factory/projects/:id/decisions/:decisionId/dismiss",
   "decisionRetry": "POST /web/factory/projects/:id/decisions/:decisionId/retry",
+  "projectEnvironmentBuild": "POST /web/factory/projects/:id/environment/build",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
-  "supervisorSession": "POST /web/factory/projects/:id/supervisor/session",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
   "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition"

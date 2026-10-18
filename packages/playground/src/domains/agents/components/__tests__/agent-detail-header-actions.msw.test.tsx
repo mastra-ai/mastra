@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentDetailHeaderActions } from '../agent-detail-header-actions';
 import { v2Agent } from './fixtures/composer-model-settings';
-import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { RouteSidePanelProvider, useRouteSidePanel } from '@/lib/route-side-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -43,15 +42,12 @@ function renderActions() {
   return renderWithProviders(
     <TestLinkProvider>
       <TooltipProvider>
-        <RouteHeaderActionsProvider>
-          <RouteSidePanelProvider>
-            <div data-testid="header-actions">
-              <RouteHeaderActionsSlot />
-            </div>
-            <FakeLayoutPanel />
+        <RouteSidePanelProvider>
+          <FakeLayoutPanel />
+          <div data-testid="header-actions">
             <AgentDetailHeaderActions agentId={AGENT_ID} />
-          </RouteSidePanelProvider>
-        </RouteHeaderActionsProvider>
+          </div>
+        </RouteSidePanelProvider>
       </TooltipProvider>
     </TestLinkProvider>,
     { router: true },

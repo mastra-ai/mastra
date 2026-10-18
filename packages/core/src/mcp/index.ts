@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { MastraError } from '../error';
@@ -10,6 +9,7 @@ import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
+  MCPServerIcon,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
   PackageInfo,
@@ -27,6 +27,12 @@ export type { MCPToolType } from '../tools';
  * that can be registered with Mastra, including handling of server metadata.
  */
 export abstract class MCPServerBase<TId extends string = string> extends MastraBase {
+  /**
+   * Set to `2` by servers that speak MCP 2026-07-28 (`@mastra/mcp` 2.x). Such a server
+   * has no standalone SSE transport and its `executeTool` resolves to a
+   * `MCPToolExecutionResultV2`. 1.x servers leave it undefined.
+   */
+  public readonly mcpVersion?: 2;
   /** Tracks if the server ID has been definitively set. */
   private idWasSet = false;
   /** The display name of the MCP server. */
@@ -37,6 +43,12 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   private _id: TId;
   /** A description of what the MCP server does. */
   public readonly description?: string;
+  /** A human-readable display title for the MCP server. */
+  public readonly title?: string;
+  /** The URL of the server's website. */
+  public readonly websiteUrl?: string;
+  /** Icons clients can display for the server. */
+  public readonly icons?: MCPServerIcon[];
   /** Optional instructions describing how to use the server and its features. */
   public readonly instructions?: string;
   /** Repository information for the server's source code. */
@@ -180,10 +192,13 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
       this._id = slugify(config.id) as TId;
       this.idWasSet = true;
     } else {
-      this._id = (this.mastra?.generateId() || randomUUID()) as TId;
+      this._id = (this.mastra?.generateId() || globalThis.crypto.randomUUID()) as TId;
     }
 
     this.description = config.description;
+    this.title = config.title;
+    this.websiteUrl = config.websiteUrl;
+    this.icons = config.icons;
     this.instructions = config.instructions;
     this.repository = config.repository;
     this.releaseDate = config.releaseDate || new Date().toISOString();
@@ -204,18 +219,32 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   public abstract startStdio(): Promise<void>;
 
   /**
-   * Start the MCP server using SSE transport
-   * This is typically used for web integration
+   * Start the MCP server using the standalone HTTP+SSE transport.
+   * Only `@mastra/mcp` 1.x overrides this; MCP 2026-07-28 removed the transport, so the
+   * base implementation throws and 2.x servers inherit that.
+   * @deprecated Removed in the next core major together with the 1.x server contract.
+   * Use `startHTTP` (Streamable HTTP) instead.
    * @param options Options for the SSE transport
    */
-  public abstract startSSE(options: MCPServerSSEOptions): Promise<void>;
+  public async startSSE(_options: MCPServerSSEOptions): Promise<void> {
+    throw new Error(
+      `MCP server '${this.id}' does not implement the standalone SSE transport (removed in MCP 2026-07-28); use startHTTP instead`,
+    );
+  }
 
   /**
-   * Start the MCP server using Hono SSE transport
-   * Used for Hono servers
+   * Start the MCP server using the standalone Hono SSE transport.
+   * Only `@mastra/mcp` 1.x overrides this; MCP 2026-07-28 removed the transport, so the
+   * base implementation throws and 2.x servers inherit that.
+   * @deprecated Removed in the next core major together with the 1.x server contract.
+   * Use `startHTTP` (Streamable HTTP) instead.
    * @param options Options for the SSE transport
    */
-  public abstract startHonoSSE(options: MCPServerHonoSSEOptions): Promise<Response | undefined>;
+  public async startHonoSSE(_options: MCPServerHonoSSEOptions): Promise<Response | undefined> {
+    throw new Error(
+      `MCP server '${this.id}' does not implement the standalone Hono SSE transport (removed in MCP 2026-07-28); use startHTTP instead`,
+    );
+  }
 
   /**
    * Start the MCP server using HTTP transport
@@ -300,13 +329,25 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param toolId The ID/name of the tool to execute.
    * @param args The arguments to pass to the tool's execute function.
    * @param executionContext Optional context for the tool execution (e.g., messages, toolCallId).
-   * @returns A promise that resolves to the result of the tool execution.
+   * On a 2026-07-28 server a continuation passes the previous round's `resumeData` and
+   * `suspendPayload`; the server supplies `context.suspend` and `context.mcp`.
+   * @returns A promise that resolves to the result of the tool execution. A server with
+   * `mcpVersion === 2` resolves to a `MCPToolExecutionResultV2` so a tool that suspended for
+   * input is reported instead of being mistaken for a completed call; such a server declares
+   * that return type on its override (the base stays `Promise<any>` so 1.x subclasses with a
+   * concrete return type keep compiling).
    * @throws Error if the tool is not found, or if execution fails.
    */
   public abstract executeTool(
     toolId: string,
     args: any,
-    executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
+    executionContext?: {
+      messages?: any[];
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      resumeData?: unknown;
+      suspendPayload?: unknown;
+    },
   ): Promise<any>;
 
   /**
@@ -314,9 +355,9 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param uri The resource URI to read (e.g. `ui://weather/dashboard`).
    * @returns A promise resolving to the resource content.
    */
-  public abstract readResource(
-    uri: string,
-  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }>;
+  public abstract readResource(uri: string): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }>;
 
   /**
    * Lists all resources available on this MCP server.

@@ -259,18 +259,20 @@ Register the durable agent with the `Mastra` instance above. Its run state now l
 A durable agent publishes stream chunks to a per-run topic through the shared pub/sub. A client that disconnects reconnects by calling `observe()` with the run's ID, and replays the chunks it missed from the shared cache:
 
 ```typescript title="src/server/reconnect.ts"
-const { output, cleanup } = await durableAssistant.observe(runId)
+const { output, detach } = await durableAssistant.observe(runId)
+
+request.signal.addEventListener('abort', detach, { once: true })
+
+if (request.signal.aborted) detach()
 
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
 }
-
-cleanup()
 ```
 
 Because the run state is in Postgres and the events are in Redis, the reconnecting request can be served by any pod, not only the one that started the run. See [Resumable streams](/docs/harness/durable-agents#resumable-streams).
 
-Multiple clients can observe the same run at once. Each `observe()` call receives the full stream, so a user watching from two devices, or two people following the same run, stay in sync.
+Multiple clients can observe the same run at once. Each `observe()` call receives the full stream, so a user watching from two devices, or two people following the same run, stay in sync. When one client leaves the loop or calls `detach()`, only that client stops watching. Don't call `cleanup()` from an observer, because it clears the cached events the other clients need to reconnect.
 
 ## Tool approval across pods
 

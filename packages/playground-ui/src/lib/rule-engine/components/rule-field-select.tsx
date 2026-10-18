@@ -4,6 +4,7 @@ import * as React from 'react';
 import { getFieldOptionsFromSchema, getFieldOptionAtPath, getChildFieldOptions, parseFieldPath } from './schema-utils';
 import type { FieldOption, RuleFieldSelectProps } from './types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -48,18 +49,18 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-surface4 text-neutral6" size="sm">
+        <SelectTrigger className="bg-muted text-foreground" size="sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map(option => (
             <SelectItem key={option.path} value={option.path}>
               <span className="flex items-center gap-2">
-                <Icon size="sm" className="text-neutral3">
+                <Icon size="xs" className="text-muted-foreground">
                   {getFieldTypeIcon(option.type)}
                 </Icon>
                 {option.label}
-                {option.hasChildren && <span className="text-neutral3">...</span>}
+                {option.hasChildren && <span className="text-muted-foreground">...</span>}
               </span>
             </SelectItem>
           ))}
@@ -132,14 +133,18 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
   );
 
   if (selectors.length === 0) {
-    return <div className={cn('text-ui-md text-neutral3', className)}>No fields available</div>;
+    return (
+      <Txt as="p" variant="body" tone="muted" className={className}>
+        No fields available
+      </Txt>
+    );
   }
 
   return (
     <div className={cn('flex items-center gap-1', className)}>
       {selectors.map((selector, index) => (
         <React.Fragment key={`${selector.basePath}-${index}`}>
-          {index > 0 && <span className="text-neutral3">.</span>}
+          {index > 0 && <span className="text-muted-foreground">.</span>}
           <FieldLevelSelect
             options={selector.options}
             value={selector.value}

@@ -12,7 +12,7 @@ packages:
 
 Use it for distributed deployments on Google Cloud. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Redis, use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams).
 
-Each topic maps to a Google Cloud topic. Subscriptions with a group share a subscription, so members compete for events. Subscriptions without a group create a per-instance subscription, so every instance receives every event.
+Each topic maps to a Google Cloud topic. Subscriptions with a group share a subscription. Members compete for events. Subscriptions without a group create a per-instance subscription. Every instance receives every event.
 
 ## Installation
 

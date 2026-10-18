@@ -19,6 +19,7 @@ vi.mock('commander', () => {
     addHelpText: any;
     action: any;
     argument: any;
+    addArgument: any;
     command: any;
     alias: any;
     description: any;
@@ -33,18 +34,31 @@ vi.mock('commander', () => {
       this.addHelpText = vi.fn().mockReturnThis();
       this.action = vi.fn().mockReturnThis();
       this.argument = vi.fn().mockReturnThis();
+      this.addArgument = vi.fn().mockReturnThis();
       this.command = vi.fn().mockReturnThis();
       this.alias = vi.fn().mockReturnThis();
       this.description = vi.fn().mockReturnThis();
       this.option = vi.fn().mockReturnThis();
+      this.addOption = vi.fn().mockReturnThis();
       this.requiredOption = vi.fn().mockReturnThis();
       this.parseAsync = vi.fn().mockResolvedValue(undefined);
       this.help = vi.fn();
     }
   }
 
+  class ArgumentMock {
+    choices = vi.fn().mockReturnThis();
+    default = vi.fn().mockReturnThis();
+  }
+
+  class OptionMock {
+    hideHelp = vi.fn().mockReturnThis();
+  }
+
   return {
     Command: CommandMock,
+    Argument: ArgumentMock,
+    Option: OptionMock,
   };
 });
 const getExistingFiles = vi.hoisted(() => vi.fn((files: string[]) => files));
@@ -238,6 +252,26 @@ describe('DevBundler', () => {
             'process.env.NODE_ENV': JSON.stringify('development'),
           },
           expect.objectContaining({ sourcemap: false }),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
+    it('analyzes tool files so workspace packages keep exports only tools import', async () => {
+      const devBundler = new DevBundler();
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+      vi.spyOn(devBundler, 'listToolsInputOptions').mockResolvedValue({
+        'tools/abc': '/project/src/mastra/tools/weather.ts',
+      });
+
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, ['/project/src/mastra/tools/**']);
+
+        const options = vi.mocked(getWatcherInputOptions).mock.lastCall?.[3];
+        expect(options?.analysisEntries).toEqual(
+          expect.arrayContaining(['test-entry.js', '/project/src/mastra/tools/weather.ts']),
         );
       } finally {
         await remove(tmpDir);

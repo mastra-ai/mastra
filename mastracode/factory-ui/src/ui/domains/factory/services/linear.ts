@@ -7,6 +7,8 @@
  * talks to Linear's GraphQL API on the org's behalf.
  */
 
+import { RequestError } from './request';
+
 export type LinearStatusReason =
   | 'missing_config'
   | 'auth_required'
@@ -35,8 +37,10 @@ export interface LinearIssue {
   assignee: string | null;
   creator?: string | null;
   team: string | null;
-  /** Linear project the issue was read from; matches an intake binding's `sourceId`. */
+  /** Selected intake source (project or team); matches an intake binding's `sourceId`. */
   sourceId?: string | null;
+  /** Actual Linear project, even when the issue was routed through a team. */
+  projectId?: string | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;
@@ -114,8 +118,8 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
     } catch {
       /* ignore non-JSON */
     }
-    const err = new Error(message);
-    (err as { code?: string }).code = code;
+    const err = new RequestError(message, res.status);
+    (err as RequestError & { code?: string }).code = code;
     throw err;
   }
   return (await res.json()) as T;

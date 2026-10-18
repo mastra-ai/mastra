@@ -23,17 +23,31 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
     description: 'Configuration for the model used to evaluate faithfulness.',
   },
   {
-    name: 'context',
-    type: 'string[]',
-    required: true,
-    description: "Array of context chunks against which the output's claims will be verified.",
-  },
-  {
-    name: 'scale',
-    type: 'number',
+    name: 'options',
+    type: '{ context?: string[]; scale?: number }',
     required: false,
-    defaultValue: '1',
-    description: 'The maximum score value. The final score will be normalized to this scale.',
+    description: 'Configuration options for the scorer.',
+    properties: [
+      {
+        type: '{ context?: string[]; scale?: number }',
+        parameters: [
+          {
+            name: 'context',
+            type: 'string[]',
+            required: false,
+            description:
+              "Array of context chunks against which the output's claims will be verified. When omitted, the scorer uses the results of tool calls in the run output.",
+          },
+          {
+            name: 'scale',
+            type: 'number',
+            required: false,
+            defaultValue: '1',
+            description: 'The maximum score value. The final score will be normalized to this scale.',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -51,8 +65,8 @@ This function returns an instance of the MastraScorer class. The `.run()` method
   },
   {
     name: 'preprocessStepResult',
-    type: 'string[]',
-    description: 'Array of extracted claims from the output.',
+    type: 'object',
+    description: 'Object with the claims extracted from the output: { claims: string[] }',
   },
   {
     name: 'preprocessPrompt',
@@ -111,7 +125,7 @@ Final score: `(supported_claims / total_claims) * scale`
 
 ### Score interpretation
 
-A faithfulness score between 0 and 1:
+A faithfulness score between 0 and the configured scale (default 1). With the default scale:
 
 - **1.0**: All claims are accurate and directly supported by the context.
 - **0.7 to 0.9**: Most claims are correct, with minor additions or omissions.

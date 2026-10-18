@@ -1,0 +1,100 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import type {
+  FactoryIncidentioEventName,
+  FactoryIncidentioRuleContext,
+  FactoryRuleHandler,
+} from '../../rules/types.js';
+import { incidentioClaimKey } from './claim.js';
+
+export type IncidentioRuleOverrides = Partial<
+  Record<FactoryIncidentioEventName, FactoryRuleHandler<FactoryIncidentioRuleContext> | null | undefined>
+>;
+export type IncidentioEventRules = Readonly<
+  Record<FactoryIncidentioEventName, FactoryRuleHandler<FactoryIncidentioRuleContext> | null>
+>;
+
+function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
+  if (context.item) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:follow-up-triage`,
+    // A source bound to a custom board lands on that board's initial phase;
+    // otherwise the follow-up waits in Work Intake.
+    board: context.intake?.board ?? 'work',
+    source: 'incidentio-follow-up',
+    sourceKey: context.issue.id,
+    claimKey: incidentioClaimKey(context.issue.id),
+    title: context.issue.title,
+    url: context.issue.url,
+    stage: context.intake?.initialPhase ?? 'intake',
+    metadata: {
+      identifier: context.issue.identifier,
+      issueRef: context.issue.id,
+      sourceCreatedAt: context.issue.createdAt,
+      state: context.issue.state,
+      stateType: context.issue.stateType,
+      priority: context.issue.priorityLabel,
+      incident: context.issue.incident,
+      assignee: context.issue.assignee,
+      assignees: (context.issue.assignee ? [context.issue.assignee] : []) as string[],
+      creator: context.issue.author,
+      author: context.issue.author,
+      labels: [...context.issue.labels] as string[],
+      createdAt: context.issue.createdAt,
+      updatedAt: context.issue.updatedAt,
+    },
+  } as const;
+}
+
+function incidentioFollowUpClosed(context: FactoryIncidentioRuleContext) {
+  if (!context.item || context.item.source !== 'incidentio-follow-up') return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
+  // Only terminal state types trigger close.
+  const stateType = context.issue.stateType;
+  if (stateType !== 'completed' && stateType !== 'canceled') return;
+  const canceled = stateType === 'canceled';
+  const target = canceled ? closure.canceled : closure.completed;
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:follow-up-closed`,
+    board: context.board,
+    stage: target.phase,
+    message: {
+      text: `incident.io follow-up ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
+    },
+  } as const;
+}
+
+export const defaultIncidentioRules = Object.freeze({
+  followUpObserved: incidentioFollowUpObserved,
+  followUpClosed: incidentioFollowUpClosed,
+} satisfies IncidentioEventRules);
+
+export function resolveIncidentioRules(overrides?: IncidentioRuleOverrides): IncidentioEventRules {
+  if (
+    overrides !== undefined &&
+    (overrides === null ||
+      typeof overrides !== 'object' ||
+      Array.isArray(overrides) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(overrides)))
+  ) {
+    throw new Error('incident.io rules must be a plain object.');
+  }
+  const rules: Record<string, FactoryRuleHandler<FactoryIncidentioRuleContext> | null> = {
+    ...defaultIncidentioRules,
+  };
+  for (const key of Reflect.ownKeys(overrides ?? {})) {
+    if (typeof key !== 'string' || !Object.hasOwn(defaultIncidentioRules, key)) {
+      throw new Error(`Unknown incident.io rule event: ${String(key)}.`);
+    }
+    const handler = overrides?.[key as FactoryIncidentioEventName];
+    if (handler !== undefined && handler !== null && typeof handler !== 'function') {
+      throw new Error(`incident.io rule ${key} must be a function, null, or undefined.`);
+    }
+    if (handler !== undefined) rules[key] = handler;
+  }
+  return recordExplicitRuleOverrides(Object.freeze(rules) as IncidentioEventRules, overrides);
+}

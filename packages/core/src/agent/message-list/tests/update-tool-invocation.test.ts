@@ -599,6 +599,37 @@ describe('MessageList.updateToolInvocation', () => {
     expect(part.providerExecuted).toBe(true);
   });
 
+  it('should preserve the tool title from the original call when the result does not include it', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        title: 'Web Search',
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+    });
+
+    expect(msg.content.parts[0]).toMatchObject({ title: 'Web Search', toolInvocation: { state: 'result' } });
+  });
+
   it('should preserve providerMetadata from original call when result does not include it', () => {
     const messageList = new MessageList();
 
@@ -702,6 +733,114 @@ describe('MessageList.updateToolInvocation', () => {
       anthropic: { cacheControl: { type: 'ephemeral' } },
       mastra: { modelOutput: true },
     });
+  });
+
+  it('should preserve both call and result itemIds when a Responses provider assigns each side its own id (same toolCallId)', () => {
+    const messageList = new MessageList();
+
+    // OpenAI hosted tool_search (Responses API): the call part carries the call
+    // item id (tsc_…) and the result carries the output item id (tso_…). Replay
+    // needs both — keeping only one id makes the next request reference the same
+    // item twice ("Duplicate item found").
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-1',
+          toolName: 'tool_search',
+          args: { queries: ['cache'] },
+        },
+        providerExecuted: true,
+        providerMetadata: { openai: { itemId: 'tsc_1' } },
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'tool_search',
+        args: {},
+        result: { tools: ['get_block'] },
+      },
+      providerExecuted: true,
+      providerMetadata: { openai: { itemId: 'tso_1' } },
+    } as any);
+
+    expect(updated).toBe(true);
+    const part = msg.content.parts[0] as any;
+    expect(part.providerMetadata).toEqual({ openai: { itemId: 'tsc_1', resultItemId: 'tso_1' } });
+  });
+
+  it('should preserve both call and result itemIds when the result also has a different toolCallId (toolName fallback)', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tsc_1',
+          toolName: 'tool_search',
+          args: { queries: ['cache'] },
+        },
+        providerExecuted: true,
+        providerMetadata: { openai: { itemId: 'tsc_1' } },
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tso_1',
+        toolName: 'tool_search',
+        args: {},
+        result: { tools: ['get_block'] },
+      },
+      providerExecuted: true,
+      providerMetadata: { openai: { itemId: 'tso_1' } },
+    } as any);
+
+    expect(updated).toBe(true);
+    const part = msg.content.parts[0] as any;
+    // The toolCallId reconciliation is unchanged; only the metadata keeps both ids.
+    expect(part.toolInvocation.toolCallId).toBe('tso_1');
+    expect(part.providerMetadata).toEqual({ openai: { itemId: 'tsc_1', resultItemId: 'tso_1' } });
+  });
+
+  it('should not record a resultItemId when call and result share the same itemId', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'ws-1', toolName: 'web_search_call', args: { query: 'news' } },
+        providerExecuted: true,
+        providerMetadata: { openai: { itemId: 'ws_1' } },
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'ws-1',
+        toolName: 'web_search_call',
+        args: {},
+        result: { status: 'completed' },
+      },
+      providerExecuted: true,
+      providerMetadata: { openai: { itemId: 'ws_1' } },
+    } as any);
+
+    const part = msg.content.parts[0] as any;
+    expect(part.providerMetadata).toEqual({ openai: { itemId: 'ws_1' } });
   });
 
   it('should let the incoming part replace a single key inside an existing namespace', () => {

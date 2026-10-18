@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ScrollArea } from './scroll-area';
+import { expect, waitFor } from 'storybook/test';
+import { ScrollArea, ScrollAreaViewport } from './scroll-area';
 import { Badge } from '@/ds/components/Badge';
 
 const meta: Meta<typeof ScrollArea> = {
@@ -13,12 +14,24 @@ const meta: Meta<typeof ScrollArea> = {
 export default meta;
 type Story = StoryObj<typeof ScrollArea>;
 
+const expectNativeHorizontalGestures: Story['play'] = async ({ canvasElement }) => {
+  const viewport = canvasElement.querySelector<HTMLElement>('[role="presentation"] > [role="presentation"]');
+  if (!viewport) throw new Error('Expected the scroll viewport');
+  await expect(getComputedStyle(viewport).overscrollBehaviorX).toBe('auto');
+  for (const deltaX of [-100, 100]) {
+    const wheel = new WheelEvent('wheel', { deltaX, bubbles: true, cancelable: true });
+    viewport.dispatchEvent(wheel);
+    await expect(wheel.defaultPrevented).toBe(false);
+  }
+};
+
 export const Default: Story = {
+  play: expectNativeHorizontalGestures,
   render: () => (
-    <ScrollArea className="w-dropdown-max-height border-border1 h-50 rounded-md border p-4">
+    <ScrollArea className="h-50 w-75 rounded-md border border-border p-4">
       <div className="space-y-4">
         {Array.from({ length: 20 }).map((_, i) => (
-          <p key={i} className="text-neutral5 text-ui-md">
+          <p key={i} className="text-body text-foreground">
             Item {i + 1} - Lorem ipsum dolor sit amet
           </p>
         ))}
@@ -29,10 +42,10 @@ export const Default: Story = {
 
 export const WithMaxHeight: Story = {
   render: () => (
-    <ScrollArea maxHeight="150px" className="w-dropdown-max-height border-border1 rounded-md border p-4">
+    <ScrollArea maxHeight="150px" className="w-75 rounded-md border border-border p-4">
       <div className="space-y-4">
         {Array.from({ length: 15 }).map((_, i) => (
-          <p key={i} className="text-neutral5 text-ui-md">
+          <p key={i} className="text-body text-foreground">
             Line {i + 1}
           </p>
         ))}
@@ -41,13 +54,56 @@ export const WithMaxHeight: Story = {
   ),
 };
 
-export const HorizontalScroll: Story = {
+export const CustomViewport: Story = {
+  play: expectNativeHorizontalGestures,
   render: () => (
-    <ScrollArea orientation="horizontal" className="w-dropdown-max-height border-border1 h-25 rounded-md border p-4">
+    <ScrollArea maxHeight="150px" className="w-75 rounded-md border border-border">
+      <ScrollAreaViewport className="overscroll-y-contain px-4 py-2">
+        <div className="space-y-4">
+          {Array.from({ length: 15 }).map((_, i) => (
+            <p key={i} className="text-body text-foreground">
+              Line {i + 1}
+            </p>
+          ))}
+        </div>
+      </ScrollAreaViewport>
+    </ScrollArea>
+  ),
+};
+
+export const HorizontalScroll: Story = {
+  play: async context => {
+    await expectNativeHorizontalGestures(context);
+    const { canvasElement } = context;
+    const viewport = canvasElement.querySelector<HTMLElement>('[role="presentation"] > [role="presentation"]');
+    if (!viewport) throw new Error('Expected the scroll viewport');
+    const getScrollbar = () => canvasElement.querySelector<HTMLElement>('[data-slot="scroll-area-scrollbar"]');
+    await waitFor(() => expect(getScrollbar()).not.toBeNull());
+    const scrollbar = getScrollbar();
+    if (!scrollbar) throw new Error('Expected the horizontal scrollbar');
+    const maxScroll = viewport.scrollWidth - viewport.clientWidth;
+    await expect(maxScroll).toBeGreaterThan(0);
+
+    // The scrollbar may consume horizontal wheel input only while it can move.
+    for (const [position, deltaX, consumed] of [
+      [0, -100, false],
+      [maxScroll, 100, false],
+      [0, 100, true],
+    ] as const) {
+      viewport.scrollLeft = position;
+      const wheel = new WheelEvent('wheel', { deltaX, bubbles: true, cancelable: true });
+      scrollbar.dispatchEvent(wheel);
+      await expect(wheel.defaultPrevented).toBe(consumed);
+    }
+    await expect(viewport.scrollLeft).toBeGreaterThan(0);
+    viewport.scrollLeft = 0;
+  },
+  render: () => (
+    <ScrollArea orientation="horizontal" className="h-25 w-75 rounded-md border border-border p-4">
       <div className="flex w-200 gap-4">
         {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="bg-surface4 flex size-16 shrink-0 items-center justify-center rounded-md">
-            <span className="text-neutral5 text-ui-md">{i + 1}</span>
+          <div key={i} className="flex size-16 shrink-0 items-center justify-center rounded-md bg-muted">
+            <span className="text-body text-foreground">{i + 1}</span>
           </div>
         ))}
       </div>
@@ -57,15 +113,11 @@ export const HorizontalScroll: Story = {
 
 export const HorizontalScrollButtons: Story = {
   render: () => (
-    <ScrollArea
-      orientation="horizontal"
-      scrollButtons
-      className="w-dropdown-max-height border-border1 h-25 rounded-md border p-4"
-    >
+    <ScrollArea orientation="horizontal" scrollButtons className="h-25 w-75 rounded-md border border-border p-4">
       <div className="flex w-200 gap-4">
         {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="bg-surface4 flex size-16 shrink-0 items-center justify-center rounded-md">
-            <span className="text-neutral5 text-ui-md">{i + 1}</span>
+          <div key={i} className="flex size-16 shrink-0 items-center justify-center rounded-md bg-muted">
+            <span className="text-body text-foreground">{i + 1}</span>
           </div>
         ))}
       </div>
@@ -78,7 +130,7 @@ export const Badges: Story = {
     <ScrollArea
       orientation="horizontal"
       scrollButtons
-      className="border-border1 w-[350px] max-w-[calc(100vw-2rem)] rounded-md border p-2"
+      className="w-[350px] max-w-[calc(100vw-2rem)] rounded-md border border-border p-2"
     >
       <div className="flex gap-2 py-1">
         {[
@@ -103,49 +155,75 @@ export const Badges: Story = {
 };
 
 export const CodeBlock: Story = {
+  play: expectNativeHorizontalGestures,
   render: () => (
-    <ScrollArea orientation="both" className="border-border1 bg-surface2 h-50 w-100 rounded-md border">
-      <pre className="text-neutral5 text-ui-md p-4 font-mono">
+    <ScrollArea orientation="both" className="h-50 w-100 rounded-md border border-border bg-background">
+      <pre className="p-4 font-mono text-body text-foreground">
         {`function example() {
-  const data = fetchData();
+ const data = fetchData();
 
-  if (data.isValid) {
-    processData(data);
-  } else {
-    handleError(data.error);
-  }
+ if (data.isValid) {
+ processData(data);
+ } else {
+ handleError(data.error);
+ }
 
-  return {
-    status: 'success',
-    timestamp: Date.now(),
-    results: data.results,
-    metadata: {
-      version: '1.0',
-      format: 'json',
-      encoding: 'utf-8'
-    }
-  };
+ return {
+ status: 'success',
+ timestamp: Date.now(),
+ results: data.results,
+ metadata: {
+ version: '1.0',
+ format: 'json',
+ encoding: 'utf-8'
+ }
+ };
 }
 
 // Additional code to show scrolling
 const config = {
-  apiKey: 'xxx',
-  endpoint: '/api/v1',
-  timeout: 5000,
-  retries: 3
+ apiKey: 'xxx',
+ endpoint: '/api/v1',
+ timeout: 5000,
+ retries: 3
 };`}
       </pre>
     </ScrollArea>
   ),
 };
 
+export const WithoutOverflow: Story = {
+  render: ({ orientation }) => (
+    <ScrollArea orientation={orientation} className="h-50 w-75">
+      <p className="text-body">A short message with no overflow.</p>
+    </ScrollArea>
+  ),
+  play: async context => {
+    await expectNativeHorizontalGestures(context);
+    const viewport = context.canvasElement.querySelector<HTMLElement>('[role="presentation"] > [role="presentation"]');
+    if (!viewport) throw new Error('Expected the scroll viewport');
+    await expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+    await expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+  },
+};
+
+export const HorizontalWithoutOverflow: Story = {
+  ...WithoutOverflow,
+  args: { orientation: 'horizontal' },
+};
+
+export const BothAxesWithoutOverflow: Story = {
+  ...WithoutOverflow,
+  args: { orientation: 'both' },
+};
+
 export const ChatMessages: Story = {
   render: () => (
-    <ScrollArea className="h-dropdown-max-height border-border1 w-[350px] rounded-md border p-4">
+    <ScrollArea className="h-75 w-[350px] rounded-md border border-border p-4">
       <div className="space-y-4">
         {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className={`rounded-lg p-3 ${i % 2 === 0 ? 'bg-surface3 ml-8' : 'bg-surface4 mr-8'}`}>
-            <p className="text-neutral5 text-ui-md">
+          <div key={i} className={`rounded-lg p-3 ${i % 2 === 0 ? 'ml-8 bg-card' : 'mr-8 bg-muted'}`}>
+            <p className="text-body text-foreground">
               {i % 2 === 0
                 ? 'This is a user message with some content'
                 : 'This is an assistant response with helpful information'}
@@ -160,7 +238,7 @@ export const ChatMessages: Story = {
 const MaskItems = () => (
   <div className="space-y-3">
     {Array.from({ length: 20 }).map((_, i) => (
-      <p key={i} className="text-neutral5 text-ui-md">
+      <p key={i} className="text-body text-foreground">
         Item {i + 1} — Lorem ipsum dolor sit amet
       </p>
     ))}
@@ -170,7 +248,7 @@ const MaskItems = () => (
 export const MaskDisabled: Story = {
   name: 'Mask / disabled',
   render: () => (
-    <ScrollArea mask={false} className="border-border1 h-50 w-65 rounded-md border p-4">
+    <ScrollArea mask={false} className="h-50 w-65 rounded-md border border-border p-4">
       <MaskItems />
     </ScrollArea>
   ),
@@ -179,7 +257,7 @@ export const MaskDisabled: Story = {
 export const MaskTopOnly: Story = {
   name: 'Mask / top only',
   render: () => (
-    <ScrollArea mask={{ bottom: false }} className="border-border1 h-50 w-65 rounded-md border p-4">
+    <ScrollArea mask={{ bottom: false }} className="h-50 w-65 rounded-md border border-border p-4">
       <MaskItems />
     </ScrollArea>
   ),
@@ -188,10 +266,10 @@ export const MaskTopOnly: Story = {
 export const MaskBothAxes: Story = {
   name: 'Mask / both axes (orientation=both)',
   render: () => (
-    <ScrollArea orientation="both" className="border-border1 h-50 w-65 rounded-md border p-4">
+    <ScrollArea orientation="both" className="h-50 w-65 rounded-md border border-border p-4">
       <div className="w-150 space-y-3">
         {Array.from({ length: 20 }).map((_, i) => (
-          <p key={i} className="text-neutral5 text-ui-md whitespace-nowrap">
+          <p key={i} className="text-body whitespace-nowrap text-foreground">
             Row {i + 1} — long horizontal content stretching past the viewport for x-axis overflow
           </p>
         ))}
@@ -203,10 +281,10 @@ export const MaskBothAxes: Story = {
 export const MaskYOnly: Story = {
   name: 'Mask / y axis only (no horizontal fade)',
   render: () => (
-    <ScrollArea orientation="both" mask={{ x: false }} className="border-border1 h-50 w-65 rounded-md border p-4">
+    <ScrollArea orientation="both" mask={{ x: false }} className="h-50 w-65 rounded-md border border-border p-4">
       <div className="w-150 space-y-3">
         {Array.from({ length: 20 }).map((_, i) => (
-          <p key={i} className="text-neutral5 text-ui-md whitespace-nowrap">
+          <p key={i} className="text-body whitespace-nowrap text-foreground">
             Row {i + 1} — long horizontal content
           </p>
         ))}

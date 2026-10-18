@@ -1,12 +1,13 @@
-import { createHash } from 'node:crypto';
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 import { coreFeatures } from '@mastra/core/features';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   MastraMemory,
@@ -29,6 +30,8 @@ import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import { TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   InputProcessorOrWorkflow,
   OutputProcessor,
@@ -72,8 +75,9 @@ import type {
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
-import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
+import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
 
 export {
   ModelByInputTokens,
@@ -87,6 +91,11 @@ export {
   type ExtractorSource,
 } from './processors/observational-memory';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export {
+  AUTO_MODEL_BY_PROVIDER,
+  resolveAutoModelId,
+  type ResolveAutoModelIdOptions,
+} from './processors/observational-memory/auto-model';
 export {
   KnowledgeSemanticIndexCoordinator,
   StaleKnowledgeSemanticIndexError,
@@ -123,7 +132,11 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
+  onDebugEvent?: ObservationalMemoryConfig['onDebugEvent'];
   hooks?: ObservationalMemoryConfig['hooks'];
+  autoModels?: ObservationalMemoryConfig['autoModels'];
+  canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
+  resolveModel?: ObservationalMemoryConfig['resolveModel'];
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -132,6 +145,12 @@ type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
 
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   options?: MemoryOptions;
+  /**
+   * Selects the experimental Knowledge runtime used by Subconscious observation ingestion, tools, pinning,
+   * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
+   * a Knowledge instance supports standalone wiring. Omit to use the `knowledge` domain of this Memory's own storage.
+   */
+  knowledge?: string | Knowledge | false;
 };
 
 type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
@@ -153,11 +172,11 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * with packages/core/src/memory/working-memory-utils.ts,
  * packages/core/src/memory/system-reminders.ts, and
  * packages/core/src/agent/signals.ts. Those source files also carry
- * compatibility notes that point back here.
+ * compatibility notes that point back here. isSystemReminderMessage lives in
+ * ./system-reminders so observational memory can share it.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
-const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -217,30 +236,58 @@ export function extractWorkingMemoryContent(text: string): string | null {
   return text.substring(contentStart, end);
 }
 
-function isSystemReminderMessage(message: MastraDBMessage): boolean {
-  if (!isRecord(message.content)) {
-    return false;
-  }
+type MastraMessagePart = MastraDBMessage['content']['parts'][number];
+const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
 
-  const metadata = message.content.metadata;
-  if (message.role === 'signal') {
-    return (
-      isRecord(metadata) &&
-      isRecord(metadata.signal) &&
-      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
+/**
+ * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
+ * at a time. A step starts at a `step-start` part, or where a tool part is followed by
+ * a non-tool part (the same boundary prompt conversion uses when markers are missing).
+ * A step whose tool calls were all working-memory calls loses its tool-call/tool-result
+ * boundary once they are removed. If only reasoning is left, the whole step is dropped:
+ * replaying that signed reasoning merges it into the next step's assistant message,
+ * which providers such as Anthropic reject (see #22798).
+ */
+function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): MastraMessagePart[] {
+  const isWorkingMemoryCall = (part: MastraMessagePart) =>
+    part?.type === 'tool-invocation' && part.toolInvocation?.toolName === UPDATE_WORKING_MEMORY_TOOL_NAME;
+
+  if (!parts.some(isWorkingMemoryCall)) return parts;
+
+  const steps: MastraMessagePart[][] = [];
+  parts.forEach((part, i) => {
+    const previous = parts[i - 1];
+    const startsStep =
+      part?.type === 'step-start' || (previous?.type === 'tool-invocation' && part?.type !== 'tool-invocation');
+    if (startsStep || steps.length === 0) steps.push([]);
+    steps[steps.length - 1]!.push(part);
+  });
+
+  return steps.flatMap(step => {
+    if (!step.some(isWorkingMemoryCall)) return step;
+    const remaining = step.filter(part => !isWorkingMemoryCall(part));
+    const onlyReasoningLeft = remaining.every(
+      part =>
+        part?.type === 'step-start' ||
+        part?.type === 'reasoning' ||
+        (part?.type === 'text' && !removeWorkingMemoryTags(part.text ?? '').trim()),
     );
-  }
+    return onlyReasoningLeft ? [] : remaining;
+  });
+}
 
-  if (message.role !== 'user') {
-    return false;
+/**
+ * Removes `updateWorkingMemory` entries from the legacy `toolInvocations` array so
+ * prompt conversion cannot re-add a stripped working-memory call.
+ */
+function removeWorkingMemoryToolInvocations(
+  toolInvocations: MastraDBMessage['content']['toolInvocations'],
+): MastraDBMessage['content']['toolInvocations'] {
+  if (!toolInvocations?.some(invocation => invocation.toolName === UPDATE_WORKING_MEMORY_TOOL_NAME)) {
+    return toolInvocations;
   }
-
-  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
-    return true;
-  }
-
-  const firstTextPart = message.content.parts.find(part => part.type === 'text');
-  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
+  const remaining = toolInvocations.filter(invocation => invocation.toolName !== UPDATE_WORKING_MEMORY_TOOL_NAME);
+  return remaining.length > 0 ? remaining : undefined;
 }
 
 // Keep this union and the recall helpers in sync with core without requiring newer peer exports.
@@ -317,7 +364,7 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
-  if (config === true) return { model: 'google/gemini-2.5-flash' };
+  if (config === true) return { model: 'auto' };
   if (config === false || config === undefined) return undefined;
   if (typeof config === 'object' && config.enabled === false) return undefined;
   return config as NormalizedObservationalMemoryConfig;
@@ -351,6 +398,13 @@ const CHARS_PER_TOKEN = 4;
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
+
+// Upper bound on how long `deleteThread` waits for in-flight observational-memory
+// cycles on that thread. Well under the engine's 30s default, which is sized for
+// server endpoints rather than a user-facing delete. Exceeding it degrades to
+// deleting anyway; the liveness checks in the observation strategies' `persist`
+// still keep a late cycle from writing to a thread that no longer exists.
+const OM_DELETE_DRAIN_TIMEOUT_MS = 10_000;
 
 // Max number of distinct contents whose embeddings are kept in the in-process
 // cache. Bounds memory so a long-running Memory instance can't accumulate every
@@ -389,6 +443,14 @@ const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
  * @see [Memory documentation](https://mastra.ai/docs/memory/overview)
  * if packaged docs are unavailable.
  */
+const invalidMerge = (text: string) =>
+  new MastraError({
+    id: 'MEMORY_WORKING_MEMORY_MERGE_INVALID',
+    domain: ErrorDomain.MASTRA_MEMORY,
+    category: ErrorCategory.USER,
+    text,
+  });
+
 export class Memory extends MastraMemory {
   protected override createMemoryTokenCounter() {
     return new TokenCounter();
@@ -397,6 +459,8 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
+  private readonly _knowledge: MemoryConstructorConfig['knowledge'];
+  private _knowledgeStore?: Promise<KnowledgeStorage>;
   private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
 
   /**
@@ -453,6 +517,8 @@ export class Memory extends MastraMemory {
   __registerMastra(mastra: Mastra): void {
     super.__registerMastra(mastra);
     this._mastraInstance = mastra;
+    this._knowledgeStore = undefined;
+    this._knowledgeSemanticIndex = undefined;
     if (this._omEngineInstance) {
       this._omEngineInstance.__registerMastra(mastra);
     } else {
@@ -464,6 +530,7 @@ export class Memory extends MastraMemory {
   createSubconsciousMemory(): Memory {
     const memory = new Memory({
       storage: this.storage,
+      knowledge: this.getKnowledgeInstance() ?? this._knowledge,
       vector: this.vector,
       embedder: this.embedder,
       embedderOptions: this.embedderOptions,
@@ -494,7 +561,7 @@ export class Memory extends MastraMemory {
     const subconsciousExtractors = omConfig.experimental_subconscious
       .createObservationExtractors(
         selectObserverModel(omConfig),
-        () => (curatorMemory ??= new Memory({ storage: this.storage, options: { observationalMemory: false } })),
+        () => (curatorMemory ??= this.createSubconsciousMemory()),
       )
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
@@ -541,7 +608,9 @@ export class Memory extends MastraMemory {
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
-    super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
+    const { knowledge, ...memoryConfig } = config;
+    super({ name: 'Memory', ...memoryConfig } as { name: string } & SharedMemoryConfig);
+    this._knowledge = knowledge;
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
@@ -570,6 +639,7 @@ export class Memory extends MastraMemory {
         );
       }
     }
+    // Every Knowledge write queues semantic-index work; only a vector store and embedder drain it.
     if (omConfig?.experimental_subconscious) {
       if (!this.vector) {
         throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
@@ -580,7 +650,38 @@ export class Memory extends MastraMemory {
     }
   }
 
-  private async getKnowledgeStore(): Promise<KnowledgeStorage> {
+  /** Returns the configured Knowledge v2 instance, or undefined when Knowledge comes from this Memory's own storage. */
+  public getKnowledgeInstance(): Knowledge | undefined {
+    if (this._knowledge === false || this._knowledge === undefined) return undefined;
+    if (typeof this._knowledge !== 'string') return this._knowledge;
+    if (!this._mastraInstance) {
+      throw new Error(
+        `Memory cannot resolve Knowledge instance "${this._knowledge}" before it is registered with Mastra.`,
+      );
+    }
+    return this._mastraInstance.getKnowledge(this._knowledge);
+  }
+
+  /**
+   * Resolves the one Knowledge storage domain used by every Subconscious path on this Memory.
+   * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
+   */
+  public async getKnowledgeStore(): Promise<KnowledgeStorage> {
+    if (this._knowledge === undefined) return this.resolveStorageKnowledgeStore();
+    if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
+    if (!this._knowledgeStore) {
+      const promise = this.getKnowledgeInstance()!
+        .getStorage()
+        .catch(error => {
+          if (this._knowledgeStore === promise) this._knowledgeStore = undefined;
+          throw error;
+        });
+      this._knowledgeStore = promise;
+    }
+    return this._knowledgeStore;
+  }
+
+  private async resolveStorageKnowledgeStore(): Promise<KnowledgeStorage> {
     const store = await this.storage.getStore('knowledge');
     if (!store) {
       throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
@@ -588,24 +689,30 @@ export class Memory extends MastraMemory {
     return store;
   }
 
-  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator> {
-    if (!this.vector || !this.embedder) {
-      throw new Error('Subconscious semantic knowledge requires both a vector store and an embedder.');
+  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined> {
+    if (!this.vector || !this.embedder) return undefined;
+    if (!this._knowledgeSemanticIndex) {
+      const promise = this.getKnowledgeStore()
+        .then(
+          knowledge =>
+            new KnowledgeSemanticIndexCoordinator({
+              knowledge,
+              vector: this.vector!,
+              embedder: this.embedder!,
+              embedderOptions: this.embedderOptions,
+            }),
+        )
+        .catch(error => {
+          if (this._knowledgeSemanticIndex === promise) this._knowledgeSemanticIndex = undefined;
+          throw error;
+        });
+      this._knowledgeSemanticIndex = promise;
     }
-    this._knowledgeSemanticIndex ??= this.getKnowledgeStore().then(
-      knowledge =>
-        new KnowledgeSemanticIndexCoordinator({
-          knowledge,
-          vector: this.vector!,
-          embedder: this.embedder!,
-          embedderOptions: this.embedderOptions,
-        }),
-    );
     return this._knowledgeSemanticIndex;
   }
 
   public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
-    return (await this.getKnowledgeSemanticIndex()).drain(scope);
+    return (await this.getKnowledgeSemanticIndex())?.drain(scope) ?? 0;
   }
 
   /**
@@ -793,33 +900,47 @@ export class Memory extends MastraMemory {
       let usage: { tokens: number } | undefined;
 
       if (config?.semanticRecall && vectorSearchString && this.vector) {
-        const result = await this.embedMessageContent(vectorSearchString!);
-        usage = result.usage;
-        const { embeddings, dimension } = result;
-        const { indexName } = await this.createEmbeddingIndex(dimension, config);
+        const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
+        const userFilter = typeof config.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
+        const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
 
-        await Promise.all(
-          embeddings.map(async embedding => {
-            if (typeof this.vector === `undefined`) {
-              throw new Error(
-                `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+        if (this.isSelfEmbedding) {
+          const { indexName } = await this.createEmbeddingIndex(undefined, config);
+          // `queryText` is accepted only by self-embedding stores, which is the only kind
+          // reached here, so it is not on the shared QueryVectorParams.
+          vectorResults.push(
+            ...(await this.vector.query({
+              indexName,
+              queryText: vectorSearchString,
+              topK: vectorConfig.topK,
+              filter: combinedFilter,
+            } as never)),
+          );
+        } else {
+          const result = await this.embedMessageContent(vectorSearchString!);
+          usage = result.usage;
+          const { embeddings, dimension } = result;
+          const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+          await Promise.all(
+            embeddings.map(async embedding => {
+              if (typeof this.vector === `undefined`) {
+                throw new Error(
+                  `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+                );
+              }
+
+              vectorResults.push(
+                ...(await this.vector.query({
+                  indexName,
+                  queryVector: embedding,
+                  topK: vectorConfig.topK,
+                  filter: combinedFilter,
+                })),
               );
-            }
-
-            const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
-            const userFilter = typeof config.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
-            const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
-
-            vectorResults.push(
-              ...(await this.vector.query({
-                indexName,
-                queryVector: embedding,
-                topK: vectorConfig.topK,
-                filter: combinedFilter,
-              })),
-            );
-          }),
-        );
+            }),
+          );
+        }
       }
 
       const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
@@ -993,6 +1114,13 @@ export class Memory extends MastraMemory {
     return savedThread;
   }
 
+  /**
+   * Update a thread's title or metadata.
+   *
+   * Unlike `session.thread.rename()`, this does not pin the title, so
+   * Observational Memory may still replace it with an extracted title. To
+   * protect a manual rename, set `metadata.titlePinned` to `true`.
+   */
   async updateThread({
     id,
     title,
@@ -1036,6 +1164,16 @@ export class Memory extends MastraMemory {
   }
 
   private async deleteStoredThread(memoryStore: MemoryStorage, threadId: string, resourceId?: string): Promise<void> {
+    // Join in-flight observational-memory cycles for this thread first so their
+    // vector writes land before `deleteThreadVectors` runs instead of after it —
+    // a write that arrives after the cleanup is never removed and stays reachable
+    // through resource-scoped recall. Only join an engine that already exists,
+    // never instantiate one just to drain it (same rule as `settled()`).
+    const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
+    if (engine && resourceId) {
+      await engine.waitForBuffering(threadId, resourceId, OM_DELETE_DRAIN_TIMEOUT_MS);
+    }
+
     await memoryStore.deleteThread({ threadId });
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);
@@ -1046,11 +1184,14 @@ export class Memory extends MastraMemory {
   }
 
   /**
-   * Prefix shared by every message index. The index for the default embedding
-   * dimension is named with the bare prefix; other dimensions add a suffix.
+   * Prefix shared by every message index. The index for the default embedding dimension is named
+   * with the bare prefix; other dimensions add a dimension suffix, and a store that embeds the
+   * text itself adds its own. Built here rather than read from `getEmbeddingIndexName()`, which
+   * answers for one configuration and so would not match indexes written under another.
    */
   private get messageIndexPrefix(): string {
-    return this.getEmbeddingIndexName();
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}messages`;
   }
 
   /**
@@ -1173,6 +1314,88 @@ export class Memory extends MastraMemory {
         release();
       }
 
+      span?.end({ output: { success: true } });
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
+  }
+
+  /**
+   * Whether the configured storage can merge resource working memory atomically across processes.
+   */
+  override async supportsAtomicWorkingMemoryMerge(): Promise<boolean> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.supportsAtomicWorkingMemoryMerge === true;
+  }
+
+  /**
+   * Deep-merges a partial JSON update into resource-scoped working memory as one
+   * atomic storage operation, so concurrent writers (even in other processes) never
+   * lose each other's fields. `null` values delete fields; arrays are replaced.
+   * Requires schema-based working memory, resource scope, and a storage adapter
+   * that supports atomic merges (e.g. PostgreSQL); otherwise throws.
+   */
+  override async mergeWorkingMemory({
+    threadId,
+    resourceId,
+    workingMemory,
+    memoryConfig,
+    observabilityContext,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string | Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
+  }): Promise<void> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (!config.workingMemory?.enabled) {
+      throw invalidMerge('Working memory is not enabled for this memory instance');
+    }
+    if (!config.workingMemory.schema) {
+      throw invalidMerge('Working memory merge requires schema-based (JSON) working memory');
+    }
+    if ((config.workingMemory.scope || 'resource') !== 'resource' || !resourceId) {
+      throw invalidMerge('Working memory merge requires resource-scoped working memory and a resourceId');
+    }
+
+    let patch: unknown = workingMemory;
+    if (typeof workingMemory === 'string') {
+      try {
+        patch = JSON.parse(workingMemory);
+      } catch {
+        throw invalidMerge('Working memory merge requires a JSON object');
+      }
+    }
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw invalidMerge('Working memory merge requires a JSON object');
+    }
+
+    const memoryStore = await this.getMemoryStore();
+    if (!memoryStore.supportsAtomicWorkingMemoryMerge) {
+      throw invalidMerge(
+        `Atomic working memory merge is not supported by this storage adapter (${memoryStore.constructor.name}).`,
+      );
+    }
+
+    const span = this.createMemorySpan(
+      'update',
+      observabilityContext,
+      { threadId, resourceId },
+      { workingMemoryEnabled: true },
+    );
+
+    try {
+      await memoryStore.mergeResourceWorkingMemory({
+        resourceId,
+        merge: existing => {
+          const parsed = parseWorkingMemoryJson(existing);
+          const base = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+          return JSON.stringify(deepMergeWorkingMemory(base, patch as Record<string, unknown>));
+        },
+      });
       span?.end({ output: { success: true } });
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
@@ -1525,6 +1748,8 @@ ${workingMemory}`;
         // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
         const embeddingData: Array<{
           embeddings: number[][];
+          /** Chunk texts, populated only when the store embeds server-side. */
+          documents?: string[];
           metadata: Array<
             Record<string, unknown> & {
               message_id: string;
@@ -1558,17 +1783,30 @@ ${workingMemory}`;
 
             if (!textForEmbedding) return;
 
-            const result = await this.embedMessageContent(textForEmbedding);
-            dimension = result.dimension;
-            if (result.usage?.tokens) {
-              totalTokens += result.usage.tokens;
+            // The store embeds these itself, so it receives the chunk texts. Chunking matches the
+            // client-side path so one metadata entry lines up with one stored row.
+            let embeddings: number[][] = [];
+            let documents: string[] | undefined;
+            let chunks: string[];
+            if (this.isSelfEmbedding) {
+              chunks = this.chunkText(textForEmbedding);
+              documents = chunks;
+            } else {
+              const result = await this.embedMessageContent(textForEmbedding);
+              dimension = result.dimension;
+              if (result.usage?.tokens) {
+                totalTokens += result.usage.tokens;
+              }
+              embeddings = result.embeddings;
+              chunks = result.chunks;
             }
 
             const threadMetadata = message.threadId ? threadMetadataMap.get(message.threadId) || {} : {};
 
             embeddingData.push({
-              embeddings: result.embeddings,
-              metadata: result.chunks.map(() => ({
+              embeddings,
+              documents,
+              metadata: chunks.map(() => ({
                 ...threadMetadata,
                 message_id: message.id,
                 thread_id: message.threadId,
@@ -1583,7 +1821,7 @@ ${workingMemory}`;
         );
 
         // Batch all vectors into a single upsert call to avoid pool exhaustion
-        if (embeddingData.length > 0 && dimension !== undefined) {
+        if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
           if (typeof this.vector === `undefined`) {
             throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
           }
@@ -1600,16 +1838,24 @@ ${workingMemory}`;
             }
           > = [];
 
+          const allDocuments: string[] = [];
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
+            if (data.documents) allDocuments.push(...data.documents);
             allMetadata.push(...data.metadata);
           }
 
-          await this.vector.upsert({
-            indexName,
-            vectors: allVectors,
-            metadata: allMetadata,
-          });
+          if (this.isSelfEmbedding) {
+            // `documents` is accepted only by self-embedding stores, so it is not on the shared
+            // UpsertVectorParams.
+            await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
+          } else {
+            await this.vector.upsert({
+              indexName,
+              vectors: allVectors,
+              metadata: allMetadata,
+            });
+          }
         }
       }
 
@@ -1643,23 +1889,19 @@ ${workingMemory}`;
     }
 
     if (Array.isArray(newMessage.content?.parts)) {
-      newMessage.content.parts = newMessage.content.parts
-        .filter(part => {
-          if (part?.type === 'tool-invocation') {
-            return part.toolInvocation?.toolName !== 'updateWorkingMemory';
-          }
-          return true;
-        })
-        .map(part => {
-          if (part?.type === 'text') {
-            const text = typeof part.text === 'string' ? part.text : '';
-            return {
-              ...part,
-              text: removeWorkingMemoryTags(text).trim(),
-            };
-          }
-          return part;
-        });
+      if (Array.isArray(newMessage.content.toolInvocations)) {
+        newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
+      }
+      newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
+        if (part?.type === 'text') {
+          const text = typeof part.text === 'string' ? part.text : '';
+          return {
+            ...part,
+            text: removeWorkingMemoryTags(text).trim(),
+          };
+        }
+        return part;
+      });
 
       // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
       // only skip the message when it also has no text content left.
@@ -2114,6 +2356,7 @@ ${workingMemory}`;
           threadId: string;
           resourceId: string;
           observedAt?: Date;
+          recordId?: string;
         }) => {
           await this.indexObservation(observation);
         }
@@ -2128,8 +2371,12 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      autoModels: omConfig.autoModels,
+      canUseProvider: omConfig.canUseProvider,
+      resolveModel: omConfig.resolveModel,
       mastra: this._mastraInstance,
       onIndexObservations,
+      onDebugEvent: omConfig.onDebugEvent,
       hooks: omConfig.hooks,
       observation: omConfig.observation
         ? {
@@ -2140,6 +2387,7 @@ ${workingMemory}`;
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
             bufferOnIdle: omConfig.observation.bufferOnIdle,
+            observeOnContextOverflow: omConfig.observation.observeOnContextOverflow,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
@@ -2147,12 +2395,16 @@ ${workingMemory}`;
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
             continuationHints: omConfig.observation.continuationHints,
+            maxRetries: omConfig.observation.maxRetries,
+            failurePolicy: omConfig.observation.failurePolicy,
             extract: omConfig.observation.extract,
           }
         : undefined,
       reflection: omConfig.reflection
         ? {
             model: omConfig.reflection.model,
+            maxRetries: omConfig.reflection.maxRetries,
+            failurePolicy: omConfig.reflection.failurePolicy,
             observationTokens: omConfig.reflection.observationTokens,
             modelSettings: omConfig.reflection.modelSettings,
             providerOptions: omConfig.reflection.providerOptions,
@@ -2220,7 +2472,7 @@ ${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object
 ${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:
@@ -2256,7 +2508,7 @@ ${template.content}
 </working_memory_template>
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:
@@ -2365,6 +2617,7 @@ Notes:
       threadId: string;
       score: number;
       groupId?: string;
+      recordId?: string;
       range?: string;
       text?: string;
       observedAt?: Date;
@@ -2392,6 +2645,7 @@ Notes:
       threadId: string;
       score: number;
       groupId?: string;
+      recordId?: string;
       range?: string;
       text?: string;
       observedAt?: Date;
@@ -2419,6 +2673,7 @@ Notes:
             threadId: r.metadata.thread_id,
             score: r.score,
             groupId,
+            recordId: typeof r.metadata.record_id === 'string' ? r.metadata.record_id : undefined,
             range: typeof r.metadata.range === 'string' ? r.metadata.range : undefined,
             text: typeof r.metadata.text === 'string' ? r.metadata.text : undefined,
             observedAt:
@@ -2457,6 +2712,7 @@ Notes:
     threadId,
     resourceId,
     observedAt,
+    recordId,
   }: {
     text: string;
     groupId: string;
@@ -2464,6 +2720,8 @@ Notes:
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    /** Observational memory record holding the group, so paging can read it directly. */
+    recordId?: string;
   }): Promise<void> {
     if (!this.vector || !this.embedder) return;
 
@@ -2475,15 +2733,19 @@ Notes:
     const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
     // Stable UUIDv8 IDs make retries safe even when a write succeeds but its acknowledgement is lost.
     // UUID formatting also supports vector stores that reject arbitrary string IDs.
-    const ids = embedResult.chunks.map((_, chunkIndex) => {
-      const hash = createHash('sha256')
-        .update(JSON.stringify([resourceId, threadId, groupId, chunkIndex]))
-        .digest();
+    const ids: string[] = [];
+    for (const [chunkIndex] of embedResult.chunks.entries()) {
+      const hash = Buffer.from(
+        await globalThis.crypto.subtle.digest(
+          'SHA-256',
+          new TextEncoder().encode(JSON.stringify([resourceId, threadId, groupId, chunkIndex])),
+        ),
+      );
       hash[6] = (hash[6]! & 0x0f) | 0x80;
       hash[8] = (hash[8]! & 0x3f) | 0x80;
       const hex = hash.toString('hex', 0, 16);
-      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-    });
+      ids.push(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
+    }
 
     await this.vector.upsert({
       indexName,
@@ -2495,6 +2757,7 @@ Notes:
         thread_id: threadId,
         resource_id: resourceId,
         observed_at: observedAt?.toISOString(),
+        ...(recordId ? { record_id: recordId } : {}),
         text: chunk,
       })),
     });
@@ -2769,6 +3032,10 @@ Notes:
       tools.recall = recallTool(mergedConfig, {
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
+        getOMEngine: async () => {
+          const om = await this.omEngine;
+          return om?.getStorage().supportsObservationalMemoryHistorySearch ? om : null;
+        },
       });
     }
     if (
@@ -2827,6 +3094,8 @@ Notes:
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
           embeddings: number[][];
+          /** Chunk texts, populated only when the store embeds the text itself. */
+          documents?: string[];
           metadata: Array<
             Record<string, unknown> & {
               message_id: string;
@@ -2877,12 +3146,24 @@ Notes:
 
             // If there's new text content, embed it
             if (textForEmbedding) {
-              const result = await this.embedMessageContent(textForEmbedding);
-              dimension = result.dimension;
+              // A self-embedding store receives the chunk texts and embeds them itself.
+              let embeddings: number[][] = [];
+              let documents: string[] | undefined;
+              let chunks: string[];
+              if (this.isSelfEmbedding) {
+                chunks = this.chunkText(textForEmbedding);
+                documents = chunks;
+              } else {
+                const result = await this.embedMessageContent(textForEmbedding);
+                dimension = result.dimension;
+                embeddings = result.embeddings;
+                chunks = result.chunks;
+              }
 
               embeddingData.push({
-                embeddings: result.embeddings,
-                metadata: result.chunks.map(() => ({
+                embeddings,
+                documents,
+                metadata: chunks.map(() => ({
                   message_id: message.id,
                   thread_id: existingMessage.threadId,
                   resource_id: existingMessage.resourceId,
@@ -2933,7 +3214,7 @@ Notes:
         }
 
         // Upsert new embeddings if any
-        if (embeddingData.length > 0 && dimension !== undefined) {
+        if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
           const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
           // Flatten all embeddings and metadata into single arrays
@@ -2946,16 +3227,24 @@ Notes:
             }
           > = [];
 
+          const allDocuments: string[] = [];
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
+            if (data.documents) allDocuments.push(...data.documents);
             allMetadata.push(...data.metadata);
           }
 
-          await this.vector.upsert({
-            indexName,
-            vectors: allVectors,
-            metadata: allMetadata,
-          });
+          if (this.isSelfEmbedding) {
+            // `documents` is accepted only by self-embedding stores, so it is not on the shared
+            // UpsertVectorParams.
+            await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
+          } else {
+            await this.vector.upsert({
+              indexName,
+              vectors: allVectors,
+              metadata: allMetadata,
+            });
+          }
         }
       }
     }
@@ -3194,7 +3483,7 @@ Notes:
     }
 
     // Batches through the new thread so large threads are embedded without loading every payload at once.
-    if (this.vector && this.embedder && config.semanticRecall) {
+    if (this.vector && (this.embedder || this.isSelfEmbedding) && config.semanticRecall) {
       try {
         await this.embedCopiedMessagesInBatches(memoryStore, result, config);
       } catch (error) {
@@ -3306,7 +3595,7 @@ Notes:
     const memoryStore = await this.getMemoryStore();
 
     const config = this.getMergedThreadConfig(memoryConfig);
-    const migratesVectors = Boolean(this.vector && this.embedder && config.semanticRecall);
+    const migratesVectors = Boolean(this.vector && (this.embedder || this.isSelfEmbedding) && config.semanticRecall);
 
     // Preserve the storage no-op contract when there is no vector migration to worry about:
     // if the thread already belongs to the target resource there is nothing to move, so return
@@ -3403,6 +3692,9 @@ Notes:
     cloned.id = crypto.randomUUID();
     cloned.createdAt = now;
     cloned.updatedAt = now;
+    // The clone starts live even if the source generation it was read from has since been
+    // replaced by a reflection; that source's `supersededBy` must not carry over.
+    cloned.supersededBy = null;
     await memoryStore.insertObservationalMemoryRecord(cloned);
   }
 
@@ -3497,12 +3789,15 @@ Notes:
    * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
    */
   private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfigInternal): Promise<void> {
-    if (!this.vector || !this.embedder) {
+    // A self-embedding store needs no embedder: it receives the text and embeds it itself.
+    if (!this.vector || (!this.embedder && !this.isSelfEmbedding)) {
       return;
     }
 
     const embeddingData: Array<{
       embeddings: number[][];
+      /** Chunk texts, populated only when the store embeds the text itself. */
+      documents?: string[];
       metadata: Array<
         Record<string, unknown> & {
           message_id: string;
@@ -3536,12 +3831,23 @@ Notes:
 
         if (!textForEmbedding) return;
 
-        const result = await this.embedMessageContent(textForEmbedding);
-        dimension = result.dimension;
+        let embeddings: number[][] = [];
+        let documents: string[] | undefined;
+        let chunks: string[];
+        if (this.isSelfEmbedding) {
+          chunks = this.chunkText(textForEmbedding);
+          documents = chunks;
+        } else {
+          const result = await this.embedMessageContent(textForEmbedding);
+          dimension = result.dimension;
+          embeddings = result.embeddings;
+          chunks = result.chunks;
+        }
 
         embeddingData.push({
-          embeddings: result.embeddings,
-          metadata: result.chunks.map(() => ({
+          embeddings,
+          documents,
+          metadata: chunks.map(() => ({
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
@@ -3554,7 +3860,7 @@ Notes:
     );
 
     // Batch all vectors into a single upsert call
-    if (embeddingData.length > 0 && dimension !== undefined) {
+    if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       // Flatten all embeddings and metadata into single arrays
@@ -3567,16 +3873,24 @@ Notes:
         }
       > = [];
 
+      const allDocuments: string[] = [];
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
+        if (data.documents) allDocuments.push(...data.documents);
         allMetadata.push(...data.metadata);
       }
 
-      await this.vector.upsert({
-        indexName,
-        vectors: allVectors,
-        metadata: allMetadata,
-      });
+      if (this.isSelfEmbedding) {
+        // `documents` is accepted only by self-embedding stores, so it is not on the shared
+        // UpsertVectorParams.
+        await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
+      } else {
+        await this.vector.upsert({
+          indexName,
+          vectors: allVectors,
+          metadata: allMetadata,
+        });
+      }
     }
   }
 
@@ -3767,12 +4081,31 @@ Notes:
   }
 
   /**
+   * Extends the base implementation to add ObservationalMemory as an error processor.
+   * OM uses processAPIError to observe pending messages and retry when the provider
+   * rejects a request for exceeding the model's context window.
+   */
+  async getErrorProcessors(
+    configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    const processors = await super.getErrorProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om as unknown as ErrorProcessor);
+    }
+
+    return processors;
+  }
+
+  /**
    * Creates an ObservationalMemory processor wrapping the shared engine.
    * Returns null if OM is not configured, not supported, or already present
    * in the user's configured processors.
    */
   private async createOMProcessor(
-    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
     const hasObservationalMemory = configuredProcessors.some(
@@ -3860,7 +4193,7 @@ Notes:
     const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
     if (alreadyConfigured) return null;
 
-    return new PinnedStateProcessor({ getKnowledgeStore: () => this.storage.getStore('knowledge') });
+    return new PinnedStateProcessor({ getKnowledgeStore: () => this.getKnowledgeStore() });
   }
 }
 

@@ -1,0 +1,106 @@
+import { useEffect, useRef, useState } from 'react';
+import { statusDotClass, type StatusPresentation, type StatusPresentationFn } from './status-dot-styles';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
+
+const HOVER_POPOVER_LEAVE_MS = 120;
+
+function StatusDotPopoverInner<T>({
+  status,
+  presentation,
+}: {
+  status: T | null;
+  presentation: StatusPresentationFn<T>;
+}) {
+  const [open, setOpen] = useState(false);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const resolved = presentation(status);
+
+  useEffect(
+    () => () => {
+      if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current);
+    },
+    [],
+  );
+
+  function onHoverOpen() {
+    if (leaveTimer.current !== undefined) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = undefined;
+    }
+    setOpen(true);
+  }
+
+  function onHoverScheduleClose() {
+    if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current);
+    leaveTimer.current = setTimeout(() => setOpen(false), HOVER_POPOVER_LEAVE_MS);
+  }
+
+  return (
+    <span className="pointer-events-auto inline-flex" onMouseEnter={onHoverOpen} onMouseLeave={onHoverScheduleClose}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={<button type="button" aria-label={resolved.label} className={statusDotClass(resolved, focusRing)} />}
+        />
+        <PopoverContent
+          side="top"
+          align="start"
+          sideOffset={6}
+          className="w-auto max-w-xs px-2.5 py-1.5 text-meta text-foreground"
+          onMouseEnter={onHoverOpen}
+          onMouseLeave={onHoverScheduleClose}
+        >
+          <Txt variant="column" tone="ink">
+            {resolved.label}
+          </Txt>
+          <p className="mt-1 text-pretty text-muted-foreground">{resolved.description}</p>
+        </PopoverContent>
+      </Popover>
+    </span>
+  );
+}
+
+export function StatusDot<T>({
+  status,
+  presentation,
+  variant = 'popover',
+  decorative = false,
+  resolved,
+}: {
+  status: T | null;
+  presentation: StatusPresentationFn<T>;
+  variant?: 'popover' | 'static';
+  decorative?: boolean;
+  resolved?: StatusPresentation;
+}) {
+  if (decorative) {
+    const presented = resolved ?? presentation(status);
+    return <span className={statusDotClass(presented)} aria-hidden />;
+  }
+
+  if (variant === 'popover') {
+    return <StatusDotPopoverInner status={status} presentation={presentation} />;
+  }
+
+  const presented = resolved ?? presentation(status);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={presented.label}
+            className={statusDotClass(presented, cn('cursor-default', focusRing))}
+          />
+        }
+      />
+      <TooltipContent side="top" className="max-w-xs text-pretty">
+        {presented.description}
+      </TooltipContent>
+    </Tooltip>
+  );
+}

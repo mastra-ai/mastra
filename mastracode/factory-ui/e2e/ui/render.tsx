@@ -82,3 +82,12 @@ export async function waitForMutationsIdle(client: QueryClient) {
     assertIdle();
   });
 }
+
+/** The routed page's `PageLayout` header (the sidebar renders its own `banner`). */
+export function findPageHeader(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const header = document.querySelector<HTMLElement>('[data-slot="page-layout"] > header');
+    if (!header) throw new Error('Page header not rendered');
+    return header;
+  });
+}

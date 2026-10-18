@@ -442,6 +442,58 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should retain a run that suspends again and release it after completion
+  {
+    const firstStepAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return suspend({ reason: 'waiting for first input' });
+      }
+      return { value: (resumeData as any).value };
+    });
+
+    const secondStepAction = vi.fn().mockImplementation(async ({ inputData, suspend, resumeData }) => {
+      if (!resumeData) {
+        return suspend({ reason: 'waiting for second input' });
+      }
+      return { result: `${inputData.value}:${(resumeData as any).value}` };
+    });
+
+    const firstStep = createStep({
+      id: 'first-suspend-step',
+      execute: firstStepAction,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ value: z.string() }),
+    });
+
+    const secondStep = createStep({
+      id: 'second-suspend-step',
+      execute: secondStepAction,
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ value: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'repeated-suspend-resume-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    workflow.then(firstStep).then(secondStep).commit();
+
+    workflows['repeated-suspend-resume-workflow'] = {
+      workflow,
+      mocks: { firstStepAction, secondStepAction },
+      resetMocks: () => {
+        firstStepAction.mockClear();
+        secondStepAction.mockClear();
+      },
+    };
+  }
+
   // Test: should handle suspend and resume using resumeLabel
   {
     let resumeCallCount = 0;
@@ -3093,6 +3145,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
       // First execution - should suspend
       const suspendResult = await execute(workflow, {}, { runId });
       expect(suspendResult.status).toBe('suspended');
+      expect(workflow.runs.has(runId)).toBe(true);
       expect(mocks.step1Action).toHaveBeenCalledTimes(1);
       expect(suspendResult.steps.step2).toMatchObject({
         status: 'suspended',
@@ -3107,11 +3160,45 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
       });
 
       expect(resumeResult.status).toBe('success');
+      expect(workflow.runs.has(runId)).toBe(false);
       expect(resumeResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'completed', userInput: 'hello from resume' },
       });
     });
+
+    it.skipIf(ctx.skipTests.resumeBasic || !ctx.resume)(
+      'should retain a run that suspends again and release it after completion',
+      async () => {
+        const { workflow, resetMocks } = registry!['repeated-suspend-resume-workflow']!;
+        resetMocks?.();
+
+        const runId = `repeated-resume-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, {}, { runId });
+        expect(startResult.status).toBe('suspended');
+        expect(workflow.runs.has(runId)).toBe(true);
+
+        const firstResumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'first-suspend-step',
+          resumeData: { value: 'first' },
+        });
+        expect(firstResumeResult.status).toBe('suspended');
+        expect(workflow.runs.has(runId)).toBe(true);
+
+        const secondResumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'second-suspend-step',
+          resumeData: { value: 'second' },
+        });
+        expect(secondResumeResult.status).toBe('success');
+        expect(workflow.runs.has(runId)).toBe(false);
+        if (secondResumeResult.status === 'success') {
+          expect(secondResumeResult.result).toEqual({ result: 'first:second' });
+        }
+      },
+    );
 
     it.skipIf(ctx.skipTests.resumeWithLabel || !ctx.resume)(
       'should handle suspend and resume using resumeLabel',

@@ -20,12 +20,14 @@ import {
   convertFullStreamChunkToUIMessageStream,
 } from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
+import type { WithTraceId } from './public-types';
 import {
   isAgentExecutionDataChunkType,
   isDataChunkType,
   isWorkflowExecutionDataChunkType,
   safeParseErrorObject,
   isMastraTextStreamChunk,
+  toUIDataChunk,
 } from './utils';
 
 type LanguageModelV2Usage = {
@@ -70,11 +72,7 @@ export type WorkflowDataPart = {
     status: WorkflowRunStatus;
     steps: Record<string, StepResult>;
     output: {
-      usage: {
-        inputTokens: number;
-        outputTokens: number;
-        totalTokens: number;
-      };
+      usage: LanguageModelV2Usage;
     } | null;
   };
 };
@@ -130,6 +128,18 @@ export type AgentRunSnapshot = LLMStepResult & {
   toolErrors?: AgentToolError[];
 };
 
+export type AgentStreamAncestryEntry = {
+  toolCallId: string;
+  toolName?: string;
+  agentId?: string;
+};
+
+type AgentStreamAncestryMetadata = {
+  ancestry: AgentStreamAncestryEntry[];
+  depth: number;
+  parentAgentId?: string;
+};
+
 export type AgentDataPart = {
   type: 'data-tool-agent';
   id: string;
@@ -146,7 +156,12 @@ export type AgentStepDataPart = {
   };
 };
 
-type TransformAgentResult = AgentDataPart | readonly [AgentDataPart, AgentStepDataPart];
+export type AgentDataPartWithAncestry = AgentDataPart & AgentStreamAncestryMetadata;
+export type AgentStepDataPartWithAncestry = AgentStepDataPart & AgentStreamAncestryMetadata;
+
+type TransformAgentResult =
+  | AgentDataPartWithAncestry
+  | readonly [AgentDataPartWithAncestry, AgentStepDataPartWithAncestry];
 
 // used so it's not serialized to JSON
 const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
@@ -381,14 +396,16 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     sendSources,
     messageMetadata,
     onError,
+    includeSubAgentMetadata = false,
   }: {
     lastMessageId?: string;
     sendStart?: boolean;
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
-    messageMetadata?: (args: { part: any }) => unknown;
+    messageMetadata?: (args: { part: any; traceId?: string }) => unknown;
     onError?: (error: unknown) => string;
+    includeSubAgentMetadata?: boolean;
   },
 ) {
   let bufferedSteps = new Map<string, any>();
@@ -427,7 +444,9 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
         part: p as any,
         sendReasoning,
         sendSources,
-        messageMetadataValue: p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined,
+        messageMetadataValue: p
+          ? messageMetadata?.({ part: p as TextStreamPart<ToolSet>, traceId: chunk.traceId })
+          : undefined,
         sendStart,
         sendFinish,
         responseMessageId: lastMessageId,
@@ -438,8 +457,11 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
 
       if (transformedChunk) {
         if (transformedChunk.type === 'tool-agent') {
-          const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
+          if (!includeSubAgentMetadata) {
+            return;
+          }
+          const { payload, ancestry } = transformedChunk;
+          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps, ancestry);
           if (agentTransformed) {
             if (Array.isArray(agentTransformed)) {
               for (const part of agentTransformed) {
@@ -556,14 +578,16 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   sendSources,
   messageMetadata,
   onError,
+  includeSubAgentMetadata = false,
 }: {
   lastMessageId?: string;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptions<UIMessage>['messageMetadata']>;
   onError?: UIMessageStreamOptions<UIMessage>['onError'];
+  includeSubAgentMetadata?: boolean;
 }) {
   return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv5, {
     lastMessageId,
@@ -573,6 +597,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
     sendSources,
     messageMetadata,
     onError,
+    includeSubAgentMetadata,
   });
 }
 
@@ -584,14 +609,16 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   sendSources,
   messageMetadata,
   onError,
+  includeSubAgentMetadata = false,
 }: {
   lastMessageId?: string;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
+  includeSubAgentMetadata?: boolean;
 }) {
   return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv6, {
     lastMessageId,
@@ -601,6 +628,7 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
     sendSources,
     messageMetadata,
     onError,
+    includeSubAgentMetadata,
   });
 }
 
@@ -781,13 +809,24 @@ function serializeAgentRun(
   };
 }
 
+function createAgentStreamAncestryMetadata(ancestry: AgentStreamAncestryEntry[]): AgentStreamAncestryMetadata {
+  const parentAgentId = ancestry.at(-2)?.agentId;
+
+  return {
+    ancestry,
+    depth: ancestry.length,
+    ...(parentAgentId ? { parentAgentId } : {}),
+  };
+}
+
 function createAgentDataPart(args: {
   current: Record<string, any>;
   runId: string;
+  ancestry: AgentStreamAncestryEntry[];
   includeCompletedStepDetails: boolean;
   includeResponseMessages: boolean;
-}): AgentDataPart {
-  const { current, runId, includeCompletedStepDetails, includeResponseMessages } = args;
+}): AgentDataPartWithAncestry {
+  const { current, runId, ancestry, includeCompletedStepDetails, includeResponseMessages } = args;
 
   return {
     type: 'data-tool-agent',
@@ -796,6 +835,7 @@ function createAgentDataPart(args: {
       includeCompletedStepDetails,
       includeResponseMessages,
     }) as unknown as AgentRunSnapshot,
+    ...createAgentStreamAncestryMetadata(ancestry),
   };
 }
 
@@ -803,8 +843,9 @@ function createAgentStepDataPart(args: {
   runId: string;
   stepIndex: number;
   step: Record<string, any>;
-}): AgentStepDataPart {
-  const { runId, stepIndex, step } = args;
+  ancestry: AgentStreamAncestryEntry[];
+}): AgentStepDataPartWithAncestry {
+  const { runId, stepIndex, step, ancestry } = args;
 
   return {
     type: 'data-tool-agent-step',
@@ -814,12 +855,14 @@ function createAgentStepDataPart(args: {
       stepIndex,
       step: cloneAgentStep(step, { includeDetails: true }) as unknown as AgentRunSnapshot,
     },
+    ...createAgentStreamAncestryMetadata(ancestry),
   };
 }
 
 export function transformAgent<OUTPUT>(
   payload: ChunkType<OUTPUT>,
   bufferedSteps: Map<string, any>,
+  ancestry: AgentStreamAncestryEntry[] = [],
 ): TransformAgentResult | null {
   let hasChanged = false;
   let completedStep: { stepIndex: number; step: Record<string, any> } | null = null;
@@ -1085,6 +1128,7 @@ export function transformAgent<OUTPUT>(
     const snapshot = createAgentDataPart({
       current,
       runId: payload.runId!,
+      ancestry,
       includeCompletedStepDetails: payload.type === 'finish',
       includeResponseMessages: payload.type === 'finish',
     });
@@ -1096,6 +1140,7 @@ export function transformAgent<OUTPUT>(
           runId: payload.runId!,
           stepIndex: completedStep.stepIndex,
           step: completedStep.step,
+          ancestry,
         }),
       ] as const;
     }
@@ -1246,8 +1291,7 @@ export function transformWorkflow<OUTPUT>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
           );
         }
-        const { type, data, id } = output;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(output);
       }
       return null;
     }
@@ -1259,13 +1303,7 @@ export function transformWorkflow<OUTPUT>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        const { type, data, id } = payload;
-
-        return {
-          type,
-          data,
-          ...(id !== undefined && { id }),
-        };
+        return toUIDataChunk(payload);
       }
       return null;
     }
@@ -1615,8 +1653,7 @@ export function transformNetwork(
           );
         }
 
-        const { type, data, id } = payload.payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(payload.payload);
       }
       if (isWorkflowExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -1624,8 +1661,7 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        const { type, data, id } = payload.payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(payload.payload);
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
@@ -1726,8 +1762,7 @@ export function transformNetwork(
           );
         }
 
-        const { type, data, id } = payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(payload);
       }
       return null;
     }

@@ -141,8 +141,12 @@ export class WorkingMemory implements Processor {
       };
     }
 
-    // Check if readOnly mode is enabled (from options or memoryConfig)
-    const isReadOnly = this.options.readOnly || memoryContext.memoryConfig?.readOnly;
+    // Read-only when configured, or when the agent has no updateWorkingMemory tool (agentManaged: false)
+    const workingMemoryConfig = memoryContext.memoryConfig?.workingMemory;
+    const isReadOnly =
+      this.options.readOnly ||
+      memoryContext.memoryConfig?.readOnly ||
+      (typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false);
 
     // Format working memory instruction
     let instruction: string;
@@ -207,7 +211,7 @@ ${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object
 ${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:
@@ -243,7 +247,7 @@ ${typeof template.content === 'string' ? template.content : JSON.stringify(templ
 </working_memory_template>
 
 <working_memory_data>
-${data}
+${data || 'No working memory data available.'}
 </working_memory_data>
 
 Notes:

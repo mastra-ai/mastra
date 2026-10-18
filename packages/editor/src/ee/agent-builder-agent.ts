@@ -50,26 +50,53 @@ const workspace = new Workspace({
  *   (anthropic tool-id format, cerebras reasoning-content strip, anthropic
  *   foreign-reasoning strip) so model swaps don't break history.
  *
+ * Same three processors, same order, as the shared stability defaults in
+ * `@mastra/core/processors`. `createBuilderAgent` passes this list explicitly
+ * rather than relying on the framework defaults: the peer range allows older
+ * cores that have no defaults, and bumping the range would be a breaking
+ * change, so the builder brings its own stack and behaves the same on every
+ * core version.
+ *
  * Exported so callers can compose a custom processor list that keeps the
- * subset they want (e.g. `[...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor'), myCustom]`).
+ * subset they want. Pass it with `errorProcessorDefaults: false`, or the
+ * builder merges the omitted defaults back in:
+ * `createBuilderAgent({ errorProcessors: [...DEFAULT_BUILDER_ERROR_PROCESSORS.filter(p => p.id !== 'stream-error-retry-processor'), myCustom], errorProcessorDefaults: false })`.
  */
 export const DEFAULT_BUILDER_ERROR_PROCESSORS = [
-  new StreamErrorRetryProcessor(),
-  new PrefillErrorHandler(),
   new ProviderHistoryCompat(),
+  new PrefillErrorHandler(),
+  new StreamErrorRetryProcessor(),
 ];
 
 export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): Agent<'builder-agent'> {
   const memory = new Memory();
 
-  // Merge defaults with any caller-supplied processors. Caller processors run
-  // after defaults so they can observe/extend retries the defaults trigger.
-  // A function-typed override (DynamicArgument) is passed through unchanged —
-  // callers using the dynamic form are assumed to manage the full list.
+  // Merge the builder's stability processors with any caller-supplied list:
+  // the peer range allows cores that predate the framework defaults, so
+  // relying on the resolver to add them would silently drop this stack on
+  // older cores. A caller instance with a default's id replaces that default
+  // at its position, so repairs keep running ahead of retries; caller
+  // processors with other ids run after the defaults so they can observe or
+  // extend retries the defaults trigger. An empty array merges like any other,
+  // matching core; `errorProcessorDefaults: false` is the only opt-out and
+  // passes the caller's list through as given (the flag is also forwarded, so
+  // newer cores add nothing either). A function-typed override
+  // (DynamicArgument) is passed through unchanged — callers using the dynamic
+  // form manage the full list.
   const callerErrorProcessors = args?.errorProcessors;
-  const errorProcessors = Array.isArray(callerErrorProcessors)
-    ? [...DEFAULT_BUILDER_ERROR_PROCESSORS, ...callerErrorProcessors]
-    : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
+  const errorProcessors =
+    args?.errorProcessorDefaults === false
+      ? callerErrorProcessors
+      : Array.isArray(callerErrorProcessors)
+        ? [
+            ...DEFAULT_BUILDER_ERROR_PROCESSORS.map(
+              processor => callerErrorProcessors.find(caller => caller.id === processor.id) ?? processor,
+            ),
+            ...callerErrorProcessors.filter(
+              caller => !DEFAULT_BUILDER_ERROR_PROCESSORS.some(processor => processor.id === caller.id),
+            ),
+          ]
+        : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
 
   const config: AgentConfig<'builder-agent'> = {
     instructions: `You are the Agent Builder.
@@ -202,6 +229,11 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
     model: 'openai/gpt-5.5',
     memory,
     workspace,
+    // Newer cores warn once per agent because this list has no explicit
+    // retry budget; that warning is accurate, and setting
+    // `maxProcessorRetries` just to silence it would also convert
+    // input/output processor `abort({ retry: true })` from abort into retry,
+    // so the warning stays.
     ...(args || {}),
     errorProcessors,
     id: 'builder-agent',

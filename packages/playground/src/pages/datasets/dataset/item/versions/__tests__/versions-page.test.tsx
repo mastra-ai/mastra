@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import DatasetItemVersionsComparePage from '../index';
 import { dataset, history } from './fixtures/versions-page';
-import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
@@ -45,11 +44,10 @@ const renderPage = (initialEntry: string) => {
               <Route
                 path="/datasets/:datasetId/items/:itemId/versions"
                 element={
-                  <RouteHeaderActionsProvider>
-                    <RouteHeaderActionsSlot />
+                  <>
                     <DatasetItemVersionsComparePage />
                     <LocationProbe />
-                  </RouteHeaderActionsProvider>
+                  </>
                 }
               />
             </Routes>
@@ -61,6 +59,13 @@ const renderPage = (initialEntry: string) => {
 };
 
 describe('DatasetItemVersionsComparePage', () => {
+  it('renders a single main landmark around the compare columns', async () => {
+    renderPage('/datasets/ds-1/items/item-a/versions');
+
+    expect(await screen.findByRole('combobox', { name: 'Version' })).toBeDefined();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+  });
+
   it('shows an empty compare column when no ?compare is provided', async () => {
     renderPage('/datasets/ds-1/items/item-a/versions');
 
@@ -97,12 +102,12 @@ describe('DatasetItemVersionsComparePage', () => {
     expect(screen.queryByText('No version selected')).toBeNull();
   });
 
-  describe('given ?view=diff with two versions selected', () => {
+  describe('when ?view=diff with two versions selected', () => {
     it('keeps the exact same two-card layout and only highlights changed lines in the editors', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
 
-      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
-      expect(container.querySelector('.cm-diff-added')).not.toBeNull();
+      await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
+      expect(container.querySelector('.code-diff-added')).not.toBeNull();
       expect(container.querySelector('.cm-mergeView')).toBeNull();
       expect(screen.getByRole('combobox', { name: 'Version' })).toBeDefined();
       expect(screen.getByRole('combobox', { name: 'Compare version' })).toBeDefined();
@@ -115,26 +120,26 @@ describe('DatasetItemVersionsComparePage', () => {
     it('colours by chronology: the newer version shows additions (green), the older one removals (red)', async () => {
       // Left = v2 (newer), right = v1 (older)
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
-      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
+      await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
 
       const grid = container.querySelector('.md\\:grid-cols-2')!;
       const [leftCard, rightCard] = Array.from(grid.children);
-      expect(leftCard.querySelector('.cm-diff-added')).not.toBeNull();
-      expect(leftCard.querySelector('.cm-diff-removed')).toBeNull();
-      expect(rightCard.querySelector('.cm-diff-removed')).not.toBeNull();
-      expect(rightCard.querySelector('.cm-diff-added')).toBeNull();
+      expect(leftCard.querySelector('.code-diff-added')?.textContent).toContain('newer');
+      expect(leftCard.querySelector('.code-diff-removed')).toBeNull();
+      expect(rightCard.querySelector('.code-diff-removed')?.textContent).toContain('older');
+      expect(rightCard.querySelector('.code-diff-added')).toBeNull();
     });
   });
 
-  describe('given the Diff View button is clicked', () => {
+  describe('when the Diff View button is clicked', () => {
     it('stores ?view=diff in the URL and highlights the changes', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1');
-      expect(container.querySelector('.cm-diff-removed')).toBeNull();
+      expect(container.querySelector('.code-diff-removed')).toBeNull();
 
       fireEvent.click(await screen.findByRole('button', { name: /Diff View/ }));
 
-      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
-      expect(container.querySelector('.cm-diff-added')).not.toBeNull();
+      await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
+      expect(container.querySelector('.code-diff-added')).not.toBeNull();
       expect(screen.getByTestId('location').textContent).toContain('view=diff');
     });
   });

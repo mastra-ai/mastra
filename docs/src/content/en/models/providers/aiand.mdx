@@ -7,7 +7,7 @@ description: "Browse ai& model IDs, capabilities, context windows, and pricing. 
 
 # <img src="https://models.dev/logos/aiand.svg" alt="ai& logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ai&
 
-Access 11 ai& models through Mastra's model router. Authentication is handled automatically using the `AIAND_API_KEY` environment variable.
+Access 13 ai& models through Mastra's model router. Authentication is handled automatically using the `AIAND_API_KEY` environment variable.
 
 Learn more in the [ai& documentation](https://docs.aiand.com/).
 
@@ -70,6 +70,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
+    "model": "aiand/deepseek-ai/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 0.6
+  },
+  {
     "model": "aiand/google/gemma-4-31b-it",
     "imageInput": true,
     "audioInput": false,
@@ -110,7 +122,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
@@ -176,6 +188,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1,
     "outputCost": 4
+  },
+  {
+    "model": "aiand/zai-org/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048550,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   }
 ]}
 />
@@ -210,7 +234,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "aiand/zai-org/glm-5.3"
+      ? "aiand/zai-org/glm-5.3-flash"
       : "aiand/deepseek-ai/deepseek-v4-flash";
   }
 });

@@ -342,30 +342,17 @@ describe('api command executor', () => {
     );
   });
 
-  it('executes Factory decision and supervisor actions at the resolved origin', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ ok: true }))
-      .mockResolvedValueOnce(jsonResponse({ sessionId: 'factory-supervisor:project-1' }));
+  it('executes Factory decision actions at the resolved origin', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 
     await executeDescriptor(API_COMMANDS.factoryDecisionApprove, ['project-1', 'decision-1'], undefined, {
       url: 'https://example.com',
       header: [],
       pretty: false,
     });
-    await executeDescriptor(API_COMMANDS.factorySupervisorSession, ['project-1'], undefined, {
-      url: 'https://example.com',
-      header: [],
-      pretty: false,
-    });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
+    expect(fetchMock).toHaveBeenCalledWith(
       'https://example.com/web/factory/projects/project-1/decisions/decision-1/approve',
-      expect.objectContaining({ method: 'POST' }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      'https://example.com/web/factory/projects/project-1/supervisor/session',
       expect.objectContaining({ method: 'POST' }),
     );
   });
@@ -694,6 +681,37 @@ describe('api command executor', () => {
       signal: expect.any(AbortSignal),
       body: JSON.stringify(input),
     });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+  });
+
+  it.each([
+    [
+      { pagination: { page: 0, perPage: 25 } },
+      { pagination: { total: 0, page: 0, perPage: 25, hasMore: false }, deltaCursor: 'bootstrap' },
+    ],
+    [
+      { mode: 'delta', after: 'bootstrap', limit: 25 },
+      { delta: { limit: 25, hasMore: true }, deltaCursor: 'continuation' },
+    ],
+  ])('preserves numbered-to-delta query inputs and polling metadata', async (paginationInput, metadata) => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+      ...paginationInput,
+    };
+    const response = { traces: [], ...metadata };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+    await executeDescriptor(API_COMMANDS.traceQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://observability.mastra.ai/api/observability/traces/query',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    );
     expect(JSON.parse(stdout)).toEqual({ data: response });
   });
 

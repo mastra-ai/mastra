@@ -31,7 +31,7 @@ export class DSQLStore extends MastraStorage {
   constructor(config: DSQLStoreConfig) {
     try {
       validateConfig(config);
-      super({ id: config.id, name: 'DSQLStore', disableInit: config.disableInit });
+      super({ id: config.id, name: 'DSQLStore', disableInit: config.disableInit, retention: config.retention });
       this.schema = config.schemaName || 'public';
 
       // Create or use provided pool

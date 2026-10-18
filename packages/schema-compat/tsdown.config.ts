@@ -33,6 +33,8 @@ export default defineConfig({
         '@standard-schema/spec',
         '@types/json-schema',
         'ajv',
+        'fast-uri',
+        'fast-deep-equal',
         'json-schema-to-zod',
         'zod-to-json-schema',
         'zod-from-json-schema-v3',

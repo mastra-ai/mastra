@@ -1,5 +1,4 @@
 import { ArrowUpIcon, ArrowDownIcon } from 'lucide-react';
-import { ButtonsGroup } from '../ButtonsGroup';
 import { Button } from '@/ds/components/Button';
 
 export type PrevNextNavProps = {
@@ -16,13 +15,13 @@ export function PrevNextNav({
   nextAriaLabel = 'Next',
 }: PrevNextNavProps) {
   return (
-    <ButtonsGroup spacing="close">
+    <div className="flex items-center gap-1">
       <Button onClick={onPrevious} disabled={!onPrevious} aria-label={previousAriaLabel} icon={<ArrowUpIcon />}>
         Prev
       </Button>
       <Button onClick={onNext} disabled={!onNext} aria-label={nextAriaLabel} icon={<ArrowDownIcon />}>
         Next
       </Button>
-    </ButtonsGroup>
+    </div>
   );
 }

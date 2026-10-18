@@ -2,11 +2,11 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Archive,
   ArchiveRestore,
-  Brain,
   Check,
   Hourglass,
   MailOpen,
@@ -17,40 +17,32 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { createElement, type ReactElement, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { createElement, type ReactNode } from 'react';
+import { Link } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
-import { attentionPrompt, supervisorAskPath } from '../../supervisor/services/supervisor';
-import { attentionAuthorName, factoryAttentionTargetPath } from '../services/attention';
+import { attentionAuthorName, factoryAttentionTargetPath, readableAttentionDetail } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
-import { TIMESTAMP } from './panel';
 import { RAIL_ROW_BODY } from './Timeline';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
-/** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
-  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-icon3', badge: 'neutral' },
-  'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
-  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
-  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
-  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-warning1', badge: 'orange' },
-} satisfies Record<
-  FactoryAttentionItem['kind'],
-  { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }
->;
+  mention: { glyph: MessageSquare, label: 'mention', badge: 'green' },
+  activity: { glyph: MessagesSquare, label: 'comment', badge: 'neutral' },
+  'automation-failed': { glyph: TriangleAlert, label: 'failed', badge: 'destructive' },
+  'automation-proposed': { glyph: Sparkles, label: 'suggested', badge: 'orange' },
+  'agent-waiting': { glyph: Hourglass, label: 'waiting', badge: 'orange' },
+} satisfies Record<FactoryAttentionItem['kind'], { glyph: typeof MessageSquare; label: string; badge: BadgeVariant }>;
 
-/** Actions ride over the row's right end rather than displacing the time, so a hover never reflows the row. */
-const REVEAL_ACTIONS =
-  'bg-surface4 absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-0.5 rounded-md pl-2 pointer-coarse:flex pointer-fine:group-hover:flex pointer-fine:group-focus-within:flex';
+/** Meta and actions stack in one grid cell, so a hover swaps them without reflow; touch has no hover, so they share a line under the title. */
+const SWAP_SLOT =
+  'relative grid shrink-0 items-center justify-items-end [grid-template-areas:"slot"] *:[grid-area:slot] pointer-coarse:flex pointer-coarse:w-full pointer-coarse:justify-between';
 
-/** Kept in flow so nothing shifts; the action bar covers it. */
-const MASKED_BY_ACTIONS =
-  'pointer-coarse:invisible pointer-fine:group-hover:invisible pointer-fine:group-focus-within:invisible';
+const HIDDEN_ON_REVEAL =
+  'pointer-events-none transition-opacity duration-150 pointer-fine:group-hover:opacity-0 pointer-fine:group-focus-within:opacity-0';
 
-export function KindIcon({ kind }: { kind: FactoryAttentionItem['kind'] }): ReactElement {
-  return createElement(KIND[kind].glyph, { size: 14, className: cn('shrink-0', KIND[kind].tone), 'aria-hidden': true });
-}
+const SHOWN_ON_REVEAL =
+  'flex items-center gap-0.5 transition-opacity duration-150 pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:pointer-events-auto pointer-fine:group-focus-within:opacity-100';
 
 function destinationLabel(item: FactoryAttentionItem): string {
   if (item.target.kind === 'thread') return 'Open thread';
@@ -75,7 +67,7 @@ function RowAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       disabled={disabled}
       tooltip={tooltip}
       aria-label={label}
@@ -92,8 +84,8 @@ export function AttentionItemRow({
   retrying,
   settling,
   updatingReceipt,
-  onOpen,
   onRetry,
+  onChooseRepository,
   onApprove,
   onDismiss,
   onRead,
@@ -105,109 +97,112 @@ export function AttentionItemRow({
   retrying: boolean;
   settling: boolean;
   updatingReceipt: boolean;
-  onOpen?: () => void;
   onRetry?: () => void;
+  onChooseRepository?: () => void;
   onApprove?: () => void;
   onDismiss?: () => void;
   onRead: () => void;
   onArchive: () => void;
   onRestore: () => void;
 }) {
-  const navigate = useNavigate();
   const author = attentionAuthorName(item);
 
   return (
-    <div className={cn('group relative flex flex-col py-2', RAIL_ROW_BODY)}>
+    <div
+      className={cn(
+        'group relative flex items-center gap-3 py-2 pointer-coarse:flex-wrap pointer-coarse:gap-y-1',
+        RAIL_ROW_BODY,
+      )}
+    >
       <Link
         to={factoryAttentionTargetPath(factoryId, item.target)}
-        onClick={onOpen}
         aria-label={`${destinationLabel(item)} for ${item.title}`}
-        className="focus-visible:outline-accent1 absolute inset-0 rounded-lg outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
+        className={`absolute inset-0 rounded-lg ${focusRingInset}`}
       />
-      <span className="flex w-full items-center gap-2">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
-        <span className="text-ui-sm text-icon6 min-w-0 flex-1 truncate font-medium">{item.title}</span>
-        <Badge
-          variant={KIND[item.kind].badge}
-          emphasis={item.read ? 'muted' : 'default'}
-          size="xs"
-          icon={createElement(KIND[item.kind].glyph)}
-          className={MASKED_BY_ACTIONS}
-        >
-          {KIND[item.kind].label}
-        </Badge>
-        <span className="relative flex shrink-0 items-center">
-          <time dateTime={item.occurredAt} className={TIMESTAMP}>
-            {relativeTime(item.occurredAt)}
-          </time>
-          <span className={REVEAL_ACTIONS}>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              tooltip="Ask supervisor"
-              aria-label={`Ask supervisor about ${item.title}`}
-              onClick={() => {
-                onOpen?.();
-                void navigate(supervisorAskPath(factoryId, attentionPrompt(item)));
-              }}
-            >
-              <Brain aria-hidden />
-            </Button>
-            {onRetry ? (
-              <RowAction
-                tooltip="Retry"
-                label={`${retrying ? 'Retrying' : 'Retry'} ${item.title}`}
-                disabled={retrying}
-                onClick={onRetry}
-              >
-                {retrying ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <RotateCw aria-hidden />}
-              </RowAction>
-            ) : null}
-            {onApprove ? (
-              <RowAction tooltip="Run it" label={`Run ${item.title}`} disabled={settling} onClick={onApprove}>
-                {settling ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <Check aria-hidden />}
-              </RowAction>
-            ) : null}
-            {onDismiss ? (
-              <RowAction tooltip="Dismiss" label={`Dismiss ${item.title}`} disabled={settling} onClick={onDismiss}>
-                <X aria-hidden />
-              </RowAction>
-            ) : null}
-            {!item.read ? (
-              <RowAction
-                tooltip="Mark as read"
-                label={`Mark ${item.title} as read`}
-                disabled={updatingReceipt}
-                onClick={onRead}
-              >
-                <MailOpen aria-hidden />
-              </RowAction>
-            ) : null}
-            {item.archived ? (
-              <RowAction
-                tooltip="Restore"
-                label={`Restore ${item.title}`}
-                disabled={updatingReceipt}
-                onClick={onRestore}
-              >
-                <ArchiveRestore aria-hidden />
-              </RowAction>
-            ) : (
-              <RowAction
-                tooltip="Archive for me"
-                label={`Archive ${item.title}`}
-                disabled={updatingReceipt}
-                onClick={onArchive}
-              >
-                <Archive aria-hidden />
-              </RowAction>
-            )}
-          </span>
-        </span>
+        <Txt as="span" variant="column" tone="ink" className="truncate">
+          {item.title}
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="truncate">
+          {author ? (
+            <Txt as="span" variant="meta" tone="muted">
+              {author}{' '}
+            </Txt>
+          ) : null}
+          {readableAttentionDetail(item.detail)}
+        </Txt>
       </span>
-      <span className="text-ui-xs text-icon3 truncate">
-        {author ? <span className="text-icon4 font-medium">{author} </span> : null}
-        {item.detail}
+      <span className={SWAP_SLOT}>
+        <span className={cn('flex items-center gap-2', HIDDEN_ON_REVEAL)}>
+          <Badge
+            variant={KIND[item.kind].badge}
+            emphasis={item.read ? 'subtle' : 'strong'}
+            size="xs"
+            icon={createElement(KIND[item.kind].glyph)}
+          >
+            {KIND[item.kind].label}
+          </Badge>
+          <Txt as="time" variant="meta" tone="muted" font="mono" dateTime={item.occurredAt}>
+            {relativeTime(item.occurredAt)}
+          </Txt>
+        </span>
+        <span className={SHOWN_ON_REVEAL}>
+          {onChooseRepository ? (
+            <RowAction
+              tooltip="Choose repository"
+              label={`Choose repository for ${item.title}`}
+              disabled={retrying}
+              onClick={onChooseRepository}
+            >
+              <RotateCw aria-hidden />
+            </RowAction>
+          ) : null}
+          {onRetry && !onChooseRepository ? (
+            <RowAction
+              tooltip="Retry"
+              label={`${retrying ? 'Retrying' : 'Retry'} ${item.title}`}
+              disabled={retrying}
+              onClick={onRetry}
+            >
+              {retrying ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <RotateCw aria-hidden />}
+            </RowAction>
+          ) : null}
+          {onApprove ? (
+            <RowAction tooltip="Run it" label={`Run ${item.title}`} disabled={settling} onClick={onApprove}>
+              {settling ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <Check aria-hidden />}
+            </RowAction>
+          ) : null}
+          {onDismiss ? (
+            <RowAction tooltip="Dismiss" label={`Dismiss ${item.title}`} disabled={settling} onClick={onDismiss}>
+              <X aria-hidden />
+            </RowAction>
+          ) : null}
+          {!item.read ? (
+            <RowAction
+              tooltip="Mark as read"
+              label={`Mark ${item.title} as read`}
+              disabled={updatingReceipt}
+              onClick={onRead}
+            >
+              <MailOpen aria-hidden />
+            </RowAction>
+          ) : null}
+          {item.archived ? (
+            <RowAction tooltip="Restore" label={`Restore ${item.title}`} disabled={updatingReceipt} onClick={onRestore}>
+              <ArchiveRestore aria-hidden />
+            </RowAction>
+          ) : (
+            <RowAction
+              tooltip="Archive for me"
+              label={`Archive ${item.title}`}
+              disabled={updatingReceipt}
+              onClick={onArchive}
+            >
+              <Archive aria-hidden />
+            </RowAction>
+          )}
+        </span>
       </span>
     </div>
   );

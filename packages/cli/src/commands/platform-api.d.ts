@@ -2785,6 +2785,7 @@ export interface operations {
             [key: string]: string;
           };
           disablePlatformObservability?: boolean;
+          artifactBytes?: number;
         };
       };
     };
@@ -3743,6 +3744,7 @@ export interface operations {
           };
           disablePlatformObservability?: boolean;
           factoryEnabled?: boolean;
+          artifactBytes?: number;
         };
       };
     };

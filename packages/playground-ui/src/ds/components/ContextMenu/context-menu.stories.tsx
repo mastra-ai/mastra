@@ -30,7 +30,7 @@ export default meta;
 type Story = StoryObj<typeof ContextMenu>;
 
 const triggerClass =
-  'flex items-center justify-center w-80 h-60 rounded-md border border-dashed border-border1 text-neutral4 select-none text-ui-smd';
+  'flex items-center justify-center w-80 h-60 rounded-md border border-dashed border-border text-muted-foreground select-none text-body-sm';
 
 export const Default: Story = {
   render: () => (
@@ -42,6 +42,21 @@ export const Default: Story = {
         <ContextMenu.Item>Billing</ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Item>Log out</ContextMenu.Item>
+      </ContextMenu.Content>
+    </ContextMenu>
+  ),
+};
+
+/** A long menu scrolls inside the popup; the scrollbar stays clear of the rounded corners. */
+export const WithManyItems: Story = {
+  render: () => (
+    <ContextMenu>
+      <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
+      <ContextMenu.Content className="w-56">
+        <ContextMenu.Label>Many items</ContextMenu.Label>
+        {Array.from({ length: 30 }, (_, i) => (
+          <ContextMenu.Item key={i}>Item {i + 1}</ContextMenu.Item>
+        ))}
       </ContextMenu.Content>
     </ContextMenu>
   ),

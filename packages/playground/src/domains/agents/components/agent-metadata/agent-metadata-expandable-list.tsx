@@ -35,7 +35,8 @@ export const AgentMetadataExpandableList = <T,>({
         <AgentMetadataListItem>
           <Button
             variant="ghost"
-            size="xs"
+            size="sm"
+            className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
             aria-expanded={isExpanded}
             data-testid="agent-metadata-expandable-toggle"
             onClick={() => setIsExpanded(expanded => !expanded)}

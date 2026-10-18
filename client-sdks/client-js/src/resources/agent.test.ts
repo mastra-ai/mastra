@@ -1,4 +1,3 @@
-import { formatDataStreamPart, processDataStream } from '@ai-sdk/ui-utils';
 import { createTool } from '@mastra/core/tools';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v3';
@@ -6,12 +5,17 @@ import { z } from 'zod/v3';
 import { MastraClient } from '../client';
 import type { Body } from '../route-types.generated';
 import type {
+  AbortAgentThreadParams,
   ClientOptions,
+  CancelQueuedAgentMessagesParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SendAgentMessageParams,
   SendAgentSignalParams,
   SubscribeAgentThreadParams,
 } from '../types';
+import { MastraClientError } from '../types';
+import { formatDataStreamPart, processDataStream } from '../utils/ai-sdk-v4';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -104,6 +108,57 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('does not throw when the consumer cancels the stream after the finish chunk', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const chunks = [
+      { type: 'start', payload: {} },
+      { type: 'text-delta', payload: { id: '1', text: 'hi' } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, output: { usage: {} } } },
+    ];
+    agent['request'] = vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const chunk of chunks) {
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            }
+            // Close after the consumer has had a chance to cancel so onFinish fires against a cancelled stream
+            setTimeout(() => {
+              try {
+                controller.close();
+              } catch {
+                // Cancelling the outer stream now cancels this underlying body too
+              }
+            }, 20);
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    ) as (typeof agent)['request'];
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const response = await agent.stream([{ role: 'user', content: 'hi' }]);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (decoder.decode(value, { stream: true }).includes('"type":"finish"')) {
+          await reader.cancel();
+          break;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+  });
+
   it('sends messages to the send-message route with object payloads unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'run-123' });
@@ -148,6 +203,26 @@ describe('Agent signal routes', () => {
     await agent.queueMessage(params);
 
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('queues typed signals to the queue-signal route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'queued-run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies QueueAgentSignalParams;
+    const routeBody: Body<'POST /agents/:agentId/queue-signal'> = params;
+
+    await agent.queueSignal(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-signal', {
       method: 'POST',
       body: routeBody,
     });
@@ -444,6 +519,20 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('forwards withInitialHistory when requested', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response(new ReadableStream()));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await agent.subscribeToThread({ threadId: 'thread-123', withInitialHistory: { perPage: 20 } });
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/subscribe', {
+      method: 'POST',
+      body: { resourceId: undefined, threadId: 'thread-123', withInitialHistory: { perPage: 20 } },
+      stream: true,
+    });
+  });
+
   it('only forwards thread coordinates in the subscribe request body', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const response = new Response(new ReadableStream());
@@ -458,7 +547,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest.mock.calls[0][1].body).toEqual({ resourceId: 'resource-123', threadId: 'thread-123' });
   });
 
-  it('aborts active thread runs through the abort route', async () => {
+  it.each([undefined, false, true])('aborts thread runs with clearPendingSignals=%s', async clearPendingSignals => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue({ aborted: true });
     agent['request'] = mockRequest as (typeof agent)['request'];
@@ -466,12 +555,31 @@ describe('Agent signal routes', () => {
     const params = {
       resourceId: 'resource-123',
       threadId: 'thread-123',
-    } satisfies SubscribeAgentThreadParams;
+      ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+      expectedRunId: 'run-a',
+    } satisfies AbortAgentThreadParams;
     const routeBody: Body<'POST /agents/:agentId/threads/abort'> = params;
 
     await expect(agent.abortThread(params)).resolves.toEqual({ aborted: true });
 
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/abort', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('cancels selected pending signals through the thread route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ cancelledSignalIds: ['first'] });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+    const params = {
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      signalIds: ['first', 'missing', 'first'],
+    } satisfies CancelQueuedAgentMessagesParams;
+    const routeBody: Body<'POST /agents/:agentId/threads/signals/cancel'> = params;
+    await expect(agent.cancelQueuedMessages(params)).resolves.toEqual({ cancelledSignalIds: ['first'] });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/signals/cancel', {
       method: 'POST',
       body: routeBody,
     });
@@ -502,27 +610,37 @@ describe('Agent signal routes', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps abort separate from unsubscribe on thread subscriptions', async () => {
-    const agent = new Agent(mockClientOptions, 'test-agent');
-    const response = new Response(new ReadableStream());
-    const mockRequest = vi.fn(async (path: string) => {
-      if (path.endsWith('/threads/subscribe')) return response;
-      if (path.endsWith('/threads/abort')) return { aborted: true };
-      throw new Error(`Unexpected request path: ${path}`);
-    });
-    agent['request'] = mockRequest as (typeof agent)['request'];
+  it.each([undefined, false, true])(
+    'keeps subscription abort separate from unsubscribe with clearPendingSignals=%s',
+    async clearPendingSignals => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      const response = new Response(new ReadableStream());
+      const mockRequest = vi.fn(async (path: string) => {
+        if (path.endsWith('/threads/subscribe')) return response;
+        if (path.endsWith('/threads/abort')) return { aborted: true };
+        throw new Error(`Unexpected request path: ${path}`);
+      });
+      agent['request'] = mockRequest as (typeof agent)['request'];
 
-    const subscription = await agent.subscribeToThread({
-      resourceId: 'resource-123',
-      threadId: 'thread-123',
-    } as SubscribeAgentThreadParams);
+      const subscription = await agent.subscribeToThread({
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+      } as SubscribeAgentThreadParams);
 
-    await expect(subscription.abort()).resolves.toBe(true);
-    expect(mockRequest).toHaveBeenLastCalledWith('/agents/test-agent/threads/abort', {
-      method: 'POST',
-      body: { resourceId: 'resource-123', threadId: 'thread-123' },
-    });
-  });
+      await expect(
+        subscription.abort(clearPendingSignals === undefined ? undefined : { clearPendingSignals }),
+      ).resolves.toBe(true);
+      expect(mockRequest).toHaveBeenLastCalledWith('/agents/test-agent/threads/abort', {
+        method: 'POST',
+        body: {
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+        },
+      });
+      expect(response.body?.locked).toBe(false);
+    },
+  );
 
   it('executes clientTools after tool-calls finish and continues with tool-result messages', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
@@ -1586,6 +1704,85 @@ describe('Agent signal routes', () => {
     expect(onChunk).toHaveBeenNthCalledWith(1, firstChunk);
     expect(onChunk).toHaveBeenNthCalledWith(2, secondChunk);
   });
+
+  describe('thread subscription reconnect on terminal HTTP errors', () => {
+    const chunk = { type: 'text-delta', runId: 'run-1', from: 'AGENT', payload: { id: 'text-1', text: 'first' } };
+    const encode = (value: unknown) => new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`);
+    const endedStream = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encode(chunk));
+            controller.close();
+          },
+        }),
+      );
+
+    it.each([401, 403, 404])('stops reconnecting and rejects with the original %s error', async status => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      const denied = new MastraClientError(status, 'Denied', `HTTP error! status: ${status}`);
+      const mockRequest = vi.fn().mockResolvedValueOnce(endedStream()).mockRejectedValue(denied);
+      agent['request'] = mockRequest as (typeof agent)['request'];
+
+      const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+
+      await expect(
+        response.processDataStream({ onChunk: vi.fn(), reconnect: { maxRetries: Infinity, delayMs: 0 } }),
+      ).rejects.toBe(denied);
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([408, 429, 503])('keeps retrying %s errors within the reconnect limit', async status => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      const mockRequest = vi
+        .fn()
+        .mockResolvedValueOnce(endedStream())
+        .mockRejectedValueOnce(new MastraClientError(status, 'Retry later', `HTTP error! status: ${status}`))
+        .mockResolvedValueOnce(endedStream());
+      agent['request'] = mockRequest as (typeof agent)['request'];
+
+      const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+      const onChunk = vi.fn();
+
+      await response.processDataStream({ onChunk, reconnect: { maxRetries: 2, delayMs: 0 } });
+
+      expect(mockRequest).toHaveBeenCalledTimes(3);
+      expect(onChunk).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves quietly when a denial arrives after unsubscribe', async () => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      let rejectResubscribe!: (error: unknown) => void;
+      let resubscribeStarted!: () => void;
+      const started = new Promise<void>(resolve => {
+        resubscribeStarted = resolve;
+      });
+      const mockRequest = vi
+        .fn()
+        .mockResolvedValueOnce(endedStream())
+        .mockImplementationOnce(
+          () =>
+            new Promise((_, reject) => {
+              rejectResubscribe = reject;
+              resubscribeStarted();
+            }),
+        );
+      agent['request'] = mockRequest as (typeof agent)['request'];
+
+      const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+      const processing = response.processDataStream({
+        onChunk: vi.fn(),
+        reconnect: { maxRetries: Infinity, delayMs: 0 },
+      });
+
+      await started;
+      response.unsubscribe();
+      rejectResubscribe(new MastraClientError(401, 'Unauthorized', 'HTTP error! status: 401'));
+
+      await expect(processing).resolves.toBeUndefined();
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 describe('Agent.stream', () => {
@@ -1978,6 +2175,7 @@ describe('Agent Voice Resource', () => {
       `${clientOptions.baseUrl}/api/agents/test-agent/voice/speak`,
       expect.objectContaining({
         method: 'POST',
+        body: JSON.stringify({ text: 'test', options: { speaker: 'speaker1' } }),
         headers: expect.objectContaining(clientOptions.headers),
       }),
     );

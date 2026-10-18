@@ -172,10 +172,12 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
       tools: { lookup: lookupTool },
     });
 
-    await agent.generate('Look up test data and summarize', {
-      maxSteps: 10, // High maxSteps — the loop should stop on its own after 'length'
-      structuredOutput: { schema: outputSchema },
-    });
+    await expect(
+      agent.generate('Look up test data and summarize', {
+        maxSteps: 10, // High maxSteps — the loop should stop on its own after 'length'
+        structuredOutput: { schema: outputSchema },
+      }),
+    ).rejects.toMatchObject({ id: 'STRUCTURED_OUTPUT_TRUNCATED' });
 
     // BUG: Without the fix, the model would be called up to 10 times (maxSteps),
     // each time generating 64K tokens (640K total wasted tokens).
@@ -241,10 +243,12 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
       model: mockModel,
     });
 
-    await agent.generate('Summarize this data', {
-      maxSteps: 10,
-      structuredOutput: { schema: outputSchema },
-    });
+    await expect(
+      agent.generate('Summarize this data', {
+        maxSteps: 10,
+        structuredOutput: { schema: outputSchema },
+      }),
+    ).rejects.toMatchObject({ id: 'STRUCTURED_OUTPUT_TRUNCATED' });
 
     // finishReason: 'length' should stop the loop immediately.
     // Without the fix, the model is called up to 10 times (maxSteps).

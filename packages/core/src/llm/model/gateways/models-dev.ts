@@ -2,7 +2,7 @@ import { createAlibaba } from '@ai-sdk/alibaba-v6';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createCerebras } from '@ai-sdk/cerebras-v6';
 import { createDeepInfra } from '@ai-sdk/deepinfra-v6';
-import { createDeepSeek } from '@ai-sdk/deepseek-v6';
+import { createDeepSeek } from '@ai-sdk/deepseek-v7';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
 import { createGroq } from '@ai-sdk/groq-v6';
 import { createMistral } from '@ai-sdk/mistral-v6';
@@ -19,7 +19,9 @@ import type {
   AttachmentCapabilities,
   GatewayLanguageModel,
   ModelProviderOverride,
+  ModelReasoningOption,
   ProviderConfig,
+  ReasoningCapabilities,
   StructuredOutputCapabilities,
   TemperatureCapabilities,
 } from './base.js';
@@ -36,6 +38,35 @@ interface ModelsDevModelInfo {
   // Per-model endpoint/shape/SDK override (models.dev model `provider` block).
   provider?: { api?: string; shape?: 'responses' | 'completions'; npm?: string };
   [key: string]: unknown;
+}
+
+function stringItems(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [];
+}
+
+function isOptionalNumber(value: unknown): value is number | undefined {
+  return value === undefined || typeof value === 'number';
+}
+
+function toReasoningOption(raw: unknown): ModelReasoningOption | undefined {
+  if (!raw || typeof raw !== 'object' || !('type' in raw)) return undefined;
+  if (raw.type === 'toggle') return { type: 'toggle' };
+  if (raw.type === 'effort') {
+    const values = 'values' in raw ? stringItems(raw.values) : [];
+    return values.length > 0 ? { type: 'effort', values } : undefined;
+  }
+  if (raw.type === 'budget_tokens') {
+    const min = 'min' in raw ? raw.min : undefined;
+    const max = 'max' in raw ? raw.max : undefined;
+    if (!isOptionalNumber(min) || !isOptionalNumber(max)) return undefined;
+    return { type: 'budget_tokens', ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}) };
+  }
+  return undefined;
+}
+
+function parseReasoningOptions(raw: unknown): ModelReasoningOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(toReasoningOption).filter(option => option !== undefined);
 }
 
 interface ModelsDevProviderInfo {
@@ -123,6 +154,7 @@ export class ModelsDevGateway extends MastraModelGateway {
   private attachmentCapabilities: AttachmentCapabilities = {};
   private temperatureCapabilities: TemperatureCapabilities = {};
   private structuredOutputCapabilities: StructuredOutputCapabilities = {};
+  private reasoningCapabilities: ReasoningCapabilities = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -141,6 +173,7 @@ export class ModelsDevGateway extends MastraModelGateway {
     this.attachmentCapabilities = {};
     this.temperatureCapabilities = {};
     this.structuredOutputCapabilities = {};
+    this.reasoningCapabilities = {};
 
     const providerConfigs: Record<string, ProviderConfig> = {};
 
@@ -199,6 +232,12 @@ export class ModelsDevGateway extends MastraModelGateway {
           .filter(([, modelInfo]) => modelInfo?.structured_output === true)
           .map(([modelId]) => modelId)
           .sort();
+
+        const reasoningByModel: Record<string, ModelReasoningOption[]> = {};
+        for (const [modelId, modelInfo] of allModels) {
+          const reasoningOptions = parseReasoningOptions(modelInfo?.reasoning_options);
+          if (reasoningOptions.length > 0) reasoningByModel[modelId] = reasoningOptions;
+        }
 
         // Collect per-model endpoint/shape/SDK overrides. Some providers serve
         // individual models over a different endpoint or request shape than the
@@ -261,6 +300,9 @@ export class ModelsDevGateway extends MastraModelGateway {
         if (structuredOutputModels.length > 0) {
           this.structuredOutputCapabilities[normalizedId] = structuredOutputModels;
         }
+        if (Object.keys(reasoningByModel).length > 0) {
+          this.reasoningCapabilities[normalizedId] = reasoningByModel;
+        }
       }
     }
 
@@ -286,6 +328,10 @@ export class ModelsDevGateway extends MastraModelGateway {
     return this.structuredOutputCapabilities;
   }
 
+  getReasoningCapabilities(): ReasoningCapabilities {
+    return this.reasoningCapabilities;
+  }
+
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {
     const { providerId, modelId } = parseModelRouterId(routerId);
 
@@ -296,15 +342,18 @@ export class ModelsDevGateway extends MastraModelGateway {
     const perModelApi = config?.modelOverrides?.[modelId]?.api;
     const template = perModelApi ?? config?.url;
 
+    // Explicit <PROVIDER>_BASE_URL override wins, even for providers without a registry url template
+    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
+    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
+    if (customBaseUrl) {
+      return customBaseUrl;
+    }
+
     if (!template) {
       return;
     }
 
-    // Check for custom base URL from env vars (explicit override still wins)
-    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
-    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
-
-    return customBaseUrl || interpolateUrlTemplate(template, envVars);
+    return interpolateUrlTemplate(template, envVars);
   }
 
   getApiKey(modelId: string): Promise<string> {

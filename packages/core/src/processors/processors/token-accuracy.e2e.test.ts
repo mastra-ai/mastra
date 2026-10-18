@@ -33,48 +33,51 @@ describe('TokenLimiterProcessor', () => {
     });
 
     const limiter = new TokenLimiterProcessor(200);
-    const mockAbort = vi.fn() as any;
     const messageList = new MessageList({ threadId: '1', resourceId: 'test-resource' });
     for (const msg of messagesV2) {
       messageList.add(msg, 'input');
     }
 
-    await limiter.processInputStep({
-      messageList,
-      messages: messageList.get.all.db(),
-      abort: mockAbort,
+    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const result = await limiter.processLLMRequest({
+      prompt,
+      model: { modelId: 'test-model' } as any,
       stepNumber: 0,
       steps: [],
       state: {},
-      systemMessages: [],
-      model: { modelId: 'test-model' } as any,
-      retryCount: 0,
     });
 
-    const result = messageList.get.all.db();
-
     // Should prioritize newest messages (higher ids)
-    expect(result.length).toBe(2);
-    expect(result[0].id).toBe('message-8');
-    expect(result[1].id).toBe('message-9');
+    expect(prompt.length).toBe(10);
+    expect(result?.prompt?.length).toBe(2);
+    expect(result?.prompt).toEqual(prompt.slice(-2));
+
+    // Limiting is transient: nothing is deleted from storage
+    expect(messageList.get.all.db().length).toBe(10);
+    expect(messageList.get.all.db().map(m => m.id)).toEqual([
+      'message-0',
+      'message-1',
+      'message-2',
+      'message-3',
+      'message-4',
+      'message-5',
+      'message-6',
+      'message-7',
+      'message-8',
+      'message-9',
+    ]);
   });
 
   it('should throw TripWire for empty messages array', async () => {
     const limiter = new TokenLimiterProcessor(1000);
-    const mockAbort = vi.fn() as any;
-    const emptyMessageList = new MessageList({ threadId: 'test-empty', resourceId: 'test' });
 
     await expect(
-      limiter.processInputStep({
-        messageList: emptyMessageList,
-        messages: [],
-        abort: mockAbort,
+      limiter.processLLMRequest({
+        prompt: [],
+        model: { modelId: 'test-model' } as any,
         stepNumber: 0,
         steps: [],
         state: {},
-        systemMessages: [],
-        model: { modelId: 'test-model' } as any,
-        retryCount: 0,
       }),
     ).rejects.toThrow('TokenLimiterProcessor: No messages to process');
   });
@@ -94,24 +97,22 @@ describe('TokenLimiterProcessor', () => {
       encoding: { foo: 'bar' } as unknown,
     });
 
-    const mockAbort = vi.fn() as any;
     const messageList = new MessageList({ threadId: '6', resourceId: 'test-resource' });
     for (const msg of messagesV2) {
       messageList.add(msg, 'input');
     }
 
-    await limiter.processInputStep({
-      messageList,
-      messages: messageList.get.all.db(),
-      abort: mockAbort,
+    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    const result = await limiter.processLLMRequest({
+      prompt,
+      model: { modelId: 'test-model' } as any,
       stepNumber: 0,
       steps: [],
       state: {},
-      systemMessages: [],
-      model: { modelId: 'test-model' } as any,
-      retryCount: 0,
     });
 
+    // Nothing is trimmed at this limit, so the prompt passes through untouched
+    expect(result).toBeUndefined();
     expect(messageList.get.all.db().length).toBe(messagesV2.length);
   });
 

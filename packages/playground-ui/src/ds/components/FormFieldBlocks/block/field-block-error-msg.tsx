@@ -1,19 +1,34 @@
-import { TriangleAlertIcon } from 'lucide-react';
+import { CircleAlertIcon } from 'lucide-react';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 
 export type FieldBlockErrorMsgProps = {
   children?: React.ReactNode;
+  /**
+   * The field this message belongs to, matching the `name` given to `FieldBlock.Label`.
+   * Sets a stable `error-<name>` id so the control can point at it with
+   * `aria-describedby` and a screen reader reads the message with the field.
+   */
+  name?: string;
+  className?: string;
 };
 
-export function FieldBlockErrorMsg({ children }: FieldBlockErrorMsgProps) {
+export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErrorMsgProps) {
   return (
-    <p
-      className={cn(
-        'flex items-center gap-2 text-ui-sm text-neutral4',
-        '[&>svg]:size-[1.2em] [&>svg]:text-red-400 [&>svg]:opacity-70',
-      )}
+    <Txt
+      variant="body-sm"
+      // `role="alert"` lives here rather than in a wrapper at every call site, so an
+      // error announces itself wherever it is used instead of depending on each caller
+      // remembering to wrap it.
+      role="alert"
+      id={name !== undefined ? `error-${name}` : undefined}
+      className={cn('flex gap-1 text-destructive-foreground', className)}
     >
-      <TriangleAlertIcon /> {children}
-    </p>
+      <Icon size="xs" className="mt-1 shrink-0" aria-hidden>
+        <CircleAlertIcon />
+      </Icon>
+      <span>{children}</span>
+    </Txt>
   );
 }

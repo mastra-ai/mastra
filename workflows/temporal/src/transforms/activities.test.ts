@@ -9,13 +9,20 @@ function stripInlineSourceMap(code: string): string {
   return code.replace(/\n\/\/# sourceMappingURL=data:application\/json[^\n]*\n?$/, '');
 }
 
-async function transform(source: string): Promise<string> {
+async function transformWithBindings(source: string) {
   const directory = await mkdtemp(path.join(tmpdir(), 'temporal-activities-transform-'));
   const inputPath = path.join(directory, 'activities.mjs');
   await writeFile(inputPath, source);
 
-  const { outputPath } = await buildTemporalActivitiesModule(inputPath, directory, 'activities.mjs');
-  return stripInlineSourceMap(await readFile(outputPath, 'utf-8'));
+  const { outputPath, activityBindings } = await buildTemporalActivitiesModule(inputPath, directory, 'activities.mjs');
+  return {
+    output: stripInlineSourceMap(await readFile(outputPath, 'utf-8')),
+    activityBindings,
+  };
+}
+
+async function transform(source: string): Promise<string> {
+  return (await transformWithBindings(source)).output;
 }
 
 describe('activity transform', () => {
@@ -95,9 +102,24 @@ describe('activity transform', () => {
       export const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({ ok: true }) });
     `);
 
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.params,[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
     expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('const fetchWeather = createStep({');
+  });
+
+  it('avoids collisions with source bindings named RequestContext', async () => {
+    const output = await transform(`
+      import { createStep } from '@mastra/core/workflows';
+
+      const RequestContext = 'source binding';
+      export const fetchWeather = createStep({
+        id: 'fetch-weather',
+        execute: async ({ requestContext }) => ({ value: RequestContext, tenantId: requestContext.get('tenantId') }),
+      });
+    `);
+
+    expect(output).toContain("const RequestContext = 'source binding'");
+    expect(output).toMatch(/import\s*\{\s*RequestContext as [A-Za-z_$][\w$]*\s*\}\s*from\s*["']@mastra\/core\/di["']/);
   });
 
   it('keeps supporting declarations needed by extracted activities while stripping workflow setup', async () => {
@@ -129,6 +151,86 @@ describe('activity transform', () => {
     expect(output).not.toContain('createWorkflow({ id: "weather-workflow" })');
   });
 
+  it('extracts callback mappings as generated activities with supporting declarations', async () => {
+    const { output, activityBindings } = await transformWithBindings(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      import { format } from 'node:util';
+
+      const double = value => format('%d', value * 2);
+      export const mappedWorkflow = createWorkflow({ 'id': 'mapped-workflow' })
+        .map(({ inputData, getInitData }) => ({
+          doubled: double(inputData.value),
+          initial: getInitData().value,
+        }), {
+          id: 'custom-mapping',
+          description: 'Custom mapping',
+          metadata: { source: 'test' },
+        })
+        .commit();
+    `);
+
+    expect(output).toContain("from 'node:util'");
+    expect(output).toContain('const double =');
+    expect(output).toMatch(/const mappingMappedWorkflow0[\s\S]*export \{ mappingMappedWorkflow0 \}/);
+    expect(output).toContain('getInitData: () => initData');
+    expect(output).toContain('requestContext');
+    expect(output).toContain('runId');
+    expect(output).toContain('resourceId');
+    expect(output).toContain('workflowId');
+    expect(output).not.toContain('const mappedWorkflow =');
+    expect(activityBindings).toContainEqual({
+      exportName: 'mappingMappedWorkflow0',
+      stepId: 'mapping_mapped-workflow_0',
+    });
+  });
+
+  it('extracts referenced and async mappings with distinct collision-safe exports', async () => {
+    const { output, activityBindings } = await transformWithBindings(`
+      import { createWorkflow } from '@mastra/core/workflows';
+
+      const mappingMappedWorkflow0 = 'reserved';
+      async function mapValue({ inputData, getInitData }) {
+        return { value: inputData.value, initial: getInitData().value };
+      }
+      export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+        .map(mapValue)
+        .map(async ({ inputData }) => ({ value: inputData.value * 2 }))
+        .commit();
+    `);
+
+    expect(output).toContain('async function mapValue');
+    expect(output).toContain('const mappingMappedWorkflow01 = async');
+    expect(output).toContain('const mappingMappedWorkflow1 = async');
+    expect(activityBindings).toEqual(
+      expect.arrayContaining([
+        { exportName: 'mappingMappedWorkflow01', stepId: 'mapping_mapped-workflow_0' },
+        { exportName: 'mappingMappedWorkflow1', stepId: 'mapping_mapped-workflow_1' },
+      ]),
+    );
+  });
+
+  it('rejects unresolved and mutable mapping callback identifiers', async () => {
+    await expect(
+      transform(`
+        import { createWorkflow } from '@mastra/core/workflows';
+        export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+          .map(missingMapping)
+          .commit();
+      `),
+    ).rejects.toThrow('requires an inline function or a statically declared function identifier');
+
+    await expect(
+      transform(`
+        import { createWorkflow } from '@mastra/core/workflows';
+        let mapping = ({ inputData }) => inputData;
+        mapping = ({ inputData }) => ({ value: inputData.value * 2 });
+        export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+          .map(mapping)
+          .commit();
+      `),
+    ).rejects.toThrow('requires an inline function or a statically declared function identifier');
+  });
+
   it('removes workflow exports and other references from generated activities modules', async () => {
     const output = await transform(`
       import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -156,6 +258,6 @@ describe('activity transform', () => {
 
     expect(output).toContain('const mastra =');
     expect(output).not.toMatch(/export\s+(const|\{)\s*mastra/);
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.params,[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
   });
 });

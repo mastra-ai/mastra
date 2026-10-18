@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { PathParams } from '../route-types.generated.js';
 import type {
   ClientOptions,
   CreateResponseParams,
@@ -10,6 +11,7 @@ import type {
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
+type ResponseId = PathParams<'GET /v1/responses/:responseId'>['responseId'];
 type ResponsePayload = Omit<ResponsesResponse, 'output_text'>;
 
 function getOutputText(output: ResponseOutputItem[]): string {
@@ -181,7 +183,7 @@ export class Responses extends BaseResource {
   }
 
   async retrieve(
-    responseId: string,
+    responseId: ResponseId,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ResponsesResponse> {
     const response = await this.request<ResponsePayload>(
@@ -191,7 +193,10 @@ export class Responses extends BaseResource {
     return attachOutputText(response);
   }
 
-  delete(responseId: string, requestContext?: RequestContext | Record<string, any>): Promise<ResponsesDeleteResponse> {
+  delete(
+    responseId: ResponseId,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ResponsesDeleteResponse> {
     return this.request(`/v1/responses/${encodeURIComponent(responseId)}${requestContextQueryString(requestContext)}`, {
       method: 'DELETE',
     });

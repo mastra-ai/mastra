@@ -87,6 +87,7 @@ function dayAt(dayOffset: number, hour = 12, minute = 0, second = 0): Date {
 
 interface ExplainPlanNode {
   'Node Type'?: string;
+  'Subplan Name'?: string;
   'Relation Name'?: string;
   Alias?: string;
   'Index Name'?: string;
@@ -557,6 +558,9 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           expect(nodes.some(node => node['Index Name']?.includes('mastra_span_events_root_'))).toBe(true);
         }
         expect(groupedNodes.some(node => node['Relation Name'] === TABLE_SCORE_EVENTS)).toBe(false);
+        for (const nodes of [scoreNodes, repeatedScoreNodes, mixedNodes]) {
+          expect(nodes.some(node => node['Node Type'] === 'Unique')).toBe(false);
+        }
         expect(
           groupedNodes
             .filter(node => node.Alias?.startsWith('r'))
@@ -1647,6 +1651,159 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
     });
   });
 
+  describe('advanced trace delta regressions', () => {
+    const timeRange = { from: dayAt(-1).toISOString(), to: dayAt(2).toISOString() };
+    const request = (pagination: Record<string, unknown>, where?: unknown) =>
+      planTraceQuery(parseTraceQueryRequest({ timeRange, ...pagination, ...(where ? { where } : {}) }));
+
+    it('returns completion after bootstrap, applies recursive predicates before limiting, and advances empty cursors', async () => {
+      const harness = await createHarness({ schemaPrefix: 'query_delta_completion' });
+      try {
+        await withDeltaPolling(async () => {
+          const span = makeSpan({ traceId: 'completion', spanId: 'completion', endedAt: undefined });
+          await harness.domain.createSpan({ span });
+          const where = {
+            op: 'and',
+            args: [
+              { op: 'not', arg: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'excluded' } } },
+              { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'root-span' } } } },
+            ],
+          };
+          const bootstrap = await harness.domain.queryTraces(request({ mode: 'delta', limit: 1 }, where));
+          if (!('deltaCursor' in bootstrap)) throw new Error('Expected delta cursor');
+          await harness.domain.batchCreateSpans({
+            records: [
+              makeSpan({ traceId: 'excluded', spanId: 'excluded', name: 'excluded', entityName: 'excluded' }),
+              { ...span, endedAt: dayAt(0, 10, 1) },
+              makeSpan({ traceId: 'second', spanId: 'second' }),
+            ],
+          });
+          const first = await harness.domain.queryTraces(
+            request({ mode: 'delta', limit: 1, after: bootstrap.deltaCursor }, where),
+          );
+          expect(first).toMatchObject({ traces: [{ traceId: 'completion' }], delta: { hasMore: true } });
+          if (!('deltaCursor' in first)) throw new Error('Expected delta cursor');
+          const second = await harness.domain.queryTraces(
+            request({ mode: 'delta', limit: 1, after: first.deltaCursor }, where),
+          );
+          expect(second).toMatchObject({ traces: [{ traceId: 'second' }], delta: { hasMore: false } });
+          if (!('deltaCursor' in second)) throw new Error('Expected delta cursor');
+          const empty = await harness.domain.queryTraces(request({ mode: 'delta', after: second.deltaCursor }, where));
+          expect(empty).toMatchObject({ traces: [] });
+          if (!('deltaCursor' in empty)) throw new Error('Expected delta cursor');
+          expect(empty.deltaCursor).not.toEqual(second.deltaCursor);
+          const repeated = await harness.domain.queryTraces(
+            request({ mode: 'delta', after: empty.deltaCursor }, where),
+          );
+          expect(repeated).toMatchObject({ traces: [] });
+          const pairs = await harness.client.any<{ xactId: string }>(
+            `SELECT "xactId"::text AS "xactId" FROM ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)} WHERE NOT "isPending"`,
+          );
+          expect(new Set(pairs.map(row => row.xactId)).size).toBe(1);
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('materializes only new candidate roots and their related spans', async () => {
+      const harness = await createHarness({ schemaPrefix: 'query_delta_selectivity' });
+      try {
+        await withDeltaPolling(async () => {
+          await harness.domain.batchCreateSpans({
+            records: Array.from({ length: 1000 }, (_, n) =>
+              makeSpan({ traceId: `history-${n}`, spanId: `history-${n}` }),
+            ),
+          });
+          const where = { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'root-span' } } } };
+          const bootstrap = await harness.domain.queryTraces(request({ mode: 'delta' }, where));
+          if (!('deltaCursor' in bootstrap)) throw new Error('Expected delta cursor');
+          await harness.domain.batchCreateSpans({
+            records: [makeSpan({ traceId: 'new-a', spanId: 'new-a' }), makeSpan({ traceId: 'new-b', spanId: 'new-b' })],
+          });
+          await harness.client.none(`ANALYZE ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)}`);
+          const horizon = await harness.client.one<{ horizon: string }>(
+            'SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon',
+          );
+          const compiled = compilePostgresTraceQuery(
+            harness.schema,
+            request({ mode: 'delta', after: bootstrap.deltaCursor }, where),
+            'data',
+            horizon.horizon,
+          );
+          const row = await harness.client.one<{ 'QUERY PLAN': Array<{ Plan: ExplainPlanNode }> }>(
+            `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${compiled.text}`,
+            compiled.values,
+          );
+          const nodes = collectPlanNodes(row['QUERY PLAN'][0]!.Plan);
+          expect(nodes.find(node => node['Subplan Name'] === 'CTE root_scope')?.['Actual Rows']).toBe(2);
+          expect(nodes.find(node => node['Subplan Name'] === 'CTE current_spans')?.['Actual Rows']).toBe(2);
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('does not resurrect an older root when its replacement lies above the safe horizon', async () => {
+      const harness = await createHarness({ schemaPrefix: 'query_delta_replacement' });
+      try {
+        await withDeltaPolling(async () => {
+          const bootstrap = await harness.domain.queryTraces(request({ mode: 'delta' }));
+          if (!('deltaCursor' in bootstrap)) throw new Error('Expected delta cursor');
+          await harness.domain.createSpan({ span: makeSpan({ traceId: 'replaced', spanId: 'older' }) });
+          const horizon = await harness.client.one<{ horizon: string }>(
+            'SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon',
+          );
+          await harness.domain.createSpan({
+            span: makeSpan({ traceId: 'replaced', spanId: 'newer', startedAt: dayAt(0, 11) }),
+          });
+          const plan = request({ mode: 'delta', after: bootstrap.deltaCursor });
+          const compiled = compilePostgresTraceQuery(harness.schema, plan, 'data', horizon.horizon);
+          expect(await harness.client.any(compiled.text, compiled.values)).toEqual([]);
+          expect(await harness.domain.queryTraces(plan)).toMatchObject({
+            traces: [{ traceId: 'replaced', rootSpanId: 'newer' }],
+          });
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('holds back higher transaction IDs until an earlier root transaction commits', async () => {
+      const harness = await createHarness({ schemaPrefix: 'query_delta_delayed' });
+      let held: Awaited<ReturnType<PoolAdapter['connect']>> | undefined;
+      try {
+        await withDeltaPolling(async () => {
+          const bootstrap = await harness.domain.queryTraces(request({ mode: 'delta' }));
+          if (!('deltaCursor' in bootstrap)) throw new Error('Expected delta cursor');
+          held = await harness.baseClient.connect();
+          await held.query('BEGIN');
+          await held.query(
+            `INSERT INTO ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)}
+            ("traceId", "spanId", "name", "spanType", "startedAt", "endedAt", "isPending")
+            VALUES ('delayed', 'delayed', 'root-span', 'agent_run', $1, $2, false)`,
+            [dayAt(0, 10), dayAt(0, 10, 1)],
+          );
+          await harness.domain.createSpan({ span: makeSpan({ traceId: 'early-commit', spanId: 'early-commit' }) });
+          const blocked = await harness.domain.queryTraces(request({ mode: 'delta', after: bootstrap.deltaCursor }));
+          expect(blocked).toMatchObject({ traces: [] });
+          if (!('deltaCursor' in blocked)) throw new Error('Expected delta cursor');
+          await held.query('COMMIT');
+          held.release();
+          held = undefined;
+          const caughtUp = await harness.domain.queryTraces(request({ mode: 'delta', after: blocked.deltaCursor }));
+          expect(caughtUp).toMatchObject({ traces: [{ traceId: 'delayed' }, { traceId: 'early-commit' }] });
+        });
+      } finally {
+        if (held) {
+          await held.query('ROLLBACK');
+          held.release();
+        }
+        await harness.close();
+      }
+    });
+  });
+
   describe('delta polling — monotonic across partitions / chunks', () => {
     it('does not skip a lower cursorId that commits after a higher cursorId', async () => {
       const harness = await createHarness({
@@ -1866,6 +2023,111 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await harness.domain.batchCreateSpans({ records: [span] });
 
         expect(await countRows(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toBe(1);
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('score rewrite conflicts', () => {
+    it('collapses equivalent timestamp strings before the PostgreSQL upsert', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_score_conflict' });
+
+      try {
+        const scoreId = 'equivalent-timestamp-score';
+        const canonicalTimestamp = dayAt(0, 10).toISOString();
+        await harness.domain.batchCreateScores({
+          scores: [
+            makeScore({
+              scoreId,
+              timestamp: canonicalTimestamp.replace('.000Z', 'Z') as unknown as Date,
+              score: 0.2,
+            }),
+            makeScore({
+              scoreId,
+              timestamp: canonicalTimestamp as unknown as Date,
+              score: 0.8,
+            }),
+          ],
+        });
+
+        expect(await countRows(harness.baseClient, harness.schema, TABLE_SCORE_EVENTS)).toBe(1);
+        await expect(harness.domain.getScoreById(scoreId)).resolves.toMatchObject({ scoreId, score: 0.8 });
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('current score query plans', () => {
+    it('uses candidate and newer-row indexes without globally deduplicating score history', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_score_plan' });
+      const table = qualifiedTable(harness.schema, TABLE_SCORE_EVENTS);
+      const logicalRows = 20_000;
+      const selectedRows = 100;
+      const oldTimestamp = dayAt(-1, 10);
+      const currentTimestamp = dayAt(0, 10);
+
+      try {
+        await harness.client.none(
+          `INSERT INTO ${table} ("scoreId", "timestamp", "scorerId", "score")
+           SELECT 'score-plan-' || value, $1, 'stale-scorer', 0.1
+           FROM generate_series(1, $2::integer) AS value`,
+          [oldTimestamp, logicalRows],
+        );
+        await harness.client.none(
+          `INSERT INTO ${table} ("scoreId", "timestamp", "scorerId", "score")
+           SELECT 'score-plan-' || value,
+                  $1,
+                  CASE WHEN value <= $2::integer THEN 'selected-scorer' ELSE 'other-scorer' END,
+                  0.8
+           FROM generate_series(1, $3::integer) AS value`,
+          [currentTimestamp, selectedRows, logicalRows],
+        );
+        await harness.client.none(`ANALYZE ${table}`);
+
+        const query = `
+          SELECT COUNT(*)::text AS count
+          FROM ${table} s
+          WHERE s."scorerId" = $1
+            AND s."timestamp" >= $2
+            AND s."timestamp" < $3
+            AND NOT EXISTS (
+              SELECT 1
+              FROM ${table} newer
+              WHERE newer."scoreId" = s."scoreId"
+                AND newer."cursorId" > s."cursorId"
+            )
+        `;
+        const values = ['selected-scorer', dayAt(0, 0), dayAt(1, 0)];
+        const explained = await harness.client.one<{ 'QUERY PLAN': Array<{ Plan: ExplainPlanNode }> }>(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query}`,
+          values,
+        );
+        const nodes = collectPlanNodes(explained['QUERY PLAN'][0]!.Plan);
+        const result = await harness.client.one<{ count: string }>(query, values);
+
+        expect(Number(result.count)).toBe(selectedRows);
+        expect(nodes.some(node => node['Node Type'] === 'Unique')).toBe(false);
+        expect(nodes.some(node => node['Index Name']?.includes('scorerId_timestamp_idx'))).toBe(true);
+        expect(nodes.some(node => node['Index Name']?.includes('scoreId_cursorId_idx'))).toBe(true);
+
+        const page = await harness.domain.listScores({
+          filters: {
+            scorerId: 'selected-scorer',
+            timestamp: { start: dayAt(0, 0), end: dayAt(1, 0) },
+          },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(page.pagination.total).toBe(selectedRows);
+        expect(page.scores).toHaveLength(10);
+        await expect(
+          harness.domain.getScoreAggregate({
+            scorerId: 'selected-scorer',
+            aggregation: 'count',
+            filters: { timestamp: { start: dayAt(0, 0), end: dayAt(1, 0) } },
+          }),
+        ).resolves.toEqual({ value: selectedRows });
       } finally {
         await harness.close();
       }

@@ -2,6 +2,8 @@
 // Should transform - imports from @mastra/core
 import { MastraMessageV2 } from '@mastra/core';
 import type { MastraMessageV2 as V2Message } from '@mastra/core';
+import type { MastraMessageV2 as AgentMessage } from '@mastra/core/agent';
+import type { MastraMessageV2 as MemoryMessage } from '@mastra/core/memory';
 
 // Should transform - type usage
 function processMessage(message: MastraMessageV2) {
@@ -10,6 +12,8 @@ function processMessage(message: MastraMessageV2) {
 
 const messages: MastraMessageV2[] = [];
 const aliasedMessage: V2Message = {} as any;
+const agentMessage: AgentMessage = {} as any;
+const memoryMessage: MemoryMessage = {} as any;
 
 // Should NOT transform - different package
 import { MastraMessageV2 as OtherV2 } from 'other-package';

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { validateUpsertInput } from '@mastra/core/vector';
@@ -45,7 +43,7 @@ export async function upsert(
     throw asMastraError('UPSERT', 'INVALID_INPUT', { indexName }, error, ErrorCategory.USER);
   }
 
-  const vectorIds = ids ?? vectors.map(() => randomUUID());
+  const vectorIds = ids ?? vectors.map(() => globalThis.crypto.randomUUID());
 
   return withConnection(async connection => {
     const indexInfo = await registry.getIndexMetadata(connection, indexName);

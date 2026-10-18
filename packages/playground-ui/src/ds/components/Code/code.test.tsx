@@ -64,6 +64,32 @@ describe('Code', () => {
     expect(token.style.color).toBe('');
   });
 
+  describe('when lineClassName is given', () => {
+    it('applies the class to matching highlighted lines', async () => {
+      vi.mocked(highlight).mockImplementation(async code => lineTokens(code));
+      const { container } = render(
+        <Code code={'a\nb\nc'} lang="json" lineClassName={i => (i === 1 ? 'hit' : undefined)} />,
+      );
+
+      await screen.findByText('b');
+      const lines = container.querySelectorAll('[data-line]');
+      expect(lines).toHaveLength(3);
+      expect(lines[1]?.classList.contains('hit')).toBe(true);
+      expect(lines[0]?.classList.contains('hit')).toBe(false);
+    });
+
+    it('applies the class to plain-text lines while highlighting is pending', () => {
+      deferredHighlight();
+      const { container } = render(
+        <Code code={'a\nb'} lang="json" lineClassName={(_, text) => (text === 'a' ? 'hit' : undefined)} />,
+      );
+
+      const lines = container.querySelectorAll('[data-line]');
+      expect(lines).toHaveLength(2);
+      expect(lines[0]?.classList.contains('hit')).toBe(true);
+    });
+  });
+
   it('passes className through to the pre element', () => {
     render(<Code code="x" className="custom-class" />);
 

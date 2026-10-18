@@ -1,4 +1,5 @@
 import type * as http from 'node:http';
+import type { JSONSchema7 } from 'json-schema';
 import type { ToolsInput, Agent } from '../agent';
 import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions.generated';
 import type { RequestContext } from '../request-context';
@@ -32,6 +33,7 @@ interface MCPServerSSEOptionsBase {
 
 /**
  * Options for starting an MCP server with SSE transport
+ * @deprecated The standalone HTTP+SSE transport only exists in `@mastra/mcp` 1.x; removed in the next core major.
  */
 export interface MCPServerSSEOptions extends MCPServerSSEOptionsBase {
   /**
@@ -47,6 +49,7 @@ export interface MCPServerSSEOptions extends MCPServerSSEOptionsBase {
 
 /**
  * Options for starting an MCP server with Hono SSE transport
+ * @deprecated The standalone HTTP+SSE transport only exists in `@mastra/mcp` 1.x; removed in the next core major.
  */
 export interface MCPServerHonoSSEOptions extends MCPServerSSEOptionsBase {
   /**
@@ -85,6 +88,7 @@ export interface MCPServerHTTPOptions {
 
   /**
    * Optional options to pass to the transport (e.g. sessionIdGenerator)
+   * @deprecated Only `@mastra/mcp` 1.x reads this; MCP 2026-07-28 has no sessions. Removed in the next core major.
    */
   options?: any; // Consider typing StreamableHTTPServerTransportOptions from @modelcontextprotocol/node if possible
 }
@@ -247,6 +251,18 @@ export interface MCPServerFGAConfig {
   permissionMapping?: MCPServerFGAPermissionMapping;
 }
 
+/** An icon an MCP client can display for a server (the MCP `Icon` type). */
+export interface MCPServerIcon {
+  /** URI of the icon: an `https:` URL or a `data:` URI. */
+  src: string;
+  /** Optional MIME type, such as `image/png` or `image/svg+xml`. */
+  mimeType?: string;
+  /** Optional sizes the icon is available in, such as `['48x48']` or `['any']` for scalable formats. */
+  sizes?: string[];
+  /** Optional theme the icon is designed for. */
+  theme?: 'light' | 'dark';
+}
+
 // +++ Authoritative MCPServerConfig +++
 /** Configuration options for creating an MCPServer instance. */
 export interface MCPServerConfig<TId extends string = string> {
@@ -274,6 +290,12 @@ export interface MCPServerConfig<TId extends string = string> {
   id?: TId;
   /** Optional description of the MCP server. */
   description?: string;
+  /** Optional human-readable display title, announced to MCP clients. Clients fall back to `name` when absent. */
+  title?: string;
+  /** Optional URL of the server's website, announced to MCP clients. */
+  websiteUrl?: string;
+  /** Optional icons clients can display for the server, announced to MCP clients. */
+  icons?: MCPServerIcon[];
   /** Optional instructions describing how to use the server and its features. */
   instructions?: string;
   /**
@@ -340,3 +362,16 @@ export interface ServerDetailInfo extends ServerInfo {
   /** Information about remote access points for this server. */
   remotes?: RemoteInfo[];
 }
+
+/**
+ * What `executeTool` resolves to on a server with `mcpVersion === 2`. A tool that
+ * calls `context.suspend(payload)` is reported as `suspended` together with the
+ * payload and its `resumeSchema` (as JSON Schema) so the caller can ask for
+ * exactly that input; otherwise the tool's output is returned as `completed`. There is
+ * no failure variant: a tool that throws, or input/resume data that fails the declared
+ * schemas, rejects the `executeTool` promise instead (core reports schema failures as a
+ * `ValidationError` output, which a 2.x server must not pass through as `completed`).
+ */
+export type MCPToolExecutionResultV2 =
+  | { status: 'completed'; output: unknown }
+  | { status: 'suspended'; suspendPayload: unknown; resumeSchema?: JSONSchema7 };

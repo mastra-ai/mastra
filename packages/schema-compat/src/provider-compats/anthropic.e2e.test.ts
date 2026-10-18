@@ -143,7 +143,7 @@ describe('Anthropic e2e test', () => {
   it('should be successful with structured_output', { timeout: 40_000 }, async () => {
     const schema = z.object(allSchemas);
 
-    const model = anthropic('claude-sonnet-4-0');
+    const model = anthropic('claude-sonnet-4-6');
 
     const compat = new AnthropicSchemaCompatLayer({
       provider: model.provider,
@@ -207,7 +207,7 @@ describe('Anthropic e2e test', () => {
 
   it('should handle tool call with manySchemas input', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
-    const model = anthropic('claude-sonnet-4-0');
+    const model = anthropic('claude-sonnet-4-6');
 
     const compat = new AnthropicSchemaCompatLayer({
       provider: model.provider,
@@ -248,7 +248,7 @@ describe('Anthropic e2e test', () => {
 
   it('should handle tool call with manySchemas input and output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
-    const model = anthropic('claude-sonnet-4-0');
+    const model = anthropic('claude-sonnet-4-6');
 
     const compat = new AnthropicSchemaCompatLayer({
       provider: model.provider,

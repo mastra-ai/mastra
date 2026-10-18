@@ -2,7 +2,7 @@ import { Spanner } from '@google-cloud/spanner';
 import type { Database, Instance } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
-import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions, RetentionConfig } from '@mastra/core/storage';
 
 import type { SpannerInitMode } from './db';
 import { AgentsSpanner } from './domains/agents';
@@ -170,6 +170,11 @@ export type SpannerConfigType = {
    * @default true
    */
   disableMetrics?: boolean;
+  /**
+   * Opt-in age-based retention policies. Only configured tables are pruned.
+   * Call `store.prune()` from your scheduler to apply them.
+   */
+  retention?: RetentionConfig;
 } & (
   | {
       /** Pre-configured Spanner Database handle. */
@@ -221,7 +226,7 @@ export class SpannerStore extends MastraCompositeStore {
     if (!config.id || config.id.trim() === '') {
       throw new Error('SpannerStore: id must be provided and cannot be empty.');
     }
-    super({ id: config.id, name: 'SpannerStore', disableInit: config.disableInit });
+    super({ id: config.id, name: 'SpannerStore', disableInit: config.disableInit, retention: config.retention });
     try {
       if (isPreConfiguredDatabase(config)) {
         this.database = config.database;

@@ -38,9 +38,18 @@ export function resolveDurableToolCallConcurrency({
 }: {
   options?: Pick<SerializableDurableOptions, 'requireToolApproval' | 'toolCallConcurrency' | 'activeTools'>;
   toolsMetadata?: SerializableToolMetadata[];
-  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName'>[];
+  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName' | 'requireApproval' | 'hasSuspendSchema'>[];
 }): number {
   if (options?.requireToolApproval) {
+    return 1;
+  }
+
+  // Step-stamped capability flags cover tools that input processors added for
+  // this step (e.g. via ToolSearchProcessor). Those tools never appear in the
+  // run-start `toolsMetadata`, so the metadata lookups below cannot see them.
+  // The stamps are persisted with the tool calls, so this stays correct across
+  // cold durable resumes (issue #24377).
+  if (toolCalls?.some(tc => tc.requireApproval || tc.hasSuspendSchema)) {
     return 1;
   }
 

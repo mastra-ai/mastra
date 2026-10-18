@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { topLevelWorkflowNodes } from '../../__utils__/workflow-nodes';
 
 test.describe('Workflow graph detail page', () => {
   test.afterEach(async () => {
@@ -13,46 +14,41 @@ test.describe('Workflow graph detail page', () => {
 
   test.describe('when the complex-workflow graph is opened', () => {
     test('overall layout information', async ({ page }) => {
-      // Header
       await expect(page).toHaveTitle(/Mastra Studio/);
       const breadcrumb = page.locator('header>nav');
       await expect(breadcrumb).toMatchAriaSnapshot();
 
-      // Information side panel
       await expect(page.getByText('complex-workflow').first()).toBeVisible();
       await expect(page.getByRole('combobox').filter({ hasText: 'complex-workflow' })).toBeVisible();
       await expect(page.getByRole('radio', { name: 'Form' })).toBeChecked();
       await expect(page.getByRole('radio', { name: 'JSON' })).not.toBeChecked();
 
-      // Shows the dynamic form when FORM is selected (default)
       await expect(page.getByRole('textbox', { name: 'Text' })).toBeVisible();
       await expect(getRunButton(page)).toBeVisible();
 
-      // Shows the JSON input when JSON is selected
       await page.getByRole('radio', { name: 'JSON' }).click();
       const codeEditor = await page.locator('[contenteditable="true"]');
       await expect(codeEditor).toBeVisible();
-      await expect(codeEditor).toHaveText('{}');
+      await expect(codeEditor).toContainText('"text": ""');
       await expect(codeEditor).toHaveAttribute('data-language', 'json');
     });
 
     test('initial workflow run state', async ({ page }) => {
-      const nodes = await page.locator('[data-workflow-node]');
+      const nodes = await topLevelWorkflowNodes(page);
       await expect(nodes).toHaveCount(14);
 
-      // Check node ordering
       await expect(nodes.nth(0)).toContainText('add-letter');
       await expect(nodes.nth(1)).toContainText('add-letter-b');
       await expect(nodes.nth(2)).toContainText('add-letter-c');
-      await expect(nodes.nth(3).getByRole('img', { name: 'Map step' })).toBeVisible();
-      await expect(nodes.nth(4).getByRole('img', { name: 'When condition' })).toBeVisible();
-      await expect(nodes.nth(5)).toContainText('short-text'); // condition short path
-      await expect(nodes.nth(6).getByRole('img', { name: 'When condition' })).toBeVisible();
-      await expect(nodes.nth(7)).toContainText('long-text'); // condition long path
-      await expect(nodes.nth(8).getByRole('img', { name: 'Map step' })).toBeVisible();
+      await expect(nodes.nth(3)).toContainText('Map');
+      await expect(nodes.nth(4)).toContainText('When');
+      await expect(nodes.nth(5)).toContainText('short-text');
+      await expect(nodes.nth(6)).toContainText('When');
+      await expect(nodes.nth(7)).toContainText('long-text');
+      await expect(nodes.nth(8)).toContainText('Map');
       await expect(nodes.nth(9)).toContainText('nested-text-processor');
       await expect(nodes.nth(10)).toContainText('add-letter-with-count');
-      await expect(nodes.nth(11).getByRole('img', { name: 'Do until condition' })).toBeVisible();
+      await expect(nodes.nth(11)).toContainText('Do until');
       await expect(nodes.nth(12)).toContainText('suspend-resume');
       await expect(nodes.nth(13)).toContainText('final-step');
     });
@@ -70,9 +66,6 @@ test.describe('Workflow graph detail page', () => {
 
   test.describe('when the workflow is run via the form with multiline input', () => {
     test('preserves the newline and takes the long path', async ({ page }) => {
-      // FEATURE: Multiline schema-driven workflow inputs
-      // USER STORY: Long prompts entered on multiple lines reach the workflow unchanged.
-      // BEHAVIOR UNDER TEST: Ten visible characters plus a newline cross the fixture's 10-character branch threshold.
       await page.getByRole('textbox', { name: 'Text' }).fill('1234567890\n');
       await getRunButton(page).click();
 
@@ -105,9 +98,6 @@ test.describe('Workflow graph detail page', () => {
 
   test.describe('when a workflow with an enum input is run with a selected option', () => {
     test('uses the selected form value in the workflow output', async ({ page }) => {
-      // FEATURE: Workflow enum input forms
-      // USER STORY: As a Studio user, I want enum dropdown choices to update run input so workflows execute with my selection.
-      // BEHAVIOR UNDER TEST: Selecting a non-default enum option persists in the form and reaches the workflow output.
       await page.goto('/workflows/enumWorkflow/graph');
 
       await page.getByRole('combobox', { name: 'Mode' }).click();
@@ -117,11 +107,34 @@ test.describe('Workflow graph detail page', () => {
 
       await getRunButton(page).click();
 
-      const nodes = page.locator('[data-workflow-node]');
+      const nodes = topLevelWorkflowNodes(page);
       await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
 
-      await page.getByRole('button', { name: 'Run output' }).click();
-      await expect(page.getByRole('dialog')).toContainText('"mode": "b"');
+      await page.getByRole('button', { name: 'Run data' }).click();
+      await expect(page.getByTestId('workflow-run-data')).toContainText('"mode": "b"');
+    });
+  });
+
+  test.describe('when a completed run is selected from the canvas', () => {
+    test('keeps the chosen camera while displaying the saved run', async ({ page }) => {
+      await page.goto('/workflows/enumWorkflow/graph');
+      await getRunButton(page).click();
+      await expect(topLevelWorkflowNodes(page).nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
+
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      const viewport = page.locator('.react-flow__viewport');
+      const initialCamera = await viewport.evaluate(element => getComputedStyle(element).transform);
+      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      await expect(viewport).not.toHaveCSS('transform', initialCamera);
+      const camera = await viewport.evaluate(element => getComputedStyle(element).transform);
+      const recentRun = page.locator('a[href*="/workflows/enumWorkflow/graph/"]');
+      await expect(recentRun).toHaveCount(1);
+      await recentRun.click();
+
+      await expect(page).toHaveURL(/\/workflows\/enumWorkflow\/graph\/[^/]+$/);
+      await expect(getRunButton(page)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Run data', exact: true })).toBeVisible();
+      await expect(viewport).toHaveCSS('transform', camera);
     });
   });
 
@@ -134,7 +147,7 @@ test.describe('Workflow graph detail page', () => {
       const suspendedSteps = page.getByTestId('workflow-suspended-steps');
       await suspendedSteps.getByRole('textbox', { name: 'User Input' }).fill('Hello');
       await suspendedSteps.getByRole('button', { name: 'Resume' }).click();
-      const nodes = await page.locator('[data-workflow-node]');
+      const nodes = await topLevelWorkflowNodes(page);
 
       await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
       await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
@@ -147,31 +160,37 @@ function getRunButton(page: Page) {
 }
 
 async function checkShortPath(page: Page) {
-  const nodes = await page.locator('[data-workflow-node]');
+  const nodes = await topLevelWorkflowNodes(page);
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(page.getByTestId('workflow-suspended-steps')).toContainText('Step suspended');
-  await page.getByRole('button', { name: /suspend-resume|reason/ }).click();
+  await page
+    .getByTestId('workflow-suspended-steps')
+    .getByRole('button', { name: /suspend-resume|reason/ })
+    .click();
   await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
     `"reason": "Please provide user input to continue"`,
   );
 }
 
 async function checkLongPath(page: Page) {
-  const nodes = await page.locator('[data-workflow-node]');
+  const nodes = await topLevelWorkflowNodes(page);
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.getByTestId('workflow-suspended-steps')).toContainText('Step suspended');
-  await page.getByRole('button', { name: /suspend-resume|reason/ }).click();
+  await page
+    .getByTestId('workflow-suspended-steps')
+    .getByRole('button', { name: /suspend-resume|reason/ })
+    .click();
   await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
     `"reason": "Please provide user input to continue"`,
   );
 }
 
 async function runWorkflow(page: Page) {
-  const nodes = await page.locator('[data-workflow-node]');
+  const nodes = await topLevelWorkflowNodes(page);
 
   await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(1)).toHaveAttribute('data-workflow-step-status', 'success');

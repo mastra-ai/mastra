@@ -1,243 +1,112 @@
-import http from 'node:http';
 import { Mastra } from '@mastra/core';
-import type { ToolsInput } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
-import getPort from 'get-port';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { z } from 'zod/v3';
-import { InternalMastraMCPClient } from '../../client/client';
-import { MCPClient } from '../../client/configuration';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { MCPServer } from '../server';
+import { connectClient, serveHTTP, textOf } from './harness.mock';
+import type { ServedHTTP } from './harness.mock';
 
-vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
-const listenOnFreePort = async (server: http.Server): Promise<number> => {
-  const port = await getPort();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, () => resolve());
-  });
-  return port;
-};
+const initialTool = createTool({
+  id: 'initialTool',
+  description: 'An initial tool',
+  inputSchema: z.object({}),
+  execute: async () => 'initial',
+});
 
-/**
- * Repeatedly triggers `notify` until `received` resolves, to avoid races between
- * the client's standalone SSE stream being established and the server sending
- * the notification.
- */
-const notifyUntilReceived = async (notify: () => Promise<void>, received: Promise<void>): Promise<void> => {
-  let done = false;
-  void received.then(() => {
-    done = true;
-  });
-  const deadline = Date.now() + 15000;
-  while (!done && Date.now() < deadline) {
-    await notify();
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-  await received;
-};
-
-const initialTools: ToolsInput = {
-  initialTool: {
-    description: 'An initial tool',
-    parameters: z.object({}),
-    execute: async () => ({ result: 'initial' }),
-  },
-};
-
-const dynamicTools: ToolsInput = {
-  dynamicTool: {
-    description: 'A dynamically added tool',
-    parameters: z.object({ input: z.string().optional() }),
-    execute: async () => ({ result: 'dynamic' }),
-  },
-};
+const dynamicTool = createTool({
+  id: 'dynamicTool',
+  description: 'A dynamically added tool',
+  inputSchema: z.object({ input: z.string().optional() }),
+  execute: async () => 'dynamic',
+});
 
 describe('MCPServer dynamic tools + tools/list_changed', () => {
   let server: MCPServer;
-  let httpServer: http.Server;
-  let client: InternalMastraMCPClient;
+  let served: ServedHTTP;
+  let client: Awaited<ReturnType<typeof connectClient>>;
+  const changes: Array<() => void> = [];
+  const nextChange = () => new Promise<void>(resolve => changes.push(resolve));
 
   beforeAll(async () => {
-    server = new MCPServer({
-      name: 'DynamicToolsTestServer',
-      version: '1.0.0',
-      tools: { ...initialTools },
-    });
-
-    let port = 0;
-    httpServer = http.createServer(async (req, res) => {
-      const url = new URL(req.url || '', `http://localhost:${port}`);
-      await server.startHTTP({
-        url,
-        httpPath: '/mcp',
-        req,
-        res,
-      });
-    });
-    port = await listenOnFreePort(httpServer);
-
-    client = new InternalMastraMCPClient({
-      name: 'dynamic-tools-test-client',
-      server: {
-        url: new URL(`http://localhost:${port}/mcp`),
-      },
-    });
-    await client.connect();
+    server = new MCPServer({ name: 'DynamicToolsTestServer', version: '1.0.0', tools: { initialTool } });
+    served = await serveHTTP(server);
+    client = await connectClient(served.url);
+    client.setNotificationHandler('notifications/tools/list_changed', async () => changes.shift()?.());
+    await client.listen({ toolsListChanged: true });
   });
 
   afterAll(async () => {
-    await client?.disconnect();
-    httpServer?.closeAllConnections?.();
-    if (httpServer) {
-      await new Promise<void>(resolve => httpServer.close(() => resolve()));
-    }
-    await server?.close();
+    await client.close();
+    await served.close();
   });
 
   it('declares the tools listChanged capability', () => {
-    // Access the underlying SDK client to read negotiated server capabilities
-    const capabilities = (client as any)['client'].getServerCapabilities();
-    expect(capabilities?.tools?.listChanged).toBe(true);
+    expect(client.getServerCapabilities()?.tools?.listChanged).toBe(true);
   });
 
   it('adding a tool notifies the client and the new tool is listed and callable', async () => {
-    const initialToolList = await client.tools();
-    expect(Object.keys(initialToolList)).toContain('initialTool');
-    expect(Object.keys(initialToolList)).not.toContain('dynamicTool');
-
-    const notified = new Promise<void>(resolve => {
-      client.setToolListChangedNotificationHandler(() => resolve());
-    });
-
-    await server.toolActions.add(dynamicTools);
-    // add() already sent one notification; re-notify until the client's SSE stream picks it up
-    await notifyUntilReceived(() => server.toolActions.notifyListChanged(), notified);
-    await expect(notified).resolves.toBeUndefined();
-
-    const updatedToolList = await client.tools();
-    expect(Object.keys(updatedToolList)).toContain('dynamicTool');
-
-    const tool = updatedToolList['dynamicTool'];
-    const result = await (tool!.execute as any)({ input: 'hello' });
-    expect(result.content?.[0]?.text).toContain('dynamic');
+    expect((await client.listTools()).tools.map(t => t.name)).toEqual(['initialTool']);
+    const notified = nextChange();
+    await server.toolActions.add({ dynamicTool });
+    await notified;
+    expect((await client.listTools()).tools.map(t => t.name)).toEqual(['initialTool', 'dynamicTool']);
+    expect(textOf(await client.callTool({ name: 'dynamicTool', arguments: { input: 'hello' } }))).toBe('dynamic');
   });
 
   it('lists healthy tools when one tool has no input schema', async () => {
     const schemaLessTool = createTool({
       id: 'schemaLessTool',
-      description: 'A tool without an input schema',
-      execute: async () => ({ result: 'success' }),
+      description: 'No input schema',
+      execute: async () => 'ok',
     });
-
+    const notified = nextChange();
     await server.toolActions.add({ schemaLessTool });
-    (server as any).convertedTools.schemaLessTool.parameters = undefined;
-
+    await notified;
     try {
-      const toolList = await client.tools();
-      expect(Object.keys(toolList)).toContain('initialTool');
-      expect(Object.keys(toolList)).toContain('schemaLessTool');
+      const listed = (await client.listTools()).tools;
+      expect(listed.map(t => t.name)).toContain('schemaLessTool');
+      expect(listed.find(t => t.name === 'schemaLessTool')?.inputSchema).toEqual({ type: 'object', properties: {} });
     } finally {
+      const removed = nextChange();
       await server.toolActions.remove(['schemaLessTool']);
+      await removed;
     }
   });
 
   it('removing a tool notifies the client and the tool is no longer listed', async () => {
-    const notified = new Promise<void>(resolve => {
-      client.setToolListChangedNotificationHandler(() => resolve());
-    });
-
+    const notified = nextChange();
     await server.toolActions.remove(['dynamicTool']);
-    await notifyUntilReceived(() => server.toolActions.notifyListChanged(), notified);
-    await expect(notified).resolves.toBeUndefined();
-
-    const toolList = await client.tools();
-    expect(Object.keys(toolList)).not.toContain('dynamicTool');
-    expect(Object.keys(toolList)).toContain('initialTool');
+    await notified;
+    expect((await client.listTools()).tools.map(t => t.name)).toEqual(['initialTool']);
   });
 
   it('removing an unknown tool does not throw and does not notify', async () => {
+    const notify = vi.spyOn(server.toolActions, 'notifyListChanged');
     await expect(server.toolActions.remove(['nope'])).resolves.toBeUndefined();
-  });
-
-  it('dynamically added tools survive tool re-conversion on Mastra registration', async () => {
-    const standaloneServer = new MCPServer({
-      name: 'ReconversionTestServer',
-      version: '1.0.0',
-      tools: { ...initialTools },
-    });
-
-    await standaloneServer.toolActions.add(dynamicTools);
-    expect(Object.keys(standaloneServer.tools())).toContain('dynamicTool');
-
-    // __registerMastra re-converts tools from originalTools
-    standaloneServer.__registerMastra({} as any);
-    expect(Object.keys(standaloneServer.tools())).toContain('dynamicTool');
-    expect(Object.keys(standaloneServer.tools())).toContain('initialTool');
-
-    await standaloneServer.toolActions.remove(['dynamicTool']);
-    standaloneServer.__registerMastra({} as any);
-    expect(Object.keys(standaloneServer.tools())).not.toContain('dynamicTool');
-
-    await standaloneServer.close();
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('keeps the Mastra tool registry in sync with dynamic add/remove', async () => {
-    // Tool with an intrinsic ID that differs from its record key, to prove the
-    // Mastra registry is keyed by tool.id (mirroring __registerMastra).
     const syncTool = createTool({
       id: 'sync-tool-id',
-      description: 'A tool used to verify Mastra registry sync',
+      description: 'Verifies Mastra registry sync',
       inputSchema: z.object({}),
-      execute: async () => ({ result: 'sync' }),
+      execute: async () => 'sync',
     });
+    const standalone = new MCPServer({ name: 'RegistrySyncTestServer', version: '1.0.0', tools: {} });
+    const mastra = new Mastra({ logger: false, mcpServers: { registrySyncServer: standalone } });
 
-    const standaloneServer = new MCPServer({
-      name: 'RegistrySyncTestServer',
-      version: '1.0.0',
-      tools: {},
-    });
-    const mastra = new Mastra({
-      logger: false,
-      mcpServers: { registrySyncServer: standaloneServer },
-    });
+    expect(mastra.listTools()['sync-tool-id']).toBeUndefined();
+    await standalone.toolActions.add({ syncToolKey: syncTool });
+    expect(mastra.listTools()['sync-tool-id']).toBe(syncTool);
+    expect(standalone.tools()).toHaveProperty('syncToolKey');
 
-    expect(mastra.listTools()?.['sync-tool-id']).toBeUndefined();
-
-    await standaloneServer.toolActions.add({ syncToolKey: syncTool });
-    expect(mastra.listTools()?.['sync-tool-id']).toBeDefined();
-
-    // MCP-side removal is by record key; Mastra registry entry (keyed by
-    // tool.id) must be removed too.
-    await standaloneServer.toolActions.remove(['syncToolKey']);
-    expect(Object.keys(standaloneServer.tools())).not.toContain('syncToolKey');
-    expect(mastra.listTools()?.['sync-tool-id']).toBeUndefined();
-
-    await standaloneServer.close();
-  });
-
-  it('MCPClient.tools.onListChanged receives tool list change notifications', async () => {
-    const mcpClient = new MCPClient({
-      id: 'dynamic-tools-mcpclient-test',
-      servers: {
-        dynamicServer: {
-          url: new URL((client as any)['serverConfig'].url),
-        },
-      },
-    });
-
-    try {
-      const notified = new Promise<void>(resolve => {
-        void mcpClient.tools.onListChanged('dynamicServer', () => resolve());
-      });
-      // Ensure connection + handler registration completed before notifying
-      await mcpClient.listTools();
-
-      await notifyUntilReceived(() => server.toolActions.notifyListChanged(), notified);
-      await expect(notified).resolves.toBeUndefined();
-    } finally {
-      await mcpClient.disconnect();
-    }
+    // MCP-side removal is by record key; the registry entry keyed by tool.id goes too.
+    await standalone.toolActions.remove(['syncToolKey']);
+    expect(standalone.tools()).not.toHaveProperty('syncToolKey');
+    expect(mastra.listTools()['sync-tool-id']).toBeUndefined();
+    await standalone.close();
   });
 });

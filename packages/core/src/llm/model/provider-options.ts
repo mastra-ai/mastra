@@ -7,20 +7,26 @@
 
 // Import types from AI SDK packages
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v6';
-import type { DeepSeekChatOptions } from '@ai-sdk/deepseek-v6';
+import type { DeepSeekLanguageModelChatOptions } from '@ai-sdk/deepseek-v7';
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v6';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import type { XaiProviderOptions } from '@ai-sdk/xai-v6';
 
 // Re-export the types
 export type {
   AnthropicProviderOptions,
-  DeepSeekChatOptions,
   GoogleGenerativeAIProviderOptions,
   OpenAIResponsesProviderOptions,
   XaiProviderOptions,
+};
+
+// The provider still accepts these legacy reasoning values and normalizes them with warnings.
+export type DeepSeekChatOptions = Omit<DeepSeekLanguageModelChatOptions, 'thinking' | 'reasoningEffort'> & {
+  thinking?: { type?: NonNullable<DeepSeekLanguageModelChatOptions['thinking']>['type'] | 'adaptive' };
+  reasoningEffort?: DeepSeekLanguageModelChatOptions['reasoningEffort'] | 'medium' | 'xhigh';
 };
 
 // Alias for consistency
@@ -115,10 +121,9 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
  * Map, etc.) are replaced wholesale. Within colliding leaf keys, `override`
  * wins.
  */
-export function mergeProviderOptions<T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions>(
-  base: T | undefined,
-  override: T | undefined,
-): T | undefined {
+export function mergeProviderOptions<
+  T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions,
+>(base: T | undefined, override: T | undefined): T | undefined {
   if (!base) return override;
   if (!override) return base;
   return deepMerge(base, override) as T;

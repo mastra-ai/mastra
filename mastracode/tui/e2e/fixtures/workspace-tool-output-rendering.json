@@ -12,6 +12,7 @@
             "id": "call_workspace_shell",
             "name": "execute_command",
             "arguments": {
+              "description": "Running the workspace output check",
               "command": "printf 'WORKSPACE_E2E_SHELL_OUTPUT\\n'",
               "timeout": 5,
               "cwd": null,

@@ -9,8 +9,10 @@ import {
   DataListNumberCell,
   DataListSelectCell,
   DataListDateCell,
+  DataListCreatedCell,
   DataListTimeCell,
 } from './data-list-cells';
+import { DataListGroup } from './data-list-group';
 import { DataListNextPageLoading } from './data-list-next-page-loading';
 import { DataListNoMatch } from './data-list-no-match';
 import { DataListPagination } from './data-list-pagination';
@@ -33,7 +35,7 @@ import {
 import { DataListTopCells } from './data-list-top-cells';
 
 export type { DataListRootProps, DataListVariant } from './data-list-root';
-export type { DataListSortableTopCellProps, DataListSortDirection } from './data-list-sortable-top-cell';
+export type { DataListSortableTopCellProps, DataListSort } from './data-list-sortable-top-cell';
 
 export const DataList = Object.assign(DataListRoot, {
   Top: DataListTop,
@@ -55,10 +57,12 @@ export const DataList = Object.assign(DataListRoot, {
   RowHeaderCell: DataListRowHeaderCell,
   NumberCell: DataListNumberCell,
   DateCell: DataListDateCell,
+  CreatedCell: DataListCreatedCell,
   TimeCell: DataListTimeCell,
   SelectCell: DataListSelectCell,
   TopSelectCell: DataListTopSelectCell,
   NoMatch: DataListNoMatch,
+  Group: DataListGroup,
   Subheader: DataListSubheader,
   SubHeading: DataListSubHeading,
   Spacer: DataListSpacer,
