@@ -324,7 +324,11 @@ describe('durable operation ids — repeated occurrences (issue #24044)', () => 
 
   it('emits unique ids for a foreach nested inside a foreach item workflow', async () => {
     const recorder = recordAllOperationIds();
-    const child = createWorkflow({ id: 'occ-fe-child', inputSchema: z.array(ioSchema), outputSchema: z.array(ioSchema) })
+    const child = createWorkflow({
+      id: 'occ-fe-child',
+      inputSchema: z.array(ioSchema),
+      outputSchema: z.array(ioSchema),
+    })
       .foreach(incStep())
       .commit();
     const workflow = createWorkflow({
@@ -336,7 +340,9 @@ describe('durable operation ids — repeated occurrences (issue #24044)', () => 
       .commit();
     new Mastra({ logger: false, storage: new MockStore(), workflows: { 'occ-fe-parent': workflow } });
 
-    const result = await (await workflow.createRun()).start({
+    const result = await (
+      await workflow.createRun()
+    ).start({
       inputData: [
         [{ n: 0 }, { n: 1 }],
         [{ n: 0 }, { n: 1 }],
@@ -344,5 +350,59 @@ describe('durable operation ids — repeated occurrences (issue #24044)', () => 
     });
     expect(result.status).toBe('success');
     expect(duplicatesOf(recorder.take())).toEqual([]);
+  });
+});
+
+/**
+ * Replay engines such as `@mastra/inngest` memoize every durable operation by id: a
+ * second call with an id they have seen returns the first call's result without
+ * running. This mirrors that so the tests check the workflow output users get.
+ */
+function memoizeLikeReplayEngine() {
+  const results = new Map<string, unknown>();
+  vi.spyOn(DefaultExecutionEngine.prototype, 'wrapDurableOperation').mockImplementation(async function (
+    this: DefaultExecutionEngine,
+    operationId: string,
+    operationFn: () => any,
+  ) {
+    if (!results.has(operationId)) results.set(operationId, await operationFn());
+    return results.get(operationId);
+  } as any);
+}
+
+describe('workflow output under a memoizing replay engine (issue #24044)', () => {
+  it('gives every foreach item its own result', async () => {
+    memoizeLikeReplayEngine();
+    const workflow = createWorkflow({
+      id: 'memo-foreach-wf',
+      inputSchema: z.array(ioSchema),
+      outputSchema: z.array(ioSchema),
+    })
+      .foreach(incStep(), { concurrency: 1 })
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'memo-foreach-wf': workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: [{ n: 0 }, { n: 10 }, { n: 20 }] });
+
+    expect(result.status).toBe('success');
+    expect(result.status === 'success' && result.result).toEqual([{ n: 1 }, { n: 11 }, { n: 21 }]);
+  });
+
+  it('feeds each dountil iteration the previous iteration result', async () => {
+    memoizeLikeReplayEngine();
+    const seen: number[] = [];
+    const workflow = createWorkflow({ id: 'memo-dountil-wf', inputSchema: ioSchema, outputSchema: ioSchema })
+      .dountil(incStep(), async ({ inputData }) => {
+        seen.push(inputData.n);
+        if (seen.length > 5) throw new Error(`loop iterations replayed a cached result: saw n=${seen.join(',')}`);
+        return inputData.n >= 3;
+      })
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'memo-dountil-wf': workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: { n: 0 } });
+
+    expect(result.status === 'failed' ? result.error : undefined).toBeUndefined();
+    expect(result.status === 'success' && result.result).toEqual({ n: 3 });
   });
 });
