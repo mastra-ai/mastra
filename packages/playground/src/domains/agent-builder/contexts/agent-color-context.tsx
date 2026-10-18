@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { stringToColor } from '@mastra/playground-ui/utils/colors';
+import { hueColors, hueForName } from '@mastra/playground-ui/utils/colors';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
@@ -22,11 +22,7 @@ export const AgentColorProvider = ({ agentId, children }: AgentColorProviderProp
       throw new Error('AgentColorProvider requires a non-empty agentId');
     }
 
-    return {
-      background: stringToColor(agentId),
-      foreground: stringToColor(agentId, 20),
-      tint: stringToColor(agentId, 50),
-    };
+    return hueColors(hueForName(agentId));
   }, [agentId]);
 
   return <AgentColorContext.Provider value={value}>{children}</AgentColorContext.Provider>;

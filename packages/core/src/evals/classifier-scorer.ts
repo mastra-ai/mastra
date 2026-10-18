@@ -9,6 +9,7 @@ import type {
   ClassifierResult,
   ClassifierState,
   ClassifierUsage,
+  RefusalAnswer,
 } from '../classifier';
 import type { Mastra } from '../mastra';
 import { createScorer, type MastraScorer, type ScorerConfig, type ScorerTypeShortcuts, type StepContext } from './base';
@@ -29,7 +30,7 @@ export type ClassifierScorerEvidence<
   TQuestion extends QuestionKey<TQuestions>,
 > = {
   question: TQuestion;
-  answer: ClassifierAnswer<TQuestions[TQuestion]>;
+  answer: Exclude<ClassifierAnswer<TQuestions[TQuestion]>, RefusalAnswer>;
   usage: ClassifierUsage;
   warnings: SharedV4Warning[];
   rounding?: ClassifierResult<TQuestions>['rounding'];
@@ -133,7 +134,7 @@ function validateQuestionAndScores(
 
 function projectClassifierScore(
   question: ClassifierQuestions[string],
-  answer: ClassifierAnswer<any>,
+  answer: Exclude<ClassifierAnswer<any>, RefusalAnswer>,
   scores?: Record<string, number>,
 ): number {
   if (answer.type === 'choice') {
@@ -151,7 +152,11 @@ function projectClassifierScore(
   return answer.probability;
 }
 
-function classifierReason(question: string, answer: ClassifierAnswer<any>, score: number): string {
+function classifierReason(
+  question: string,
+  answer: Exclude<ClassifierAnswer<any>, RefusalAnswer>,
+  score: number,
+): string {
   if (answer.type === 'choice') {
     return `Classifier question '${question}' selected '${answer.choice}' (score: ${score}).`;
   }
@@ -232,7 +237,7 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
       validateQuestionAndScores(classifier, options.id, options.question, options.scores);
 
       const state = await options.state(context);
-      const result = await classifier.evaluate({
+      const result = await classifier.decide({
         state,
         maxRetries: options.maxRetries,
         providerOptions: options.providerOptions,
@@ -241,6 +246,11 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
       if (!answer) {
         throw new TypeError(
           `Classifier '${classifier.id}' did not return question '${options.question}' for scorer '${options.id}'.`,
+        );
+      }
+      if (answer.type === 'refusal') {
+        throw new TypeError(
+          `Classifier '${classifier.id}' refused question '${options.question}' for scorer '${options.id}'.`,
         );
       }
 

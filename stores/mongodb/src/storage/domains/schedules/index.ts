@@ -257,6 +257,7 @@ export class SchedulesMongoDB extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const collection = await this.getSchedulesCollection();
     const result = await collection.updateOne(
@@ -267,6 +268,7 @@ export class SchedulesMongoDB extends SchedulesStorage {
           last_fire_at: lastFireAt,
           last_run_id: lastRunId,
           updated_at: Date.now(),
+          ...(newStatus ? { status: newStatus } : {}),
         },
       },
     );

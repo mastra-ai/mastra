@@ -1,0 +1,282 @@
+---
+title: "Reference: TeamsProvider | Channel Providers"
+description: "TeamsProvider connects Mastra agents to Microsoft Teams bots with per-agent bot provisioning, managed installations, JWT-verified webhooks, and streaming replies."
+packages:
+  - "@mastra/teams"
+---
+
+# TeamsProvider
+
+`TeamsProvider` connects Mastra agents to Microsoft Teams through the Bot Framework. Register it on `Mastra.channels` to manage bot installations, receive JWT-verified activity webhooks, and route Teams conversations to agents with adaptive cards and streaming replies.
+
+The provider supports two mutually exclusive credential modes:
+
+- **Self-managed**: bring your own Azure Bot registration and supply its `appId` and `appPassword`. Point the bot's messaging endpoint at the installation's webhook URL.
+- **Delegated**: supply a scope-aware `tokenResolver` for a manager credential. `connect(agentId)` then provisions a dedicated bot per agent: an Entra application and client secret through Microsoft Graph, and a bot registration through the Teams Developer Portal API, with the messaging endpoint pointing at your Mastra server.
+
+## Usage example
+
+Self-managed mode with an existing Azure Bot registration:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core/mastra'
+import { TeamsProvider } from '@mastra/teams'
+
+const supportAgent = new Agent({
+  id: 'support',
+  name: 'Support agent',
+  instructions: 'Help users with product questions.',
+  model: 'openai/gpt-5-mini',
+})
+
+const teams = new TeamsProvider({
+  baseUrl: 'https://your-app.example.com',
+  appId: process.env.TEAMS_APP_ID,
+  appPassword: process.env.TEAMS_APP_PASSWORD,
+})
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  channels: { teams },
+})
+
+await teams.connect('support')
+```
+
+Point the bot registration's messaging endpoint at the installation's `messagingEndpoint`, for example `https://your-app.example.com/teams/events/<webhookId>`.
+
+Delegated mode provisions a bot per agent from a manager credential:
+
+```typescript title="src/mastra/index.ts"
+import { TeamsProvider, TEAMS_GRAPH_SCOPE } from '@mastra/teams'
+
+const teams = new TeamsProvider({
+  baseUrl: 'https://your-app.example.com',
+  tokenResolver: async scope => {
+    // Return an access token minted for the requested audience:
+    // Microsoft Graph or the Teams Developer Portal API.
+    return fetchManagerToken(scope)
+  },
+})
+```
+
+## Credential modes and token audiences
+
+Teams provisioning spans two token audiences, so the delegated `tokenResolver` receives the scope it must request a token for:
+
+| Scope constant | Audience | Used for |
+| - | - | - |
+| `TEAMS_GRAPH_SCOPE` | Microsoft Graph | Creating the per-agent Entra application and its client secret |
+| `TEAMS_DEV_PORTAL_SCOPE` | Teams Developer Portal API | Creating and deleting bot registrations |
+
+The manager credential is only used at provisioning time. Each provisioned bot receives its own client secret, stored encrypted in the install store, and the runtime authenticates to the Bot Framework with that per-agent secret.
+
+Direct credentials (`appId`/`appPassword`) and `tokenResolver` are mutually exclusive, enforced at the type level and at runtime by `configure()` and `connect()`.
+
+## Constructor parameters
+
+`TeamsProviderConfig` combines Teams lifecycle options, adapter behavior, and a curated subset of [`ChannelConfig`](/reference/agents/channels) options forwarded to each connected agent. All fields are optional.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'baseUrl',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Public HTTPS base URL used as the bot messaging endpoint ({baseUrl}/teams/events/{webhookId}). May be auto-detected from the Mastra server config. Required for delegated provisioning.',
+  },
+  {
+    name: 'appId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Microsoft App (client) ID of an existing bot registration (self-managed mode). Mutually exclusive with tokenResolver.',
+  },
+  {
+    name: 'appPassword',
+    type: 'string',
+    isOptional: true,
+    description: 'Client secret for appId (self-managed mode). Mutually exclusive with tokenResolver.',
+  },
+  {
+    name: 'tokenResolver',
+    type: '(scope: string | string[], tenantId?: string) => Promise<string>',
+    isOptional: true,
+    description:
+      'Scope-aware manager credential resolver (delegated mode). Called with TEAMS_GRAPH_SCOPE or TEAMS_DEV_PORTAL_SCOPE during connect() and disconnect(). Mutually exclusive with appId/appPassword.',
+  },
+  {
+    name: 'appTenantId',
+    type: 'string',
+    isOptional: true,
+    description: 'Entra tenant ID for single-tenant bots.',
+  },
+  {
+    name: 'appType',
+    type: "'MultiTenant' | 'SingleTenant'",
+    isOptional: true,
+    defaultValue: "'MultiTenant'",
+    description: 'Bot application audience. Provisioned bots default to MultiTenant.',
+  },
+  {
+    name: 'storage',
+    type: 'ChannelsStorage',
+    isOptional: true,
+    description:
+      "Persistence for bot installations. Defaults to Mastra's channels storage when available, falling back to an in-memory store (dev/test only).",
+  },
+  {
+    name: 'encryptionKey',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Passphrase for encrypting the per-bot client secret at rest (AES-256-GCM). Defaults to the MASTRA_ENCRYPTION_KEY environment variable. Required in delegated mode: connect() refuses to provision a bot when no key is available.',
+  },
+  {
+    name: 'apiUrl',
+    type: 'string',
+    isOptional: true,
+    description: 'Override the Bot Framework service URL (for example, sovereign clouds). Forwarded to the adapter.',
+  },
+  {
+    name: 'botIconUrl',
+    type: 'string',
+    isOptional: true,
+    description: 'Icon URL recorded on provisioned bot registrations.',
+  },
+  {
+    name: 'streaming',
+    type: 'StreamingConfig',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Stream agent text to Teams as it generates.',
+  },
+  {
+    name: 'typingStatus',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Keep a typing indicator alive during generation.',
+  },
+  {
+    name: 'waitUntil',
+    type: 'WaitUntilFn',
+    isOptional: true,
+    description: 'Keep the serverless invocation alive while the agent stream runs after the webhook returns 200.',
+  },
+  {
+    name: 'onInstall',
+    type: '(installation: TeamsInstallation) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called after an agent successfully connects and the installation is persisted.',
+  },
+]}
+/>
+
+The config also forwards `handlers`, `inlineMedia`, `inlineLinks`, `state`, `threadContext`, `chatOptions`, `tools`, `resolveResourceId`, `resolveWaitUntil`, `cors`, `formatError`, `toolDisplay`, and `logger` to each connected agent's `AgentChannels`, matching [`SlackProvider`](/reference/channels/slack-provider) and [`TelegramProvider`](/reference/channels/telegram-provider).
+
+## Methods
+
+### Installation lifecycle
+
+#### `connect(agentId, options?)`
+
+Connect an agent to Microsoft Teams. Behavior depends on the credential mode:
+
+- **Delegated** (`tokenResolver`): provisions a per-agent bot (an Entra application and client secret through Microsoft Graph, then a Teams Developer Portal bot registration whose messaging endpoint points at this server) and returns `{ type: 'deep_link' }` to the Developer Portal, where the bot is packaged into a Teams app for install. A Developer Portal failure rolls back the Entra application.
+- **Self-managed** with credentials (per-call or provider default): validates the credentials by requesting a Bot Framework token, persists the installation, and returns `{ type: 'immediate' }`.
+- **Self-managed** without credentials: persists a pending installation and returns `{ type: 'deep_link' }` pointing at the Teams Developer Portal.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: 'Display name for the bot. Defaults to the agent id.',
+  },
+  {
+    name: 'appId',
+    type: 'string',
+    isOptional: true,
+    description: 'Microsoft App (client) ID (self-managed mode). Rejected in delegated mode.',
+  },
+  {
+    name: 'appPassword',
+    type: 'string',
+    isOptional: true,
+    description: 'Client secret for appId (self-managed mode). Rejected in delegated mode.',
+  },
+  {
+    name: 'appTenantId',
+    type: 'string',
+    isOptional: true,
+    description: 'Entra tenant ID for single-tenant bots.',
+  },
+]}
+/>
+
+Returns: `Promise<ChannelConnectResult>`
+
+Throws when the agent is already connected, when another agent already uses the same bot, when Microsoft rejects the credentials, or when delegated mode has no `baseUrl` to register a messaging endpoint.
+
+#### `disconnect(agentId)`
+
+Disconnect an agent from Microsoft Teams. For bots this provider provisioned (delegated mode), the Developer Portal registration and the Entra application are deleted best-effort. A control-plane failure never blocks removal of the local installation.
+
+#### `listInstallations()`
+
+List installations as public, secret-free info for the editor UI.
+
+Returns: `Promise<ChannelInstallationInfo[]>`
+
+#### `getInstallation(agentId)`
+
+Get the full installation for an agent, including the client secret. Returns `null` when the agent has no Teams installation.
+
+Returns: `Promise<TeamsInstallation | null>`
+
+### Configuration and status
+
+#### `configure(credentials)`
+
+Update runtime provider settings. Pass `appId`/`appPassword` to change the default bot credentials new `connect()` calls fall back to. Pass `baseUrl`/`apiUrl` to point the provider or adapter at a different host. Pass `null` to clear the default credentials.
+
+Throws in delegated mode when `appId` or `appPassword` is supplied, because bot credentials are provisioned per agent.
+
+#### `initialize()`
+
+Restore installations from storage: rebuild an adapter per active bot and inject `AgentChannels` so agents receive events immediately. Idempotent.
+
+#### `isConfigured()`
+
+Whether at least one bot is actively registered.
+
+Returns: `boolean`
+
+#### `getInfo()`
+
+Discovery metadata for the editor UI, including the `connect()` options schema. `isConfigured` is `true` when credentials are available or an active installation exists.
+
+Returns: `ChannelPlatformInfo`
+
+#### `getAdapter(installationId)`
+
+Get the live `TeamsAdapter` for an installation id, if one is active.
+
+Returns: `TeamsAdapter | undefined`
+
+#### `getRoutes()`
+
+A single unauthenticated `POST /teams/events/:webhookId` route. Inbound requests are authenticated by Microsoft's JWT signature, which the adapter verifies against the bot's `appId` audience. The `webhookId` is a routing key and carries no secret material.
+
+Returns: `ApiRoute[]`
+
+## Related
+
+- [ChannelProvider](/reference/channels/channel-provider)
+- [SlackProvider](/reference/channels/slack-provider)
+- [TelegramProvider](/reference/channels/telegram-provider)
+- [Agent channels](/reference/agents/channels)

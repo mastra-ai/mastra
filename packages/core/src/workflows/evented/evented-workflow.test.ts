@@ -1247,6 +1247,68 @@ describe('Workflow (Evented Engine Specific)', () => {
     });
   });
 
+  describe('foreach iteration records (issue #24943)', () => {
+    it('does not copy the foreach input array into each iteration record', async () => {
+      const items = Array.from({ length: 5 }, (_, i) => i);
+
+      const seed = createStep({
+        id: 'records-seed',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        execute: async () => items,
+      });
+      const double = createStep({
+        id: 'records-double',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => inputData * 2,
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-foreach-records',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+      });
+      workflow.then(seed).foreach(double, { concurrency: 1 }).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-records': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('success');
+        if (result.status === 'success') {
+          expect(result.result).toEqual([0, 2, 4, 6, 8]);
+        }
+
+        const workflowsStore = await testStorage.getStore('workflows');
+        const record = await workflowsStore?.getWorkflowRunById({
+          runId: run.runId,
+          workflowName: 'evented-foreach-records',
+        });
+        const snapshot = typeof record?.snapshot === 'string' ? JSON.parse(record.snapshot) : record?.snapshot;
+        const stepResult = snapshot?.context?.['records-double'];
+        expect(stepResult?.payload).toEqual(items);
+
+        const foreachOutput = stepResult?.suspendPayload?.__workflow_meta?.foreachOutput;
+        expect(foreachOutput).toHaveLength(items.length);
+        for (const [i, entry] of foreachOutput.entries()) {
+          expect(entry).not.toHaveProperty('payload');
+          expect(entry.status).toBe('success');
+          expect(entry.output).toBe(i * 2);
+        }
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   describe('non-retryable workflow failures', () => {
     it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
       let calls = 0;

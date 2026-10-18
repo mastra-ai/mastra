@@ -59,9 +59,11 @@ describe('RequestContextPopover', () => {
       renderWithProviders(<RequestContextPopover entityType="agent" entityId={AGENT_ID} />, 'agent', AGENT_ID);
 
       await open('Request context');
-      expect(await screen.findByText('Request Context (JSON)', undefined, { timeout: 10_000 })).not.toBeNull();
+      expect(
+        await screen.findByRole('textbox', { name: 'Request Context (JSON)' }, { timeout: 10_000 }),
+      ).not.toBeNull();
 
-      fireEvent.click(screen.getByRole('combobox'));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Request Context preset' }));
       const presetOption = await screen.findByRole('option', { name: 'French' });
       fireEvent.pointerDown(presetOption, { pointerType: 'mouse' });
       fireEvent.click(presetOption, { detail: 1 });

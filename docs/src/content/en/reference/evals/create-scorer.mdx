@@ -13,7 +13,7 @@ Mastra provides a unified `createScorer` factory that allows you to define custo
 
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
 
-**Prompt object steps** are step configurations expressed as objects with `description` + `createPrompt` (and `outputSchema` for `preprocess`/`analyze`). These steps invoke the judge LLM. **Function steps** are plain functions and never call the judge.
+**Prompt object steps** are step configurations expressed as objects with `description` + `createPrompt` (and `outputSchema` for `preprocess`/`analyze`, but not for `generateScore`). These steps invoke the judge LLM. **Function steps** are plain functions and never call the judge.
 
 ```typescript
 import { createScorer } from '@mastra/core/evals'
@@ -112,7 +112,7 @@ const scorer = createScorer({
             type: 'number',
             isOptional: true,
             description:
-              'Maximum number of times error processors can retry one judge generation. The runtime defaults to 10 when errorProcessors are configured without this value. Set it explicitly to bound the retry budget.',
+              'Maximum number of times error processors can retry one judge generation. The runtime defaults to 3 when errorProcessors are configured without this value. Set it explicitly to bound the retry budget.',
           },
         ],
       },
@@ -139,7 +139,7 @@ This function returns a scorer builder that you can chain step methods onto. See
 
 The judge only runs for steps defined as **prompt objects** (`preprocess`, `analyze`, `generateScore`, `generateReason` in prompt mode). If you use function steps only, the judge is never called and there is no LLM output to inspect. In that case, any score/reason must be produced by your functions.
 
-When a prompt-object step runs, its structured LLM output is stored in the corresponding result field (`preprocessStepResult`, `analyzeStepResult`, or the value consumed by `calculateScore` in `generateScore`).
+When a prompt-object step runs, its structured LLM output is stored in the corresponding result field (`preprocessStepResult` or `analyzeStepResult`). For `generateScore`, the judge returns `{ score: number }` and `score` becomes the scorer's score.
 
 ## Retry judge requests
 
@@ -500,12 +500,6 @@ The method must return a numerical score.
     description: 'Description of what this scoring step does.',
   },
   {
-    name: 'outputSchema',
-    type: 'StandardJSONSchemaV1',
-    isOptional: false,
-    description: 'Standard JSON Schema for the expected output of the generateScore step.',
-  },
-  {
     name: 'createPrompt',
     type: 'function',
     isOptional: false,
@@ -520,19 +514,7 @@ The method must return a numerical score.
 ]}
 />
 
-When using prompt object mode, you must also provide a `calculateScore` function to convert the LLM output to a numerical score:
-
-<PropertiesTable
-  content={[
-  {
-    name: 'calculateScore',
-    type: 'function',
-    isOptional: false,
-    description:
-      "Function: ({ run, results, analyzeStepResult }) => number. Converts the LLM's structured output into a numerical score.",
-  },
-]}
-/>
+In prompt object mode, don't set `outputSchema`. Mastra asks the judge for structured output of the form `{ score: number }` and uses `score` as the step result.
 
 ### `generateReason`
 

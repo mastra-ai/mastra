@@ -5,6 +5,7 @@ import type { Mastra } from '../../../mastra';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
@@ -36,17 +37,24 @@ export type AgentCapabilities = {
         overrides?: InputProcessorOrWorkflow[];
       }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
   llmRequestInputProcessors?:
-    | InputProcessorOrWorkflow[]
+    | LLMRequestProcessorOrWorkflow[]
     | ((args: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
+        errorOverrides?: ErrorProcessorOrWorkflow[];
+      }) => Promise<LLMRequestProcessorOrWorkflow[]> | LLMRequestProcessorOrWorkflow[]);
+  /**
+   * The function form resolves the run's error processors once and reports whether the caller
+   * configured any themselves (excluding framework defaults).
+   */
   errorProcessors?:
     | ErrorProcessorOrWorkflow[]
     | ((args: {
         requestContext: RequestContext;
         overrides?: ErrorProcessorOrWorkflow[];
-      }) => Promise<ErrorProcessorOrWorkflow[]> | ErrorProcessorOrWorkflow[]);
+      }) =>
+        | Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }>
+        | { errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean });
   llm: MastraLLMVNext;
 };
 

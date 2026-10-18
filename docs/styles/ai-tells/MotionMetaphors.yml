@@ -1,15 +1,15 @@
 ---
 extends: existence
-message: "AI motion metaphor: '%s'. Name the literal operation: is passed to, or depends on."
+message: "AI motion metaphor: '%s'. Use the literal operation: is passed to, or depends on."
 level: error
 nonword: true
 ignorecase: true
 # Motion and force verbs applied to data or control flow: a pipeline that
 # "feeds" a stage, a row that "strands," extra rows that "swamp" an index,
 # a table that "dwarfs" the rest, a planner that "leans on" an index, a
-# step that "mints" an identifier, a default "baked in," a rule that
-# "crowds out" the rest, a config that "drives" the build, a pass that
-# "shapes" the output, a stage that "cracks open" a record. A
+# default "baked in," a rule that "crowds out" the rest, a config that
+# "drives" the build, a pass that "shapes" the output, a stage that
+# "cracks open" a record. A
 # documentation-corpus audit (2026-09) counted sixty of these across
 # thirty verbs with no rule reading the class. The plain sentence names
 # the operation: the stage reads the pipeline's output, the row is left
@@ -70,10 +70,8 @@ tokens:
   # heavily on the cache").
   - "\\blean(?:s|ed|ing)? (?:on|heavily on|hard on|entirely on) (?:the|a|an|its|their|this|that|each|every|one|[a-z]+)\\b(?! (?:wall|walls|fence|fences|railing|railings|counter|doorframe|post|posts|tree|trees|car|truck|desk|table|shoulder|shoulders|arm|arms)\\b)"
 
-  # --- Manufacture: an identifier as coinage, a default as pastry ("the
-  # step mints a new identifier," "the default is baked in," "bakes the
-  # path into the image").
-  - "\\bmint(?:s|ed|ing)? (?:a|an|the|its|this|that|new|fresh|one|two|every|each|another)\\b"
+  # --- Manufacture: a default as pastry ("the default is baked in,"
+  # "bakes the path into the image").
   - "\\bbak(?:es?|ed|ing) (?:in|into)\\b(?! (?:the oven|a pan|an oven)\\b)"
   - "\\bbak(?:es?|ed|ing) (?:the|a|an|its|this|that|every|each) (?:[a-z]+ )?[a-z]+ (?:in|into)\\b"
 

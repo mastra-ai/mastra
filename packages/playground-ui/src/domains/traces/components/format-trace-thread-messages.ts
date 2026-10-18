@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { SpanType } from '@mastra/core/observability';
+import { isHiddenTool } from '@/domains/chat/tools/tool-card-kind';
 import { formatHierarchicalSpans } from '@/domains/traces/components/format-hierarchical-spans';
 import type { UISpan } from '@/domains/traces/types';
 
@@ -69,6 +70,8 @@ const readString = (value: unknown, key: string): string | undefined => {
   return typeof field === 'string' ? field : undefined;
 };
 
+const toolNameOf = (span: SpanRecord): string => span.entityName ?? span.entityId ?? span.name;
+
 const toToolPart = (span: SpanRecord): MastraMessagePart => {
   const failed = Boolean(span.error);
   const settled = Boolean(span.endedAt);
@@ -78,13 +81,63 @@ const toToolPart = (span: SpanRecord): MastraMessagePart => {
     type: 'tool-invocation',
     toolInvocation: {
       toolCallId: readString(span.attributes, 'toolCallId') ?? span.spanId,
-      toolName: span.entityName ?? span.entityId ?? span.name,
+      toolName: toolNameOf(span),
       args: span.input ?? {},
       state,
       ...(settled ? { result: span.output } : {}),
       ...(failed ? { isError: true, errorText: readString(span.error, 'message') } : {}),
     },
     providerExecuted: span.spanType === SpanType.PROVIDER_TOOL_CALL,
+  };
+};
+
+const OBSERVATIONS_TAG = /<observations>([\s\S]*?)<\/observations>/;
+
+const findGeneratedText = (node: UISpan, spanById: Map<string, SpanRecord>): string => {
+  for (const child of node.spans ?? []) {
+    const span = spanById.get(child.id);
+    if (span?.spanType === SpanType.MODEL_GENERATION) {
+      const text = getResponseText(span.output);
+      if (text) return text;
+    }
+    const nested = findGeneratedText(child, spanById);
+    if (nested) return nested;
+  }
+  return '';
+};
+
+/** Same tool shape the chat builds from `data-om-*` parts, so the observation badge renders. */
+const toObservationPart = (span: SpanRecord, node: UISpan, spanById: Map<string, SpanRecord>): MastraMessagePart => {
+  const failed = Boolean(span.error);
+  const settled = Boolean(span.endedAt);
+  const text = findGeneratedText(node, spanById);
+  const observations = (OBSERVATIONS_TAG.exec(text)?.[1] ?? text).trim();
+  const inputTokens = span.attributes?.inputTokens;
+  const omData = {
+    cycleId: span.spanId,
+    operationType: readString(span.attributes, 'operationType') === 'reflect' ? 'reflection' : 'observation',
+    startedAt: new Date(span.startedAt).toISOString(),
+    ...(typeof inputTokens === 'number' ? { tokensObserved: inputTokens } : {}),
+    ...(observations ? { observations } : {}),
+    ...(settled && span.endedAt
+      ? {
+          [failed ? 'failedAt' : 'completedAt']: new Date(span.endedAt).toISOString(),
+          durationMs: new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime(),
+        }
+      : {}),
+    ...(failed ? { error: readString(span.error, 'message') } : {}),
+    _state: failed ? 'failed' : settled ? 'complete' : 'loading',
+  };
+
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      toolCallId: `om-${span.spanId}`,
+      toolName: 'mastra-memory-om-observation',
+      args: omData,
+      state: settled ? 'result' : 'call',
+      ...(settled ? { result: { omData } } : {}),
+    },
   };
 };
 
@@ -98,37 +151,89 @@ interface ToolCallPart {
   part: MastraMessagePart;
   /** The tool-call span plus any top-level execution it started (workflow/agent run). */
   spanIds: string[];
+  toolCallId?: string;
+  startedAt: SpanRecord['startedAt'];
 }
+
+const OM_PROCESSOR_ID = 'observational-memory';
+const OM_AGENT_IDS = new Set([
+  'observational-memory-observer',
+  'observational-memory-reflector',
+  'multi-thread-observer',
+]);
+
+/** Observational memory machinery (its processor run or its observer/reflector agents) is never part of the chat. */
+const isObservationalMemoryInternalSpan = (span: SpanRecord) => {
+  if (span.spanType === SpanType.PROCESSOR_RUN) {
+    return span.entityId === OM_PROCESSOR_ID || span.name.endsWith(`: ${OM_PROCESSOR_ID}`);
+  }
+  if (span.spanType === SpanType.AGENT_RUN) {
+    return OM_AGENT_IDS.has(span.entityId ?? '') || OM_AGENT_IDS.has(span.entityName ?? '');
+  }
+  return false;
+};
 
 /**
  * Walks the span tree collecting each tool call (with the spans behind it) in visit order,
  * plus the ids of the model chunks that produced the response text.
  */
-const collectAssistantSpans = (root: UISpan, spans: SpanRecord[]): { tools: ToolCallPart[]; textSpanIds: string[] } => {
+const collectAssistantSpans = (
+  root: UISpan,
+  spans: SpanRecord[],
+): { tools: ToolCallPart[]; textSpanIds: string[]; resumedOutput: unknown } => {
   const spanById = new Map(spans.map(span => [span.spanId, span]));
   const tools: ToolCallPart[] = [];
   const textSpanIds: string[] = [];
+  let resumedOutput: unknown;
 
   const visit = (nodes: UISpan[]) => {
     for (const node of nodes) {
       const span = spanById.get(node.id);
       if (!span) continue;
       if (TOOL_SPAN_TYPES.has(span.spanType)) {
+        // Tools the chat never draws (task tools, working memory) get no message either.
+        if (isHiddenTool(toolNameOf(span))) continue;
         // A tool that runs a workflow or an agent gets that top-level execution featured too,
         // so the user can see what the tool call actually did without featuring every nested step.
         const executionIds = (node.spans ?? []).flatMap(child =>
           TOOL_EXECUTION_SPAN_TYPES.has(child.type) ? [child.id] : [],
         );
-        tools.push({ part: toToolPart(span), spanIds: [span.spanId, ...executionIds] });
+        const part = toToolPart(span);
+        const spanIds = [span.spanId, ...executionIds];
+        // A suspended call (e.g. submit_plan) is resumed under the same toolCallId: one call, one part.
+        const toolCallId = readString(span.attributes, 'toolCallId');
+        const existing = toolCallId ? tools.find(tool => tool.toolCallId === toolCallId) : undefined;
+        if (existing) {
+          const earlier = new Date(existing.startedAt) <= new Date(span.startedAt);
+          if (earlier) existing.part = part;
+          existing.spanIds = earlier ? [...existing.spanIds, ...spanIds] : [...spanIds, ...existing.spanIds];
+          if (!earlier) existing.startedAt = span.startedAt;
+        } else {
+          tools.push({ part, spanIds, toolCallId, startedAt: span.startedAt });
+        }
         continue;
       }
+      // Observational memory runs its own observer/reflector agent: render it as the chat's OM badge
+      // and skip its subtree so the observer's output is never mistaken for the assistant's reply.
+      const omOperation = readString(span.attributes, 'operationType');
+      if (span.spanType === SpanType.MEMORY_OPERATION && (omOperation === 'observe' || omOperation === 'reflect')) {
+        tools.push({
+          part: toObservationPart(span, node, spanById),
+          spanIds: [span.spanId],
+          startedAt: span.startedAt,
+        });
+        continue;
+      }
+      if (isObservationalMemoryInternalSpan(span)) continue;
       if (isResponseChunkSpan(span)) textSpanIds.push(span.spanId);
+      // A suspended run resumes as a nested agent run (outside any tool call) that carries the final response.
+      if (span.spanType === SpanType.AGENT_RUN) resumedOutput = span.output;
       visit(node.spans ?? []);
     }
   };
 
   visit(root.spans ?? []);
-  return { tools, textSpanIds };
+  return { tools, textSpanIds, resumedOutput };
 };
 
 const messageContent = (parts: MastraMessagePart[]) =>
@@ -157,20 +262,25 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
   if (!root) return [];
 
   const userParts = getUserParts(root.input);
-  const responseText = getResponseText(root.output);
-  const { tools, textSpanIds } = collectAssistantSpans(hierarchicalRoot, spans);
+  const { tools, textSpanIds, resumedOutput } = collectAssistantSpans(hierarchicalRoot, spans);
+  const responseText = getResponseText(root.output) || getResponseText(resumedOutput);
   const assistantCreatedAt = new Date(root.endedAt ?? root.startedAt);
   const threadId = root.threadId ?? undefined;
 
   const messages: TraceViewMastraDBMessage[] = [
-    {
-      id: `${root.traceId}:${root.spanId}:user`,
-      role: 'user',
-      createdAt: new Date(root.startedAt),
-      threadId,
-      content: { format: 2, parts: userParts, content: messageContent(userParts) },
-      traceSpanIds: [root.spanId],
-    },
+    // A resumed run's input is the resume payload, not a user message: no user bubble then.
+    ...(userParts.length > 0
+      ? [
+          {
+            id: `${root.traceId}:${root.spanId}:user`,
+            role: 'user' as const,
+            createdAt: new Date(root.startedAt),
+            threadId,
+            content: { format: 2 as const, parts: userParts, content: messageContent(userParts) },
+            traceSpanIds: [root.spanId],
+          },
+        ]
+      : []),
     // One message per tool call so each part maps to exactly the spans behind it.
     ...tools.map<TraceViewMastraDBMessage>(({ part, spanIds }) => ({
       id: `${root.traceId}:${spanIds[0]}:tool`,

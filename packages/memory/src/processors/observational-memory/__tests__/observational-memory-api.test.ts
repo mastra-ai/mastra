@@ -21,10 +21,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
 import { skillResultRedactor } from '../hooks';
+import { getBufferedChunks } from '../message-utils';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
-import type { ContinuationHintsConfig, ObserveHooks } from '../types';
+import type { ActivationTTL, ContinuationHintsConfig, ObserveHooks } from '../types';
 
 // =============================================================================
 // Helpers
@@ -248,7 +249,7 @@ function createOM(
     observationFailurePolicy?: 'abort' | 'continue';
     reflectionMaxRetries?: number;
     reflectionFailurePolicy?: 'abort' | 'continue';
-    activateAfterIdle?: number | string;
+    activateAfterIdle?: ActivationTTL;
     hooks?: ObserveHooks;
     hookExecution?: 'non-blocking' | 'await';
   },
@@ -282,7 +283,9 @@ function createOM(
 // Clean up static maps between ALL tests to prevent ordering-dependent failures
 beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
+  BufferingCoordinator.pendingChunkWrites.clear();
   BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.observationBoundaryOwners.clear();
   BufferingCoordinator.lastBufferedAtTime.clear();
   BufferingCoordinator.reflectionBufferCycleIds.clear();
 });
@@ -1243,8 +1246,8 @@ describe('buffer()', () => {
   it('retries a transient database connection timeout while persisting buffered observations', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     const messages = createBulkMessages(5, threadId);
-    const updateBufferedObservations = storage.updateBufferedObservations.bind(storage);
-    const updateSpy = vi.spyOn(storage, 'updateBufferedObservations').mockImplementationOnce(async input => {
+    const updateBufferedObservations = storage.appendBufferedObservations.bind(storage);
+    const updateSpy = vi.spyOn(storage, 'appendBufferedObservations').mockImplementationOnce(async input => {
       await updateBufferedObservations(input);
       throw new Error('Connection terminated due to connection timeout');
     });
@@ -1264,7 +1267,7 @@ describe('buffer()', () => {
     const onIndexObservations = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined);
     const model = createMockObserverModel();
     const observe = vi.spyOn(model, 'doStream');
-    const persist = vi.spyOn(storage, 'updateBufferedObservations');
+    const persist = vi.spyOn(storage, 'appendBufferedObservations');
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',
@@ -1298,8 +1301,10 @@ describe('buffer()', () => {
     expect(status.record?.isBufferingObservation).toBe(false);
     const stored = await storage.listMessages({ threadId, perPage: false });
     const markerTypes = stored.messages.flatMap(message => message.content.parts.map(part => part.type));
-    expect(markerTypes.includes('data-om-buffering-failed')).toBe(!transient);
-    expect(markerTypes.includes('data-om-buffering-end')).toBe(transient);
+    // The end marker is emitted once the chunk is stored, before indexing runs; an indexing
+    // failure after that doesn't fail the cycle, so there is no failed marker either way.
+    expect(markerTypes.includes('data-om-buffering-failed')).toBe(false);
+    expect(markerTypes.includes('data-om-buffering-end')).toBe(true);
   });
 
   it('should not buffer when no unobserved messages exist', async () => {
@@ -1411,6 +1416,47 @@ describe('activate()', () => {
     expect(actResult.record.activeObservations).toBeTruthy();
   });
 
+  it('should activate after the chunk-write wait times out and keep the chunk the hung op lands meanwhile', async () => {
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+    expect((await om.buffer({ threadId })).buffered).toBe(true);
+    const before = (await storage.getObservationalMemory(threadId, null))!;
+    const lateAt = new Date(getBufferedChunks(before).at(-1)!.lastObservedAt!.getTime() + 60_000);
+
+    // A buffer op whose chunk write hangs past activate()'s wait, then lands while the
+    // activation that gave up waiting is swapping.
+    const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(`obs:thread:${threadId}`);
+    const originalSwap = storage.swapBufferedToActive.bind(storage);
+    vi.spyOn(storage, 'swapBufferedToActive').mockImplementationOnce(async input => {
+      await storage.updateBufferedObservations({
+        id: input.id,
+        chunk: {
+          observations: '- late chunk',
+          tokenCount: 5,
+          messageIds: ['late-msg'],
+          cycleId: 'late-cycle',
+          messageTokens: 100,
+          lastObservedAt: lateAt,
+        },
+      });
+      return originalSwap(input);
+    });
+    vi.useFakeTimers();
+    try {
+      const activation = om.activate({ threadId });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect((await activation).activated).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      releaseChunkWrite();
+    }
+
+    // The late chunk is neither dropped by the swap nor activated ahead of its turn.
+    const after = (await storage.getObservationalMemory(threadId, null))!;
+    expect(getBufferedChunks(after).map(chunk => chunk.cycleId)).toContain('late-cycle');
+    expect(after.activeObservations).not.toContain('- late chunk');
+  });
+
   it('should return activatedMessageIds', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
@@ -1510,6 +1556,60 @@ describe('activate()', () => {
 
         expect(result.activated).toBe(true);
       } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not wait on an in-flight buffer op when the ttl triggers activation', async () => {
+      vi.useFakeTimers();
+      let releaseChunkWrite: (() => void) | undefined;
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+        const om = new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          activateAfterIdle: 300_000,
+          observation: { model: createMockObserverModel(), messageTokens: 50_000, bufferTokens: 5_000 },
+          reflection: { model: createMockReflectorModel(), observationTokens: 50_000 },
+        });
+        const staleTime = now.getTime() - 301_000;
+        const messages: MastraDBMessage[] = [
+          { ...createTestMessage('Earlier question', 'user', 'ttl-wait-user-1', new Date(staleTime - 1000)), threadId },
+          {
+            ...createTestMessage('Earlier answer', 'assistant', 'ttl-wait-assistant-1', new Date(staleTime)),
+            threadId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Earlier answer', createdAt: staleTime }],
+            } as MastraMessageContentV2,
+          },
+          { ...createTestMessage('Latest user follow-up', 'user', 'ttl-wait-user-2', now), threadId },
+        ];
+        await storage.saveMessages({ messages });
+        const record = await om.getOrCreateRecord(threadId);
+        await storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            observations: '- Buffered observation',
+            tokenCount: 80,
+            messageIds: ['ttl-wait-user-1', 'ttl-wait-assistant-1'],
+            cycleId: 'ttl-wait-cycle-1',
+            messageTokens: 200,
+            lastObservedAt: new Date(staleTime + 1),
+          },
+        });
+
+        // A buffer op is still running its Observer call. A TTL activation exists to refresh a
+        // cold prompt cache before the step's model call, so it must not wait on that op.
+        releaseChunkWrite = BufferingCoordinator.trackChunkWrite(`obs:thread:${threadId}`);
+        let settled = false;
+        const activation = om.activate({ threadId, checkThreshold: true, messages }).finally(() => (settled = true));
+        await vi.advanceTimersByTimeAsync(10);
+        expect(settled).toBe(true);
+        expect((await activation).activated).toBe(true);
+      } finally {
+        releaseChunkWrite?.();
         vi.useRealTimers();
       }
     });
@@ -2087,6 +2187,227 @@ describe('activate()', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    describe('per-provider map', () => {
+      const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+      const openaiModel = { provider: 'openai.responses', modelId: 'gpt-5.4' };
+
+      async function activateAfterIdleFor({
+        activateAfterIdle,
+        observationActivateAfterIdle,
+        idleMs,
+        currentModel,
+      }: {
+        activateAfterIdle?: ActivationTTL;
+        observationActivateAfterIdle?: ActivationTTL;
+        idleMs: number;
+        currentModel?: { provider: string; modelId: string };
+      }) {
+        vi.useFakeTimers();
+        try {
+          const now = new Date('2026-04-14T12:00:00.000Z');
+          vi.setSystemTime(now);
+
+          const om = new ObservationalMemory({
+            storage,
+            scope: 'thread',
+            activateAfterIdle,
+            observation: {
+              model: createMockObserverModel(),
+              messageTokens: 50_000,
+              bufferTokens: 5_000,
+              activateAfterIdle: observationActivateAfterIdle,
+            },
+            reflection: {
+              model: createMockReflectorModel(),
+              observationTokens: 50_000,
+            },
+          });
+          const assistantPartTime = now.getTime() - idleMs;
+          const messages: MastraDBMessage[] = [
+            {
+              ...createTestMessage('Earlier question', 'user', 'map-user-1', new Date(assistantPartTime - 1000)),
+              threadId,
+            },
+            {
+              ...createTestMessage('Earlier answer', 'assistant', 'map-assistant-1', new Date(assistantPartTime)),
+              threadId,
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'Earlier answer', createdAt: assistantPartTime }],
+              } as MastraMessageContentV2,
+            },
+            { ...createTestMessage('Latest user follow-up', 'user', 'map-user-2', now), threadId },
+          ];
+
+          await storage.saveMessages({ messages });
+          const { record } = await om.getStatus({ threadId, messages });
+          await storage.updateBufferedObservations({
+            id: record!.id,
+            chunk: {
+              observations: '- Buffered observation',
+              tokenCount: 80,
+              messageIds: ['map-user-1', 'map-assistant-1'],
+              cycleId: 'map-cycle-1',
+              messageTokens: 200,
+              lastObservedAt: new Date(assistantPartTime),
+            },
+          });
+
+          const capturedParts: any[] = [];
+          const writer = { custom: async (part: any) => void capturedParts.push(part) };
+          const result = await om.activate({
+            threadId,
+            checkThreshold: true,
+            messages,
+            writer: writer as any,
+            currentModel,
+          });
+          return { activated: result.activated, capturedParts };
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+
+      const anthropicHour = { default: 'auto', anthropic: '1h' } as const;
+
+      it('waits for the anthropic entry instead of the auto 5m ttl', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          idleMs: 10 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
+      it('activates once the anthropic entry expires and emits the resolved number in the marker', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          idleMs: 61 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(true);
+        const activation = result.capturedParts.find(part => part.type === 'data-om-activation');
+        expect(activation?.data).toMatchObject({ triggeredBy: 'ttl', ttlExpiredMs: 61 * 60_000 });
+        expect(activation?.data.config.activateAfterIdle).toBe(3_600_000);
+      });
+
+      it('uses default for providers without an entry', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          idleMs: 10 * 60_000,
+          currentModel: openaiModel,
+        });
+
+        expect(result.activated).toBe(true);
+        const activation = result.capturedParts.find(part => part.type === 'data-om-activation');
+        expect(activation?.data).toMatchObject({ triggeredBy: 'ttl', config: { activateAfterIdle: 300_000 } });
+      });
+
+      it('matches provider keys case-insensitively', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: { default: 'auto', Anthropic: '1h' },
+          idleMs: 10 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
+      it('lets observation.activateAfterIdle replace the top-level map without merging', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          observationActivateAfterIdle: { default: '2m' },
+          idleMs: 10 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(true);
+      });
+
+      it('lets observation.activateAfterIdle false disable a top-level map', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          observationActivateAfterIdle: false,
+          idleMs: 61 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
+      it('keeps a JSON-sourced "__proto__" key as a provider entry', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: JSON.parse('{"__proto__": "1h", "default": "1m"}'),
+          idleMs: 10 * 60_000,
+          currentModel: { provider: '__proto__', modelId: 'model' },
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
+      it('omits the map from buffering markers', async () => {
+        const om = new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          activateAfterIdle: anthropicHour,
+          observation: { model: createMockObserverModel(), messageTokens: 500, bufferTokens: 0.2 },
+          reflection: { model: createMockReflectorModel(), observationTokens: 50_000 },
+        });
+        await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+        const capturedParts: any[] = [];
+        const writer = { custom: async (part: any) => void capturedParts.push(part) };
+        await om.buffer({ threadId, writer: writer as any });
+
+        const markersWithConfig = capturedParts.filter(part => part.data?.config);
+        expect(markersWithConfig.length).toBeGreaterThan(0);
+        for (const marker of markersWithConfig) {
+          expect(marker.data.config.activateAfterIdle).toBeUndefined();
+        }
+      });
+
+      it.each([
+        [{ anthropic: 'nope' }, 'activateAfterIdle.anthropic'],
+        [{ anthropic: { ttl: '1h' } }, 'activateAfterIdle.anthropic'],
+        [{ anthropic: null }, 'activateAfterIdle.anthropic'],
+        [{ anthropic: ['1h'] }, 'activateAfterIdle.anthropic'],
+        [['1h'], 'object of per-provider TTLs'],
+        [null, 'object of per-provider TTLs'],
+        [{ '  ': '1h' }, 'empty provider key'],
+        [{}, 'at least one provider'],
+        [{ anthropic: undefined }, 'at least one provider'],
+        [{ Anthropic: '1h', anthropic: '5m' }, 'case-insensitive'],
+        [{ 'anthropic.messages': '1h' }, 'instead of "anthropic.messages"'],
+        [{ 'openrouter/anthropic': '1h' }, 'not a valid provider key'],
+      ])('rejects %j', (activateAfterIdle, message) => {
+        expect(() => createOM(storage, { activateAfterIdle: activateAfterIdle as any })).toThrow(message);
+      });
+
+      it('names the nested path in observation errors', () => {
+        expect(
+          () =>
+            new ObservationalMemory({
+              storage,
+              scope: 'thread',
+              observation: {
+                model: createMockObserverModel(),
+                messageTokens: 50_000,
+                activateAfterIdle: { anthropic: 'nope' },
+              },
+              reflection: { model: createMockReflectorModel(), observationTokens: 50_000 },
+            }),
+        ).toThrow('observation.activateAfterIdle.anthropic');
+      });
+
+      it('keeps scalar error messages unchanged', () => {
+        expect(() => createOM(storage, { activateAfterIdle: 'nope' })).toThrow(
+          'activateAfterIdle must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
+        );
+      });
     });
   });
 });

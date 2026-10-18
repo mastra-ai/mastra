@@ -296,15 +296,13 @@ A configured classifier can produce typed answers before `.branch()`. Route on t
 
 ```typescript title="src/mastra/workflows/ticket-triage.ts"
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { createWorkflow } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const router = new Classifier({
   id: 'ticket-router',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-  ),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     route: {
       type: 'choice',
@@ -332,7 +330,9 @@ export const ticketTriage = createWorkflow({
   .commit()
 ```
 
-The `choice` field retains the configured criteria-key union, so `inputData.answers.route.choice` is typed as `'billing' | 'support' | 'other'`. Score answers expose `score`. Boolean answers expose the `P(true)` value as `probability`. Apply an explicit threshold when routing.
+The `choice` field retains the configured criteria-key union, so `inputData.answers.route.choice` is typed as `'billing' | 'support' | 'other' | undefined`. Score answers expose `score`. Boolean answers expose the `P(true)` value as `probability`. Apply an explicit threshold when routing.
+
+When the decision model refuses a question, its answer is `{ type: 'refusal' }` and `choice`, `score`, and `probability` are `undefined`. In the example above, a refused `route` question matches no condition. Add a condition on `inputData.answers.route.type === 'refusal'` to handle it explicitly.
 
 ### Output structure
 
@@ -597,6 +597,34 @@ export const testWorkflow = createWorkflow({})
   .dowhile(step2, async ({ inputData: { number } }) => number < 10)
   .commit();
 ```
+
+### Passing data between iterations
+
+Each iteration of `.dountil()` or `.dowhile()` receives the previous iteration's output as its `inputData`. When input validation is enabled (the default), that output is validated against the loop body's `inputSchema` before the body runs. With an object schema such as `z.object()`, keys the schema doesn't declare are removed. Schemas that allow unknown keys, such as `.passthrough()`, keep them.
+
+When the loop body is a nested workflow, the output is validated against the nested workflow's `inputSchema` and then against its first step's `inputSchema`. A value is only available on the next iteration if the nested workflow returns it and both schemas declare it. This includes values produced inside the nested workflow, such as feedback from a step that suspended and resumed.
+
+To carry data across iterations, declare it in the body's `inputSchema` and return it from the body's last step:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const loopSchema = z.object({
+  draft: z.string(),
+  feedback: z.string().optional(),
+  attempts: z.number(),
+})
+
+const reviewStep = createStep({
+  id: 'review',
+  inputSchema: loopSchema,
+  outputSchema: loopSchema,
+  execute: async ({ inputData }) => {
+    // ...
+    return { draft, feedback, attempts: inputData.attempts + 1 }
+  },
+})
+```
+
+For values that don't belong in the step's input, such as counters or audit data, use [workflow state](/docs/workflows/workflow-state) instead.
 
 ### Looping with `.foreach()`
 

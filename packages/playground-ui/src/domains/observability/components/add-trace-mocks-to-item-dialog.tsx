@@ -1,19 +1,22 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
+
 import { useMastraClient } from '@mastra/react';
+import { useDatasetItem, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon, WrenchIcon, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations, useDatasets } from '@/domains/datasets';
-import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Label } from '@/ds/components/Label';
+import { Field, FieldDescription, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
 import { toast } from '@/utils/toast';
 
 type AddTraceMocksToItemDialogProps = {
@@ -76,7 +79,9 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
         </SideDialog.Header>
 
         {isTrajectoryLoading ? (
-          <div className="px-2 py-4 text-body text-muted-foreground">Loading tool calls from trace...</div>
+          <Txt as="p" variant="body" tone="muted" className="px-2 py-4">
+            Loading tool calls from trace...
+          </Txt>
         ) : (
           // Remount when the source trace changes so the form's useState seeds
           // from the freshly derived mocks — no state-reset effect needed.
@@ -101,8 +106,15 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
   const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
   const datasets = datasetsData?.datasets ?? [];
 
-  const { data: items = [], isLoading: isItemsLoading } = useDatasetItems(selectedDatasetId);
-  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem(selectedDatasetId, selectedItemId);
+  const { data: items = [], isLoading: isItemsLoading } = useDatasetItems({
+    datasetId: selectedDatasetId,
+    queryOptions: { enabled: Boolean(selectedDatasetId) },
+  });
+  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem({
+    datasetId: selectedDatasetId,
+    itemId: selectedItemId,
+    queryOptions: { enabled: Boolean(selectedDatasetId) && Boolean(selectedItemId) },
+  });
   const { updateItem } = useDatasetMutations();
 
   // Whether the current editor content is a non-empty JSON array (enables submit).
@@ -169,16 +181,18 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
   };
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
-      <div className="grid gap-2">
-        <Label htmlFor="target-dataset">Dataset *</Label>
+    <Form onSubmit={handleSubmit}>
+      <Field>
+        <FieldLabel required>Dataset</FieldLabel>
         <Select value={selectedDatasetId} onValueChange={handleDatasetChange} disabled={isDatasetsLoading}>
-          <SelectTrigger id="target-dataset">
+          <SelectTrigger>
             <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
           </SelectTrigger>
           <SelectContent>
             {datasets.length === 0 ? (
-              <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+              <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                No datasets available
+              </Txt>
             ) : (
               datasets.map(dataset => (
                 <SelectItem key={dataset.id} value={dataset.id}>
@@ -188,16 +202,16 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
             )}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
 
-      <div className="grid gap-2">
-        <Label htmlFor="target-item">Item *</Label>
+      <Field>
+        <FieldLabel required>Item</FieldLabel>
         <Select
           value={selectedItemId}
           onValueChange={setSelectedItemId}
           disabled={!selectedDatasetId || isItemsLoading}
         >
-          <SelectTrigger id="target-item">
+          <SelectTrigger>
             <SelectValue
               placeholder={
                 !selectedDatasetId ? 'Select a dataset first' : isItemsLoading ? 'Loading items...' : 'Select an item'
@@ -206,7 +220,9 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {items.length === 0 ? (
-              <div className="px-2 py-4 text-center text-body text-muted-foreground">No items available</div>
+              <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                No items available
+              </Txt>
             ) : (
               items.map(item => (
                 <SelectItem key={item.id} value={item.id}>
@@ -216,15 +232,15 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
             )}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
 
-      <div className="grid gap-2">
-        <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
+      <Field>
+        <FieldLabel>Tool Mocks (JSON)</FieldLabel>
         <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-40" />
-        <p className="text-caption text-muted-foreground">
+        <FieldDescription>
           Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
-        </p>
-      </div>
+        </FieldDescription>
+      </Field>
 
       <div className="flex justify-end gap-2 pt-4">
         <Button icon={<X />} type="button" onClick={onClose}>
@@ -246,6 +262,6 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           {updateItem.isPending ? 'Adding...' : 'Append Tool Mocks'}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

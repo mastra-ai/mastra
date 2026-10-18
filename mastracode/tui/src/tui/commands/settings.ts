@@ -5,19 +5,23 @@ import { join } from 'node:path';
 
 import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { ExperimentalAgent, StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { SettingsComponent } from '../components/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
-import { applyQuietModeToRenderedComponents } from '../quiet-mode.js';
+import { applyPreviewLinesToRenderedComponents } from '../preview-lines.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
   const color = ctx.state.session.mode.resolve().metadata?.color;
   return typeof color === 'string' ? color : undefined;
+}
+
+function resolveExperimentalAgentSetting(value: unknown): ExperimentalAgent | null {
+  return value === 'durable' || value === 'evented' ? value : null;
 }
 
 function commandExists(command: string): Promise<boolean> {
@@ -175,11 +179,6 @@ async function ensureGitcrawlReady(ctx: SlashCommandContext): Promise<boolean> {
   }
 }
 
-function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
-  applyQuietModeToRenderedComponents(ctx.state, enabled, previewLineLimit, getCurrentModeColor(ctx));
-  ctx.state.ui.requestRender();
-}
-
 export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<void> {
   const state = ctx.state.session.state.get() as any;
   const globalSettings = loadSettings();
@@ -189,13 +188,14 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     thinkingLevel: (state?.thinkingLevel ?? globalSettings.preferences.thinkingLevel) as string,
     currentModelId: ctx.state.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
-    quietMode: globalSettings.preferences.quietMode,
-    quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,
+    previewLines: globalSettings.preferences.previewLines,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
+    experimentalScheduleTools: globalSettings.signals.experimentalScheduleTools,
+    experimentalAgent: resolveExperimentalAgentSetting(globalSettings.experimentalAgent),
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
     // matching the runtime resolver's fallback. The saved preference is kept so
@@ -231,21 +231,13 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         await ctx.state.session.state.set({ escapeAsCancel: enabled });
         await ctx.state.session.thread.setSetting({ key: 'escapeAsCancel', value: enabled });
       },
-      onQuietModeChange: enabled => {
+      onPreviewLinesChange: lines => {
         const current = loadSettings();
-        current.preferences.quietMode = enabled;
-        current.onboarding.quietModePreferenceSelected = true;
+        current.preferences.previewLines = lines;
         saveSettings(current);
-        ctx.state.quietMode = enabled;
-        ctx.state.taskProgress?.setQuietMode(enabled);
-        applyQuietModeToRenderedTools(ctx, enabled, ctx.state.quietModeMaxToolPreviewLines);
-      },
-      onQuietModeMaxToolPreviewLinesChange: lines => {
-        const current = loadSettings();
-        current.preferences.quietModeMaxToolPreviewLines = lines;
-        saveSettings(current);
-        ctx.state.quietModeMaxToolPreviewLines = lines;
-        applyQuietModeToRenderedTools(ctx, ctx.state.quietMode, lines);
+        ctx.state.previewLines = lines;
+        applyPreviewLinesToRenderedComponents(ctx.state, lines, getCurrentModeColor(ctx));
+        ctx.state.ui.requestRender();
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();
@@ -277,6 +269,18 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental cross-agent communication: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
+      },
+      onExperimentalScheduleToolsChange: enabled => {
+        const current = loadSettings();
+        current.signals.experimentalScheduleTools = enabled;
+        saveSettings(current);
+        ctx.showInfo(`Experimental schedule tools: ${enabled ? 'on' : 'off'} (restart required)`);
+      },
+      onExperimentalAgentChange: (agent: ExperimentalAgent | null) => {
+        const current = loadSettings();
+        current.experimentalAgent = agent;
+        saveSettings(current);
+        ctx.showInfo(`Experimental agent: ${agent ?? 'off'} (restart required)`);
       },
       onBackgroundToolsChange: enabled => {
         const current = loadSettings();

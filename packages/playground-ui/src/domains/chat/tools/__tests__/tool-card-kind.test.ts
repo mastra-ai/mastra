@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MessageMetadata } from '../../messages/message-metadata';
 import type { ToolPartFields } from '../../messages/renderers/tool-part';
-import { badgeStatus, toolCardKind, toolInteraction } from '../tool-card-kind';
+import { badgeStatus, isHiddenTool, toolCardKind, toolInteraction } from '../tool-card-kind';
 import { WORKSPACE_TOOLS } from '../workspace-tool-constants';
 
 const fields = (toolName: string, extra: Partial<ToolPartFields> = {}): ToolPartFields => ({
@@ -16,6 +16,15 @@ const fields = (toolName: string, extra: Partial<ToolPartFields> = {}): ToolPart
 const network = (from: string): MessageMetadata => ({ mode: 'network', from });
 
 const approval = (toolCallId: string) => ({ toolCallId, toolName: 'view', args: {} });
+
+describe('isHiddenTool', () => {
+  it('hides task tools and working memory updates, not regular tools', () => {
+    for (const name of ['task_write', 'task_update', 'task_complete', 'task_check', 'updateWorkingMemory']) {
+      expect(isHiddenTool(name)).toBe(true);
+    }
+    expect(isHiddenTool('view')).toBe(false);
+  });
+});
 
 describe('toolCardKind', () => {
   describe('when the tool draws nothing on its own', () => {

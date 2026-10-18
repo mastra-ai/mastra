@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { statusDotClass, type StatusPresentation, type StatusPresentationFn } from './status-dot-styles';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const HOVER_POPOVER_LEAVE_MS = 120;
 
@@ -40,16 +43,7 @@ function StatusDotPopoverInner<T>({
     <span className="pointer-events-auto inline-flex" onMouseEnter={onHoverOpen} onMouseLeave={onHoverScheduleClose}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
-          render={
-            <button
-              type="button"
-              aria-label={resolved.label}
-              className={statusDotClass(
-                resolved,
-                'outline-hidden focus-visible:ring-ring focus-visible:ring-offset-background focus-visible:ring-2 focus-visible:ring-offset-2',
-              )}
-            />
-          }
+          render={<button type="button" aria-label={resolved.label} className={statusDotClass(resolved, focusRing)} />}
         />
         <PopoverContent
           side="top"
@@ -59,7 +53,9 @@ function StatusDotPopoverInner<T>({
           onMouseEnter={onHoverOpen}
           onMouseLeave={onHoverScheduleClose}
         >
-          <p className="text-column text-foreground">{resolved.label}</p>
+          <Txt variant="column" tone="ink">
+            {resolved.label}
+          </Txt>
           <p className="mt-1 text-pretty text-muted-foreground">{resolved.description}</p>
         </PopoverContent>
       </Popover>
@@ -98,10 +94,7 @@ export function StatusDot<T>({
           <button
             type="button"
             aria-label={presented.label}
-            className={statusDotClass(
-              presented,
-              'outline-hidden focus-visible:ring-ring focus-visible:ring-offset-background cursor-default focus-visible:ring-2 focus-visible:ring-offset-2',
-            )}
+            className={statusDotClass(presented, cn('cursor-default', focusRing))}
           />
         }
       />

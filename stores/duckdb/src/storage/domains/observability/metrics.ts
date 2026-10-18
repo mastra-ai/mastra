@@ -33,7 +33,7 @@ import {
   validateCursorId,
 } from './polling';
 
-const METRIC_FILTER_FIELD_MAPPINGS = { traceIds: 'traceId' };
+const METRIC_FILTER_FIELD_MAPPINGS = { traceIds: 'traceId', experimentIds: 'experimentId' };
 
 // ============================================================================
 // Helpers

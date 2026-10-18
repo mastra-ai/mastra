@@ -670,6 +670,56 @@ describe('useChat forwards clientTools', () => {
     unmount();
   });
 
+  describe('tool-call-resumed (#24280)', () => {
+    const suspendedThenResumed = (suspended: string[], resumed: string[]) => [
+      ...suspended.flatMap(id => [
+        {
+          type: 'tool-call',
+          runId: 'run-resumed',
+          from: 'AGENT',
+          payload: { toolName: 'askUser', toolCallId: id, args: {} },
+        },
+        {
+          type: 'tool-call-suspended',
+          runId: 'run-resumed',
+          from: 'AGENT',
+          payload: { toolName: 'askUser', toolCallId: id, args: {}, suspendPayload: {}, resumeSchema: '' },
+        },
+      ]),
+      ...resumed.map(id => ({
+        type: 'tool-call-resumed',
+        runId: 'run-resumed',
+        from: 'AGENT',
+        payload: { toolName: 'askUser', toolCallId: id, kind: 'suspension' },
+      })),
+    ];
+
+    const render = () =>
+      renderHook(
+        () =>
+          useChat({ agentId: 'test-agent', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
+        { wrapper },
+      );
+
+    it('keeps awaiting while another suspension is still pending', async () => {
+      nextSubscribeChunks = suspendedThenResumed(['tc-a', 'tc-b'], ['tc-a']);
+      keepSubscriptionOpen = true;
+      const { result, unmount } = render();
+      await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+      unmount();
+    });
+
+    it('clears the live awaiting flag once every suspension is resumed', async () => {
+      nextSubscribeChunks = suspendedThenResumed(['tc-a', 'tc-b'], ['tc-a', 'tc-b']);
+      keepSubscriptionOpen = true;
+      const { result, unmount } = render();
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+      await new Promise(r => setTimeout(r, 50));
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+      unmount();
+    });
+  });
+
   it('keeps subscription approval pending when the server ACK fails', async () => {
     nextSubscribeChunks = [
       {
@@ -1164,6 +1214,7 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).toHaveBeenCalledTimes(2);
     expect((sendError as Error | undefined)?.name).toBe('AbortError');
     expect(result.current.isRunning).toBe(false);
+    expect(result.current.messages.filter(m => m.role === 'user')).toEqual([]);
   });
 
   it('resets isRunning when the signal send request itself fails', async () => {
@@ -1193,6 +1244,36 @@ describe('useChat forwards clientTools', () => {
 
     expect((sendError as Error | undefined)?.message).toBe('network down');
     expect(result.current.isRunning).toBe(false);
+    // The optimistic pending bubble is dropped since the server never accepted it (#26831).
+    expect(result.current.messages.filter(m => m.role === 'user')).toEqual([]);
+  });
+
+  it('keeps earlier messages and allows a clean retry after a failed signal send', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({ agentId: 'test-agent', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
+      { wrapper },
+    );
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    // An earlier send succeeds and its pending bubble stays in place.
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'first message', threadId: 'thread-1' });
+    });
+
+    sendMessageMock.mockRejectedValueOnce(new Error('network down'));
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'retry me', threadId: 'thread-1' }).catch(() => {});
+    });
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'retry me', threadId: 'thread-1' });
+    });
+
+    const users = result.current.messages.filter(m => m.role === 'user');
+    expect(users).toHaveLength(2);
+    expect(JSON.stringify(users[0]!.content)).toContain('first message');
+    expect(JSON.stringify(users[1]!.content)).toContain('retry me');
+    expect(users.every(m => m.content.metadata?.status === 'pending')).toBe(true);
   });
 
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {
@@ -1637,6 +1718,64 @@ describe('useChat optimistic pending user message', () => {
       expect(metadata?.status).toBe('pending');
       expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(message.id);
     }
+  });
+
+  it('shows a first message once when its history snapshot lands before the thread echo', async () => {
+    const echo = Promise.withResolvers<unknown>();
+    subscribeToThreadMock.mockImplementationOnce(async () => ({
+      abort: threadSubscriptionAbortMock,
+      unsubscribe: threadSubscriptionUnsubscribeMock,
+      processDataStream: async ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> | void }) => {
+        await onChunk(await echo.promise);
+        await Promise.withResolvers<never>().promise;
+      },
+    }));
+    const noHistory: MastraDBMessage[] = [];
+    const { result, rerender } = renderHook(
+      ({ initialMessages }: { initialMessages: MastraDBMessage[] }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+          enableThreadSignals: true,
+        }),
+      { wrapper, initialProps: { initialMessages: noHistory } },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+    });
+    const clientMessageId = result.current.messages[0]?.id;
+
+    const persistedSignal: MastraDBMessage = {
+      id: 'sig-1',
+      role: 'signal',
+      type: 'user',
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'hello' }],
+        metadata: { signal: { id: 'sig-1', type: 'user', tagName: 'user', metadata: { clientMessageId } } },
+      },
+    };
+    rerender({ initialMessages: [persistedSignal] });
+
+    expect(result.current.messages.map(message => message.id)).toEqual(['sig-1']);
+    expect(result.current.messages[0]?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(clientMessageId);
+
+    await act(async () => {
+      echo.resolve({
+        type: 'data-user-message',
+        runId: 'run-1',
+        data: { id: 'sig-1', type: 'user', contents: 'hello', metadata: { clientMessageId } },
+      });
+      await echo.promise;
+    });
+
+    expect(result.current.messages.map(message => message.id)).toEqual(['sig-1']);
   });
 
   it('does not mark the user message pending on the legacy stream path', async () => {

@@ -1,5 +1,5 @@
 ---
-'mastracode': patch
+'@mastra/code-sdk': patch
 ---
 
-Fixed output speed readings that jumped to thousands of tokens per second. Thinking and text are now timed from when the model starts each block, so a block the provider holds and then sends all at once no longer reads as near-instant. When a provider sends a whole response at once, the reading keeps its previous value instead of showing an impossible rate.
+Fixed headless runs reporting success while a tool was still waiting for an answer. When a tool such as `request_access` paused the run, `runMC` stopped with `status: 'completed'` and exit code `0`, so the answer from the permission policy was never applied. Headless runs now wait for the paused run to stop, send the policy's answer, and keep running until the resumed run finishes. If a paused tool can't be resumed, the run ends with `status: 'error'` and exit code `1` instead of reporting success.

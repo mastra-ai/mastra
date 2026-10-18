@@ -11,9 +11,13 @@ Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.
 
 Use [`MCPClient`](/reference/tools/mcp-client) to connect to MCP servers. Use [`MCPServer`](/reference/tools/mcp-server) to expose Mastra agents, tools, workflows, prompts, and resources to other MCP-compatible systems. Both speak the MCP `2026-07-28` revision over stdio and Streamable HTTP.
 
+For hosted MCP servers such as Neon and Canva, [Connect](/docs/mastra-platform/connect/providers#mcp-providers) on Mastra platform can manage the OAuth flow and credentials for you, so agents get the server's tools through [`tools()`](/docs/mastra-platform/connect/tools) without a hand-configured `MCPClient`.
+
 :::note
 Upgrading from `@mastra/mcp` 1.x? See the [migration guide](/reference/migrations/mcp-v2).
 :::
+
+For credential choices and permission boundaries, see [Authentication and authorization with MCP](/docs/guides/mcp-authentication-authorization).
 
 ## Connect to MCP servers
 
@@ -197,7 +201,7 @@ Protect HTTP MCP servers with OAuth middleware. Visit [OAuth protection](/refere
 
 :::
 
-Registered servers are served at `/api/mcp/:serverId/mcp` over Streamable HTTP. Every request is self-contained, so the same server runs unchanged on long-lived hosts and serverless platforms.
+Registered servers are served at `/api/mcp/:serverId/mcp` over Streamable HTTP. Because every request is self-contained, the same server runs unchanged on long-lived hosts and serverless platforms.
 
 A tool that needs something from the user before it can finish calls `context.suspend()` with a payload and declares a `resumeSchema`. The server turns that into an `input_required` round and runs the tool again with the answer in `context.resumeData`. Clients answer those rounds with the `inputRequests` handler on their server definition. Visit [Asking the caller for input](/reference/tools/mcp-server#asking-the-caller-for-input) and [Answering input requests](/reference/tools/mcp-client#answering-input-requests).
 

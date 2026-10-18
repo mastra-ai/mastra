@@ -29,7 +29,7 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Filter agents' }));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
   });
 
   it('focuses the search field on Ctrl+Shift+F off mac', () => {
@@ -38,7 +38,7 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', ctrlKey: true, shiftKey: true });
 
-    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Filter agents' }));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
   });
 
   it('ignores Cmd+F without shift so the browser find bar keeps working', () => {
@@ -47,7 +47,7 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true });
 
-    expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Filter agents' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
   });
 
   it('selects the existing value so the next keystroke replaces it', () => {
@@ -56,7 +56,7 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'Filter agents' });
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Filter agents' });
     expect(input.selectionStart).toBe(0);
     expect(input.selectionEnd).toBe('agent'.length);
   });
@@ -67,7 +67,7 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Filter agents' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
   });
 
   it('leaves the disabled instance alone when two are mounted', () => {
@@ -81,8 +81,8 @@ describe('ListSearch keyboard shortcut', () => {
 
     fireEvent.keyDown(window, { key: 'f', metaKey: true, shiftKey: true });
 
-    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Filter agents' }));
-    expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Filter skills' }));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter agents' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Filter skills' }));
   });
 
   it('still debounces search input', async () => {
@@ -90,11 +90,36 @@ describe('ListSearch keyboard shortcut', () => {
     const onSearch = vi.fn();
     renderListSearch({ onSearch });
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Filter agents' }), { target: { value: 'abc' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter agents' }), { target: { value: 'abc' } });
     expect(onSearch).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(300);
     expect(onSearch).toHaveBeenCalledWith('abc');
+    vi.useRealTimers();
+  });
+});
+
+describe('ListSearch clearing', () => {
+  it('offers no clear button until there is something to clear', () => {
+    renderListSearch();
+
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+  });
+
+  it('clears the field at once, drops the pending search and keeps focus in the field', () => {
+    vi.useFakeTimers();
+    const onSearch = vi.fn();
+    renderListSearch({ onSearch });
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Filter agents' });
+
+    fireEvent.change(input, { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    vi.advanceTimersByTime(300);
+
+    expect(input.value).toBe('');
+    expect(onSearch.mock.calls).toEqual([['']]);
+    expect(document.activeElement).toBe(input);
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
     vi.useRealTimers();
   });
 });

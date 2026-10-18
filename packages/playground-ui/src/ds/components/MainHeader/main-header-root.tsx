@@ -1,4 +1,5 @@
 import React from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface MainHeaderRootProps {
@@ -35,14 +36,13 @@ export function MainHeaderRoot({
     </header>
   ) : (
     <header className={cn('grid gap-1 py-3', className)}>
-      <h1
-        className={cn(
-          'flex items-center gap-2 text-heading text-foreground',
-          '[&>svg]:size-6 [&>svg]:text-muted-foreground',
-          {
-            'w-60 max-w-[50%] animate-pulse rounded-md bg-muted': titleIsLoading,
-          },
-        )}
+      <Txt
+        as="h1"
+        variant="heading"
+        tone="ink"
+        className={cn('flex items-center gap-2', '[&>svg]:size-6 [&>svg]:text-muted-foreground', {
+          'w-60 max-w-[50%] animate-pulse rounded-md bg-muted': titleIsLoading,
+        })}
       >
         {titleIsLoading ? (
           <>&nbsp;</>
@@ -51,15 +51,17 @@ export function MainHeaderRoot({
             {icon && icon} {title}
           </>
         )}
-      </h1>
+      </Txt>
       {description && (
-        <p
-          className={cn('m-0 text-caption text-muted-foreground', {
+        <Txt
+          variant="caption"
+          tone="muted"
+          className={cn('m-0', {
             'w-[40rem] max-w-[80%] animate-pulse rounded-md bg-muted': descriptionIsLoading,
           })}
         >
           {descriptionIsLoading ? <>&nbsp;</> : description}
-        </p>
+        </Txt>
       )}
     </header>
   );

@@ -1,7 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
-import { ClickhouseDB } from './index';
+import { ClickhouseDB, resolveClickhouseConfig } from './index';
 
 describe('ClickhouseDB DDL execution', () => {
   it('uses command for CREATE while keeping replication lookup on query', async () => {
@@ -58,5 +58,25 @@ describe('ClickhouseDB DDL execution', () => {
     expect(query).not.toHaveBeenCalled();
     expect(command).toHaveBeenCalledOnce();
     expect(command).toHaveBeenCalledWith({ query: `DROP TABLE IF EXISTS ${TABLE_SPANS}` });
+  });
+});
+
+describe('resolveClickhouseConfig', () => {
+  it('applies caller settings to every query and keeps the settings Mastra relies on', async () => {
+    const { client } = resolveClickhouseConfig({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      clickhouse_settings: { filesystem_prefetches_limit: 8, date_time_output_format: 'simple' },
+    });
+    try {
+      const result = await client.query({
+        query: `SELECT getSetting('filesystem_prefetches_limit') AS prefetches, getSetting('date_time_output_format') AS format`,
+        format: 'JSONEachRow',
+      });
+      expect(await result.json()).toEqual([{ prefetches: 8, format: 'iso' }]);
+    } finally {
+      await client.close();
+    }
   });
 });

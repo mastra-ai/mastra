@@ -21,7 +21,7 @@ import {
   RESPONSE_ITEM_ID_PROVIDERS,
   RESPONSE_RESULT_ITEM_ID_KEY,
 } from '../utils/response-item-metadata';
-import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
+import { normalizeToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Merges text parts that share the same OpenAI-compatible itemId.
@@ -373,26 +373,10 @@ export function sanitizeV5UIMessages(
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
-              output: (() => {
-                const o = part.output;
-                if (o == null || typeof o !== 'object') return o;
-                const obj = o as Record<string, unknown>;
-                // Preserve { type: 'content', value: [...] } — this is the AI SDK's
-                // native multimodal tool result shape. Unwrapping it here causes
-                // convertToModelMessages to receive a raw array which gets stringified.
-                // See: https://github.com/mastra-ai/mastra/issues/17876
-                if (obj.type === 'content' && Array.isArray(obj.value)) return o;
-                // Unwrap AI SDK typed output wrappers before model-message conversion.
-                const isTypedOutputWrapper =
-                  (obj.type === 'text' ||
-                    obj.type === 'json' ||
-                    obj.type === 'error-text' ||
-                    obj.type === 'error-json') &&
-                  'value' in obj &&
-                  Object.keys(obj).length === 2;
-                if (isTypedOutputWrapper) return obj.value;
-                return unwrapLegacyToolOutput(o);
-              })(),
+              // Preserve the AI SDK's native multimodal content wrapper here.
+              // convertToModelMessages stringifies the raw array if it is unwrapped.
+              // See: https://github.com/mastra-ai/mastra/issues/17876
+              output: normalizeToolOutput(part.output, { unwrapContent: false }).output,
             };
           }
           return part;
@@ -509,6 +493,8 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 /**
  * Converts MCP-style tool results (`{ content: [...] }`) to model-native
  * multimodal tool result output without persisting a duplicate modelOutput copy.
+ * Media is emitted in the V2-authored `media` shape; the spec-boundary prompt
+ * converters translate it for V3/V4 models.
  */
 function convertMcpContentToolResultOutput(output: unknown): unknown {
   if (!output || typeof output !== 'object') return undefined;
@@ -532,11 +518,11 @@ function convertMcpContentToolResultOutput(output: unknown): unknown {
           return { type: 'text', text: String(typedPart.text ?? '') };
         case 'image':
           return typeof typedPart.data === 'string'
-            ? { type: 'image-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
+            ? { type: 'media', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
             : { type: 'text', text: JSON.stringify(typedPart) };
         case 'audio':
           return typeof typedPart.data === 'string'
-            ? { type: 'file-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
+            ? { type: 'media', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
             : { type: 'text', text: JSON.stringify(typedPart) };
         default:
           return { type: 'text', text: JSON.stringify(typedPart) };
@@ -596,6 +582,50 @@ function applyMcpContentToolResultOutputs(
       }
       modified = true;
       return { ...part, output: converted } as typeof part;
+    });
+
+    return modified ? ({ ...message, content } as AIV5Type.ModelMessage) : message;
+  });
+}
+
+function collectProviderToolErrorResults(dbMessage: MastraDBMessage | undefined): Map<string, unknown> {
+  const errors = new Map<string, unknown>();
+  if (dbMessage?.content?.format !== 2 || !dbMessage.content.parts) return errors;
+
+  for (const part of dbMessage.content.parts) {
+    if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'output-error') continue;
+    if (!part.providerExecuted || part.toolInvocation.result === undefined) continue;
+    errors.set(part.toolInvocation.toolCallId, part.toolInvocation.result);
+  }
+  return errors;
+}
+
+/**
+ * The vendored AI SDK v5 `convertToModelMessages` builds a provider-executed
+ * tool error's `error-json` value from the `errorText` string. Providers expect
+ * the original structured error (e.g. Anthropic `tool_search_tool_result_error`),
+ * so restore the object stored in the tool invocation's `result`. Results are
+ * read from the UI message's own source message so a toolCallId reused in
+ * another turn cannot overwrite this turn's error.
+ */
+function applyProviderToolErrorOutputs(
+  modelMessages: AIV5Type.ModelMessage[],
+  dbMessage: MastraDBMessage | undefined,
+): AIV5Type.ModelMessage[] {
+  const errorResults = collectProviderToolErrorResults(dbMessage);
+  if (errorResults.size === 0) return modelMessages;
+
+  return modelMessages.map(message => {
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
+
+    let modified = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'tool-result' || part.output?.type !== 'error-json') return part;
+      if (!errorResults.has(part.toolCallId)) return part;
+      const value = errorResults.get(part.toolCallId);
+      if (typeof value === 'string') return part;
+      modified = true;
+      return { ...part, output: { type: 'error-json', value: value ?? null } } as typeof part;
     });
 
     return modified ? ({ ...message, content } as AIV5Type.ModelMessage) : message;
@@ -712,8 +742,9 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   // [assistant, tool] model messages, so a batch convert + index-based attach
   // would misplace message-level providerOptions onto the tool message.
   const converted: AIV5Type.ModelMessage[] = [];
+  const dbMessagesById = new Map(dbMessages.map(message => [message.id, message]));
   for (const uiMsg of preprocessed) {
-    const produced = AIV5.convertToModelMessages([uiMsg]);
+    const produced = applyProviderToolErrorOutputs(AIV5.convertToModelMessages([uiMsg]), dbMessagesById.get(uiMsg.id));
     if (produced.length === 0) continue;
 
     const providerMetadata =

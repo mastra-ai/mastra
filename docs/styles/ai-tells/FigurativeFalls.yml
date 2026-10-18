@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the shortfall or the membership directly. Disable this rule for gravity or weather prose."
+message: "AI overused verb: '%s'. State the shortfall or the membership directly. Disable this rule for gravity or weather prose."
 level: error
 nonword: true
 ignorecase: true

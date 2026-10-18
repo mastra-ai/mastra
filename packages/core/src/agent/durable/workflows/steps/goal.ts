@@ -5,9 +5,11 @@ import { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { globalRunRegistry } from '../../run-registry';
+import { restoreRunAgentScopes } from '../../../scopes';
+import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { createRunMessageList } from '../../utils/run-message-list';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
  * Create the durable goal step.
@@ -32,17 +34,19 @@ export function createDurableGoalStep() {
       const state = inputData as {
         runId: string;
         iterationCount: number;
-        messageListState: any;
+        /** Present only on runs that thread the transcript through step payloads. */
+        messageListState?: any;
         messageId: string;
         accumulatedSteps: Array<{
           text?: string;
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
-        lastStepResult?: { isContinued?: boolean; reason?: string };
+        lastStepResult?: { isContinued?: boolean; reason?: string; signalPreempted?: boolean };
         options?: { maxSteps?: number };
         backgroundTaskPending?: boolean;
       };
+      if (state.lastStepResult?.signalPreempted) return state;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
         agentId?: string;
@@ -51,7 +55,7 @@ export function createDurableGoalStep() {
         requestContextEntries?: Record<string, unknown>;
       };
 
-      const registryEntry = globalRunRegistry.get(state.runId);
+      const registryEntry = getRunRegistryEntry(state.runId, mastra);
       // This is shared agent configuration (judge, scorer, tools, defaults), not per-goal state.
       // The objective and its progress are isolated by thread and loaded from storage in the core.
       let goalConfig = registryEntry?.goal;
@@ -65,16 +69,21 @@ export function createDurableGoalStep() {
         for (const [key, value] of Object.entries(initData.requestContextEntries)) {
           requestContext.set(key, value);
         }
+        restoreRunAgentScopes(requestContext);
       }
 
-      // Rehydrate the message list lazily — only when the core actually judges
+      // No goal configured on the agent → nothing to judge.
+      if (!goalConfig) return state;
+
+      // Build the message list lazily — only when the core actually judges
       // this iteration does it read the transcript / append the feedback
       // signal. Memoized so the scorer context and signal injection share one
       // instance, which is then serialized back into state.
+      const messageListState = await readMessageListState(params, state);
       let messageList: ReturnType<ReturnType<typeof createRunMessageList>['deserialize']> | undefined;
       const list = () => {
         if (!messageList) {
-          messageList = createRunMessageList({ mastra }).deserialize(state.messageListState);
+          messageList = createRunMessageList({ mastra }).deserialize(messageListState);
         }
         return messageList;
       };
@@ -125,7 +134,7 @@ export function createDurableGoalStep() {
         // The transcript gained the feedback signal (and the response message
         // id may have rotated) — persist both back into serialized state.
         nextState.messageId = outcome.messageId;
-        nextState.messageListState = list().serialize();
+        Object.assign(nextState, await storeMessageListState(params, list().serialize()));
       }
       return nextState;
     },

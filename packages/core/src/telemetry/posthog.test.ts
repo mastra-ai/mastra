@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { capture, flush, PostHog } = vi.hoisted(() => {
+const { capture, captureImmediate, flush, PostHog } = vi.hoisted(() => {
   const capture = vi.fn();
+  const captureImmediate = vi.fn().mockResolvedValue(undefined);
   const flush = vi.fn().mockResolvedValue(undefined);
   const PostHog = vi.fn(function () {
-    return { capture, flush };
+    return { capture, captureImmediate, flush };
   });
-  return { capture, flush, PostHog };
+  return { capture, captureImmediate, flush, PostHog };
 });
 
 vi.mock('posthog-node', () => ({ PostHog }));
 
-import { captureEEEvent, resetEETelemetryForTests } from './posthog';
+import { captureEEEvent, captureTelemetryEventImmediate, resetEETelemetryForTests } from './posthog';
 
 describe('EE PostHog telemetry', () => {
   let originalTelemetryDisabled: string | undefined;
@@ -68,5 +69,63 @@ describe('EE PostHog telemetry', () => {
     });
 
     expect(() => captureEEEvent('ee_feature_used', 'user-1', { feature: 'fga' })).not.toThrow();
+  });
+});
+
+describe('captureTelemetryEventImmediate', () => {
+  let originalTelemetryDisabled: string | undefined;
+
+  beforeEach(() => {
+    originalTelemetryDisabled = process.env['MASTRA_TELEMETRY_DISABLED'];
+    delete process.env['MASTRA_TELEMETRY_DISABLED'];
+    captureImmediate.mockReset().mockResolvedValue(undefined);
+    PostHog.mockClear();
+    resetEETelemetryForTests();
+  });
+
+  afterEach(() => {
+    if (originalTelemetryDisabled !== undefined) process.env['MASTRA_TELEMETRY_DISABLED'] = originalTelemetryDisabled;
+    else delete process.env['MASTRA_TELEMETRY_DISABLED'];
+    resetEETelemetryForTests();
+  });
+
+  it('resolves only after PostHog has finished sending the event', async () => {
+    let deliver!: () => void;
+    captureImmediate.mockReturnValueOnce(new Promise<void>(resolve => (deliver = resolve)));
+    let settled = false;
+
+    const sending = captureTelemetryEventImmediate('mastra_model_token_usage_v2', 'user-1', { input_tokens: 1 }).then(
+      () => {
+        settled = true;
+      },
+    );
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    deliver();
+    await sending;
+
+    expect(settled).toBe(true);
+    expect(captureImmediate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        distinctId: 'user-1',
+        event: 'mastra_model_token_usage_v2',
+        properties: expect.objectContaining({ input_tokens: 1, machine_id: expect.stringMatching(/^[a-f0-9]{16}$/) }),
+      }),
+    );
+  });
+
+  it('sends nothing when telemetry is disabled', async () => {
+    process.env['MASTRA_TELEMETRY_DISABLED'] = '1';
+
+    await captureTelemetryEventImmediate('mastra_model_token_usage_v2', 'user-1');
+
+    expect(PostHog).not.toHaveBeenCalled();
+    expect(captureImmediate).not.toHaveBeenCalled();
+  });
+
+  it('swallows PostHog send failures', async () => {
+    captureImmediate.mockRejectedValueOnce(new Error('posthog unavailable'));
+
+    await expect(captureTelemetryEventImmediate('mastra_model_token_usage_v2', 'user-1')).resolves.toBeUndefined();
   });
 });

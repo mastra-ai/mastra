@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
-import type { InputProps } from '@/ds/components/Input';
+import { SearchInput } from '@/ds/components/SearchInput';
+import type { SearchInputProps } from '@/ds/components/SearchInput';
 import { useKeydown } from '@/lib/keyboard';
 
 export type ListSearchProps = {
@@ -9,7 +9,7 @@ export type ListSearchProps = {
   label: string;
   placeholder: string;
   debounceMs?: number;
-  size?: InputProps['size'];
+  size?: SearchInputProps['size'];
   /**
    * Optional controlled value. When provided, ListSearch stays in sync with this
    * prop — useful when the parent needs to clear the input programmatically
@@ -32,7 +32,6 @@ export const ListSearch = ({
   value: controlledValue,
   shortcutDisabled = false,
 }: ListSearchProps) => {
-  const id = useId();
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,31 +61,24 @@ export const ListSearch = ({
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setInternalValue(e.target.value);
-      debouncedSearch(e.target.value);
-    },
-    [debouncedSearch],
-  );
-
-  const handleReset = useCallback(() => {
-    setInternalValue('');
-    onSearch('');
+  const searchNowOrDebounced = (next: string) => {
+    setInternalValue(next);
+    if (next) {
+      debouncedSearch(next);
+      return;
+    }
     debouncedSearch.cancel();
-  }, [onSearch, debouncedSearch]);
+    onSearch('');
+  };
 
   return (
-    <SearchFieldBlock
-      name={id}
+    <SearchInput
+      ref={inputRef}
       label={label}
-      labelIsHidden
       placeholder={placeholder}
-      value={internalValue}
-      onChange={handleChange}
-      onReset={handleReset}
       size={size}
-      inputRef={inputRef}
+      value={internalValue}
+      onValueChange={searchNowOrDebounced}
       className="w-full max-w-120"
     />
   );

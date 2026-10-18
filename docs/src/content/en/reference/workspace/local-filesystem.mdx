@@ -179,8 +179,8 @@ filesystem.setAllowedPaths([])
 Read file contents.
 
 ```typescript
-const content = await filesystem.readFile('/docs/guide.md')
-const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
+const content = await filesystem.readFile('/docs/guide.md', { encoding: 'utf-8' })
+const buffer = await filesystem.readFile('/image.png')
 ```
 
 **Parameters:**
@@ -203,10 +203,9 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
         parameters: [
           {
             name: 'encoding',
-            type: "'utf-8' | 'binary'",
-            description: 'Text or binary encoding',
+            type: 'BufferEncoding',
+            description: "Text encoding (for example 'utf-8'). When omitted, the file is returned as a Buffer.",
             isOptional: true,
-            defaultValue: "'utf-8'",
           },
         ],
       },
@@ -235,7 +234,7 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
   },
   {
     name: 'content',
-    type: 'string | Buffer',
+    type: 'string | Buffer | Uint8Array',
     description: 'File content',
   },
   {
@@ -252,7 +251,7 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
             type: 'boolean',
             description: "Create parent directories if they don't exist",
             isOptional: true,
-            defaultValue: 'false',
+            defaultValue: 'true',
           },
           {
             name: 'overwrite',
@@ -294,7 +293,7 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
   },
   {
     name: 'content',
-    type: 'string | Buffer',
+    type: 'string | Buffer | Uint8Array',
     description: 'Content to append',
   },
 ]}
@@ -465,7 +464,7 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
             type: 'boolean',
             description: 'Create parent directories',
             isOptional: true,
-            defaultValue: 'false',
+            defaultValue: 'true',
           },
         ],
       },

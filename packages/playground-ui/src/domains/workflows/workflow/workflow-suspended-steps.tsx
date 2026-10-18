@@ -1,5 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
+import { CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
@@ -11,6 +11,7 @@ import { ActivityWick } from '@/ds/components/Activity';
 import { Badge } from '@/ds/components/Badge';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -18,7 +19,7 @@ import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
 
-const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning-indicator)' };
 
 export interface ResumeStepParams {
   stepId: string | string[];
@@ -69,14 +70,14 @@ export function WorkflowSuspendedSteps({
       aria-label="Step suspended"
     >
       <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
-        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-background px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-5 py-4">
           <Txt as="h2" variant="column" tone="ink" className="flex items-center gap-2">
             <Icon>
               <CirclePause />
             </Icon>
             Step suspended
           </Txt>
-          <Badge variant="orange" emphasis="muted">
+          <Badge variant="orange" emphasis="subtle">
             Needs input
           </Badge>
         </div>
@@ -128,7 +129,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
   };
 
   return (
-    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border/50">
+    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border">
       <div className="space-y-2">
         <Txt as="p" variant="subheading" tone="ink" className="break-words">
           {step.stepId}
@@ -158,11 +159,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
             >
               <span className="flex min-w-0 items-center gap-2">
                 <Icon>
-                  <ChevronRight
-                    className={cn('text-muted-foreground transition-transform', {
-                      'rotate-90 transform': isPayloadOpen,
-                    })}
-                  />
+                  <DisclosureChevron direction="right" className="text-muted-foreground" />
                 </Icon>
                 <Txt as="span" variant="body" tone="ink" className="truncate">
                   {getPayloadLabel(step.suspendPayload, step.stepId)}

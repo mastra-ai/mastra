@@ -115,6 +115,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -458,6 +460,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -837,6 +841,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -1165,6 +1171,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -1808,6 +1816,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -2259,6 +2269,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -3189,6 +3201,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -3548,6 +3562,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -3891,6 +3907,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -4397,6 +4415,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -4838,6 +4858,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -5166,6 +5188,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -5809,6 +5833,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
     "messageId": "id-2000",
     "payload": {
       "messageId": "id-2000",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -6563,6 +6589,8 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "startedAt": 1704067200000,
       "warnings": [],
@@ -6916,6 +6944,8 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "startedAt": 1704067200000,
       "warnings": [],
@@ -7630,6 +7660,8 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "startedAt": 1704067200000,
       "warnings": [],
@@ -8107,6 +8139,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -8474,6 +8508,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -8877,6 +8913,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -9223,6 +9261,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -9902,6 +9942,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -10377,6 +10419,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -11331,6 +11375,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
     "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -11714,6 +11760,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -12081,6 +12129,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -12611,6 +12661,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -13076,6 +13128,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -13422,6 +13476,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
     "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
@@ -14101,6 +14157,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
     "messageId": "id-2000",
     "payload": {
       "messageId": "id-2000",
+      "modelId": "mock-model-id",
+      "provider": "mock-provider",
       "request": {},
       "warnings": [],
     },
