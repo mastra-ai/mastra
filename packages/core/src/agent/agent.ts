@@ -110,6 +110,8 @@ import { WorkspaceInstructionsProcessor } from '../processors/processors/workspa
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from '../processors/stability-defaults';
+import type { ProcessorStepOutput } from '../processors/step-schema';
+import { takeHeldParts } from '../processors/stream-reprocess';
 import {
   RequestContext,
   MASTRA_INHERITED_MEMORY_KEY,
@@ -2239,6 +2241,7 @@ export class Agent<
 
     const stateSignalProcessors: Processor[] = [];
     const streamSteps: ReturnType<typeof createStepFromProcessor>[] = [];
+    const streamProcessorIds: string[] = [];
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
@@ -2254,6 +2257,7 @@ export class Agent<
         step = processorStep;
         if (processor.processOutputStream) {
           streamSteps.push(processorStep);
+          streamProcessorIds.push(processor.id);
         }
         const toolProvider = processor as ProcessorLoadedToolsProvider;
         if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
@@ -2286,6 +2290,22 @@ export class Agent<
             result = await step.execute({ inputData: result, ...context });
           }
           return result;
+        };
+        committedWorkflow.__flushOutputStream = async ({ inputData, ...context }) => {
+          const released: ChunkType[] = [];
+          const { processorStates } = inputData as { processorStates?: Map<string, ProcessorState> };
+          for (const index of streamSteps.keys()) {
+            const held = await takeHeldParts(processorStates?.get(streamProcessorIds[index]!)?.customState);
+            for (const part of held) {
+              let result: ProcessorStepOutput = { ...inputData, part };
+              for (const next of streamSteps.slice(index + 1)) {
+                if (result.part == null) break;
+                result = await next.execute({ inputData: result, ...context });
+              }
+              if (result.part != null) released.push(result.part as ChunkType);
+            }
+          }
+          return released;
         };
       }
     }
