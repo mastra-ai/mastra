@@ -268,6 +268,13 @@ export interface AgentControllerConfig<TState = {}> {
   /** Memory configuration (shared across all modes) */
   memory?: DynamicArgument<MastraMemory>;
 
+  /**
+   * Save messages to memory after each finished step instead of once when the run ends,
+   * so a run that crashes mid-way keeps its earlier steps. Ignored when observational memory is enabled.
+   * @default false
+   */
+  savePerStep?: boolean;
+
   /** Available agent modes */
   modes: AgentControllerMode[];
 
