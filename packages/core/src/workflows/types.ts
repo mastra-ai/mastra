@@ -547,8 +547,15 @@ export interface WorkflowOptions {
   sharePubsub?: boolean;
   /**
    * Whether `Mastra.restartAllActiveWorkflowRuns()` (boot-time generic
-   * recovery) automatically restarts this workflow's active runs. Defaults to
-   * true. Set to false for workflows whose recovery is owned elsewhere or
+   * recovery) automatically restarts this workflow's active runs.
+   *
+   * Defaults to true on both the default and evented engines (including
+   * workflows with a `schedule`). On the evented engine the step that was
+   * running when the process stopped is executed again; completed steps are
+   * not re-run. Evented runs take no ownership lease, so in a multi-instance
+   * deploy sharing storage a booting replica can re-drive a step another live
+   * replica is still executing.
+   * Set to false for workflows whose recovery is owned elsewhere or
    * whose side effects must not be re-driven by a blanket restart — durable
    * agent workflows set this to false because their recovery is owned by the
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).

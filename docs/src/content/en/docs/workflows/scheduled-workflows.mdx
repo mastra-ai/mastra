@@ -160,6 +160,26 @@ When you change the `schedule` config and redeploy, Mastra diffs the existing sc
 
 Removing a schedule entry from a workflow's `schedule` array deletes its row on the next boot.
 
+## Recovering runs after a restart
+
+Scheduled workflows run on the evented engine. When the process restarts, `mastra.restartAllActiveWorkflowRuns()` recovers runs that were in progress. Each run continues from the step that was running. Completed steps don't run again, but the interrupted step runs again from the start. Restarts requested before `startWorkers()` wait until the workers are running.
+
+If the interrupted step isn't safe to repeat, set `autoRestartActiveRuns: false` so the run stays `running` after a restart:
+
+```typescript title="src/mastra/workflows/price-check.ts"
+export const priceCheck = createWorkflow({
+  id: 'price-check',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  schedule: { cron: '0 */6 * * *' },
+  options: { autoRestartActiveRuns: false },
+})
+```
+
+:::warning
+Evented runs don't hold an ownership lease. In a multi-instance deployment that shares storage, a replica that boots while another is mid-step runs that step a second time. Set `autoRestartActiveRuns: false` on evented workflows whose steps must not repeat.
+:::
+
 ## Deployment topology
 
 The built-in scheduler uses a `setInterval` tick loop to poll the schedules table and claim due rows. It dispatches workflow runs through the in-process pubsub. It assumes a long-lived host process.

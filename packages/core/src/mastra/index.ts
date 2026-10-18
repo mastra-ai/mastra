@@ -956,6 +956,16 @@ export class Mastra<
    */
   #workersStarted = false;
   /**
+   * Set only by a full `startWorkers()` (no name), which wires the workflow
+   * event consumer. Named partial starts leave it false, so evented restarts
+   * stay queued until a full start can publish them.
+   */
+  #allWorkersStarted = false;
+  /** Evented run restarts requested before a workflow consumer is wired (`workflowName:runId` -> `{ workflowName, runId }`). */
+  #pendingEventedRestarts = new Map<string, { workflowName: string; runId: string }>();
+  /** Run ids whose restart is in flight, so overlapping sweeps don't drive a run twice. */
+  #inFlightRestarts = new Map<string, object>();
+  /**
    * Set when something has signalled that the scheduler is needed at runtime
    * (e.g. an agent schedule was registered via `__ensureScheduleRuntimeReady()`).
    * Causes `#shouldEnableScheduler()` to return `true` even when there are no
@@ -4226,9 +4236,11 @@ export class Mastra<
   }
 
   /**
-   * Restart every RUNNING/WAITING run of the registered default-engine
-   * workflows. Runs are restarted `recovery.workflowConcurrency` at a time
-   * (default 5) and the promise resolves once all of them have settled.
+   * Restart every RUNNING/WAITING run of the registered default-engine and
+   * evented workflows. Default-engine runs are restarted
+   * `recovery.workflowConcurrency` at a time (default 5) and the promise
+   * resolves once they have settled. Evented restarts are published without
+   * waiting for the runs to finish, and are queued until workers start.
    * Failures are logged per run and never reject the sweep.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
@@ -4237,20 +4249,131 @@ export class Mastra<
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
-    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, async runSnapshot => {
+    // Evented restarts are processed by the workflow event consumer and resolve only when the
+    // run finishes, so they are published without holding a concurrency slot.
+    const defaultRuns: typeof runs = [];
+    for (const runSnapshot of runs) {
+      if (this.#inFlightRestarts.has(`${runSnapshot.workflowName}:${runSnapshot.runId}`)) continue;
+      // An unresolvable workflow goes through #restartWorkflowRun, which logs the failure.
+      const workflow = Object.values(this.#workflows as Record<string, AnyWorkflow>).find(
+        w => w.id === runSnapshot.workflowName,
+      );
+      if (workflow?.engineType !== 'evented') {
+        defaultRuns.push(runSnapshot);
+        continue;
+      }
+      let snapshot;
       try {
-        const workflow = this.getWorkflowById(runSnapshot.workflowName);
-        const run = await workflow.createRun({ runId: runSnapshot.runId });
-        await run.restart();
-        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
+        snapshot = typeof runSnapshot.snapshot === 'string' ? JSON.parse(runSnapshot.snapshot) : runSnapshot.snapshot;
       } catch (error) {
-        this.#logger.error('Failed to restart workflow run', {
+        this.#logger.warn('Skipping evented workflow run restart; snapshot could not be parsed', {
           workflow: runSnapshot.workflowName,
           runId: runSnapshot.runId,
           error,
         });
+        continue;
       }
-    });
+      if (!snapshot?.activePaths?.length) {
+        this.#logger.warn('Skipping evented workflow run restart; no recorded execution position', {
+          workflow: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+        });
+        continue;
+      }
+      // Defer until the event consumer is wired so the restart event isn't lost.
+      if (!this.#allWorkersStarted && !this.#executionWorkersStarted) {
+        this.#logger.debug('Deferring evented workflow run restart until workers start', {
+          workflow: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+        });
+        this.#pendingEventedRestarts.set(`${runSnapshot.workflowName}:${runSnapshot.runId}`, {
+          workflowName: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+        });
+        continue;
+      }
+      void this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId);
+    }
+    await runWithConcurrency(defaultRuns, this.#recoveryConfig.workflowConcurrency, runSnapshot =>
+      this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId),
+    );
+  }
+
+  #drainPendingEventedRestarts(): void {
+    const pending = [...this.#pendingEventedRestarts];
+    this.#pendingEventedRestarts.clear();
+    for (const [key, { workflowName, runId }] of pending) {
+      if (this.#inFlightRestarts.has(key)) continue;
+      void this.#restartWorkflowRun(workflowName, runId);
+    }
+  }
+
+  /**
+   * Restarts one active run. A run whose ownership lease is still live belongs to another
+   * process (or to this one before a crash), so it is skipped and re-checked once the lease
+   * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
+   * A re-check that throws is retried with backoff; `recheck.failures` counts the
+   * consecutive ones.
+   */
+  async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
+    const key = `${workflowName}:${runId}`;
+    const token = {};
+    this.#inFlightRestarts.set(key, token);
+    try {
+      const workflow = this.getWorkflowById(workflowName);
+      const run = await workflow.createRun({ runId });
+      // A re-check can find the run already settled or suspended by its owner.
+      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
+      await run.restart();
+      this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {
+        this.#logger.debug('Skipped restarting workflow run owned by a live process', {
+          workflow: workflowName,
+          runId,
+        });
+        const leaseExpiresAt = error.details?.leaseExpiresAt;
+        const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, Number.isNaN(retryAt) ? Date.now() : retryAt);
+        return;
+      }
+      const context = { workflow: workflowName, runId, error };
+      if (!recheck) {
+        this.#logger.error('Failed to restart workflow run', context);
+        return;
+      }
+      if (recheck.failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+        this.#logger.error(
+          'Failed to re-check workflow run for recovery; leaving it for the next boot or a manual restart()',
+          context,
+        );
+        return;
+      }
+      this.#logger.warn('Failed to re-check workflow run for recovery; retrying', context);
+      this.#scheduleWorkflowRecoveryRecheck(
+        workflowName,
+        runId,
+        Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** recheck.failures,
+        recheck.failures + 1,
+      );
+    } finally {
+      // A stopWorkers() + newer restart may have replaced this entry; only remove our own.
+      if (this.#inFlightRestarts.get(key) === token) this.#inFlightRestarts.delete(key);
+    }
+  }
+
+  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number, failures = 0): void {
+    if (this.#shuttingDown) return;
+    const key = JSON.stringify(['workflow', workflowName, runId]);
+    clearTimeout(this.#durableRecoveryRechecks.get(key));
+    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const timer = setTimeout(() => {
+      this.#durableRecoveryRechecks.delete(key);
+      if (this.#shuttingDown) return;
+      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, { failures }));
+    }, delay);
+    timer.unref?.();
+    this.#durableRecoveryRechecks.set(key, timer);
   }
 
   /**
@@ -7144,6 +7267,16 @@ export class Mastra<
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
 
+    // Only a full start wires the workflow consumer. A scheduler-only process
+    // still drains here so remote workflow consumers receive the restarts.
+    if (!name) {
+      this.#allWorkersStarted = true;
+    }
+
+    if (!name) {
+      this.#drainPendingEventedRestarts();
+    }
+
     // A wake event (or a local `schedules.create()`) that landed while this
     // method was running only flipped the request flag, because injecting
     // workers mid-boot would race the start loop above. Honor it now.
@@ -7300,6 +7433,7 @@ export class Mastra<
 
     await this.#wirePushWorkflowSubscription();
     this.#executionWorkersStarted = true;
+    this.#drainPendingEventedRestarts();
   }
 
   /**
@@ -7320,6 +7454,9 @@ export class Mastra<
     // teardown still set their request flags, so a later startWorkers() can
     // honor them, but they must not resurrect workers behind a stopped instance.
     this.#workersStarted = false;
+    this.#allWorkersStarted = false;
+    // Restarts in flight can't settle against workers that are gone; let later sweeps retry them.
+    this.#inFlightRestarts.clear();
 
     // A runtime signal may have kicked off a lazy worker start that is still in
     // flight. Wait for it so the teardown below covers what it started —
