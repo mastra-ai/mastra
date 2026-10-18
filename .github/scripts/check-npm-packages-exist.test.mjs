@@ -11,11 +11,13 @@ const script = fileURLToPath(new URL('./check-npm-packages-exist.mjs', import.me
 
 // Mock npm registry: routes map URL path (`/@scope%2fname`) to a status code,
 // or to an array of statuses consumed one request at a time (last one sticks).
-async function startRegistry(t, routes) {
+// `requestTimes`, if given, collects the arrival time of every request.
+async function startRegistry(t, routes, requestTimes = []) {
   const remaining = new Map(
     Object.entries(routes).map(([key, value]) => [key, Array.isArray(value) ? [...value] : [value]]),
   );
   const server = createServer((req, res) => {
+    requestTimes.push(Date.now());
     const statuses = remaining.get(req.url);
     const status = statuses ? (statuses.length > 1 ? statuses.shift() : statuses[0]) : 404;
     res.writeHead(status, { 'content-type': 'application/json' });
@@ -181,7 +183,7 @@ async function startOidc(t, { exchange = {}, idTokenStatus = 200 } = {}) {
   const requests = [];
   const remaining = new Map(Object.entries(exchange).map(([key, value]) => [key, [value].flat()]));
   const server = createServer((req, res) => {
-    requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+    requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization, at: Date.now() });
     const reply = (status, body) => {
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(body));
@@ -335,6 +337,10 @@ test('without --oidc, a package published by trusted publishing does not warn', 
 // Timing: the --retry-404 window is shared, so a failing run takes about one
 // window however many packages fail. Before, each package polled for the full
 // window, CONCURRENCY at a time (163 packages: ~105 minutes on a 5-minute window).
+// Measured from the first to the last registry request, which is what the
+// deadline governs: process start-up and `pnpm m ls` discovery can take 10s+ on
+// a loaded machine and are not under test here.
+const registryActivity = times => Math.max(...times) - Math.min(...times);
 const manyPackages = count => Array.from({ length: count }, (_, i) => ({ name: `@mastra/pkg-${i}` }));
 
 test('--oidc fails at once when every package is refused, without waiting out --retry-404', async t => {
@@ -342,9 +348,8 @@ test('--oidc fails at once when every package is refused, without waiting out --
   const cwd = makeWorkspace(t, packages);
   const exchange = Object.fromEntries(packages.map(({ name }) => [name.replace('/', '%2f'), 401]));
   const oidc = await startOidc(t, { exchange });
-  const started = Date.now();
   const result = await run(t, cwd, oidc.url, ['--oidc', '--retry-404', '60000'], oidc.env);
-  const elapsed = Date.now() - started;
+  const elapsed = registryActivity(oidc.requests.map(request => request.at));
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /24 package\(s\) cannot publish through npm trusted publishing/);
   assert.match(result.stderr, /Every package was refused/);
@@ -359,9 +364,8 @@ test('--oidc re-checks only refused packages, against one shared deadline', asyn
   // 8 trusted, 24 refused for good: three batches of 8 under per-package windows.
   const exchange = Object.fromEntries(packages.map(({ name }, i) => [name.replace('/', '%2f'), i < 8 ? 200 : 404]));
   const oidc = await startOidc(t, { exchange });
-  const started = Date.now();
   const result = await run(t, cwd, oidc.url, ['--oidc', '--retry-404', '3000'], oidc.env);
-  const elapsed = Date.now() - started;
+  const elapsed = registryActivity(oidc.requests.map(request => request.at));
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /24 package\(s\) cannot publish through npm trusted publishing/);
   assert.doesNotMatch(result.stderr, /Every package was refused/);
@@ -377,10 +381,10 @@ test('--oidc re-checks only refused packages, against one shared deadline', asyn
 test('--retry-404 shares one deadline across missing packages too', async t => {
   const packages = manyPackages(24);
   const cwd = makeWorkspace(t, packages);
-  const registry = await startRegistry(t, {});
-  const started = Date.now();
+  const requestTimes = [];
+  const registry = await startRegistry(t, {}, requestTimes);
   const result = await run(t, cwd, registry, ['--retry-404', '3000']);
-  const elapsed = Date.now() - started;
+  const elapsed = registryActivity(requestTimes);
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /24 package\(s\) have never been published/);
   // Per-package windows: three batches of 8 (~9s); shared: about one window.

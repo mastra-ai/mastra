@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -16,6 +16,7 @@ import {
   comparisonResponse,
   contenderResults,
   contenderScoreRows,
+  datasetItemsById,
   threeWayComparisonResponse,
   usageBreakdownByExperimentId,
 } from './fixtures/comparison';
@@ -71,6 +72,10 @@ beforeEach(() => {
       HttpResponse.json(scoresResponse(contenderScoreRows)),
     ),
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
+    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items/:itemId`, ({ params }) => {
+      const item = datasetItemsById[String(params.itemId)];
+      return item ? HttpResponse.json(item) : HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
   );
 });
 
@@ -158,6 +163,91 @@ describe('experiments comparison table', () => {
     });
   });
 
+  describe('when an item row is clicked', () => {
+    it('opens the dataset item in a side panel named after it', async () => {
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      expect(await screen.findByRole('dialog', { name: 'Dataset item item-a' })).toBeTruthy();
+    });
+
+    it('shows the dataset item input and ground truth in the side panel', async () => {
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+      const input = await within(panel).findByRole('region', { name: 'Input' });
+      expect(within(input).getByText(/What is the capital of France/)).toBeTruthy();
+      const groundTruth = within(panel).getByRole('region', { name: 'Ground Truth' });
+      expect(within(groundTruth).getByText(/Paris/)).toBeTruthy();
+    });
+
+    it('shows the dataset item metadata in the side panel', async () => {
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+      expect(await within(panel).findByText(/trivia-set/)).toBeTruthy();
+    });
+  });
+
+  describe('when the side panel close button is clicked', () => {
+    it('closes the dataset item side panel', async () => {
+      renderComparison();
+      fireEvent.click(await findItemRow('item-a'));
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+
+      // Waits for the loaded item, whose header replaces the loading one.
+      await within(panel).findByRole('region', { name: 'Input' });
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'Close Panel' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Dataset item item-a' })).toBeNull());
+    });
+  });
+
+  describe('when Enter is pressed on a focused item row', () => {
+    it('opens the dataset item in a side panel', async () => {
+      renderComparison();
+
+      fireEvent.keyDown(await findItemRow('item-b'), { key: 'Enter' });
+
+      expect(await screen.findByRole('dialog', { name: 'Dataset item item-b' })).toBeTruthy();
+    });
+  });
+
+  describe('when a control inside an item row is clicked', () => {
+    it('does not open the dataset item side panel', async () => {
+      renderComparison();
+      const trigger = await waitFor(() =>
+        within(sideOf('item-a', 'Baseline')).getByRole('button', { name: 'Show accuracy reason' }),
+      );
+
+      fireEvent.click(trigger);
+
+      expect(screen.queryByRole('dialog', { name: 'Dataset item item-a' })).toBeNull();
+    });
+  });
+
+  describe('when the clicked item no longer exists in the dataset', () => {
+    it('tells the item could not be loaded in the side panel', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items/item-a`, () =>
+          HttpResponse.json({ error: 'Not found' }, { status: 404 }),
+        ),
+      );
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+      expect(await within(panel).findByText('Dataset item "item-a" not found.')).toBeTruthy();
+    });
+  });
+
   describe('when the item is missing from the contender experiment', () => {
     it('shows an explicit empty state on the contender side only', async () => {
       renderComparison();
@@ -181,15 +271,40 @@ describe('experiments comparison table', () => {
   });
 
   describe('when scores are known', () => {
-    it('shows the delta once, on the contender, without the scorer reason', async () => {
+    it('shows the delta once, on the contender', async () => {
       renderComparison();
 
       await waitFor(() => {
         expect(within(sideOf('item-a', 'Contender 1')).getByRole('link', { name: 'Open accuracy' })).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Baseline')).queryByText('Missing the country')).toBeNull();
       expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40', { exact: false })).toBeNull();
+    });
+  });
+
+  describe('when a scorer explains its score', () => {
+    it('reveals the reason of that side when its info icon is hovered', async () => {
+      renderComparison();
+
+      const trigger = await waitFor(() =>
+        within(sideOf('item-a', 'Baseline')).getByRole('button', { name: 'Show accuracy reason' }),
+      );
+      expect(screen.queryByText('Missing the country')).toBeNull();
+
+      fireEvent.mouseEnter(trigger);
+
+      expect(await screen.findByText('Missing the country')).toBeTruthy();
+    });
+  });
+
+  describe('when a scorer gives no reason', () => {
+    it('shows no info icon for that score', async () => {
+      renderComparison();
+
+      await waitFor(() => {
+        expect(within(sideOf('item-a', 'Baseline')).getByRole('link', { name: 'Open relevancy' })).toBeTruthy();
+      });
+      expect(within(sideOf('item-a', 'Baseline')).queryByRole('button', { name: 'Show relevancy reason' })).toBeNull();
     });
   });
 

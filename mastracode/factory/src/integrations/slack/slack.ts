@@ -473,6 +473,9 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
       id: thread.resourceId,
       ownerId: controller.id,
       resourceId: thread.resourceId,
+      // Bind the Slack-created thread itself. Without it the scoped session
+      // auto-selects (or creates) another thread and is switched onto this one later.
+      threadId: thread.id,
       requestContext,
       ...(session?.factoryProjectId ? { tags: { factoryProjectId: session.factoryProjectId } } : {}),
     });
@@ -493,7 +496,7 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * chat-only `channel:...` id names no project, so there is nothing to read.
  *
  * The model this session starts on is picked here, once, from the project's
- * exclusive model scope: the Factory default or the durable session owner's
+ * effective model scope for a session: the Factory default or the durable session owner's
  * default, else the SDK's built-in model. The choice is persisted on the thread
  * as `currentModelId`, so it outlives the process that made it.
  *
@@ -521,8 +524,19 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!sourceControl) return;
     const sourceSession = await sourceControl.sessions.getBySessionId(thread.resourceId);
     if (!sourceSession?.factoryProjectId) return;
+    const threadId = session.thread.getId();
+    const binding =
+      threadId && deps.workItems
+        ? await deps.workItems.findRunBindingByThread({
+            orgId: sourceSession.orgId,
+            resourceId: thread.resourceId,
+            sessionId: thread.resourceId,
+            threadId,
+            rejectAmbiguous: true,
+          })
+        : null;
     const owner = {
-      factoryProjectId: sourceSession.factoryProjectId,
+      factoryProjectId: binding?.factoryProjectId ?? sourceSession.factoryProjectId,
       orgId: sourceSession.orgId,
       userId: sourceSession.userId,
     };
@@ -533,6 +547,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       factoryProjectId: owner.factoryProjectId,
       orgId: owner.orgId,
       ownerUserId: owner.userId,
+      context: binding ? 'run' : 'session',
     });
 
     // Repo-backed Slack sessions use the source-control row's durable owner,
@@ -558,8 +573,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       getMetadata: async () =>
         activeThreadId
           ? (((await session.thread.getById({ threadId: activeThreadId }))?.metadata as
-              | Record<string, unknown>
-              | undefined) ?? {})
+              Record<string, unknown> | undefined) ?? {})
           : {},
       modeId,
       set: (key: string, value: unknown) =>
@@ -574,16 +588,15 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         if (typeof modelId === 'string') await applySubagentModel(session, agentType, modelId);
       }
     } else {
-      await hydrateFactorySession(session, {
-        orgId: owner.orgId,
-        modelScope: sessionModel.modelScope,
-        ownerUserId: owner.userId,
-        defaultModelId: sessionModel.modelId,
-      });
-
-      // `hydrateFactorySession` has already persisted either the scoped model
-      // or the SDK mode default as this thread's model of record.
-      const selectedModelId = sessionModel.modelId ?? session.mode.resolve().defaultModelId ?? session.model.get();
+      // `hydrateFactorySession` persists the scoped model, a connected provider's
+      // provider default, or the SDK mode default as this thread's model of record.
+      const selectedModelId =
+        (await hydrateFactorySession(session, {
+          orgId: owner.orgId,
+          modelScope: sessionModel.modelScope,
+          ownerUserId: owner.userId,
+          defaultModelId: sessionModel.modelId,
+        })) ?? session.model.get();
 
       // Pin subagent models on the thread like the main model so a restart
       // restores the selected scope's choice rather than re-resolving it.
@@ -658,7 +671,9 @@ async function prepareExistingSessionOwnerContext(
   }
   if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
   if (!options.expectedOrgId) {
-    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+    throw new Error(
+      `Could not authorize the owner of Slack Factory session ${internalThread.resourceId}: the sender's account link has no organization.`,
+    );
   }
 
   const preparation = await prepareSessionRunContext(
@@ -668,8 +683,12 @@ async function prepareExistingSessionOwnerContext(
     { expectedOrgId: options.expectedOrgId },
   );
   if (preparation === 'organization-mismatch') return preparation;
-  if (preparation === 'unavailable') {
-    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+  if (preparation !== 'prepared') {
+    const reason =
+      preparation === 'session-not-found'
+        ? 'no source-control session row exists for it, or its project repository row is missing'
+        : 'its source-control session row has no organization';
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}: ${reason}.`);
   }
   return 'ready';
 }

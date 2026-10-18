@@ -70,6 +70,7 @@ import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
 import { experimentalAgentDurableScenario, experimentalAgentEventedScenario } from './experimental-agent-runtime.js';
 import { experimentalAgentSettingsScenario } from './experimental-agent-settings.js';
+import { factoryClientModeScenario } from './factory-client-mode.js';
 import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
@@ -253,6 +254,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
+  'factory-client-mode': factoryClientModeScenario,
   'abort-followup': abortFollowupScenario,
   'abort-escape-off': abortEscapeOffScenario,
   'abort-escape-durable': abortEscapeDurableScenario,

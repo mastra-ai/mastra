@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -21,10 +22,10 @@ import { Link, useParams } from 'react-router';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import { useChatConnection } from '../../context/useChatConnection';
+import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { formatModelName } from '../../../settings/components/model-display-name';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { SessionThinkingControl } from './SessionThinkingControl';
@@ -49,8 +50,9 @@ export function ModelPicker() {
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const modelsQuery = useAvailableModelsQuery(factoryId);
-  const organizationScoped = useOrganizationScopedFactory(factoryId);
+  const { catalogTarget, modelScope, scopeLoading } = useChatModelScope();
+  const modelsQuery = useAvailableModelsQuery(catalogTarget);
+  const organizationScoped = useOrganizationScopedFactory();
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
 
@@ -71,15 +73,27 @@ export function ModelPicker() {
 
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
-    Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
+    !scopeLoading &&
+    Boolean(selectedModelId) &&
+    modelsQuery.isSuccess &&
+    !modelsQuery.data.some(model => model.id === selectedModelId);
   const switchable = canSwitchModel(kind, Boolean(draftSessionId), sessionEnabled);
   const canReset =
     kind === 'user' &&
+    modelScope !== 'factory' &&
     Boolean(defaultModelId) &&
     selectedModelId !== defaultModelId &&
     modelsQuery.data?.some(model => model.id === defaultModelId);
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
+  if (modelsQuery.isError && noModelsToOffer) {
+    const unavailableLabel = `${label} · model list unavailable`;
+    return (
+      <span className="text-destructive-foreground" aria-label={unavailableLabel} title={modelsQuery.error.message}>
+        {unavailableLabel}
+      </span>
+    );
+  }
   if (!switchable || noModelsToOffer) {
     if (notConfigured && organizationScoped && factoryId) {
       return (
@@ -120,7 +134,7 @@ export function ModelPicker() {
     setPendingModelId(modelId);
     runAction(setModel(modelId), 'Failed to switch model');
   };
-  const modelMenuLocked = busy || modelsQuery.isPending;
+  const modelMenuLocked = busy || modelsQuery.isPending || scopeLoading;
 
   return (
     <ButtonsGroup size="sm" aria-label="Model and thinking">

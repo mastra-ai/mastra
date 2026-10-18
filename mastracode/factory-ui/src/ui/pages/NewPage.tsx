@@ -1,7 +1,6 @@
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Bot, GitBranch } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -12,7 +11,7 @@ import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
 import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
-import { providerDisplayName } from '../domains/settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
@@ -23,7 +22,7 @@ import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
+const draftStartClass = 'flex min-w-0 w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
@@ -97,7 +96,7 @@ function NewPageContent({
 
   return (
     <div className="grid min-h-full place-items-center px-4 py-10 md:px-6">
-      <div className="flex w-full max-w-xl flex-col items-center gap-4">
+      <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-4">
         <DraftStart
           activeFactory={activeFactory}
           configurationError={configurationError}
@@ -144,18 +143,17 @@ function DraftStart({
 
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
-      <div className="flex flex-col items-center gap-3 text-center">
-        <BrandLockup />
-        <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0">
-          What do you want to work on?
-        </Txt>
-        <FactoryContext activeFactory={activeFactory} />
-      </div>
+      <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0 text-center">
+        What do you want to work on?
+      </Txt>
       {configurationError && (
         <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
       )}
 
-      {activeFactory && <ComposerPanel composerVariant="textarea" />}
+      <div className="flex min-w-0 flex-col gap-2">
+        {activeFactory && <ComposerPanel composerVariant="textarea" />}
+        <FactoryContext activeFactory={activeFactory} />
+      </div>
     </section>
   );
 }
@@ -196,17 +194,6 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
   );
 }
 
-function BrandLockup() {
-  return (
-    <div className="text-muted-foreground inline-flex items-center gap-2">
-      <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <Txt as="span" variant="eyebrow">
-        Mastra Code
-      </Txt>
-    </div>
-  );
-}
-
 function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
   const { sessionId } = useParams<{ sessionId: string }>();
   const sessionQuery = useUserSessionQuery(sessionId);
@@ -216,10 +203,10 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
-    <div className="text-muted-foreground flex max-w-full items-center justify-center gap-1.5">
+    <div className="text-muted-foreground flex max-w-full items-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <FolderIcon size={13} className="text-placeholder shrink-0" />
-        <Txt as="span" variant="column" className="shrink-0">
+        <Txt as="span" variant="column" title={activeFactory?.name} className="min-w-0 truncate">
           {activeFactory?.name ?? 'Factory'}
         </Txt>
         {projectPath && (

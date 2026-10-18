@@ -62,6 +62,7 @@ function applyMetricFilters(
 ): void {
   applyCommonFilters(acc, filters);
   applySingleOrArrayFilter(acc, 'traceId', filters?.traceIds);
+  applySingleOrArrayFilter(acc, 'experimentId', filters?.experimentIds);
   applySingleOrArrayFilter(acc, 'name', filters?.name);
   applySingleOrArrayFilter(acc, 'provider', filters?.provider);
   applySingleOrArrayFilter(acc, 'model', filters?.model);

@@ -222,6 +222,36 @@ describe('ExperimentResultPanel review controls', () => {
 
     expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull();
   });
+
+  it('drops the "Experiment result" title from the header', () => {
+    renderPanel(makeResult());
+
+    expect(screen.queryByRole('heading', { name: 'Experiment result' })).toBeNull();
+  });
+
+  it('renders the complete action with a visible label, before the other header actions', () => {
+    renderPanel(makeResult({ status: 'needs-review' }), {
+      onComplete: vi.fn(),
+      experimentLink: '/experiments/exp-1',
+    });
+
+    const button = screen.getByRole('button', { name: 'Mark as reviewed' });
+    expect(button.textContent).toBe('Mark as reviewed');
+    const experimentLink = screen.getByRole('link', { name: /See experiment/ });
+    expect(button.compareDocumentPosition(experimentLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Sits on the left of the header, outside the right-aligned actions group.
+    expect(experimentLink.parentElement?.contains(button)).toBe(false);
+  });
+
+  it('renders the request review action with a visible label', () => {
+    const onFlagForReview = vi.fn();
+    renderPanel(makeResult({ status: null }), { onFlagForReview });
+
+    const button = screen.getByRole('button', { name: 'Request review' });
+    expect(button.textContent).toBe('Request review');
+    fireEvent.click(button);
+    expect(onFlagForReview).toHaveBeenCalled();
+  });
 });
 
 describe('ExperimentResultPanel trace usage', () => {

@@ -2,12 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useParams } from 'react-router';
+import { useChatModelScope } from '../../context/useChatModelScope';
 
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
 import { useChatThinking } from '../../context/useChatThinking';
-import { GLOBAL_THINKING_SOURCE_LABEL, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
+import { FACTORY_THINKING_SOURCE_LABEL, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
 import type { EffectiveThinkingLevel, ThinkingLevelOrigin } from '../../services/thinkingLevels';
 
 interface SessionThinkingControlProps {
@@ -38,14 +38,14 @@ function showFailure(fallback: string) {
 }
 
 function originLabel(origin: ThinkingLevelOrigin) {
-  return origin === 'session' ? 'this session' : GLOBAL_THINKING_SOURCE_LABEL;
+  return origin === 'session' ? 'this session' : FACTORY_THINKING_SOURCE_LABEL;
 }
 
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const thinking = useChatThinking();
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const catalog = useAvailableModelsQuery(factoryId);
-  const reasoningOptions = useModelReasoningOptions(modelId, factoryId);
+  const { catalogTarget } = useChatModelScope();
+  const catalog = useAvailableModelsQuery(catalogTarget);
+  const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
   const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);
   const state = thinkingControlState({ catalog, thinking, switchingModel });
 
