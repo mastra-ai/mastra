@@ -3,10 +3,11 @@
  * executing (issue #25579). Two Mastra instances share one store, the way two
  * replicas share one database.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
+import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { Mastra } from './index';
 
 function buildReplica(storage: InMemoryStore, onExecute: (runId: string) => Promise<void>) {
@@ -31,8 +32,30 @@ function buildReplica(storage: InMemoryStore, onExecute: (runId: string) => Prom
 
 const replicas: Mastra[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown()));
 });
+
+async function persistOrphanedRun(storage: InMemoryStore, mastra: Mastra, leaseMs: number) {
+  const workflow = mastra.getWorkflow('workflow');
+  const run = await workflow.createRun();
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+  await workflowsStore.persistWorkflowSnapshot({
+    workflowName: workflow.id,
+    runId: run.runId,
+    snapshot: { ...snapshot!, status: 'running', activePaths: [0], context: { input: {} } as any },
+  });
+  await workflowsStore.claimRunOwnership({ runId: run.runId, ownerId: 'crashed-replica', leaseMs });
+  return { workflow, run, workflowsStore };
+}
+
+async function advanceUntil(condition: () => boolean | Promise<boolean>, maxMs: number, stepMs = 1_000) {
+  for (let elapsed = 0; elapsed < maxMs && !(await condition()); elapsed += stepMs) {
+    await vi.advanceTimersByTimeAsync(stepMs);
+  }
+}
 
 describe('boot-time workflow recovery and run ownership (#25579)', () => {
   it('does not re-execute a run that another live replica is executing', async () => {
@@ -144,4 +167,77 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       'success',
     );
   }, 15_000);
+  it('keeps renewing the lease of a run that outlives the lease TTL', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    let finish!: () => void;
+    const gate = new Promise<void>(resolve => (finish = resolve));
+    let signalStarted!: () => void;
+    const started = new Promise<void>(resolve => (signalStarted = resolve));
+    const replicaA = buildReplica(storage, async runId => {
+      executions.push(`A:${runId}`);
+      signalStarted();
+      await gate;
+    });
+    const replicaB = buildReplica(storage, async runId => {
+      executions.push(`B:${runId}`);
+    });
+    replicas.push(replicaA, replicaB);
+
+    const run = await replicaA.getWorkflow('workflow').createRun();
+    const resultPromise = run.start({ inputData: {} });
+    await started;
+
+    // A is still executing well past the TTL of the lease it first claimed.
+    await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 3);
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    expect((await workflowsStore.getRunOwnership({ runId: run.runId }))?.live).toBe(true);
+
+    await replicaB.restartAllActiveWorkflowRuns();
+    expect(executions).toEqual([`A:${run.runId}`]);
+    const runOnB = await replicaB.getWorkflow('workflow').createRun({ runId: run.runId });
+    await expect(runOnB.restart()).rejects.toMatchObject({ id: 'WORKFLOW_RESTART_RUN_OWNED' });
+    expect(executions).toEqual([`A:${run.runId}`]);
+
+    finish();
+    expect((await resultPromise).status).toBe('success');
+    expect(executions).toEqual([`A:${run.runId}`]);
+  });
+
+  it('retries a recheck that fails with a transient storage error', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const storage = new InMemoryStore();
+    const executions: string[] = [];
+    const replica = buildReplica(storage, async runId => {
+      executions.push(runId);
+    });
+    replicas.push(replica);
+    const { workflow, run, workflowsStore } = await persistOrphanedRun(storage, replica, 300);
+
+    await replica.restartAllActiveWorkflowRuns();
+    expect(executions).toEqual([]);
+
+    // The first recheck after the lease lapses hits a storage error.
+    const load = workflowsStore.loadWorkflowSnapshot.bind(workflowsStore);
+    let failures = 0;
+    vi.spyOn(workflowsStore, 'loadWorkflowSnapshot').mockImplementation(async args => {
+      if (failures === 0) {
+        failures++;
+        throw new Error('connection reset');
+      }
+      return load(args);
+    });
+
+    await advanceUntil(() => failures > 0, 10_000, 100);
+    expect(failures).toBe(1);
+    expect(executions).toEqual([]);
+
+    // The failed recheck is retried with backoff and recovers the run.
+    const status = async () =>
+      (await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.status;
+    await advanceUntil(async () => (await status()) === 'success', 120_000);
+    expect(executions).toEqual([run.runId]);
+    expect(await status()).toBe('success');
+  });
 });

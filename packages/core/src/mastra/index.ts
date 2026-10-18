@@ -4246,8 +4246,10 @@ export class Mastra<
    * Restarts one active run. A run whose ownership lease is still live belongs to another
    * process (or to this one before a crash), so it is skipped and re-checked once the lease
    * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
+   * A re-check that throws is retried with backoff; `recheck.failures` counts the
+   * consecutive ones.
    */
-  async #restartWorkflowRun(workflowName: string, runId: string, recheck = false): Promise<void> {
+  async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
     try {
       const workflow = this.getWorkflowById(workflowName);
       const run = await workflow.createRun({ runId });
@@ -4261,25 +4263,42 @@ export class Mastra<
           workflow: workflowName,
           runId,
         });
-        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, error.details?.leaseExpiresAt);
+        const leaseExpiresAt = error.details?.leaseExpiresAt;
+        const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, Number.isNaN(retryAt) ? Date.now() : retryAt);
         return;
       }
-      this.#logger.error('Failed to restart workflow run', { workflow: workflowName, runId, error });
+      const context = { workflow: workflowName, runId, error };
+      if (!recheck) {
+        this.#logger.error('Failed to restart workflow run', context);
+        return;
+      }
+      if (recheck.failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+        this.#logger.error(
+          'Failed to re-check workflow run for recovery; leaving it for the next boot or a manual restart()',
+          context,
+        );
+        return;
+      }
+      this.#logger.warn('Failed to re-check workflow run for recovery; retrying', context);
+      this.#scheduleWorkflowRecoveryRecheck(
+        workflowName,
+        runId,
+        Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** recheck.failures,
+        recheck.failures + 1,
+      );
     }
   }
 
-  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, leaseExpiresAt: unknown): void {
+  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number, failures = 0): void {
     if (this.#shuttingDown) return;
-    const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
     const key = JSON.stringify(['workflow', workflowName, runId]);
     clearTimeout(this.#durableRecoveryRechecks.get(key));
-    const delay =
-      (Number.isNaN(retryAt) ? 0 : Math.max(0, retryAt - Date.now())) +
-      Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
     const timer = setTimeout(() => {
       this.#durableRecoveryRechecks.delete(key);
       if (this.#shuttingDown) return;
-      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, true));
+      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, { failures }));
     }, delay);
     timer.unref?.();
     this.#durableRecoveryRechecks.set(key, timer);
