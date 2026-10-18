@@ -2202,6 +2202,26 @@ describe('createMastraCode', () => {
     expect(decision.streamOptions.requestContext.get('controller')).toBeDefined();
   });
 
+  it("carries the sender's request context entries into a woken run", async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({});
+    const wakeOptions = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.wakeOptions)?.wakeOptions;
+    const sender = new RequestContext();
+    sender.set('caller', 'github');
+
+    const options = await wakeOptions({
+      resourceId: 'project-resource',
+      threadId: 'notification-thread',
+      requestContext: sender,
+    });
+
+    expect(options.requestContext.get('caller')).toBe('github');
+    expect(options.requestContext.get('controller')).toBeDefined();
+    expect(options.requestContext).not.toBe(sender);
+  });
+
   it('does not prepare a wake request context when no session owns the resource', async () => {
     const prepareWakeRequestContext = vi.fn();
     const { createMastraCode } = await import('../index.js');
