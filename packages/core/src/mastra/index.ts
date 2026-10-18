@@ -4278,7 +4278,8 @@ export class Mastra<
       Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
     const timer = setTimeout(() => {
       this.#durableRecoveryRechecks.delete(key);
-      void this.#restartWorkflowRun(workflowName, runId, true);
+      if (this.#shuttingDown) return;
+      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, true));
     }, delay);
     timer.unref?.();
     this.#durableRecoveryRechecks.set(key, timer);

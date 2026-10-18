@@ -107,4 +107,41 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       )
       .toBe('success');
   }, 15_000);
+
+  it('drains a recheck-driven restart on shutdown', async () => {
+    const storage = new InMemoryStore();
+    let finish!: () => void;
+    const gate = new Promise<void>(resolve => (finish = resolve));
+    let signalStarted!: () => void;
+    const started = new Promise<void>(resolve => (signalStarted = resolve));
+    const replica = buildReplica(storage, async () => {
+      signalStarted();
+      await gate;
+    });
+
+    const workflow = replica.getWorkflow('workflow');
+    const run = await workflow.createRun();
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: workflow.id,
+      runId: run.runId,
+      snapshot: { ...snapshot!, status: 'running', activePaths: [0], context: { input: {} } as any },
+    });
+    await workflowsStore.claimRunOwnership({ runId: run.runId, ownerId: 'crashed-replica', leaseMs: 100 });
+
+    await replica.restartAllActiveWorkflowRuns();
+    await started;
+
+    let shutDown = false;
+    const shutdown = replica.shutdown().then(() => (shutDown = true));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(shutDown).toBe(false);
+
+    finish();
+    await shutdown;
+    expect((await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.status).toBe(
+      'success',
+    );
+  }, 15_000);
 });
