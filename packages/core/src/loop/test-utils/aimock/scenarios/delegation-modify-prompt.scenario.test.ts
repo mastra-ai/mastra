@@ -128,13 +128,18 @@ describeForAllEngines('AIMock loop scenario: delegation onDelegationStart modifi
         },
       },
       fixtures: llm => {
+        // Subagent turn: routed by its resolved system prompt, registered first so
+        // the supervisor's no-tool-result fixture cannot capture it.
+        llm.on(
+          { endpoint: 'chat', systemMessage: 'You are a writer specialising' },
+          { content: 'Sip the extraordinary.' },
+        );
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
             toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a tagline.' } }],
           },
         );
-        llm.onMessage(/Draft a tagline\./, { content: 'Sip the extraordinary.' });
         llm.on(
           { endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true },
           { content: 'The writer suggested: Sip the extraordinary.' },
@@ -144,6 +149,13 @@ describeForAllEngines('AIMock loop scenario: delegation onDelegationStart modifi
 
     const text = await output.text;
     expect(text).toContain('Sip the extraordinary.');
+
+    // Exactly supervisor → subagent → supervisor wrap-up; a misrouted fixture
+    // would add a failed tool call and an extra request.
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests.map(r => r.body?.messages))).not.toContain('not found');
+    // The supervisor's wrap-up turn received the subagent's own answer as the tool result.
+    expect(JSON.stringify(requests[2]?.body?.messages)).toContain('Sip the extraordinary.');
 
     // The subagent's system prompt was resolved with the requestContext value
     // the hook set, so the mutation reached the delegated run.
