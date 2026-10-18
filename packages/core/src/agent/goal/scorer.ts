@@ -7,6 +7,7 @@ import type { MastraModelConfig } from '../../llm';
 import type { StreamCompletionContext } from '../../loop/network/validation';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
+import { isTrailingAssistantGuardContinuation } from '../../processors/trailing-assistant-guard';
 import type { RequestContext } from '../../request-context';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
@@ -89,7 +90,7 @@ function isSyntheticReminderContent(content: string): boolean {
 }
 
 function isLatestUserCandidateForGoal(message: MastraDBMessage): boolean {
-  if (!isUserMessageForGoal(message)) return false;
+  if (!isUserMessageForGoal(message) || isTrailingAssistantGuardContinuation(message)) return false;
   const textContent = extractTextContent(message.content);
   return textContent.trim() !== '' && !isSyntheticReminderContent(textContent);
 }
