@@ -140,6 +140,28 @@ describe('AgentOverviewPanel', () => {
     expect(await screen.findByText('Agent not found')).not.toBeNull();
   });
 
+  describe('model list editability', () => {
+    const READ_ONLY_NOTE = "This model list is set in code and can't be edited here.";
+
+    it('shows a function-valued model list without edit controls', async () => {
+      installHandlers({ agent: { ...dynamicFallbackAgent, modelListEditable: false } });
+      renderPanel();
+
+      expect(await screen.findByText(READ_ONLY_NOTE)).not.toBeNull();
+      expect(screen.getByText('openai/gpt-5.4-mini')).not.toBeNull();
+      expect(screen.getByText('openai/gpt-5.5')).not.toBeNull();
+      expect(screen.queryAllByRole('switch')).toHaveLength(0);
+    });
+
+    it('keeps the edit controls for a static model list', async () => {
+      installHandlers({ agent: { ...dynamicFallbackAgent, modelListEditable: true } });
+      renderPanel();
+
+      expect(await screen.findAllByRole('switch')).toHaveLength(2);
+      expect(screen.queryByText(READ_ONLY_NOTE)).toBeNull();
+    });
+  });
+
   describe('when a model-list update is rejected', () => {
     it('restores the previous enabled state', async () => {
       installHandlers({ agent: dynamicFallbackAgent });

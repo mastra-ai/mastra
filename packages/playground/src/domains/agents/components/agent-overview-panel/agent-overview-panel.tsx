@@ -134,6 +134,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
           <AgentMetadataModelList
             modelList={agent.modelList}
+            editable={agent.modelListEditable !== false}
             updateModelInModelList={handleUpdateModelInModelList}
             reorderModelList={handleReorderModelList}
           />

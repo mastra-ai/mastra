@@ -3,6 +3,7 @@ import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { GripVertical } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -14,12 +15,15 @@ export interface AgentMetadataModelListProps {
   modelList: AgentMetadataModelListType;
   updateModelInModelList: AgentMetadataModelListItemProps['updateModelInModelList'];
   reorderModelList: (params: ReorderModelListParams) => Promise<{ message: string }>;
+  /** False when the list comes from a function in code; renders it without edit controls */
+  editable?: boolean;
 }
 
 export const AgentMetadataModelList = ({
   modelList,
   updateModelInModelList,
   reorderModelList,
+  editable = true,
 }: AgentMetadataModelListProps) => {
   const [modelConfigs, setModelConfigs] = useState(() => modelList);
   const hasMultipleModels = modelConfigs.length > 1;
@@ -72,6 +76,10 @@ export const AgentMetadataModelList = ({
     }
   };
 
+  if (!editable) {
+    return <AgentMetadataReadOnlyModelList modelList={modelList} />;
+  }
+
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <Droppable droppableId="model-list">
@@ -99,6 +107,24 @@ export const AgentMetadataModelList = ({
     </DragDropContext>
   );
 };
+
+const AgentMetadataReadOnlyModelList = ({ modelList }: { modelList: AgentMetadataModelListType }) => (
+  <div className="flex flex-col gap-2">
+    <Txt variant="caption" tone="muted">
+      This model list is set in code and can't be edited here.
+    </Txt>
+    {modelList.map(modelConfig => (
+      <div key={modelConfig.id} className="flex items-center gap-2 rounded-lg bg-sidebar p-2">
+        <Txt as="span" variant="caption" tone="ink" className="min-w-0 flex-1 truncate">
+          {modelConfig.model.provider}/{modelConfig.model.modelId}
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+          {modelConfig.enabled === false ? 'Disabled' : 'Enabled'}
+        </Txt>
+      </div>
+    ))}
+  </div>
+);
 
 interface AgentMetadataModelListItemProps {
   modelConfig: AgentMetadataModelListType[number];

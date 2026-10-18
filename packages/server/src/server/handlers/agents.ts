@@ -442,6 +442,8 @@ export interface SerializedAgent {
   modelId?: string;
   modelVersion?: string;
   supportsMemory?: boolean;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean;
   modelList?: Array<
     Omit<AgentModelManagerConfig, 'model'> & {
       model: {
@@ -916,6 +918,7 @@ async function formatAgentList({
     supportsMemory,
     defaultOptions,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
@@ -1235,6 +1238,7 @@ async function formatAgent({
     modelVersion: model?.specificationVersion,
     supportsMemory,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,

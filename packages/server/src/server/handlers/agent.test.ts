@@ -1011,6 +1011,35 @@ describe('Agent Handlers', () => {
       expect(mastra.getAgentById('fn-model-agent').model).toBe(modelFn);
     });
 
+    it('should report whether the model list can be edited', async () => {
+      const mastra = makeMastraMock({
+        agents: {
+          'fn-model-agent': makeMockAgent({
+            name: 'fn-model-agent',
+            model: () => [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }],
+          }),
+          'static-model-agent': makeMockAgent({
+            name: 'static-model-agent',
+            model: [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }],
+          }),
+        },
+      });
+
+      const dynamic = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'fn-model-agent',
+      });
+      const fixed = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'static-model-agent',
+      });
+
+      expect(dynamic.modelList?.map(m => m.model.modelId)).toEqual(['gpt-4o-mini', 'gpt-4o']);
+      expect(dynamic.modelListEditable).toBe(false);
+      expect(fixed.modelList?.map(m => m.model.modelId)).toEqual(['gpt-4o-mini', 'gpt-4o']);
+      expect(fixed.modelListEditable).toBe(true);
+    });
+
     it('should return 404 for an unknown model config id', async () => {
       await expect(
         UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
