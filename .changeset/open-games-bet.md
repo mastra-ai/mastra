@@ -1,0 +1,5 @@
+---
+'@mastra/core': patch
+---
+
+Fixed `get_process_output` with `wait: true` hanging after a background command had exited. When the command left a child running that still held its output open (`cmd &`, or a child of `timeout`), the wait never returned. It now returns once the command exits and its output has had a moment to drain. A blocking wait also stops after 10 minutes and reports the process as still running, instead of holding the run indefinitely. `ProcessHandle.wait()` accepts `maxWaitMs` and rejects with `ProcessWaitTimeoutError` when it runs out, leaving the process running.

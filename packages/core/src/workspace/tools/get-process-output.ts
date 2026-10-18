@@ -2,9 +2,15 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
+import { ProcessWaitTimeoutError } from '../sandbox/process-manager';
 import { coerceNumericString, emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
+
+/** Longest a `wait: true` call blocks before it returns the output so far. */
+const MAX_WAIT_MS = 10 * 60_000;
+
+const STILL_RUNNING_NOTE = `Still running after waiting ${MAX_WAIT_MS / 60_000} minutes. Call get_process_output again to keep waiting, or kill_process to stop it.`;
 
 const ABORTED_PROCESS_NOTE =
   'Process aborted: the run that started or was waiting on this process was cancelled (by the user or system), so it was killed before it finished.';
@@ -28,7 +34,7 @@ Use this after starting a background command with execute_command (background: t
       .boolean()
       .optional()
       .describe(
-        'If true, block until the process exits and return the final output. Useful for short-lived background commands where you want to wait for the result.',
+        `If true, block until the process exits (at most ${MAX_WAIT_MS / 60_000} minutes) and return the final output. Useful for short-lived background commands where you want to wait for the result.`,
       ),
   }),
   execute: async ({ pid, tail, wait: shouldWait }, context) => {
@@ -67,38 +73,48 @@ Use this after starting a background command with execute_command (background: t
       // stop) interrupts a blocking wait instead of outliving the turn: the
       // handle kills the process on abort, mirroring the spawn-time
       // `abortSignal` convention.
+      let waitedOut = false;
       if (shouldWait && handle.exitCode === undefined) {
-        const result = await handle.wait({
-          abortSignal: context?.abortSignal,
-          onStdout: context?.writer
-            ? async (data: string) => {
-                await context.writer!.custom({
-                  type: 'data-sandbox-stdout',
-                  data: { output: data, timestamp: Date.now(), toolCallId },
-                  transient: true,
-                });
-              }
-            : undefined,
-          onStderr: context?.writer
-            ? async (data: string) => {
-                await context.writer!.custom({
-                  type: 'data-sandbox-stderr',
-                  data: { output: data, timestamp: Date.now(), toolCallId },
-                  transient: true,
-                });
-              }
-            : undefined,
-        });
+        const result = await handle
+          .wait({
+            abortSignal: context?.abortSignal,
+            maxWaitMs: MAX_WAIT_MS,
+            onStdout: context?.writer
+              ? async (data: string) => {
+                  await context.writer!.custom({
+                    type: 'data-sandbox-stdout',
+                    data: { output: data, timestamp: Date.now(), toolCallId },
+                    transient: true,
+                  });
+                }
+              : undefined,
+            onStderr: context?.writer
+              ? async (data: string) => {
+                  await context.writer!.custom({
+                    type: 'data-sandbox-stderr',
+                    data: { output: data, timestamp: Date.now(), toolCallId },
+                    transient: true,
+                  });
+                }
+              : undefined,
+          })
+          .catch(error => {
+            if (!(error instanceof ProcessWaitTimeoutError)) throw error;
+            waitedOut = true;
+            return undefined;
+          });
 
-        await context?.writer?.custom({
-          type: 'data-sandbox-exit',
-          data: {
-            exitCode: result.exitCode,
-            success: result.success,
-            executionTimeMs: result.executionTimeMs,
-            toolCallId,
-          },
-        });
+        if (result) {
+          await context?.writer?.custom({
+            type: 'data-sandbox-exit',
+            data: {
+              exitCode: result.exitCode,
+              success: result.success,
+              executionTimeMs: result.executionTimeMs,
+              toolCallId,
+            },
+          });
+        }
       }
 
       const running = handle.exitCode === undefined;
@@ -117,7 +133,7 @@ Use this after starting a background command with execute_command (background: t
 
       if (running && !stdout && !stderr) {
         span.end({ success: true }, { exitCode: handle.exitCode });
-        return '(no output yet)';
+        return waitedOut ? `(no output yet)\n\n${STILL_RUNNING_NOTE}` : '(no output yet)';
       }
 
       const parts: string[] = [];
@@ -138,6 +154,8 @@ Use this after starting a background command with execute_command (background: t
           `Exit code: ${handle.exitCode}`,
         ];
         parts.push(...(parts.length > 0 ? [''] : []), ...terminalLines);
+      } else if (waitedOut) {
+        parts.push('', STILL_RUNNING_NOTE);
       }
 
       span.end({ success: true }, { exitCode: handle.exitCode });

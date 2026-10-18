@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
+import { ProcessWaitTimeoutError } from './process-manager';
 
 const node = JSON.stringify(process.execPath);
 const script = (source: string) => `${node} -e ${JSON.stringify(source)}`;
@@ -125,5 +126,75 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager timeout termi
 
     expect(result).toMatchObject({ exitCode: 0, success: true });
     expect(result.timedOut).toBe(false);
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after the process exits', () => {
+  let workingDirectory: string;
+  let sandbox: LocalSandbox;
+  const strayPids: number[] = [];
+
+  beforeEach(async () => {
+    workingDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-exit-wait-'));
+    sandbox = new LocalSandbox({ workingDirectory });
+  });
+
+  afterEach(async () => {
+    for (const pid of strayPids.splice(0)) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {}
+    }
+    await sandbox.destroy();
+    await fs.rm(workingDirectory, { recursive: true, force: true });
+  });
+
+  it('settles when the shell exits while a background child keeps stdout open', async () => {
+    const child = script(
+      `console.log('CHILD ' + process.pid); setTimeout(() => console.log('LATE'), 300); ${STAY_ALIVE}`,
+    );
+    const handle = await sandbox.processes.spawn(`${child} & echo started`);
+
+    const result = await handle.wait();
+
+    const childPid = Number(/CHILD (\d+)/.exec(result.stdout)?.[1]);
+    expect(childPid).toBeGreaterThan(0);
+    strayPids.push(childPid);
+    expect(result).toMatchObject({ exitCode: 0, success: true });
+    expect(result.executionTimeMs).toBeLessThan(5_000);
+    expect(handle.exitCode).toBe(0);
+    // Output the child wrote while the exit drained is kept.
+    expect(result.stdout).toContain('started');
+    expect(result.stdout).toContain('LATE');
+    expect(isAlive(childPid)).toBe(true);
+  });
+
+  it('settles when the shell is killed while a `timeout` child in its own process group holds stdout', async () => {
+    // `timeout` puts the command it runs in a new process group, so it survives
+    // the shell and keeps the pipe open.
+    const child = script(`console.log('CHILD ' + process.pid); ${STAY_ALIVE}`);
+    const handle = await sandbox.processes.spawn(`for i in 1 2 3; do timeout 60 ${child}; done`);
+    await vi.waitFor(() => expect(handle.stdout).toMatch(/CHILD \d+/));
+    strayPids.push(Number(/CHILD (\d+)/.exec(handle.stdout)?.[1]));
+
+    process.kill(Number(handle.pid), 'SIGKILL');
+    const result = await handle.wait();
+
+    expect(result).toMatchObject({ exitCode: 128, killed: true });
+    expect(handle.exitCode).toBe(128);
+  });
+
+  it('keeps waiting on a process that is still running, up to maxWaitMs', async () => {
+    const handle = await sandbox.processes.spawn(script(`console.log('READY'); ${STAY_ALIVE}`));
+    strayPids.push(Number(handle.pid));
+
+    const started = Date.now();
+    await expect(handle.wait({ maxWaitMs: 3_000 })).rejects.toBeInstanceOf(ProcessWaitTimeoutError);
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2_900);
+    expect(handle.exitCode).toBeUndefined();
+    expect(isAlive(Number(handle.pid))).toBe(true);
+    expect(await handle.kill()).toBe(true);
+    await expect(handle.wait()).resolves.toMatchObject({ killed: true });
   });
 });

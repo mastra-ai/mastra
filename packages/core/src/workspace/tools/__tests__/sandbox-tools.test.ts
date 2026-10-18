@@ -7,6 +7,7 @@ import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS } from '../../constants';
 import type { CommandResult } from '../../sandbox';
 import { LocalSandbox } from '../../sandbox/local-sandbox';
+import { ProcessWaitTimeoutError } from '../../sandbox/process-manager';
 import { Workspace } from '../../workspace';
 import {
   executeCommandInputSchema,
@@ -498,6 +499,42 @@ describe('get_process_output tool', () => {
     const result = await getProcessOutputTool.execute({ pid: '11' }, ctx);
     expect(result).toBe('(no output yet)');
   });
+
+  it('stops waiting after the bound and says the process is still running', async () => {
+    const handle = createMockHandle({ pid: '14', stdout: 'compiling\n', exitCode: undefined });
+    handle.wait.mockRejectedValue(new ProcessWaitTimeoutError(600_000));
+    const sandbox = createMockSandbox({ processes: { get: vi.fn().mockResolvedValue(handle) } });
+    const result = await getProcessOutputTool.execute({ pid: '14', wait: true }, createContext(sandbox));
+
+    expect(handle.wait).toHaveBeenCalledWith(expect.objectContaining({ maxWaitMs: 600_000 }));
+    expect(result).toBe(
+      'compiling\n\n\nStill running after waiting 10 minutes. Call get_process_output again to keep waiting, or kill_process to stop it.',
+    );
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'returns once a background command exits, even while a child it left behind holds its output open',
+    async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bg-exit-'));
+      const workspace = new Workspace({ sandbox: new LocalSandbox({ workingDirectory: dir }) });
+      await workspace.init();
+      try {
+        const started = await executeCommandWithBackgroundTool.execute!(
+          { command: 'sleep 30 & echo started', background: true },
+          { workspace } as any,
+        );
+        const pid = String(started).match(/PID: (.+)\)/)![1]!;
+
+        const result = await getProcessOutputTool.execute!({ pid, wait: true }, { workspace } as any);
+
+        expect(result).toBe('started\n\n\nExit code: 0');
+      } finally {
+        await workspace.destroy();
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    },
+    15_000,
+  );
 
   it('returns not found for unknown PID', async () => {
     const sandbox = createMockSandbox({

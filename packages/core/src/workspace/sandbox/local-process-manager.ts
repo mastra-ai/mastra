@@ -21,6 +21,9 @@ const isWindows = process.platform === 'win32';
 /** How long a timed-out process tree gets to exit after SIGTERM before it is sent SIGKILL. */
 const TIMEOUT_KILL_GRACE_MS = 2_000;
 
+/** How long output may keep draining after the process exits before wait() settles without it. */
+const EXIT_OUTPUT_GRACE_MS = 2_000;
+
 // =============================================================================
 // Local Process Handle
 // =============================================================================
@@ -54,6 +57,7 @@ class LocalProcessHandle extends ProcessHandle {
     let timedOut = false;
     let killTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let releaseTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let exitGraceId: ReturnType<typeof setTimeout> | undefined;
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
@@ -78,6 +82,7 @@ class LocalProcessHandle extends ProcessHandle {
       clearTimeout(timeoutId);
       clearTimeout(killTimeoutId);
       clearTimeout(releaseTimeoutId);
+      clearTimeout(exitGraceId);
     };
 
     const stdoutDecoder = new TextDecoder(outputEncoding);
@@ -100,7 +105,10 @@ class LocalProcessHandle extends ProcessHandle {
     };
 
     this.waitPromise = new Promise<CommandResult>(resolve => {
-      subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      let settled = false;
+      const settle = (code: number | null, signal: NodeJS.Signals | null) => {
+        if (settled) return;
+        settled = true;
         clearTimers();
         flushStdoutDecoder();
         flushStderrDecoder();
@@ -120,9 +128,22 @@ class LocalProcessHandle extends ProcessHandle {
           killed: signal !== null,
           timedOut,
         });
+      };
+      subprocess.on('close', settle);
+      // 'close' waits for stdout and stderr to close too, and a descendant the
+      // process left behind (`cmd &`, or one in its own process group such as
+      // `timeout`'s) can hold them open long after the process exited. Settle
+      // on the exit once its output has had time to drain; output the
+      // descendant writes later is still collected. A timed-out process is
+      // left to the timeout's own kill escalation and pipe release.
+      subprocess.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+        exitGraceId = setTimeout(() => {
+          if (!timedOut) settle(code, signal);
+        }, EXIT_OUTPUT_GRACE_MS);
       });
 
       subprocess.on('error', (err: Error) => {
+        settled = true;
         clearTimers();
         flushStdoutDecoder();
         flushStderrDecoder();

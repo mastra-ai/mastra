@@ -196,6 +196,18 @@ export class UnsupportedStdinCloseError extends Error {
 }
 
 /**
+ * `wait({ maxWaitMs })` stopped waiting before the process exited. The process
+ * keeps running and can be waited on again.
+ */
+export class ProcessWaitTimeoutError extends Error {
+  readonly name = 'ProcessWaitTimeoutError';
+
+  constructor(readonly maxWaitMs: number) {
+    super(`Process still running after waiting ${maxWaitMs}ms`);
+  }
+}
+
+/**
  * Handle to a spawned process.
  *
  * Subclasses implement the platform-specific primitives (kill, sendStdin,
@@ -274,6 +286,9 @@ export abstract class ProcessHandle {
    * `abortSignal` convention in {@link CommandOptions}), which lets the wait
    * settle with the killed process's result instead of blocking forever.
    *
+   * Optionally pass `maxWaitMs` to stop waiting after that long: `wait()` then
+   * rejects with {@link ProcessWaitTimeoutError} and the process keeps running.
+   *
    * Subclasses implement `wait()` with platform-specific logic; the base
    * constructor wraps it to handle the optional streaming callbacks.
    */
@@ -281,6 +296,7 @@ export abstract class ProcessHandle {
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
     abortSignal?: AbortSignal;
+    maxWaitMs?: number;
   }): Promise<CommandResult> {
     throw new Error(`${this.constructor.name} must implement wait()`);
   }
@@ -319,6 +335,7 @@ export abstract class ProcessHandle {
       onStdout?: (data: string) => void;
       onStderr?: (data: string) => void;
       abortSignal?: AbortSignal;
+      maxWaitMs?: number;
     }) => {
       if (waitOptions?.onStdout) this._stdoutListeners.add(waitOptions.onStdout);
       if (waitOptions?.onStderr) this._stderrListeners.add(waitOptions.onStderr);
@@ -331,10 +348,20 @@ export abstract class ProcessHandle {
       };
       if (abortSignal?.aborted) onAbort();
       else abortSignal?.addEventListener('abort', onAbort, { once: true });
+      const maxWaitMs = waitOptions?.maxWaitMs;
+      let waitTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         let result: CommandResult;
         try {
-          result = await implWait();
+          result =
+            maxWaitMs === undefined
+              ? await implWait()
+              : await Promise.race([
+                  implWait(),
+                  new Promise<never>((_, reject) => {
+                    waitTimer = setTimeout(() => reject(new ProcessWaitTimeoutError(maxWaitMs)), maxWaitMs);
+                  }),
+                ]);
         } catch (error) {
           // Killing for the output limit can make the provider's wait reject; report why.
           throw this._outputLimitError ?? error;
@@ -348,6 +375,7 @@ export abstract class ProcessHandle {
           stderrDroppedBytes: this.stderrDroppedBytes,
         };
       } finally {
+        clearTimeout(waitTimer);
         abortSignal?.removeEventListener('abort', onAbort);
         if (waitOptions?.onStdout) this._stdoutListeners.delete(waitOptions.onStdout);
         if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
