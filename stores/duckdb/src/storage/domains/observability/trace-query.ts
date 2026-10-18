@@ -88,6 +88,27 @@ const SPAN_FIELDS = {
   organizationId: { sql: 's.organizationId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
+// Direct querySpans policy is separate from trace-related span predicates.
+const SPAN_QUERY_FIELDS = {
+  ...SPAN_FIELDS,
+  traceId: { sql: 's.traceId', parameterType: 'scalar' },
+  spanId: { sql: 's.spanId', parameterType: 'scalar' },
+  parentSpanId: { sql: 's.parentSpanId', parameterType: 'scalar' },
+  threadId: { sql: 's.threadId', parameterType: 'scalar' },
+  resourceId: { sql: 's.resourceId', parameterType: 'scalar' },
+  requestId: { sql: 's.requestId', parameterType: 'scalar' },
+  serviceName: { sql: 's.serviceName', parameterType: 'scalar' },
+  experimentId: { sql: 's.experimentId', parameterType: 'scalar' },
+  environment: { sql: 's.environment', parameterType: 'scalar' },
+  executionSource: { sql: 's.executionSource', parameterType: 'scalar' },
+  parentEntityType: { sql: 's.parentEntityType', parameterType: 'scalar' },
+  parentEntityId: { sql: 's.parentEntityId', parameterType: 'scalar' },
+  parentEntityName: { sql: 's.parentEntityName', parameterType: 'scalar' },
+  rootEntityType: { sql: 's.rootEntityType', parameterType: 'scalar' },
+  rootEntityId: { sql: 's.rootEntityId', parameterType: 'scalar' },
+  rootEntityName: { sql: 's.rootEntityName', parameterType: 'scalar' },
+} as const;
+
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'scalar' },
   scorerVersion: { sql: 's.scorerVersion', parameterType: 'scalar' },
@@ -1042,7 +1063,7 @@ export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQuer
   });
 }
 
-/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+/** Compile a direct span-query filter using its dedicated field mapping. */
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
-  return compileScalarPredicate(predicate, SPAN_FIELDS);
+  return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS);
 }

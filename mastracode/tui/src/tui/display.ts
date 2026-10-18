@@ -130,8 +130,14 @@ export function showFormattedError(
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
 
   const isObservationalMemoryError = /observational memory|\bOM (?:observation|reflection)/i.test(error.message);
-  const omRole = /reflect/i.test(error.message) ? state.session.om.reflector : state.session.om.observer;
-  const hint = withOMGuidance(getErrorHint(parsed.type), isObservationalMemoryError ? omRole.modelId() : undefined);
+  const om = state.local?.session.om;
+  const omRole = /reflect/i.test(error.message) ? om?.reflector : om?.observer;
+  const hint = withOMGuidance(
+    state.factory && parsed.type === 'auth'
+      ? `Add the provider credential in Factory (${state.factory.url})`
+      : getErrorHint(parsed.type),
+    isObservationalMemoryError ? omRole?.modelId() : undefined,
+  );
   if (hint) {
     lines.push(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
   }

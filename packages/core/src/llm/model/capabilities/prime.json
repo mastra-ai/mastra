@@ -11,6 +11,7 @@
     "anthropic/claude-sonnet-5",
     "anthropic/claude-sonnet-5.5",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemini-3-flash-preview",
     "google/gemini-3.1-pro-preview",
     "google/gemini-3.5-flash",
@@ -19,6 +20,7 @@
     "google/gemini-3.8-flash",
     "google/gemini-4-argon",
     "google/gemma-3-27b-it",
+    "meta/muse-spark-open",
     "mistralai/mistral-large-2512",
     "mistralai/mistral-small-2603",
     "moonshotai/kimi-k3",
@@ -61,6 +63,7 @@
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemini-3-flash-preview",
     "google/gemini-3.1-pro-preview",
     "google/gemini-3.5-flash",
@@ -70,6 +73,7 @@
     "google/gemini-4-argon",
     "google/gemma-3-27b-it",
     "meta-llama/llama-3.3-70b-instruct",
+    "meta/muse-spark-open",
     "mistralai/mistral-large-2512",
     "mistralai/mistral-nemo",
     "mistralai/mistral-small-2603",
@@ -107,6 +111,7 @@
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemini-3-flash-preview",
     "google/gemini-3.1-pro-preview",
     "google/gemini-3.5-flash",
@@ -116,6 +121,7 @@
     "google/gemini-4-argon",
     "google/gemma-3-27b-it",
     "meta-llama/llama-3.3-70b-instruct",
+    "meta/muse-spark-open",
     "mistralai/mistral-large-2512",
     "mistralai/mistral-nemo",
     "mistralai/mistral-small-2603",
@@ -155,8 +161,7 @@
     "qwen/qwen3-vl-30b-a3b-instruct",
     "x-ai/grok-4.6",
     "x-ai/grok-4.7",
-    "z-ai/glm-5.2",
-    "z-ai/glm-5.3-flash"
+    "z-ai/glm-5.2"
   ],
   "reasoning": {
     "anthropic/claude-opus-4.6": [
@@ -237,6 +242,12 @@
         "values": ["none", "high", "xhigh"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
@@ -259,6 +270,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "x-ai/grok-4.7": [

@@ -7,7 +7,7 @@ description: "Browse Prime Inference model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/prime.svg" alt="Prime Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Prime Inference
 
-Access 65 Prime Inference models through Mastra's model router. Authentication is handled automatically using the `PRIME_API_KEY` environment variable.
+Access 67 Prime Inference models through Mastra's model router. Authentication is handled automatically using the `PRIME_API_KEY` environment variable.
 
 Learn more in the [Prime Inference documentation](https://docs.primeintellect.ai).
 
@@ -214,6 +214,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "prime/deepseek/deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "prime/google/gemini-3-flash-preview",
     "imageInput": true,
     "audioInput": true,
@@ -317,9 +329,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 16384,
     "inputCost": 1.04,
     "outputCost": 2.253
+  },
+  {
+    "model": "prime/meta/muse-spark-open",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 1.25,
+    "outputCost": 4.25
   },
   {
     "model": "prime/mistralai/mistral-large-2512",
@@ -821,7 +845,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
+    "maxOutput": 131072,
     "inputCost": 0.15,
     "outputCost": 0.5
   }

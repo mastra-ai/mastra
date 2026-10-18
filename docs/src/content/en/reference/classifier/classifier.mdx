@@ -366,9 +366,9 @@ Only retryable AI SDK `APICallError` failures are retried. Other errors reject i
 
 ## Observability
 
-When an active Mastra span exists, `decide()` creates a `CLASSIFIER_EVALUATION` child span. It records the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage.
+When an active Mastra span exists, `decide()` creates a `CLASSIFIER_EVALUATION` child span. The span input holds the evaluated `state` and the questions. The span output holds the answers, including probabilities. Span attributes record the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage. The token usage also produces [token and cost metrics](/reference/observability/metrics/automatic-metrics#token-usage-metrics).
 
-The span doesn't include the evaluated state, question instructions, criteria, answers, probabilities, provider response body, or generated text.
+To keep the state and answers out of exported traces, set `hideInput` and `hideOutput` in the `tracingOptions` of the agent or workflow run that calls the classifier. See [hiding sensitive input/output](/docs/observability/tracing/overview#hiding-sensitive-inputoutput).
 
 ## Customize provider responses
 

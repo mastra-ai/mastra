@@ -92,6 +92,41 @@ function runActivityHeartbeat(): void {
   }
 }
 
+const inFlightResumes = new Map<string, Map<string, symbol>>();
+
+/**
+ * Marks a resume of `toolCallId` on `runId` as in flight in this process,
+ * synchronously, so a concurrent resume of the same tool call can fail fast
+ * instead of queueing on the execution claim (#27365).
+ *
+ * @returns A release function, or `undefined` when that tool call already has
+ * a resume in flight. Release is idempotent and only clears its own marker.
+ */
+export function markResumeInFlight(runId: string, toolCallId: string): (() => void) | undefined {
+  let byToolCall = inFlightResumes.get(runId);
+  if (byToolCall?.has(toolCallId)) return undefined;
+  if (!byToolCall) inFlightResumes.set(runId, (byToolCall = new Map()));
+  const token = Symbol(toolCallId);
+  byToolCall.set(toolCallId, token);
+  return () => {
+    const current = inFlightResumes.get(runId);
+    if (current?.get(toolCallId) !== token) return;
+    current.delete(toolCallId);
+    if (current.size === 0) inFlightResumes.delete(runId);
+  };
+}
+
+/**
+ * Clears the in-flight marker for a tool call whose resumed segment is
+ * suspending again, so a later resume of it is not treated as a duplicate.
+ */
+export function clearResumeInFlight(runId: string, toolCallId: string): void {
+  const current = inFlightResumes.get(runId);
+  if (!current) return;
+  current.delete(toolCallId);
+  if (current.size === 0) inFlightResumes.delete(runId);
+}
+
 /**
  * Hold a run's registry entry alive while an operation is in flight.
  *

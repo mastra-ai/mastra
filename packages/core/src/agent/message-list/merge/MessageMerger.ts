@@ -46,7 +46,12 @@ export class MessageMerger {
     // Don't merge into sealed messages (e.g., messages that have been observed)
     if (MessageMerger.isSealed(latestMessage)) return false;
 
+    // A boundary keeps the next response out of this message. Parts that still
+    // carry this message's own id (a tool that was running when the boundary
+    // landed, reporting its data parts and result) belong to it and must merge;
+    // otherwise the add falls through to replace-by-id and drops its tool call.
     if (
+      latestMessage.id !== incomingMessage.id &&
       (latestMessage.content?.metadata as { mastra?: { responseBoundary?: boolean } } | undefined)?.mastra
         ?.responseBoundary
     ) {
