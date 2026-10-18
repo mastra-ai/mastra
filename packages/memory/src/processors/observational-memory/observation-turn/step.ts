@@ -282,8 +282,15 @@ export class ObservationStep {
         const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
         // A message drained again only because OM markers were appended to it was already read.
+        // A message drained on an earlier step can also change in place without returning to a
+        // bucket — e.g. a background task result merged over its placeholder after the response
+        // message id rotated. Its new parts are just as unread.
+        const drainedIds = new Set(messagesToSave.map(msg => msg.id));
+        const updatedEarlier = messageList.get.all
+          .db()
+          .filter(msg => !drainedIds.has(msg.id) && this.turn.drainedPartKeys.has(msg.id));
         const drainedKeys = new Map<string, Set<string>>();
-        const unreadIds = messagesToSave
+        const unreadIds = [...messagesToSave, ...updatedEarlier]
           .filter(msg => {
             const keys = getPartKeys(msg);
             const seen = this.turn.drainedPartKeys.get(msg.id);

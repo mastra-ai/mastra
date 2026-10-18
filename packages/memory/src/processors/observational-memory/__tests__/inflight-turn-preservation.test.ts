@@ -6,99 +6,117 @@
  * turn's own user message and the tool results it has not read yet — otherwise
  * it answers (or loops) without the request it is working on.
  *
- * These tests drive a real Agent + Memory + ObservationalMemory turn with mock
- * models and assert on the prompt the actor model actually receives.
+ * These tests run a real Agent + Memory + ObservationalMemory turn through the
+ * public `agent.stream()` API, with a real OpenAI provider pointed at AIMock for
+ * both the actor and the Observer, and assert on the request journal: what the
+ * actor model was actually sent on each step.
  */
 
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import type { MastraDBMessage } from '@mastra/core/agent';
-import { Agent, MessageList } from '@mastra/core/agent';
-import { InMemoryDB, InMemoryMemory, InMemoryStore } from '@mastra/core/storage';
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import { LLMock } from '@copilotkit/aimock';
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, it, expect, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
-import { ObservationalMemory } from '../observational-memory';
 
+const ACTOR = 'actor-model';
+const OBSERVER = 'observer-model';
 const USER_REQUEST = 'USER_REQUEST_MARKER: look up the order status for order 4471 and report it back.';
 const RESULT_MARKER = 'TOOL_RESULT_MARKER';
+const BG_RESULT_MARKER = 'BACKGROUND_RESULT_MARKER';
+const BG_PLACEHOLDER = 'Background task started';
+const FINAL_ANSWER = 'Order 4471 has shipped.';
+const LOST = 'LOST_CONTEXT';
 
-// Large enough that the tool result alone crosses the observation threshold.
+// Large enough that one tool result crosses the observation threshold.
 const filler = Array.from({ length: 400 }, (_, i) => `line ${i}: shipment scan event recorded at depot`).join('\n');
 
-function observerModel(calls: { count: number }) {
-  const text = `<observations>
+const OBSERVATIONS = `<observations>
 ## January 28, 2026
 - 🔴 User asked to look up an order status
 </observations>
 <current-task>Look up the order status</current-task>`;
-  return new MockLanguageModelV2({
-    doStream: async () => {
-      calls.count++;
-      return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'obs', modelId: 'observer', timestamp: new Date() },
-          { type: 'text-start', id: 't' },
-          { type: 'text-delta', id: 't', delta: text },
-          { type: 'text-end', id: 't' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
+
+let mock: LLMock;
+
+beforeAll(async () => {
+  mock = new LLMock({ port: 0 });
+  await mock.start();
+});
+
+afterEach(() => {
+  mock.clearFixtures();
+  mock.clearRequests();
+  mock.resetMatchCounts();
+});
+
+afterAll(async () => {
+  await mock.stop();
+});
+
+type ChatMessage = { role: string; content?: unknown; tool_call_id?: string };
+
+const lastMessage = (req: { messages: ChatMessage[] }) => req.messages.at(-1);
+const lastToolResultFor = (req: { messages: ChatMessage[] }, toolCallId: string) => {
+  const last = lastMessage(req);
+  return last?.role === 'tool' && last.tool_call_id === toolCallId;
+};
+
+/**
+ * Observer always returns the same observation. Actor: calls `lookup` `toolSteps` times, each
+ * step keyed on the previous step's tool result being the last message, then answers. If the
+ * actor is sent a prompt that matches none of those shapes, it answers `LOST_CONTEXT`.
+ */
+function scriptLookupTurn(toolSteps: number) {
+  mock.on({ endpoint: 'chat', model: OBSERVER }, { content: OBSERVATIONS });
+  mock.on(
+    {
+      endpoint: 'chat',
+      model: ACTOR,
+      predicate: req => lastMessage(req)?.role === 'user' && JSON.stringify(lastMessage(req)).includes('USER_REQUEST'),
     },
-  });
+    { toolCalls: [{ id: 'call_0', name: 'lookup', arguments: JSON.stringify({ orderId: '4471-0' }) }] },
+  );
+  for (let n = 1; n <= toolSteps; n++) {
+    mock.on(
+      { endpoint: 'chat', model: ACTOR, predicate: req => lastToolResultFor(req, `call_${n - 1}`) },
+      n < toolSteps
+        ? { toolCalls: [{ id: `call_${n}`, name: 'lookup', arguments: JSON.stringify({ orderId: `4471-${n}` }) }] }
+        : { content: FINAL_ANSWER },
+    );
+  }
+  mock.on({ endpoint: 'chat', model: ACTOR }, { content: LOST });
 }
 
-/** Actor that calls `lookup` `toolSteps` times, then answers. Records every prompt it receives. */
-function actorModel(toolSteps: number) {
-  const prompts: unknown[] = [];
-  let call = 0;
-  const model = new MockLanguageModelV2({
-    doStream: async ({ prompt }) => {
-      prompts.push(structuredClone(prompt));
-      const n = call++;
-      if (n < toolSteps) {
-        const input = JSON.stringify({ orderId: `4471-${n}` });
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start' as const, warnings: [] },
-            { type: 'response-metadata' as const, id: `r-${n}`, modelId: 'actor', timestamp: new Date() },
-            { type: 'tool-input-start' as const, id: `call-${n}`, toolName: 'lookup' },
-            { type: 'tool-input-delta' as const, id: `call-${n}`, delta: input },
-            { type: 'tool-input-end' as const, id: `call-${n}` },
-            { type: 'tool-call' as const, toolCallId: `call-${n}`, toolName: 'lookup', input },
-            {
-              type: 'finish' as const,
-              finishReason: 'tool-calls' as const,
-              usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      }
-      return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start' as const, warnings: [] },
-          { type: 'response-metadata' as const, id: `r-${n}`, modelId: 'actor', timestamp: new Date() },
-          { type: 'text-start' as const, id: 't' },
-          { type: 'text-delta' as const, id: 't', delta: 'Order 4471 has shipped.' },
-          { type: 'text-end' as const, id: 't' },
-          {
-            type: 'finish' as const,
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-          },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
+/** Bodies of the requests the actor model received, in order. */
+function actorRequests(): string[] {
+  return mock
+    .getRequests()
+    .filter(entry => (entry.body as { model?: string })?.model === ACTOR)
+    .map(entry => JSON.stringify((entry.body as { messages: unknown }).messages));
+}
+
+function observerRequestCount(): number {
+  return mock.getRequests().filter(entry => (entry.body as { model?: string })?.model === OBSERVER).length;
+}
+
+function createMemory(storage = new InMemoryStore()) {
+  const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+  const memory = new Memory({
+    storage,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model: openai.chat(OBSERVER), messageTokens: 1000, bufferTokens: false },
+        reflection: { model: openai.chat(OBSERVER), observationTokens: 100_000 },
+      },
     },
   });
-  return { model, prompts };
+  return { memory, openai };
 }
 
 const lookup = createTool({
@@ -108,340 +126,153 @@ const lookup = createTool({
   execute: async ({ orderId }) => ({ orderId, status: `${RESULT_MARKER}-${orderId}`, log: filler }),
 });
 
-function createAgent(toolSteps: number) {
-  const observerCalls = { count: 0 };
-  const memory = new Memory({
-    storage: new InMemoryStore(),
-    options: {
-      observationalMemory: {
-        enabled: true,
-        observation: {
-          model: observerModel(observerCalls) as any,
-          messageTokens: 1000,
-          bufferTokens: false,
-        },
-        reflection: { model: observerModel({ count: 0 }) as any, observationTokens: 100_000 },
-      },
-    },
-  });
-  const actor = actorModel(toolSteps);
-  const agent = new Agent({
-    id: 'inflight-agent',
-    name: 'inflight-agent',
-    instructions: 'Use the lookup tool.',
-    model: actor.model as any,
-    tools: { lookup },
-    memory,
-  });
-  return { agent, prompts: actor.prompts, observerCalls };
-}
-
-function promptText(prompt: unknown): string {
-  return JSON.stringify(prompt);
-}
-
 describe('OM preserves the in-flight turn across mid-turn observation (#25372)', () => {
-  it('keeps the user message and the unread tool result in the next step prompt', async () => {
-    const { agent, prompts } = createAgent(1);
-
-    const stream = await agent.stream(USER_REQUEST, {
-      memory: { thread: 'inflight-1', resource: 'r' },
+  it('keeps the user message and the unread tool result in the next step request', async () => {
+    scriptLookupTurn(1);
+    const { memory, openai } = createMemory();
+    const agent = new Agent({
+      id: 'inflight-agent',
+      name: 'inflight-agent',
+      instructions: 'Use the lookup tool.',
+      model: openai.chat(ACTOR),
+      tools: { lookup },
+      memory,
     });
-    expect(await stream.text).toContain('shipped');
-    expect(prompts).toHaveLength(2);
 
-    // Observation fired between step 0 and step 1 (the tool result crossed the threshold).
-    const step1 = promptText(prompts[1]);
-    expect(step1).toContain('User asked to look up an order status');
+    const stream = await agent.stream(USER_REQUEST, { memory: { thread: 'inflight-1', resource: 'r' } });
 
-    // The model is about to answer the request using the tool result — both must be visible.
-    expect(step1).toContain('USER_REQUEST_MARKER');
-    expect(step1).toContain(`${RESULT_MARKER}-4471-0`);
+    expect(await stream.text).toBe(FINAL_ANSWER);
+    const requests = actorRequests();
+    expect(requests).toHaveLength(2);
+    // The tool result crossed the threshold, so the Observer ran before step 1 …
+    expect(requests[1]).toContain('User asked to look up an order status');
+    // … and the model, about to answer from that result, still has the request and the result.
+    expect(requests[1]).toContain('USER_REQUEST_MARKER');
+    expect(requests[1]).toContain(`${RESULT_MARKER}-4471-0`);
   });
 
-  it('keeps the user message and the newest tool result on every later step', async () => {
-    const { agent, prompts, observerCalls } = createAgent(3);
-
-    const stream = await agent.stream(USER_REQUEST, {
-      memory: { thread: 'inflight-3', resource: 'r' },
+  it('keeps the user message and the newest tool result on every later step and retires read results', async () => {
+    scriptLookupTurn(3);
+    const { memory, openai } = createMemory();
+    const agent = new Agent({
+      id: 'inflight-agent',
+      name: 'inflight-agent',
+      instructions: 'Use the lookup tool.',
+      model: openai.chat(ACTOR),
+      tools: { lookup },
+      memory,
     });
-    expect(await stream.text).toContain('shipped');
-    expect(prompts).toHaveLength(4);
 
-    for (let step = 1; step < prompts.length; step++) {
-      const text = promptText(prompts[step]);
-      expect(text, `step ${step} lost the user request`).toContain('USER_REQUEST_MARKER');
-      expect(text, `step ${step} lost the unread tool result`).toContain(`${RESULT_MARKER}-4471-${step - 1}`);
+    const stream = await agent.stream(USER_REQUEST, { memory: { thread: 'inflight-3', resource: 'r' } });
+
+    expect(await stream.text).toBe(FINAL_ANSWER);
+    const requests = actorRequests();
+    expect(requests).toHaveLength(4);
+    for (let step = 1; step < requests.length; step++) {
+      expect(requests[step], `step ${step} lost the user request`).toContain('USER_REQUEST_MARKER');
+      expect(requests[step], `step ${step} lost the unread tool result`).toContain(`${RESULT_MARKER}-4471-${step - 1}`);
+    }
+    // Mid-turn compaction still works: results the model already read are gone once observed.
+    expect(requests[3]).not.toContain(`${RESULT_MARKER}-4471-0`);
+    expect(requests[3]).not.toContain(`${RESULT_MARKER}-4471-1`);
+  });
+
+  it('keeps a background task result merged over its placeholder until the model reads it', async () => {
+    // Step 0 dispatches `research` in the background: its tool part is written as `result`
+    // holding a placeholder. Step 1 calls `lookup`, which lets the task finish and waits until
+    // the real result has been merged over the placeholder in place (same message, same part,
+    // state still `result`). Step 2 observes (the lookup result crosses the threshold); the
+    // actor must still be sent the real background result it has never read.
+    let releaseResearch!: () => void;
+    const researchGate = new Promise<void>(resolve => (releaseResearch = resolve));
+    let markMerged!: () => void;
+    const merged = new Promise<void>(resolve => (markMerged = resolve));
+
+    const research = createTool({
+      id: 'research',
+      description: 'Long-running research',
+      inputSchema: z.object({ topic: z.string() }),
+      background: { enabled: true, timeoutMs: 10_000 },
+      execute: async () => {
+        await researchGate;
+        return { finding: `${BG_RESULT_MARKER}: carrier confirmed delivery window` };
+      },
+    });
+    const gatedLookup = createTool({
+      id: 'lookup',
+      description: 'Look up an order',
+      inputSchema: z.object({ orderId: z.string() }),
+      execute: async ({ orderId }) => {
+        releaseResearch();
+        await merged;
+        return { orderId, status: `${RESULT_MARKER}-${orderId}`, log: filler };
+      },
+    });
+
+    mock.on({ endpoint: 'chat', model: OBSERVER }, { content: OBSERVATIONS });
+    mock.on(
+      { endpoint: 'chat', model: ACTOR, predicate: req => lastMessage(req)?.role === 'user' },
+      {
+        content: filler,
+        toolCalls: [{ id: 'call_bg', name: 'research', arguments: JSON.stringify({ topic: '4471' }) }],
+      },
+    );
+    mock.on(
+      { endpoint: 'chat', model: ACTOR, predicate: req => lastToolResultFor(req, 'call_bg') },
+      { toolCalls: [{ id: 'call_0', name: 'lookup', arguments: JSON.stringify({ orderId: '4471-0' }) }] },
+    );
+    mock.on(
+      { endpoint: 'chat', model: ACTOR, predicate: req => lastToolResultFor(req, 'call_0') },
+      { content: FINAL_ANSWER },
+    );
+    mock.on({ endpoint: 'chat', model: ACTOR }, { content: LOST });
+
+    const storage = new InMemoryStore();
+    // Observe the storage boundary: the background result is flushed to memory right after it
+    // is merged into the run's message list.
+    const memoryStore = (await storage.getStore('memory'))!;
+    const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+    vi.spyOn(memoryStore, 'saveMessages').mockImplementation(async args => {
+      const saved = await saveMessages(args);
+      if (JSON.stringify(args.messages).includes(BG_RESULT_MARKER)) markMerged();
+      return saved;
+    });
+
+    const { memory, openai } = createMemory(storage);
+    const agent = new Agent({
+      id: 'inflight-bg-agent',
+      name: 'inflight-bg-agent',
+      instructions: 'Research, then look up the order.',
+      model: openai.chat(ACTOR),
+      tools: { research, lookup: gatedLookup },
+      backgroundTasks: { tools: { research: true } },
+      memory,
+    });
+    const mastra = new Mastra({
+      agents: { agent },
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+    });
+    await mastra.startWorkers();
+
+    try {
+      const stream = await mastra
+        .getAgent('agent')
+        .stream(USER_REQUEST, { memory: { thread: 'inflight-bg', resource: 'r' } });
+      expect(await stream.text).toBe(FINAL_ANSWER);
+    } finally {
+      await mastra.stopWorkers();
     }
 
-    // Mid-turn compaction still works: results the model already read are retired once observed,
-    // and the preserved messages do not make every step re-run the Observer.
-    const last = promptText(prompts[3]);
-    expect(last).not.toContain(`${RESULT_MARKER}-4471-0`);
-    expect(last).not.toContain(`${RESULT_MARKER}-4471-1`);
-    expect(observerCalls.count).toBe(3);
-  });
-});
-
-describe('tool result merged in place into an already-drained message', () => {
-  it('keeps the merged result in the live prompt when the next step observes', async () => {
-    const threadId = 'thread-merged-result';
-    const resourceId = 'resource-merged-result';
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    await storage.saveThread({
-      thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
-    });
-    const observerCalls = { count: 0 };
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observerModel(observerCalls) as any, messageTokens: 1000, bufferTokens: false },
-      reflection: { model: observerModel({ count: 0 }) as any, observationTokens: 100_000 },
-    });
-
-    const t0 = Date.now() - 60_000;
-    const user = {
-      id: 'user-1',
-      role: 'user',
-      content: { format: 2, parts: [{ type: 'text', text: USER_REQUEST }] },
-      createdAt: new Date(t0),
-      threadId,
-      resourceId,
-    } as MastraDBMessage;
-    // Step 0 output: some reasoning text and a tool call whose result has not arrived yet.
-    const assistant = {
-      id: 'assistant-1',
-      role: 'assistant',
-      content: {
-        format: 2,
-        parts: [
-          { type: 'text', text: filler },
-          {
-            type: 'tool-invocation',
-            toolInvocation: { state: 'call', toolCallId: 'call-merged', toolName: 'lookup', args: {} },
-          },
-        ],
-      },
-      createdAt: new Date(t0 + 1000),
-      threadId,
-      resourceId,
-    } as MastraDBMessage;
-
-    const messageList = new MessageList({ threadId, resourceId });
-    messageList.add(user, 'input');
-    messageList.add(assistant, 'response');
-
-    const turn = om.beginTurn({ threadId, resourceId, messageList });
-    await turn.start();
-    await turn.step(0).prepare();
-    // Step 1 drains and observes the call; the model has read the call, not a result.
-    await turn.step(1).prepare();
-    const callsAfterStep1 = observerCalls.count;
-
-    // The tool result is merged into the existing tool-invocation part: same message, same part count.
-    const merged = messageList.updateToolInvocation({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'result',
-        toolCallId: 'call-merged',
-        toolName: 'lookup',
-        args: {},
-        result: { status: `${RESULT_MARKER}-merged`, log: filler },
-      },
-    });
-    expect(merged).toBe(true);
-
-    await turn.step(2).prepare();
-
-    expect(observerCalls.count).toBeGreaterThan(callsAfterStep1);
-    expect(
-      JSON.stringify(messageList.get.all.db()),
-      'the merged tool result was removed before the model read it',
-    ).toContain(`${RESULT_MARKER}-merged`);
-  });
-});
-
-describe('background task result merged over its placeholder', () => {
-  it('keeps the real result in the live prompt when the next step observes', async () => {
-    const threadId = 'thread-bg-placeholder';
-    const resourceId = 'resource-bg-placeholder';
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    await storage.saveThread({
-      thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
-    });
-    const observerCalls = { count: 0 };
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observerModel(observerCalls) as any, messageTokens: 1000, bufferTokens: false },
-      reflection: { model: observerModel({ count: 0 }) as any, observationTokens: 100_000 },
-    });
-
-    const t0 = Date.now() - 60_000;
-    const messageList = new MessageList({ threadId, resourceId });
-    messageList.add(
-      {
-        id: 'user-1',
-        role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: USER_REQUEST }] },
-        createdAt: new Date(t0),
-        threadId,
-        resourceId,
-      } as MastraDBMessage,
-      'input',
-    );
-    // A background tool dispatch: the tool part is already `result`, holding the placeholder.
-    messageList.add(
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: {
-          format: 2,
-          parts: [
-            { type: 'text', text: filler },
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: 'call-bg',
-                toolName: 'lookup',
-                args: {},
-                result: 'Background task started. The result will be delivered when it completes.',
-              },
-            },
-          ],
-        },
-        createdAt: new Date(t0 + 1000),
-        threadId,
-        resourceId,
-      } as MastraDBMessage,
-      'response',
-    );
-
-    const turn = om.beginTurn({ threadId, resourceId, messageList });
-    await turn.start();
-    await turn.step(0).prepare();
-    // Step 1 drains and observes the placeholder; the model has read only the placeholder.
-    await turn.step(1).prepare();
-    const callsAfterStep1 = observerCalls.count;
-
-    // The background task finishes: the real result replaces the placeholder in place, as
-    // background-task-result-core does. Same message, same part, state stays `result`.
-    const merged = messageList.updateToolInvocation(
-      {
-        type: 'tool-invocation',
-        toolInvocation: {
-          state: 'result',
-          toolCallId: 'call-bg',
-          toolName: 'lookup',
-          args: {},
-          result: { status: `${RESULT_MARKER}-bg`, log: filler },
-        },
-        providerMetadata: {
-          mastra: { modelOutput: null, backgroundTask: { taskId: 'task-bg', status: 'completed' } },
-        },
-      },
-      {
-        mode: 'stream',
-        backgroundTasks: { 'call-bg': { startedAt: new Date(t0), completedAt: new Date(), taskId: 'task-bg' } },
-      },
-    );
-    expect(merged).toBe(true);
-    // More output in a second response message pushes step 2 over the threshold again.
-    messageList.add(
-      {
-        id: 'assistant-2',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: filler }] },
-        createdAt: new Date(t0 + 2000),
-        threadId,
-        resourceId,
-      } as MastraDBMessage,
-      'response',
-    );
-
-    await turn.step(2).prepare();
-
-    expect(observerCalls.count).toBeGreaterThan(callsAfterStep1);
-    expect(
-      JSON.stringify(messageList.get.all.db()),
-      'the background task result was removed before the model read it',
-    ).toContain(`${RESULT_MARKER}-bg`);
-  });
-});
-
-describe('drained output whose save failed', () => {
-  it('still treats the output as unread when the next step retries the save', async () => {
-    const threadId = 'thread-failed-save';
-    const resourceId = 'resource-failed-save';
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    await storage.saveThread({
-      thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
-    });
-    const observerCalls = { count: 0 };
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: observerModel(observerCalls) as any, messageTokens: 1000, bufferTokens: false },
-      reflection: { model: observerModel({ count: 0 }) as any, observationTokens: 100_000 },
-    });
-
-    const t0 = Date.now() - 60_000;
-    const messageList = new MessageList({ threadId, resourceId });
-    messageList.add(
-      {
-        id: 'user-1',
-        role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: USER_REQUEST }] },
-        createdAt: new Date(t0),
-        threadId,
-        resourceId,
-      } as MastraDBMessage,
-      'input',
-    );
-
-    const turn = om.beginTurn({ threadId, resourceId, messageList });
-    await turn.start();
-    await turn.step(0).prepare();
-
-    // Step 0 output: a finished tool call the model has not read yet.
-    messageList.add(
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: 'call-failed-save',
-                toolName: 'lookup',
-                args: {},
-                result: { status: `${RESULT_MARKER}-failed-save`, log: filler },
-              },
-            },
-          ],
-        },
-        createdAt: new Date(t0 + 1000),
-        threadId,
-        resourceId,
-      } as MastraDBMessage,
-      'response',
-    );
-
-    const saveSpy = vi.spyOn(storage, 'saveMessages').mockRejectedValueOnce(new Error('storage unavailable'));
-    await expect(turn.step(1).prepare()).rejects.toThrow('storage unavailable');
-    saveSpy.mockRestore();
-
-    // The retry saves and observes; the result is still unread, so it must stay in the prompt.
-    await turn.step(2).prepare();
-
-    expect(observerCalls.count).toBeGreaterThan(0);
-    expect(
-      JSON.stringify(messageList.get.all.db()),
-      'the tool result was removed after a failed save marked it as read',
-    ).toContain(`${RESULT_MARKER}-failed-save`);
+    const requests = actorRequests();
+    expect(requests).toHaveLength(3);
+    expect(requests[1]).toContain(BG_PLACEHOLDER);
+    expect(requests[1]).not.toContain(BG_RESULT_MARKER);
+    // Step 2 ran after an observation …
+    expect(observerRequestCount()).toBeGreaterThan(0);
+    expect(requests[2]).toContain('User asked to look up an order status');
+    // … and still carries the background result the model has not read yet.
+    expect(requests[2], 'the background task result was removed before the model read it').toContain(BG_RESULT_MARKER);
   });
 });
