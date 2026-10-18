@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -10,6 +11,9 @@ const script = (source: string) => `${node} -e ${JSON.stringify(source)}`;
 
 const IGNORE_TERM = `process.on('SIGTERM', () => console.log('TERM_IGNORED'));`;
 const STAY_ALIVE = `setInterval(() => {}, 1000);`;
+
+// `timeout` is GNU coreutils; stock macOS doesn't ship it.
+const hasTimeout = spawnSync('timeout', ['--version'], { stdio: 'ignore' }).status === 0;
 
 function isAlive(pid: number): boolean {
   try {
@@ -214,19 +218,22 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after th
     expect((await sandbox.processes.list()).map(p => p.pid)).toContain(handle.pid);
   });
 
-  it('settles when the shell is killed while a `timeout` child in its own process group holds stdout', async () => {
-    // `timeout` puts the command it runs in a new process group, so it survives
-    // the shell and keeps the pipe open.
-    const child = script(`console.log('CHILD ' + process.pid); ${STAY_ALIVE}`);
-    const handle = await sandbox.processes.spawn(`for i in 1 2 3; do timeout 60 ${child}; done`);
-    await vi.waitFor(() => expect(handle.stdout).toMatch(/CHILD \d+/));
-    strayPids.push(Number(/CHILD (\d+)/.exec(handle.stdout)?.[1]));
+  it.skipIf(!hasTimeout)(
+    'settles when the shell is killed while a `timeout` child in its own process group holds stdout',
+    async () => {
+      // `timeout` puts the command it runs in a new process group, so it survives
+      // the shell and keeps the pipe open.
+      const child = script(`console.log('CHILD ' + process.pid); ${STAY_ALIVE}`);
+      const handle = await sandbox.processes.spawn(`for i in 1 2 3; do timeout 60 ${child}; done`);
+      await vi.waitFor(() => expect(handle.stdout).toMatch(/CHILD \d+/));
+      strayPids.push(Number(/CHILD (\d+)/.exec(handle.stdout)?.[1]));
 
-    process.kill(Number(handle.pid), 'SIGKILL');
-    const result = await handle.wait();
+      process.kill(Number(handle.pid), 'SIGKILL');
+      const result = await handle.wait();
 
-    expect(result).toMatchObject({ exitCode: 128, killed: true });
-    // Without settling on the exit, wait() lasts until `timeout 60` ends its child.
-    expect(result.executionTimeMs).toBeLessThan(5_000);
-  });
+      expect(result).toMatchObject({ exitCode: 128, killed: true });
+      // Without settling on the exit, wait() lasts until `timeout 60` ends its child.
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    },
+  );
 });
