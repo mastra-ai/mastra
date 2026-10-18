@@ -150,7 +150,9 @@ const processor = new SystemPromptScrubber({
 
 ## Extended usage example
 
-When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
+`SystemPromptScrubber` buffers streamed text by default, so it makes one detection call per sentence instead of one per chunk. The buffer flushes at a sentence boundary, when it reaches `bufferSize` characters, or before a non-text part. Use `bufferSize` to control how much text each detection call sees.
+
+`BatchPartsProcessor` is optional. Add it before `SystemPromptScrubber` when you also want to coalesce stream parts.
 
 ```typescript title="src/mastra/agents/scrubbed-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -162,11 +164,11 @@ export const agent = new Agent({
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [
-    // Batch stream parts first to reduce LLM calls
+    // Optional: coalesce stream parts before detection
     new BatchPartsProcessor({
       batchSize: 10,
     }),
-    // Then apply system prompt detection on batched content
+    // Detect system prompts in the buffered text
     new SystemPromptScrubber({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',
       strategy: 'redact',
