@@ -11486,6 +11486,7 @@ export class Agent<
       - always produce a title, even when the transcript is only a greeting or trivial exchange
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
+      - write the title in the same language the user's messages are written in
       - do not use quotes or colons
       - the entire text you return will be used as the title`;
 

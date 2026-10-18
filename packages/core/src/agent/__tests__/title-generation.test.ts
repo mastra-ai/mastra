@@ -3977,3 +3977,25 @@ describe('generateTitle.emitEvent', () => {
     expect(thread?.title).toBe('Generated Title');
   });
 });
+
+describe('default title instructions', () => {
+  it('tell the model to write the title in the language of the conversation (#24688)', async () => {
+    const agent = new Agent({
+      name: 'title-language-agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          text: 'x',
+          content: [{ type: 'text' as const, text: 'x' }],
+          warnings: [],
+        }),
+      }),
+    });
+
+    const instructions = await agent.resolveTitleInstructions(new RequestContext());
+    expect(instructions).toContain('same language');
+  });
+});
