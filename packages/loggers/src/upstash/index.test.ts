@@ -270,6 +270,83 @@ describe('UpstashTransport', () => {
     });
   });
 
+  describe('pipeline command errors', () => {
+    const wrongType = 'WRONGTYPE Operation against a key holding the wrong kind of value';
+    const pipelineResponse = (results: unknown[]) =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve(results) });
+
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    it('should keep the batch when Redis rejects LPUSH', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }, { error: wrongType }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+      const lastFlush = transport.lastFlush;
+      vi.advanceTimersByTime(5);
+
+      await expect(transport._flush()).rejects.toThrow(wrongType);
+
+      expect(transport.logBuffer).toEqual([{ msg: 'hello', time: 1 }]);
+      expect(transport.lastFlush).toBe(lastFlush);
+    });
+
+    it('should resend a rejected batch before newer records', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }, { error: wrongType }]));
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+      batchTransport.logBuffer.push({ msg: 'message1' } as any, { msg: 'message2' } as any, { msg: 'message3' } as any);
+
+      await expect(batchTransport._flush()).rejects.toThrow(wrongType);
+      await batchTransport._flush();
+
+      const [lpush] = JSON.parse(fetchMock.mock.calls[1][1].body);
+      expect(lpush.slice(2).map((log: string) => JSON.parse(log).msg)).toEqual(['message1', 'message2']);
+    });
+
+    it('should report a rejected LTRIM without resending the pushed batch', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ result: 1 }, { error: wrongType }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+      const lastFlush = transport.lastFlush;
+      vi.advanceTimersByTime(5);
+
+      await expect(transport._flush()).rejects.toThrow(`Failed to trim Upstash log list: ${wrongType}`);
+
+      expect(transport.logBuffer).toEqual([]);
+      expect(transport.lastFlush).toBeGreaterThan(lastFlush);
+    });
+
+    it('should keep the batch when LPUSH is rejected without an LTRIM command', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }]));
+      const untrimmedTransport = new UpstashTransport({ ...defaultOptions, maxListLength: -1 });
+      untrimmedTransport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+      await expect(untrimmedTransport._flush()).rejects.toThrow(wrongType);
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toHaveLength(1);
+      expect(untrimmedTransport.logBuffer).toEqual([{ msg: 'hello', time: 1 }]);
+    });
+
+    it('should pass a rejected final push to the destroy callback', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }, { error: wrongType }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+      const error = await new Promise<Error | null | undefined>(resolve => {
+        transport._destroy(null as any, (err?: Error | null) => resolve(err));
+      });
+
+      expect(error?.message).toContain(wrongType);
+      expect(transport.logBuffer).toEqual([{ msg: 'hello', time: 1 }]);
+    });
+
+    it('should resolve when every pipeline command succeeds', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ result: 1 }, { result: 'OK' }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+      await expect(transport._flush()).resolves.toBeUndefined();
+      expect(transport.logBuffer).toEqual([]);
+    });
+  });
+
   describe('outage buffering', () => {
     const write = (target: UpstashTransport, count: number) => {
       for (let i = 1; i <= count; i++) {
