@@ -40,6 +40,12 @@ describeForAllEngines('AIMock loop scenario: agents as tools', engine => {
       agents: { writer },
       stopWhen: stepCountIs(5),
       fixtures: llm => {
+        // Subagent's own loop turn: the writer drafts the tagline. Routed by its system prompt and
+        // registered first so the supervisor's `hasToolResult: false` fixture cannot capture it.
+        llm.on(
+          { endpoint: 'chat', systemMessage: 'You are a skilled writer subagent.' },
+          { content: 'Brewed fresh, served warm.' },
+        );
         // Supervisor turn 1: delegate to the writer subagent. No tool result yet.
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
@@ -53,9 +59,6 @@ describeForAllEngines('AIMock loop scenario: agents as tools', engine => {
             ],
           },
         );
-        // Subagent's own loop turn: the writer drafts the tagline. Matched by the
-        // delegated prompt content.
-        llm.onMessage(/coffee shop/i, { content: 'Brewed fresh, served warm.' });
         // Supervisor turn 2: the subagent result comes back as a tool result;
         // the supervisor wraps up.
         llm.on(
@@ -78,8 +81,9 @@ describeForAllEngines('AIMock loop scenario: agents as tools', engine => {
     expect(toolMessage?.tool_call_id).toBe('call_writer');
     expect(JSON.stringify(toolMessage?.content)).toContain('Brewed fresh, served warm.');
 
-    // At least 3 requests reached AIMock: supervisor delegate, subagent draft,
-    // supervisor finalize.
-    expect(requests.length).toBeGreaterThanOrEqual(3);
+    // Exactly 3 requests reached AIMock: supervisor delegate, subagent draft,
+    // supervisor finalize — no misrouted turns.
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests.map(r => r.body?.messages))).not.toContain('not found');
   });
 });

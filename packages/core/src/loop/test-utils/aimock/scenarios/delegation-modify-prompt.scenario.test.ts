@@ -53,6 +53,12 @@ describeForAllEngines('AIMock loop scenario: delegation onDelegationStart modifi
         },
       },
       fixtures: llm => {
+        // Subagent's own loop turn, routed by its system prompt. Registered first so the supervisor's
+        // `hasToolResult: false` fixture cannot capture it.
+        llm.on(
+          { endpoint: 'chat', systemMessage: 'You are a skilled writer subagent.' },
+          { content: 'Sip the extraordinary.' },
+        );
         // Supervisor turn 1: delegate to the writer subagent.
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
@@ -60,8 +66,6 @@ describeForAllEngines('AIMock loop scenario: delegation onDelegationStart modifi
             toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a tagline.' } }],
           },
         );
-        // Subagent's own loop turn: matched by the modified prompt content.
-        llm.onMessage(/PREMIUM coffee shop/i, { content: 'Sip the extraordinary.' });
         // Supervisor turn 2: wraps up with the subagent result.
         llm.on(
           { endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true },
@@ -98,6 +102,10 @@ describeForAllEngines('AIMock loop scenario: delegation onDelegationStart modifi
     // The original (unmodified) prompt was NOT forwarded to the subagent.
     const subagentMessages = JSON.stringify(subagentRequest?.body?.messages ?? []);
     expect(subagentMessages).not.toContain('Draft a tagline.');
+
+    // Supervisor delegate, subagent answer, supervisor wrap-up — no misrouted turns.
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests.map(r => r.body?.messages))).not.toContain('not found');
   });
 
   it('applies onDelegationStart requestContext mutations to the delegated run', async () => {

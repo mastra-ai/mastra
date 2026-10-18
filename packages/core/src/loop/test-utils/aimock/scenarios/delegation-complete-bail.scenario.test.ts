@@ -38,7 +38,7 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
       model: openai(SCENARIO_MODEL_ID),
     });
 
-    const { output } = await runLoopScenario({
+    const { output, requests } = await runLoopScenario({
       engine,
       llm: mock,
       prompt: 'Ask the writer to draft something.',
@@ -76,6 +76,10 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
     // The loop completed successfully
     const text = await output.text;
     expect(text).toContain('Writer completed');
+
+    // Supervisor delegate, subagent answer, supervisor wrap-up — no misrouted turns.
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests.map(r => r.body?.messages))).not.toContain('not found');
   });
 
   it('bail() stops the supervisor loop from continuing to additional delegations', async () => {
@@ -133,6 +137,9 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
         },
       },
       fixtures: llm => {
+        // Agent1 turn: completes successfully. Routed by its system prompt and registered first so
+        // the supervisor's `hasToolResult: false` fixture cannot capture it.
+        llm.on({ endpoint: 'chat', systemMessage: 'You are agent 1.' }, { content: 'Agent1 completed task 1.' });
         // Supervisor turn 1: delegate to agent1.
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
@@ -140,8 +147,6 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
             toolCalls: [{ id: 'call_agent1', name: 'agent-agent1', arguments: { prompt: 'Task 1' } }],
           },
         );
-        // Agent1 turn: completes successfully.
-        llm.on({ endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 }, { content: 'Agent1 completed task 1.' });
         // Supervisor would normally delegate to agent2 next, but bail() should prevent it.
         // We don't script agent2 because bail() should stop the loop.
       },
@@ -157,9 +162,9 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
     const agent2Requests = requests.filter((r: any) => JSON.stringify(r.body?.messages).includes('agent-agent2'));
     expect(agent2Requests.length).toBe(0);
 
-    // Bail should stop the loop immediately — supervisor turn 1 (delegates to agent1),
-    // agent1 turn (completes), supervisor turn 2 (sees agent1 result, bail stops loop)
-    // Without bail, the loop would continue to a 4th iteration
-    expect(requests.length).toBe(3);
+    // Bail stops the loop immediately — supervisor turn 1 (delegates to agent1), agent1 turn
+    // (completes). Without bail, the supervisor would take another turn with agent1's result.
+    expect(requests.length).toBe(2);
+    expect(JSON.stringify(requests.map((r: any) => r.body?.messages))).not.toContain('not found');
   });
 });

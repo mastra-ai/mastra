@@ -38,7 +38,7 @@ describeForAllEngines('AIMock loop scenario: delegation messageFilter', engine =
       model: openai(SCENARIO_MODEL_ID),
     });
 
-    const { output } = await runLoopScenario({
+    const { output, requests } = await runLoopScenario({
       engine,
       llm: mock,
       prompt: 'Ask the writer to draft something.',
@@ -52,17 +52,15 @@ describeForAllEngines('AIMock loop scenario: delegation messageFilter', engine =
         },
       },
       fixtures: llm => {
+        // Subagent turn, routed by its system prompt and registered first so the supervisor's
+        // `hasToolResult: false` fixture cannot capture it.
+        llm.on({ endpoint: 'chat', systemMessage: 'You are a writer.' }, { content: 'Here is what you requested.' });
         // Supervisor turn 1: delegate to writer.
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
             toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
           },
-        );
-        // Subagent turn: receives the filtered context.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 },
-          { content: 'Here is what you requested.' },
         );
         // Supervisor turn 2: wraps up.
         llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Writer completed the task.' });
@@ -80,6 +78,10 @@ describeForAllEngines('AIMock loop scenario: delegation messageFilter', engine =
     // The final output reflects the writer's response.
     const text = await output.text;
     expect(text).toContain('Writer completed');
+
+    // Supervisor delegate, subagent answer, supervisor wrap-up — no misrouted turns.
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests.map(r => r.body?.messages))).not.toContain('not found');
   });
 
   it('messageFilter receives the prompt after onDelegationStart modifications', async () => {
@@ -116,17 +118,18 @@ describeForAllEngines('AIMock loop scenario: delegation messageFilter', engine =
         },
       },
       fixtures: llm => {
+        // Subagent turn, routed by its system prompt and registered first so the supervisor's
+        // `hasToolResult: false` fixture cannot capture it.
+        llm.on(
+          { endpoint: 'chat', systemMessage: 'You are a writer.' },
+          { content: 'Here is the formal letter you requested.' },
+        );
         // Supervisor turn 1: delegate to writer.
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
             toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
           },
-        );
-        // Subagent turn: receives the modified prompt.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 },
-          { content: 'Here is the formal letter you requested.' },
         );
         // Supervisor turn 2: wraps up.
         llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Letter drafted successfully.' });
@@ -144,6 +147,8 @@ describeForAllEngines('AIMock loop scenario: delegation messageFilter', engine =
       JSON.stringify(r.body?.messages).includes('MODIFIED: Write a formal letter'),
     );
     expect(subagentRequest).toBeDefined();
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(requests.map((r: any) => r.body?.messages))).not.toContain('not found');
   });
 
   it('forwards transient request-processor messages to the subagent', async () => {
