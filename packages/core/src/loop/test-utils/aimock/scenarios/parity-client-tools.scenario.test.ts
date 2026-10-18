@@ -6,7 +6,7 @@
  * with the call surfaced, no tool result, finish reason `tool-calls`, exactly one
  * model call, and the call persisted so a client can answer it on a later turn.
  *
- * Both harness variants are covered: `stream` (through `expectEngineParity`) and
+ * Both harness variants are covered: `stream` (through `expectParity`) and
  * `generate`. The parity helper only drives streaming turns, so the `generate`
  * variant is driven per engine directly.
  *
@@ -15,28 +15,28 @@
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import type { DurableAgent } from '../durable-agent';
+import { Agent } from '../../../../agent';
+import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
+import type { DurableAgent } from '../../../../agent/durable/durable-agent';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
+import { InMemoryStore } from '../../../../storage';
+import { createTool } from '../../../../tools';
 import {
   type EngineParityResults,
   type ParityEngine,
-  PARITY_ENGINES,
+  type ParityTarget,
   chunksOfType,
-  expectEngineParity,
+  describeParity,
+  expectParity,
   textOnlyTape,
   toolCallTape,
-} from './parity-harness';
+} from '../parity';
 
-const ENGINES: readonly ParityEngine[] = PARITY_ENGINES;
 const THREAD = 'thread-t33';
 const RESOURCE = 'resource-t33';
 const TURN_OPTIONS = { maxSteps: 3, memory: { thread: THREAD, resource: RESOURCE } };
@@ -74,9 +74,9 @@ function toolParts(messages: readonly { content?: { parts?: PersistedPart[] } }[
   return messages.flatMap(message => message.content?.parts ?? []).filter(part => part.type === 'tool-invocation');
 }
 
-async function runT33() {
+async function runT33(target: ParityTarget) {
   const memories = new Map<ParityEngine, MockMemory>();
-  const results: EngineParityResults = await expectEngineParity({
+  const results: EngineParityResults = await expectParity(target, {
     model: { respond },
     buildAgent: ({ engine, model }) => {
       const memory = new MockMemory();
@@ -95,11 +95,11 @@ async function runT33() {
   return { results, persistedToolParts };
 }
 
-describe('T33 client tools (plain, durable, evented)', () => {
+describeParity('client-tools parity', target => {
   it('stream: the call is surfaced once, nothing runs server-side, and the call is persisted', async () => {
-    const { results, persistedToolParts } = await runT33();
+    const { results, persistedToolParts } = await runT33(target);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const { turns, requests } = results[engine]!;
       const turn = turns[0]!;
 
@@ -133,7 +133,7 @@ describe('T33 client tools (plain, durable, evented)', () => {
 
   it('generate: each engine returns the client tool call with reason tool-calls', async () => {
     const records = [];
-    for (const engine of ENGINES) records.push(await driveGenerate(engine));
+    for (const engine of ['plain', target] as const) records.push(await driveGenerate(engine));
 
     const [plain, ...rest] = records;
     for (const record of rest) expect({ ...record, engine: undefined }).toEqual({ ...plain!, engine: undefined });

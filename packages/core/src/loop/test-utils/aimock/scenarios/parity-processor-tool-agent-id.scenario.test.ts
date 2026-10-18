@@ -3,22 +3,22 @@
  * owning agent's id in `context.agent.agentId`, the same as tools assigned to
  * the agent directly (https://github.com/mastra-ai/mastra/issues/26794).
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import type { InputProcessor } from '../../../processors';
-import { InMemoryStore } from '../../../storage/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import { PARITY_ENGINES, createRecordingModel, textOnlyTape, toolCallTape } from './parity-harness';
+import { Agent } from '../../../../agent';
+import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import type { InputProcessor } from '../../../../processors';
+import { InMemoryStore } from '../../../../storage/mock';
+import { createTool } from '../../../../tools';
+import { createRecordingModel, describeParity, textOnlyTape, toolCallTape } from '../parity';
 
 const AGENT_ID = 'processor-tool-agent';
 
-describe('processor-added tools receive the agent id', () => {
-  it.each(PARITY_ENGINES)('%s engine', async engine => {
+describeParity('processor-tool-agent-id parity', target => {
+  it.each(['plain', target] as const)('%s engine', async engine => {
     const captured: Array<string | undefined> = [];
     const probe = createTool({
       id: 'probe',

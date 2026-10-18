@@ -36,25 +36,25 @@
  *
  * The harness's engine comparison (chunk sequence, finish payload, usage,
  * getFullOutput and the requests the model saw) is covered by
- * `expectEngineParity`; the contract the harness read off that comparison is
+ * `expectParity` (parity mode); the contract the harness read off that comparison is
  * asserted on every engine, with plain's values pinned literally and the
  * wrapped engines' own values pinned per variant.
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
 import type {
   CapturedRequest,
   EngineDifference,
   EngineParityResults,
   ParityEngine,
   ParitySnapshot,
-} from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+  ParityTarget,
+} from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const THREAD = 'thread-t32';
 const RESOURCE = 'resource-t32';
 const TURN_OPTIONS = { maxSteps: 3, memory: { thread: THREAD, resource: RESOURCE } };
@@ -201,11 +201,12 @@ function contractOf(turn: ParitySnapshot, requests: readonly CapturedRequest[]):
 }
 
 async function runT32(
+  target: ParityTarget,
   variant: Variant,
   differences?: Partial<Record<Exclude<ParityEngine, 'plain'>, EngineDifference>>,
 ): Promise<EngineParityResults> {
   const call = CALLS[variant];
-  return expectEngineParity({
+  return expectParity(target, {
     ...(differences ? { differences } : {}),
     model: {
       respond: request =>
@@ -228,12 +229,12 @@ async function runT32(
   });
 }
 
-describe('T32 tool errors (plain, durable, evented)', () => {
+describeParity('tool-errors parity', target => {
   for (const variant of ['non-json', 'bad-args', 'undefined'] as const) {
     it(`${variant}: the tool call is surfaced, the loop continues and the model is told`, async () => {
-      const results = await runT32(variant);
+      const results = await runT32(target, variant);
 
-      for (const engine of ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const { turns, requests } = results[engine]!;
         const turn = turns[0]!;
         // The harness's check: the tool call was surfaced publicly.
@@ -250,9 +251,9 @@ describe('T32 tool errors (plain, durable, evented)', () => {
   // its enumerable fields plus `{ name, message }` (COR-1417): a failed tool
   // lookup serialises to exactly that on the wrapped engines.
   it('unknown: the tool call is surfaced, the run settles and the model is told', async () => {
-    const results = await runT32('unknown');
+    const results = await runT32(target, 'unknown');
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const { turns, requests } = results[engine]!;
       const turn = turns[0]!;
       // The harness's check: the tool call was surfaced publicly.
@@ -269,10 +270,10 @@ describe('T32 tool errors (plain, durable, evented)', () => {
   for (const variant of HELD_VARIANTS) {
     it(`${variant}: the tool call is surfaced, the run settles and the model is told`, async () => {
       const difference = HELD_DIFFERENCES[variant];
-      const results = await runT32(variant, { durable: difference, evented: difference });
+      const results = await runT32(target, variant, { [target]: difference });
       const contracts = HELD_CONTRACTS[variant];
 
-      for (const engine of ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const { turns, requests } = results[engine]!;
         const turn = turns[0]!;
         // The harness's check: the tool call was surfaced publicly.

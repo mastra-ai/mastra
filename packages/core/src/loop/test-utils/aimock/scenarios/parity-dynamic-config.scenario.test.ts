@@ -8,16 +8,15 @@
  * sees reflect the per-call configuration? This file asserts the resolved
  * request context and the resolved request body on each engine.
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { RequestContext } from '../../../request-context';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { CapturedRequest, ModelScript, ParityEngine, ParityStreamOptions } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { RequestContext } from '../../../../request-context';
+import { createTool } from '../../../../tools';
+import type { CapturedRequest, ModelScript, ParityEngine, ParityStreamOptions, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const MARKER = 't25-marker';
 
 type Variant = 'instructions' | 'model' | 'tools' | 'active-tools';
@@ -73,7 +72,7 @@ function taggedModel(model: unknown, modelId: string, onCall: (modelId: string) 
 }
 
 /** Runs one T25 variant; captures the resolved markers, served model ids and committed tools per engine. */
-async function runT25(variant: Variant) {
+async function runT25(target: ParityTarget, variant: Variant) {
   const resolved = new Map<ParityEngine, string[]>();
   const servedModelIds = new Map<ParityEngine, string[]>();
   const commits = new Map<ParityEngine, number>();
@@ -94,7 +93,7 @@ async function runT25(variant: Variant) {
     ...(variant === 'active-tools' ? { activeTools: ['step'] } : {}),
   };
 
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model,
     buildAgent: ({ engine, model: agentModel }) => {
       const seen: string[] = [];
@@ -157,13 +156,13 @@ async function runT25(variant: Variant) {
   return { results, resolved, servedModelIds, commits };
 }
 
-describe('T25 dynamic agent configuration (plain, durable, evented)', () => {
+describeParity('dynamic-config parity', target => {
   it.each<Variant>(['instructions', 'model', 'tools', 'active-tools'])(
     '%s: the caller request context reaches every model call',
     async variant => {
-      const { results, resolved, servedModelIds, commits } = await runT25(variant);
+      const { results, resolved, servedModelIds, commits } = await runT25(target, variant);
 
-      for (const engine of ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const { turns, requests } = results[engine]!;
 
         // 'two tool turns then an answer, one finish'

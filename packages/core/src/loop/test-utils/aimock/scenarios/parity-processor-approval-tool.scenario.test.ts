@@ -7,15 +7,15 @@
  * (COR-1339); the `static` variant registers the same tool on the agent as a
  * control that the approval gate is not simply blind to the tool.
  *
- * `expectEngineParity` cannot drive this case. Plain ends its stream at a
+ * `expectParity` cannot drive this case. Plain ends its stream at a
  * suspension and only records the suspension once the segment is drained to the
  * end, while durable and evented keep the stream open until the run is resumed.
  * The helper stops every drain at the first suspension chunk, which is enough
  * for a single approval (its own approval scenario) but leaves plain's second
  * approval unregistered: approving the second call then fails with "cannot
  * resume tool call ... because it is not suspended". The helper also has no
- * equivalent of the harness's per-condition `stopOn`, so this case builds the
- * three engines directly and drives them the way the harness does — plain's
+ * equivalent of the harness's per-condition `stopOn`, so this case builds plain
+ * and the target engine directly and drives them the way the harness does — plain's
  * segments are read to the end, durable/evented segments stop at the suspension
  * chunk.
  *
@@ -31,24 +31,18 @@
  * every tool-result at the end of the step. The counts agree; only the position
  * differs.
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import type { InputProcessor } from '../../../processors';
-import { InMemoryStore } from '../../../storage/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import {
-  PARITY_ENGINES,
-  createRecordingModel,
-  textOnlyTape,
-  type ModelTape,
-  type ParityEngine,
-} from './parity-harness';
+import { Agent } from '../../../../agent';
+import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
+import type { InputProcessor } from '../../../../processors';
+import { InMemoryStore } from '../../../../storage/mock';
+import { createTool } from '../../../../tools';
+import { createRecordingModel, describeParity, textOnlyTape, type ModelTape, type ParityEngine } from '../parity';
 
 const CALLS = [1, 2];
 const THREAD = 'thread-t66';
@@ -214,12 +208,12 @@ function comparable(contract: EngineContract) {
   };
 }
 
-describe('durable agent: T66 processor-added approval tool', () => {
+describeParity('processor-approval-tool parity', target => {
   it.each(VARIANTS)(
     'resolves one approval per call: %s',
     async variant => {
       const contracts: EngineContract[] = [];
-      for (const engine of PARITY_ENGINES) contracts.push(await drive(engine, variant));
+      for (const engine of ['plain', target] as const) contracts.push(await drive(engine, variant));
 
       const plain = contracts[0]!;
       for (const contract of contracts) {

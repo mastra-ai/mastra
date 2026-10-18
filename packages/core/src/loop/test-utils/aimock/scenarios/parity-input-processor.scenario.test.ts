@@ -12,19 +12,19 @@
  *     chunk. Plain emits the `tripwire` chunk alone while durable and evented emit `start` before it,
  *     declared below against COR-1390 (the widened chunk-sequence ticket); the tripwire chunk's own
  *     content is compared exactly.
- *   - `throws`   — `processInput` throws. All three engines fail closed: the run rejects
+ *   - `throws`   — `processInput` throws. Every engine fails closed: the run rejects
  *     `[Agent:script] - Input processor error` with no model call, finish chunk, completed step, or
  *     persisted mutation. This is the COR-1413 regression contract.
  *
- * The `throws` shape runs through the parity helper and keeps explicit assertions for the rejection,
+ * The `throws` shape runs through parity mode and keeps explicit assertions for the rejection,
  * absence of model and tool activity, and memory side effects.
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import type { InputProcessor } from '../../../processors';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import type { InputProcessor } from '../../../../processors';
+import { createTool } from '../../../../tools';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -32,10 +32,10 @@ import type {
   ModelScript,
   ParityEngine,
   ParitySnapshot,
-} from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+  ParityTarget,
+} from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const THREAD = 't44-thread';
 const RESOURCE = 't44-resource';
 const MAX_STEPS = 3;
@@ -141,7 +141,7 @@ function createInputProbe(id: string, mode: Mode, onInput: () => void): InputPro
   };
 }
 
-async function runT44(mode: Mode) {
+async function runT44(target: ParityTarget, mode: Mode) {
   const memories = new Map<ParityEngine, MockMemory>();
   const inputs = new Map<ParityEngine, number>();
 
@@ -153,9 +153,9 @@ async function runT44(mode: Mode) {
     },
   };
 
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model: script,
-    ...(mode === 'tripwire' ? { differences: { durable: TRIPWIRE_SHAPE, evented: TRIPWIRE_SHAPE } } : {}),
+    ...(mode === 'tripwire' ? { differences: { [target]: TRIPWIRE_SHAPE } } : {}),
     buildAgent: ({ engine, model }) => {
       const memory = new MockMemory();
       memories.set(engine, memory);
@@ -190,12 +190,12 @@ async function runT44(mode: Mode) {
   return { results, memories, inputs };
 }
 
-describe('T44 input processors (plain, durable, evented)', () => {
+describeParity('input-processor parity', target => {
   it('lets an input mutation reach the model request and memory', async () => {
-    const { results, memories, inputs } = await runT44('mutate');
+    const { results, memories, inputs } = await runT44(target, 'mutate');
     const contracts = new Map<ParityEngine, Record<string, unknown>>();
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const observation = results[engine]!;
       const turn = observation.turns[0];
       const request = observation.requests[0];
@@ -232,17 +232,15 @@ describe('T44 input processors (plain, durable, evented)', () => {
     }
 
     expect(contracts.get('plain'), 'plain contract').toEqual(MUTATE_CONTRACT);
-    for (const engine of ENGINES.slice(1)) {
-      // The harness pairs every cell's contract against plain, so the wrapped engines reproduce it.
-      expect(contracts.get(engine), `${engine} contract`).toEqual(contracts.get('plain'));
-    }
+    // The harness pairs every cell's contract against plain, so the wrapped engine reproduces it.
+    expect(contracts.get(target), `${target} contract`).toEqual(contracts.get('plain'));
   });
 
   it('stops the run in processInput when the input processor trips the wire', async () => {
-    const { results, memories, inputs } = await runT44('tripwire');
+    const { results, memories, inputs } = await runT44(target, 'tripwire');
     const contracts = new Map<ParityEngine, Record<string, unknown>>();
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const observation = results[engine]!;
       const turn = observation.turns[0];
       if (!turn) throw new Error(`T44 tripwire: ${engine} produced no turn`);
@@ -275,15 +273,13 @@ describe('T44 input processors (plain, durable, evented)', () => {
     }
 
     expect(contracts.get('plain'), 'plain contract').toEqual(TRIPWIRE_CONTRACT);
-    for (const engine of ENGINES.slice(1)) {
-      expect(contracts.get(engine), `${engine} contract`).toEqual(contracts.get('plain'));
-    }
+    expect(contracts.get(target), `${target} contract`).toEqual(contracts.get('plain'));
   });
 
   it('fails closed on a throwing input processor for every engine', async () => {
-    const { results, memories, inputs } = await runT44('throw');
+    const { results, memories, inputs } = await runT44(target, 'throw');
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const observation = results[engine]!;
       const turn = observation.turns[0]!;
       expect(inputs.get(engine), `${engine}: processInput runs`).toBe(1);

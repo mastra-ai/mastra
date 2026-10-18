@@ -5,18 +5,17 @@
  * second turn on the same thread must stream the same chunk shape and send
  * the full history to the model — identically on plain, durable and evented
  * agents. This file is the reference example for porting harness cases onto
- * `expectEngineParity`. The harness's engine comparison (chunk sequence, finish
+ * parity mode (`describeParity` + `expectParity`). The harness's engine comparison (chunk sequence, finish
  * payload, usage, getFullOutput) is covered by the helper itself.
  */
-import { describe, expect, it } from 'vitest';
-import { MockMemory } from '../../../memory/mock';
-import { Agent } from '../../agent';
-import type { EngineParityResults, EngineParityScenario, ParityEngine, ParitySnapshot } from './parity-harness';
-import { chunksOfType, expectEngineParity, lastUserText, textOnlyTape } from './parity-harness';
+import { expect, it } from 'vitest';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import type { EngineParityResults, EngineParityScenario, ParityEngine, ParitySnapshot, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, lastUserText, textOnlyTape } from '../parity';
 
 const THREAD = 'thread-t29';
 const RESOURCE = 'resource-t29';
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const TURN_OPTIONS = { maxSteps: 2, memory: { thread: THREAD, resource: RESOURCE } };
 
 /**
@@ -69,9 +68,9 @@ const PLAIN_USAGE = {
 };
 
 /** Runs the T29 scenario; returns each engine's results and persisted message roles. */
-async function runT29(run: EngineParityScenario['run']) {
+async function runT29(target: ParityTarget, run: EngineParityScenario['run']) {
   const memories = new Map<ParityEngine, MockMemory>();
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model: { respond: request => textOnlyTape(`answer to: ${lastUserText(request)}`) },
     buildAgent: ({ engine, model }) => {
       const memory = new MockMemory();
@@ -103,15 +102,15 @@ function expectPlainReference(results: EngineParityResults) {
   }
 }
 
-describe('T29 text-only multistep (plain, durable, evented)', () => {
+describeParity('text-only-multistep parity', target => {
   it('single turn: one finish, one model call, persisted user+assistant', async () => {
-    const { results, persistedRoles } = await runT29(async handle => {
+    const { results, persistedRoles } = await runT29(target, async handle => {
       await handle.turn('First question', TURN_OPTIONS);
     });
 
     expectPlainReference(results);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const { turns, requests } = results[engine]!;
       expectTurnOneAnswered(turns[0]);
       expect(requests).toHaveLength(1);
@@ -120,14 +119,14 @@ describe('T29 text-only multistep (plain, durable, evented)', () => {
   });
 
   it('multi turn: second turn mirrors the first and sends the full history', async () => {
-    const { results, persistedRoles } = await runT29(async handle => {
+    const { results, persistedRoles } = await runT29(target, async handle => {
       await handle.turn('First question', TURN_OPTIONS);
       await handle.turn('Second question', TURN_OPTIONS);
     });
 
     expectPlainReference(results);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const { turns, requests } = results[engine]!;
       expectTurnOneAnswered(turns[0]);
       expect(turns.map(t => t.streamedText)).toEqual(['answer to: First question', 'answer to: Second question']);
