@@ -23,7 +23,7 @@ import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 
-import { chatModule, getChatModule } from './chat-lazy';
+import { getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
@@ -1565,8 +1565,7 @@ export class AgentChannels {
   private isContentlessMessage(message: Message): boolean {
     if (message.attachments?.length) return false;
     if (message.text?.trim()) return false;
-    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : '';
-    return !richText;
+    return !messageText(message)?.trim();
   }
 
   /**
