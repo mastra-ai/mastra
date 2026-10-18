@@ -96,14 +96,6 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
       },
     });
 
-    console.log(
-      'DBG',
-      JSON.stringify(
-        (chunks ?? [])
-          .filter((c: any) => c.type?.startsWith('tool'))
-          .map((c: any) => [c.type, c.metadata, Object.keys(c)]),
-      ),
-    );
     const meta = (type: string) =>
       (chunks ?? []).find((c: any) => c.type === type)?.metadata?.mastra?.toolPayloadTransform;
     expect(meta('tool-call')?.display?.['input-available']?.transformed).toBe('[redacted input-available on display]');
