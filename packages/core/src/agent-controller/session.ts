@@ -1961,6 +1961,8 @@ interface ApprovalGate {
 /** The run signal a tool-call answer armed itself, set only when it created the controller. */
 interface ArmedRun {
   signal?: AbortSignal;
+  /** {@link SessionRun.armCount} right after this answer armed the run. */
+  armCount?: number;
 }
 
 /**
@@ -2151,6 +2153,8 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  /** Incremented every time a caller arms (or re-arms) the current run. */
+  #armCount = 0;
   /** Incremented on every abort request, so waiters can ignore earlier ones. */
   #abortGeneration = 0;
   readonly #teardownWaiters = new Set<() => void>();
@@ -2268,8 +2272,17 @@ export class SessionRun {
    * run. Callers pass its `.signal` into the underlying stream.
    */
   ensureAbortController(): AbortController {
+    this.#armCount += 1;
     this.#abortController ??= new AbortController();
     return this.#abortController;
+  }
+
+  /**
+   * How many times the run has been armed via {@link ensureAbortController}.
+   * Lets a caller tell whether anyone else joined the run it armed.
+   */
+  armCount(): number {
+    return this.#armCount;
   }
 
   /** Signal for the current run's AbortController, or undefined when none is armed. */
@@ -5782,7 +5795,10 @@ export class Session<TState = unknown> {
   #armRun(armed?: ArmedRun): AbortSignal {
     const wasRunning = this.run.isRunning();
     const signal = this.run.ensureAbortController().signal;
-    if (!wasRunning && armed) armed.signal = signal;
+    if (!wasRunning && armed) {
+      armed.signal = signal;
+      armed.armCount = this.run.armCount();
+    }
     return signal;
   }
 
@@ -5797,8 +5813,16 @@ export class Session<TState = unknown> {
       await answer(armed);
     } catch (error) {
       // The thread subscription still reports the parked run as active, so
-      // only the run's own id tells whether the answer started a run.
-      if (armed.signal && this.run.getAbortSignal() === armed.signal && !this.run.getRunId()) this.run.reset();
+      // only the run's own id tells whether the answer started a run. A
+      // message or signal that armed the same run meanwhile keeps it.
+      if (
+        armed.signal &&
+        this.run.getAbortSignal() === armed.signal &&
+        this.run.armCount() === armed.armCount &&
+        !this.run.getRunId()
+      ) {
+        this.run.reset();
+      }
       throw error;
     }
   }

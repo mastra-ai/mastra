@@ -532,6 +532,7 @@ describe('AgentController: tool resume that fails before its run starts', () => 
     await session.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     expect(events.some((e: any) => e.type === 'error')).toBe(true);
+    expect(events.some((e: any) => e.type === 'agent_end')).toBe(false);
     expect(session.run.isRunning()).toBe(false);
     expect(session.run.getRunId()).toBeNull();
     expect(session.displayState.get().pendingSuspensions.size).toBe(1);
@@ -552,5 +553,20 @@ describe('AgentController: tool resume that fails before its run starts', () => 
 
     expect(session.run.isRunning()).toBe(true);
     expect(session.run.getAbortSignal()).toBe(armedSignal);
+  });
+
+  it('keeps the run when another caller arms it while the resume is failing', async () => {
+    const { session, agent } = await suspendedSession('test-agent-failed-resume-joined');
+    let joinedSignal: AbortSignal | undefined;
+    vi.spyOn(agent, 'sendStreamResume').mockImplementationOnce(async () => {
+      joinedSignal = session.run.ensureAbortController().signal;
+      throw new Error('resume dispatch failed');
+    });
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(joinedSignal).toBeDefined();
+    expect(session.run.isRunning()).toBe(true);
+    expect(session.run.getAbortSignal()).toBe(joinedSignal);
   });
 });
