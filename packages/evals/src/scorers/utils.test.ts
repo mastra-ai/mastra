@@ -2303,6 +2303,74 @@ describe('Scorer Utils', () => {
       expect(result.violatedTools).toEqual(['deleteAll']);
       expect(result.violatedSequences).toEqual([['escalate', 'admin']]);
     });
+
+    // Trace-derived trajectories nest tool calls under model_generation and interleave processor_run steps
+    const sequenceMessageTrajectory: Trajectory = {
+      steps: [
+        { stepType: 'tool_call' as const, name: 'searchCorpus' },
+        { stepType: 'tool_call' as const, name: 'lookupSource' },
+      ],
+    };
+    const sequenceTraceTrajectory: Trajectory = {
+      steps: [
+        { stepType: 'processor_run' as const, name: 'input-processor', processorId: 'p' },
+        {
+          stepType: 'model_generation' as const,
+          name: 'model',
+          children: [
+            { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+            { stepType: 'tool_call' as const, name: 'searchCorpus' },
+            { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+            { stepType: 'tool_call' as const, name: 'lookupSource' },
+            { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+          ],
+        },
+      ],
+    };
+
+    it('should detect blacklisted sequences separated by processor_run steps in a trace trajectory', () => {
+      const result = checkTrajectoryBlacklist(sequenceTraceTrajectory, {
+        blacklistedSequences: [['searchCorpus', 'lookupSource']],
+      });
+      expect(result.score).toBe(0);
+      expect(result.violatedSequences).toEqual([['searchCorpus', 'lookupSource']]);
+    });
+
+    it('should not flag sequences separated by another tool call in a trace trajectory', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'model_generation' as const,
+            name: 'model',
+            children: [
+              { stepType: 'tool_call' as const, name: 'searchCorpus' },
+              { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+              { stepType: 'tool_call' as const, name: 'summarize' },
+              { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+              { stepType: 'tool_call' as const, name: 'lookupSource' },
+            ],
+          },
+        ],
+      };
+      const result = checkTrajectoryBlacklist(trajectory, {
+        blacklistedSequences: [['searchCorpus', 'lookupSource']],
+      });
+      expect(result.score).toBe(1);
+      expect(result.violatedSequences).toEqual([]);
+    });
+
+    it('should return the same result for message and trace trajectories of the same run', () => {
+      const options = {
+        blacklistedTools: ['lookupSource'],
+        blacklistedSequences: [
+          ['searchCorpus', 'lookupSource'],
+          ['lookupSource', 'searchCorpus'],
+        ],
+      };
+      expect(checkTrajectoryBlacklist(sequenceTraceTrajectory, options)).toEqual(
+        checkTrajectoryBlacklist(sequenceMessageTrajectory, options),
+      );
+    });
   });
 
   describe('analyzeToolFailures', () => {
@@ -2367,6 +2435,77 @@ describe('Scorer Utils', () => {
       const result = analyzeToolFailures(trajectory);
       expect(result.score).toBe(1);
       expect(result.patterns).toEqual([]);
+    });
+
+    // Trace-derived trajectories nest tool calls under model_generation and interleave processor_run steps
+    const flakyMessageTrajectory: Trajectory = {
+      steps: [
+        { stepType: 'tool_call' as const, name: 'flakySearch', success: false },
+        { stepType: 'tool_call' as const, name: 'flakySearch', success: true },
+        { stepType: 'tool_call' as const, name: 'summarize', success: true },
+      ],
+    };
+    const flakyTraceTrajectory: Trajectory = {
+      steps: [
+        { stepType: 'processor_run' as const, name: 'input-processor', processorId: 'p' },
+        {
+          stepType: 'model_generation' as const,
+          name: 'model',
+          children: [
+            { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+            { stepType: 'tool_call' as const, name: 'flakySearch', success: false },
+            { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+            { stepType: 'tool_call' as const, name: 'flakySearch', success: true },
+            { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+            { stepType: 'tool_call' as const, name: 'summarize', success: true },
+          ],
+        },
+        { stepType: 'processor_run' as const, name: 'output-processor', processorId: 'p' },
+      ],
+    };
+
+    it('should detect retries nested under model_generation with interleaved processor_run steps', () => {
+      const result = analyzeToolFailures(flakyTraceTrajectory, { maxRetriesPerTool: 0 });
+      expect(result.totalRetries).toBe(1);
+      expect(result.score).toBe(0.8);
+      expect(result.excessiveRetryTools).toEqual(['flakySearch']);
+      expect(result.patterns).toEqual([
+        {
+          toolName: 'flakySearch',
+          retryCount: 1,
+          fellBackToAlternative: false,
+          alternativeTool: undefined,
+          eventuallySucceeded: true,
+        },
+      ]);
+    });
+
+    it('should return the same result for message and trace trajectories of the same run', () => {
+      for (const maxRetriesPerTool of [0, 2]) {
+        expect(analyzeToolFailures(flakyTraceTrajectory, { maxRetriesPerTool })).toEqual(
+          analyzeToolFailures(flakyMessageTrajectory, { maxRetriesPerTool }),
+        );
+      }
+    });
+
+    it('should not group calls to the same tool across different sibling lists', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'model_generation' as const,
+            name: 'model',
+            children: [{ stepType: 'tool_call' as const, name: 'flakySearch', success: false }],
+          },
+          {
+            stepType: 'model_generation' as const,
+            name: 'model',
+            children: [{ stepType: 'tool_call' as const, name: 'flakySearch', success: true }],
+          },
+        ],
+      };
+      const result = analyzeToolFailures(trajectory, { maxRetriesPerTool: 0 });
+      expect(result.totalRetries).toBe(0);
+      expect(result.score).toBe(1);
     });
   });
 });
