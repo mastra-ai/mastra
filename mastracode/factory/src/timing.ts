@@ -63,10 +63,29 @@ export function instrumentMethods<T extends object>(target: T, label: string, me
   return target;
 }
 
+/** Every method name on `target`'s prototype chain, excluding `Object.prototype`. */
+function prototypeMethodNames(target: object): string[] {
+  const names = new Set<string>();
+  for (
+    let proto = Object.getPrototypeOf(target);
+    proto && proto !== Object.prototype;
+    proto = Object.getPrototypeOf(proto)
+  ) {
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name === 'constructor') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+      if (typeof descriptor?.value === 'function') names.add(name);
+    }
+  }
+  return [...names];
+}
+
 /**
- * Wrap every async method on `target` (and on the domains returned by a
- * `getDomain` method) so each call logs `<label>.<method>` duration. Returns
- * `target` unchanged when timing is disabled.
+ * Wrap every async method on `target` so each call logs `<label>.<method>`
+ * duration. Domains passed to a `registerDomain` method are instrumented in
+ * place as `<label>.<domain name>`, so the handle it returns and later
+ * `getDomain` lookups are the same timed object. Returns `target` unchanged
+ * when timing is disabled.
  */
 export function instrumentAsyncMethods<T extends object>(target: T, label: string): T {
   if (!factoryTimingEnabled) return target;
@@ -80,8 +99,9 @@ export function instrumentAsyncMethods<T extends object>(target: T, label: strin
       const fn = (...args: unknown[]) => {
         const start = performance.now();
         const result = value.apply(obj, args);
-        if (prop === 'getDomain' && result && typeof result === 'object' && !(result instanceof Promise)) {
-          return instrumentAsyncMethods(result, `${label}.${String(args[0])}`);
+        if (prop === 'registerDomain' && result && typeof result === 'object' && !(result instanceof Promise)) {
+          const name = (result as { name?: unknown }).name;
+          return instrumentMethods(result, `${label}.${String(name)}`, prototypeMethodNames(result));
         }
         if (result instanceof Promise) {
           return result.finally(() => logTiming(`${label}.${prop} ${Math.round(performance.now() - start)}ms`));

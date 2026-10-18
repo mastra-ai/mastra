@@ -1,4 +1,37 @@
+import { FactoryStorage, FactoryStorageDomain } from '@mastra/core/storage';
+import type { FactoryStorageOps, MastraCompositeStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
+
+class TestFactoryStorage extends FactoryStorage {
+  readonly ops = {} as FactoryStorageOps;
+  getMastraStorage(): MastraCompositeStore {
+    throw new Error('not used');
+  }
+  protected async initStorage(): Promise<void> {}
+  async ensureCollections(): Promise<void> {}
+  withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
+    return fn(this.ops);
+  }
+  async close(): Promise<void> {}
+}
+
+class NotesDomain extends FactoryStorageDomain {
+  constructor() {
+    super('notes');
+  }
+  async list(): Promise<string[]> {
+    return ['n1'];
+  }
+  async dangerouslyClearAll(): Promise<void> {}
+}
+
+function timingLines(write: MockInstance): string[] {
+  return write.mock.calls
+    .map(([chunk]) => String(chunk))
+    .filter(line => line.startsWith('[factory:timing] '))
+    .map(line => line.slice('[factory:timing] '.length).trimEnd());
+}
 
 async function loadTiming(flag: string | undefined) {
   vi.resetModules();
@@ -31,14 +64,19 @@ describe('FACTORY_TIMING instrumentation', () => {
     );
   });
 
-  it('times storage domain calls reached through getDomain', async () => {
+  it('times calls on the handle registerDomain returns and on getDomain, which are the same object', async () => {
     const { instrumentAsyncMethods } = await loadTiming('true');
     const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-    const domain = { list: async () => ['a'] };
-    const storage = instrumentAsyncMethods({ getDomain: (_name: string) => domain }, 'storage');
+    const storage = instrumentAsyncMethods(new TestFactoryStorage(), 'storage');
 
-    await expect(storage.getDomain('sessions').list()).resolves.toEqual(['a']);
-    expect(write).toHaveBeenCalledWith(expect.stringMatching(/^\[factory:timing\] storage\.sessions\.list \d+ms\n$/));
+    const notes = storage.registerDomain(new NotesDomain());
+    await expect(notes.list()).resolves.toEqual(['n1']);
+    expect(timingLines(write)).toEqual([expect.stringMatching(/^storage\.notes\.list \d+ms$/)]);
+
+    expect(storage.getDomain('notes')).toBe(notes);
+    await storage.getDomain<NotesDomain>('notes').list();
+    expect(timingLines(write)).toHaveLength(2);
+    expect(timingLines(write)[1]).toMatch(/^storage\.notes\.list \d+ms$/);
   });
 
   it('leaves objects untouched and logs nothing when disabled', async () => {
