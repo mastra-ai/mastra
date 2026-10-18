@@ -4237,20 +4237,51 @@ export class Mastra<
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
-    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, async runSnapshot => {
-      try {
-        const workflow = this.getWorkflowById(runSnapshot.workflowName);
-        const run = await workflow.createRun({ runId: runSnapshot.runId });
-        await run.restart();
-        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
-      } catch (error) {
-        this.#logger.error('Failed to restart workflow run', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-          error,
+    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, runSnapshot =>
+      this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId),
+    );
+  }
+
+  /**
+   * Restarts one active run. A run whose ownership lease is still live belongs to another
+   * process (or to this one before a crash), so it is skipped and re-checked once the lease
+   * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
+   */
+  async #restartWorkflowRun(workflowName: string, runId: string, recheck = false): Promise<void> {
+    try {
+      const workflow = this.getWorkflowById(workflowName);
+      const run = await workflow.createRun({ runId });
+      // A re-check can find the run already settled or suspended by its owner.
+      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
+      await run.restart();
+      this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {
+        this.#logger.debug('Skipped restarting workflow run owned by a live process', {
+          workflow: workflowName,
+          runId,
         });
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, error.details?.leaseExpiresAt);
+        return;
       }
-    });
+      this.#logger.error('Failed to restart workflow run', { workflow: workflowName, runId, error });
+    }
+  }
+
+  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, leaseExpiresAt: unknown): void {
+    if (this.#shuttingDown) return;
+    const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
+    const key = JSON.stringify(['workflow', workflowName, runId]);
+    clearTimeout(this.#durableRecoveryRechecks.get(key));
+    const delay =
+      (Number.isNaN(retryAt) ? 0 : Math.max(0, retryAt - Date.now())) +
+      Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const timer = setTimeout(() => {
+      this.#durableRecoveryRechecks.delete(key);
+      void this.#restartWorkflowRun(workflowName, runId, true);
+    }, delay);
+    timer.unref?.();
+    this.#durableRecoveryRechecks.set(key, timer);
   }
 
   /**
