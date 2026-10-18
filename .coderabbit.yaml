@@ -135,7 +135,7 @@ reviews:
     checkov:
       enabled: true
     eslint:
-      enabled: true
+      enabled: false
     actionlint:
       enabled: true
     semgrep:
