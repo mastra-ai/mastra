@@ -196,6 +196,17 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after th
     expect(await waitForExit(childPid)).toBe(true);
   });
 
+  it('stops the child a foreground command left behind once the command returns', async () => {
+    const result = await sandbox.executeCommand!('sleep 300 & echo "CHILD $!"; echo started');
+
+    const childPid = Number(/CHILD (\d+)/.exec(result.stdout)?.[1]);
+    expect(childPid).toBeGreaterThan(0);
+    strayPids.push(childPid);
+    expect(result).toMatchObject({ exitCode: 0, success: true });
+    expect(result.executionTimeMs).toBeLessThan(5_000);
+    expect(await waitForExit(childPid)).toBe(true);
+  });
+
   it('keeps listing a command whose child still holds its output after its output is read', async () => {
     const { handle } = await leaveChildBehind();
 
