@@ -296,7 +296,15 @@ export function normalizeChunkPayload(type: string, payload: unknown): unknown {
   if (type === 'error') return normalizePayload(payload, [], true);
 
   const normalized = normalizePayload(payload);
-  if (type !== 'tool-error' || normalized === null || typeof normalized !== 'object') return normalized;
+  if (normalized === null || typeof normalized !== 'object') return normalized;
+
+  // Only the plain loop puts the suspended step's usage on these chunks yet (#27440).
+  // suspended-step-usage.scenario.test.ts tracks that gap per engine.
+  if (type === 'tool-call-approval' || type === 'tool-call-suspended') {
+    delete (normalized as Record<string, unknown>).usage;
+    return normalized;
+  }
+  if (type !== 'tool-error') return normalized;
 
   const error = (normalized as Record<string, unknown>).error;
   if (error !== null && typeof error === 'object') delete (error as Record<string, unknown>).stack;
