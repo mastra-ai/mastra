@@ -37,7 +37,7 @@ Pick the highest rung that fits; each step down needs a reason:
 
 ## Wiring
 
-- `packages/playground-ui/src/index.css` imports Tailwind and `theme.css`, and declares the dark variant: `@custom-variant dark (&:is(.dark *))`.
+- `packages/playground-ui/components.css` is the design system's stylesheet uncompiled: `theme.css`, the dark variant (`@custom-variant dark (&:is(.dark *))`), custom utilities, base styles and keyframes. `src/index.css` is `@import 'tailwindcss'` plus that file, for the library build. An app with its own Tailwind build imports `components.css` and `sources.css` into its sheet instead of `style.css`.
 - The palette defaults to dark in `:root`; `html.light` flips the semantic variables. Theming is automatic through semantic tokens — never write `dark:` color overrides on semantic tokens; reserve `dark:` for rare structural differences.
 - Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-body-sm` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
 - Code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — all of these rules apply there too.

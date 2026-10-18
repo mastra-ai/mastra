@@ -57,6 +57,7 @@
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
@@ -107,6 +108,7 @@
     "moonshot/kimi-k3",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
@@ -285,6 +287,7 @@
     "deepinfra/microsoft/WizardLM-2-8x22B",
     "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
     "deepinfra/moonshotai/Kimi-K2-Instruct",
+    "deepinfra/nemotron-3-super-120b-a12b",
     "deepinfra/nemotron-3-ultra-550b-a55b",
     "deepinfra/nvidia/Llama-3.1-Nemotron-70B-Instruct",
     "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
@@ -304,6 +307,7 @@
     "deepseek/deepseek-v4-pro",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "fireworks_ai/gpt-oss-120b",
     "flexai/DeepSeek-V4-Flash-0731",
     "flexai/DeepSeek-V4-Flash-0731@eu",
@@ -373,6 +377,7 @@
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -543,6 +548,7 @@
     "deepinfra/meta-models/Muse-Glimmer-30B",
     "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
     "deepinfra/moonshotai/Kimi-K2.5",
+    "deepinfra/nemotron-3-super-120b-a12b",
     "deepinfra/nemotron-3-ultra-550b-a55b",
     "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
     "deepinfra/openai/gpt-oss-120b",
@@ -562,6 +568,7 @@
     "deepseek/deepseek-v4-pro",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4-Flash-0731",
     "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
@@ -630,7 +637,9 @@
     "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -747,6 +756,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepinfra/nemotron-3-super-120b-a12b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
       }
     ],
     "deepinfra/nemotron-3-ultra-550b-a55b": [
@@ -1313,6 +1328,12 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "nebius/meta-models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
@@ -1671,6 +1692,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "mistral/mistral-small-latest": [

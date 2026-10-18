@@ -81,7 +81,9 @@ function resolveInputProcessors(): Array<{ id?: string }> {
 function resolveOutputProcessors(): Array<{ id?: string }> {
   const config = agentConstructorMock.mock.calls[0]?.[0] as { outputProcessors?: unknown } | undefined;
   expect(typeof config?.outputProcessors).toBe('function');
-  return (config!.outputProcessors as () => Array<{ id?: string }>)();
+  return (config!.outputProcessors as (args: { requestContext: RequestContext }) => Array<{ id?: string }>)({
+    requestContext: new RequestContext(),
+  });
 }
 
 const controllerConstructorMock = vi.fn();
@@ -1816,6 +1818,17 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
+  });
+
+  it('appends embedding output processors after the built-in output processors', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const customProcessor = { id: 'embedding-stamper', processOutputStep: vi.fn() };
+
+    await createMastraCode({ outputProcessors: () => [customProcessor], disablePlugins: true });
+
+    const processors = resolveOutputProcessors();
+    expect(processors.map(processor => processor.id)).toEqual(['cyber-refusal-handler', 'embedding-stamper']);
+    expect(processors[1]).toBe(customProcessor);
   });
 
   it('resolves request-scoped input processors before mandatory built-ins', async () => {

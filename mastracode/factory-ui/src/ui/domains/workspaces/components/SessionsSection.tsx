@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowUpDown, CircleDashed, Clock, MessagesSquare, Plus, UserRound } from 'lucide-react';
+import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -32,7 +32,7 @@ import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
-import { SessionListProperties } from './SessionListProperties';
+import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -82,7 +82,7 @@ export function SessionsSection() {
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
       <Sidebar.NavHeader
-        icon={<MessagesSquare />}
+        className="mt-0"
         action={
           <div className="flex items-center gap-0.5">
             {hasRepositories && (
@@ -96,7 +96,8 @@ export function SessionsSection() {
                 <Plus size={15} />
               </Button>
             )}
-            <SessionListProperties
+            <PropertiesMenu
+              label="Sessions properties"
               changedCount={changedSettingCount + activeFilterCount}
               onReset={() => {
                 resetView();
@@ -139,7 +140,7 @@ export function SessionsSection() {
                 onVisibilityChange={changeGroupVisibility}
                 onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
               />
-            </SessionListProperties>
+            </PropertiesMenu>
           </div>
         }
       >

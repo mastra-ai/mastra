@@ -102,7 +102,7 @@ describe('Classifier', () => {
     });
 
     expect(doEvaluate).toHaveBeenCalledWith({
-      state: { content: 'hello' },
+      state: [{ type: 'json', value: { content: 'hello' } }],
       questions: {
         unsafe: {
           ...booleanQuestions.unsafe,
@@ -200,6 +200,36 @@ describe('Classifier', () => {
 
       expect(doDecide).toHaveBeenCalledTimes(1);
       expect(doEvaluate).not.toHaveBeenCalled();
+    });
+
+    it('converts state into provider parts like the AI SDK does', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+        warnings: [],
+      }));
+      const classifier = new Classifier({
+        id: 'parts',
+        model: createDecisionModel(doDecide),
+        questions: booleanQuestions,
+      });
+      const parts = [
+        { type: 'text', text: 'hi' },
+        { type: 'json', value: { a: 1 } },
+      ] as const;
+
+      await classifier.decide({ state: 'I was charged twice' });
+      await classifier.decide({ state: { message: 'hi' } });
+      await classifier.decide({ state: parts });
+      await classifier.decide({ state: ['a', 1] });
+      await classifier.decide({ state: [{ type: 'text', text: 'hi' }, 'b'] });
+
+      expect(doDecide.mock.calls.map(([options]) => options.state)).toEqual([
+        [{ type: 'text', text: 'I was charged twice' }],
+        [{ type: 'json', value: { message: 'hi' } }],
+        parts,
+        [{ type: 'json', value: ['a', 1] }],
+        [{ type: 'json', value: [{ type: 'text', text: 'hi' }, 'b'] }],
+      ]);
     });
 
     it('keeps the deprecated evaluate() and MastraEvaluationModel working', async () => {
@@ -518,20 +548,23 @@ describe('Classifier', () => {
     expect((error as APICallError).statusCode).toBe(503);
   });
 
-  it('records only safe classifier tracing metadata', async () => {
+  it('records the state and questions as span input and the answers as span output', async () => {
     const childSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
     const parentSpan = { createChildSpan: vi.fn(() => childSpan) };
     vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(parentSpan as never);
-    const classifier = new Classifier({ id: 'safe-id', model: createModel(), questions: booleanQuestions });
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+    const state = { message: 'I was charged twice' };
 
-    await classifier.decide({ state: { secret: 'sensitive-state' } });
+    await classifier.decide({ state });
 
-    const serializedCalls = JSON.stringify([parentSpan.createChildSpan.mock.calls, childSpan.update.mock.calls]);
-    expect(serializedCalls).toContain('safe-id');
-    expect(serializedCalls).toContain('test-model');
-    expect(serializedCalls).not.toContain('sensitive-state');
-    expect(serializedCalls).not.toContain('Unsafe');
-    expect(serializedCalls).not.toContain('probability');
-    expect(childSpan.end).toHaveBeenCalledOnce();
+    expect(parentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: { state, questions: booleanQuestions },
+        attributes: expect.objectContaining({ classifierId: 'router', modelId: 'test-model' }),
+      }),
+    );
+    expect(childSpan.end).toHaveBeenCalledExactlyOnceWith({
+      output: { answers: { unsafe: { type: 'boolean', probability: 0.8 } } },
+    });
   });
 });

@@ -163,6 +163,45 @@ describe('ensureFactorySourceSession', () => {
     );
   });
 
+  it('passes a chosen session id, visibility and origin through to the row', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+    const sessionId = '00000000-0000-4000-8000-0000000000a1';
+
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      sessionId,
+      branch: `user/session-${sessionId}`,
+      attributeToUserId: 'user-2',
+      visibility: 'private',
+      origin: { sessionId: 'parent-session', threadId: 'parent-thread' },
+    });
+
+    expect(result).toMatchObject({ sessionId, userId: 'user-2' });
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      userId: 'user-2',
+      visibility: 'private',
+      originSessionId: 'parent-session',
+      originThreadId: 'parent-thread',
+    });
+  });
+
+  it('leaves the default visibility and no origin when neither is passed', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/issue-50',
+    });
+    await expect(sourceControl.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({
+      visibility: 'org',
+      originSessionId: null,
+      originThreadId: null,
+    });
+  });
+
   it('files every session under the position-1 environment link and still rejects a cross-link branch collision', async () => {
     const { sourceControl, project, repository, projectRepository } = await seedLinkedRepository();
     const other = await sourceControl.repositories.upsert({

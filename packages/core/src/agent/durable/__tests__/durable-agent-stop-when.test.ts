@@ -8,36 +8,14 @@
  *   predicate      one tool turn, one model call
  *   has-tool-call  the same outcome, hand-rolled from the last step's tool calls
  *   array          two tool turns (first predicate never fires)
- *   throws         a throwing predicate has to settle the run one way or another, never hang
- *
- * Deviation from the harness for the `throws` leg: the harness records its contract
- * reference-vs-candidate (main vs PR) and marks its engine comparison NOT COMPARABLE, because
- * plain fails "worker completion" while durable and evented pass. The port therefore asserts the
- * harness's actual per-engine check (`finish >= 1 || errors || threw`) and does not compare the
- * contracts across engines — the cross-engine divergence is COR-1430, declared below.
- *
- * COR-1430 (declared below, for durable and evented): a throwing `stopWhen` rejects plain's stream
- * — its turn simply ends after the tool result — where durable and evented append `step-finish` and
- * `error` chunks to that same turn and resolve. The declaration's `expect` adds exactly those chunks,
- * so the helper's leaf-by-leaf comparison still covers everything else, and its own staleness check
- * fails the moment either side stops behaving this way.
- *
- * Plain's own values are pinned literally, read from the observation the helper returns, so the
- * reference stays visible next to the declaration.
+ *   throws         one tool turn, then the predicate rejects the stream
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import type {
-  EngineDifference,
-  EngineObservation,
-  ModelScript,
-  ParityEngine,
-  ParitySnapshot,
-  ParityStreamOptions,
-} from './parity-harness';
+import type { ModelScript, ParityEngine, ParitySnapshot, ParityStreamOptions } from './parity-harness';
 import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
@@ -52,36 +30,8 @@ type StopContext = { steps: Array<{ toolCalls?: Array<{ toolName?: string }> }> 
 type StopPredicate = (context: StopContext) => boolean;
 type StopWhen = NonNullable<ParityStreamOptions['stopWhen']>;
 
-/** Tool turns each variant is expected to complete; `throws` promises nothing. */
+/** Tool turns each non-throwing variant is expected to complete. */
 const EXPECTED_TURNS: Partial<Record<Variant, number>> = { predicate: 1, 'has-tool-call': 1, array: 2 };
-
-/**
- * COR-1430: the same run settles differently. plain rejects the stream on the throwing predicate,
- * so its turn ends after the tool result; durable and evented append `step-finish` and `error` chunks
- * to that turn and resolve. The expectation adds exactly those chunks so the helper still compares
- * everything else leaf by leaf.
- *
- * `chunkPayloads` is ignored because the extra payloads are not derivable from plain's observation.
- * The test body pins the parts that matter instead — the extra chunks' types, the completed step,
- * and the error they carry.
- */
-function settledAfterThrowingStopWhen(plain: EngineObservation): EngineObservation {
-  return {
-    ...plain,
-    turns: plain.turns.map(turn => ({
-      ...turn,
-      chunks: [...turn.chunks, 'AGENT:step-finish', 'undefined:error'],
-      chunkTypes: [...turn.chunkTypes, 'step-finish', 'error'],
-    })),
-  };
-}
-
-const COR_1430: EngineDifference = {
-  reason:
-    "COR-1430: a throwing stopWhen rejects plain's stream, where durable and evented stream `step-finish` and `error` chunks instead and resolve.",
-  ignore: ['chunkPayloads'],
-  expect: settledAfterThrowingStopWhen,
-};
 
 /** The `stepResult` of every `step-finish` chunk in a turn, in order. */
 function stepFinishStepResults(turn: ParitySnapshot): Array<{ isContinued?: unknown; reason?: unknown }> {
@@ -173,8 +123,6 @@ async function runT23(variant: Variant) {
 
   const results = await expectEngineParity({
     model: script,
-    // `throws` settles differently on the wrapped engines (COR-1430).
-    differences: variant === 'throws' ? { durable: COR_1430, evented: COR_1430 } : undefined,
     buildAgent: ({ engine, model }) => {
       commits.set(engine, 0);
       calls.set(engine, []);
@@ -236,58 +184,27 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
     },
   );
 
-  it('a throwing stopWhen settles the run one way or another', async () => {
+  it('a throwing stopWhen rejects the stream identically on every engine', async () => {
     const { results, commits, calls } = await runT23('throws');
 
-    // The harness records this contract per engine, reference-vs-candidate; its fields are asserted
-    // below from the observation the helper returned.
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
       const turn = turns.at(-1)!;
 
-      // The throwing predicate has to be what settled the run, otherwise this leg is vacuous.
       expect(calls.get(engine)!.length, `${engine}: the throwing predicate was consulted`).toBeGreaterThanOrEqual(1);
       expect(requests, `${engine}: modelCalls`).toHaveLength(1);
       expect(commits.get(engine), `${engine}: commits`).toBe(1);
+      expect(turn.chunkTypes, `${engine}: chunks`).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
       expect(chunksOfType(turn, 'finish'), `${engine}: finish`).toBe(0);
-      // No finish chunk reached the stream, so the harness's finishReason has nothing to read.
+      expect(errorMessages(turn), `${engine}: no error chunk on the wire`).toEqual([]);
       expect(turn.finishChunk.payloadKeys, `${engine}: finishReason`).toEqual([]);
-      expect(
-        errorMessages(turn).length > 0 || turn.error !== undefined,
-        `${engine}: throwing stopWhen settles the run one way or another`,
-      ).toBe(true);
       expect(turn.error, `${engine}: threw`).toEqual({ name: 'Error', message: 'T23 stopWhen failure' });
-      // The shared chunks' `chunkPayloads` is ignored for this behaviour (see COR_1430), so pin the
-      // payload the harness's `commits` stands for.
       expect((turn.chunkPayloads[3] as { result?: unknown }).result, `${engine}: tool result`).toEqual({ done: 1 });
     }
 
-    // Plain's reference, read off the observation the helper returned: the rejection ends the turn
-    // after the tool result, so nothing else reaches the stream. Durable and evented settle the same
-    // run by appending the completed step and error chunks the COR-1430 declaration adds — its
-    // `expect` makes the comparison above possible, and its `reason` records why they may differ.
-    const plainTypes = results.plain!.turns.at(-1)!.chunkTypes;
-    expect(plainTypes).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
-    expect(errorMessages(results.plain!.turns.at(-1)!), 'plain: no error chunk on the wire').toEqual([]);
-
-    for (const engine of ['durable', 'evented'] as const) {
-      const turn = results[engine]!.turns.at(-1)!;
-      expect(turn.chunkTypes, `${engine}: chunks`).toEqual([
-        'start',
-        'step-start',
-        'tool-call',
-        'tool-result',
-        'step-finish',
-        'error',
-      ]);
-      expect((turn.chunkPayloads[4] as { stepResult?: { reason?: unknown } }).stepResult?.reason).toBe('tool-calls');
-      expect(errorMessages(turn), `${engine}: error chunk`).toEqual(['T23 stopWhen failure']);
-    }
-
-    // How often the predicate is consulted differs across engines: plain and durable ask once,
-    // while evented may ask more because its worker re-runs the step and re-reads the decision.
     expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
     expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
-    expect(calls.get('evented')!.length, 'evented: the predicate was consulted').toBeGreaterThanOrEqual(1);
+    // COR-1466: evented retries a throwing loop condition up to its delivery-attempt limit.
+    expect(calls.get('evented')!.length, 'evented: the predicate was consulted three times').toBe(3);
   });
 });
