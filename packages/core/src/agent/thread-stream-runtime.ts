@@ -381,8 +381,8 @@ type PendingIdleSignal<OUTPUT = unknown> = {
 
 /**
  * Stream options for a run started by a signal waking an idle thread. Explicit
- * options (from the sender or a notification delivery policy) are used as-is;
- * otherwise the agent's `wakeOptions` hook is called, falling back to the
+ * options (from the sender or a notification delivery policy) are used, with the
+ * sender's context filling fields they omit; otherwise the agent's `wakeOptions` hook is called, falling back to the
  * sender's request context.
  */
 /**
@@ -393,9 +393,24 @@ function resolveWakeStreamOptions<OUTPUT>(
   agent: Agent<any, any, any, any>,
   input: AgentWakeOptionsInput & { streamOptions?: AgentExecutionOptions<OUTPUT> },
 ): AgentExecutionOptions<OUTPUT> | undefined | Promise<AgentExecutionOptions<OUTPUT> | undefined> {
-  if (input.streamOptions) return input.streamOptions;
-  const { streamOptions: _explicit, ...hookInput } = input;
+  const { streamOptions: explicit, ...hookInput } = input;
   const { requestContext, tracingContext, tracingOptions } = hookInput;
+  if (explicit) {
+    // Explicit fields win; the sender's context fills only what they leave out.
+    if (
+      (explicit.requestContext || !requestContext) &&
+      (explicit.tracingContext || !tracingContext) &&
+      (explicit.tracingOptions || !tracingOptions)
+    ) {
+      return explicit;
+    }
+    return {
+      ...explicit,
+      requestContext: explicit.requestContext ?? requestContext,
+      tracingContext: explicit.tracingContext ?? tracingContext,
+      tracingOptions: explicit.tracingOptions ?? tracingOptions,
+    };
+  }
   // The sender's trace wins so the woken run nests under whatever caused it;
   // the sender's request context is only a fallback for the hook's.
   const merge = (hooked: AgentExecutionOptions<any> | undefined): AgentExecutionOptions<OUTPUT> | undefined => {
@@ -4166,7 +4181,7 @@ export class AgentThreadStreamRuntime {
       return drained || owns.acquired;
     }
 
-    if (pendingIdle.cancelled) {
+    const dropCancelled = () => {
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
@@ -4176,23 +4191,27 @@ export class AgentThreadStreamRuntime {
       this.#notifyThreadEvents(state);
       void this.#drainPendingIdleSignals(state, pubsub, key);
       return true;
-    }
+    };
+    if (pendingIdle.cancelled) return dropCancelled();
 
     let resolvingWakeOptions = false;
     try {
-      state.drainingIdleSignalsByThread.delete(key);
-      this.#notifyThreadEvents(state);
       state.startingQueuedRunIds.add(pendingIdle.runId);
       if (pendingIdle.wake) {
         resolvingWakeOptions = true;
         const resolved = resolveWakeStreamOptions(pendingIdle.agent, {
           resourceId: pendingIdle.resourceId,
           threadId: pendingIdle.threadId,
+          streamOptions: pendingIdle.streamOptions,
           ...pendingIdle.wake,
         });
+        // Stay in the draining slot while an async hook resolves so the signal can still be cancelled.
         pendingIdle.streamOptions = resolved instanceof Promise ? await resolved : resolved;
         resolvingWakeOptions = false;
+        if (pendingIdle.cancelled) return dropCancelled();
       }
+      state.drainingIdleSignalsByThread.delete(key);
+      this.#notifyThreadEvents(state);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
@@ -5994,15 +6013,11 @@ export class AgentThreadStreamRuntime {
         resourceId,
         threadId,
         streamOptions: target.ifIdle?.streamOptions,
-        ...(target.ifIdle?.streamOptions
-          ? {}
-          : {
-              wake: {
-                requestContext: target.requestContext,
-                tracingContext: target.tracingContext,
-                tracingOptions: target.tracingOptions,
-              },
-            }),
+        wake: {
+          requestContext: target.requestContext,
+          tracingContext: target.tracingContext,
+          tracingOptions: target.tracingOptions,
+        },
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
