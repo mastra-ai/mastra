@@ -17,7 +17,7 @@ import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
-import { FactorySkillsSection } from './FactorySkillsSection';
+import { FactoryBoardsSection } from './FactoryBoardsSection';
 import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -99,7 +99,7 @@ export function SettingsPanel() {
           sessionScope={sessionScope}
         />
       )}
-      {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
+      {section === 'boards' && <FactoryBoardsSection factoryId={factoryId} />}
       {section === 'behavior' && (
         <BehaviorSettings
           settings={settings}

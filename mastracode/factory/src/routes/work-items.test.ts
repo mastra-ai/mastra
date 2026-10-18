@@ -194,6 +194,7 @@ describe('installed board catalog', () => {
     expect(boards.at(-1)).toEqual({
       id: 'release',
       title: 'Release Preview',
+      custom: false,
       initialPhase: 'queued',
       phases: [
         { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },

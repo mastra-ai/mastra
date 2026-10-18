@@ -3,6 +3,7 @@ import type { BoardCatalogResponse, InstalledBoardInfo } from '../../src/api/typ
 export const releaseBoard: InstalledBoardInfo = {
   id: 'release',
   title: 'Release Preview',
+  custom: false,
   initialPhase: 'queued',
   phases: [
     { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
@@ -29,6 +30,7 @@ export const builtinBoardCatalog: BoardCatalogResponse = {
     {
       id: 'work',
       title: 'Work',
+      custom: false,
       initialPhase: 'intake',
       phases: [
         { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },
@@ -43,6 +45,7 @@ export const builtinBoardCatalog: BoardCatalogResponse = {
     {
       id: 'review',
       title: 'Review',
+      custom: false,
       initialPhase: 'intake',
       phases: [
         { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },

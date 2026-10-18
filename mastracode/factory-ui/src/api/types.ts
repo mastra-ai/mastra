@@ -157,11 +157,36 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  | { status: 'pending'; nextPollMs: number }
-  | { status: 'complete' }
-  | { status: 'failed'; error: string };
+  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
+}
+
+/** A Factory-wide skill chosen for a board phase (`/web/factory/projects/:id/phase-skills`). */
+/** What a phase runs instead of its board's built-in kickoff: a library skill or a prompt. */
+export type PhaseKickoff = { skillName: string; prompt: null } | { skillName: null; prompt: string };
+
+export type PhaseSkillInfo = PhaseKickoff & {
+  boardId: string;
+  phaseId: string;
+  updatedAt: string;
+};
+
+/** A skill in a Factory's skill library. */
+export interface LibrarySkillInfo {
+  name: string;
+  description: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SkillLibraryResponse {
+  skills: LibrarySkillInfo[];
+}
+
+export interface PhaseSkillsResponse {
+  phaseSkills: PhaseSkillInfo[];
 }

@@ -3,6 +3,7 @@
  * so a card filed from a session goes through exactly what "New card" does.
  */
 
+import { boardAvailableTo } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
@@ -57,7 +58,7 @@ export async function createFactoryWorkItem({
   origin,
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
   const boardId = input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
-  const board = boards.get(boardId);
+  const board = boardAvailableTo(boards, boardId, factoryProjectId) ? boards.get(boardId) : undefined;
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];
   if (initialStages.length !== 1 || initialStages[0] !== board.initialPhase) {

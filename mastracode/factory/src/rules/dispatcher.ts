@@ -19,12 +19,19 @@ import {
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
-import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
+import {
+  formatLibrarySkillMessage,
+  resolvePromptInvocation,
+  resolveSkillInvocation,
+  resolveSkillResumeInvocation,
+} from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
+import type { FactorySkillLibraryStorage } from '../storage/domains/factory-skills/base.js';
+import type { PhaseSkillsStorage } from '../storage/domains/phase-skills/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemClaimConflictError } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -342,6 +349,10 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  /** Factory-wide skill overrides for board phases; a match replaces the phase's built-in kickoff. */
+  phaseSkills?: Pick<PhaseSkillsStorage, 'get'>;
+  /** The Factory's skill library, which phase kickoffs name skills from. */
+  skillLibrary?: Pick<FactorySkillLibraryStorage, 'get'>;
   /**
    * Told when a run fails terminally at dispatch, so whoever follows the item
    * hears about failures no run end covers. How runs end is reported by the
@@ -529,6 +540,43 @@ export class FactoryDecisionDispatcher {
   /** Background work awaited on stop but outside both caps. */
   readonly #backgroundInFlight = new Set<Promise<void>>();
   readonly #bindingSkillRuns = new Map<string, Promise<void>>();
+  readonly #phaseSkills?: Pick<PhaseSkillsStorage, 'get'>;
+  readonly #skillLibrary?: Pick<FactorySkillLibraryStorage, 'get'>;
+
+  /**
+   * What the Factory runs for the phase the card sits in that seats `role`, if
+   * set: a library skill's body or a prompt. A phase naming a skill that is no
+   * longer in the library keeps the board's built-in kickoff.
+   */
+  async #phaseSkillFor(
+    record: FactoryDeferredDecisionRecord,
+    item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+    role: string,
+  ): Promise<{ skill: { name: string; content: string } } | { prompt: string } | undefined> {
+    if (!this.#phaseSkills) return undefined;
+    const boardId = boardForWorkItem(item);
+    const phases = this.#boards.get(boardId)?.phases;
+    if (!phases) return undefined;
+    const phaseId = item.stages.find(stage => {
+      const phase = Object.hasOwn(phases, stage) ? phases[stage] : undefined;
+      return phase?.kind === 'working' && phase.role === role;
+    });
+    if (phaseId === undefined) return undefined;
+    const override = await this.#phaseSkills.get({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      boardId,
+      phaseId,
+    });
+    if (!override) return undefined;
+    if (override.skillName === null) return { prompt: override.prompt };
+    const skill = await this.#skillLibrary?.get({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      name: override.skillName,
+    });
+    return skill ? { skill: { name: skill.name, content: skill.content } } : undefined;
+  }
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#audit = options.audit;
@@ -542,6 +590,8 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#phaseSkills = options.phaseSkills;
+    this.#skillLibrary = options.skillLibrary;
     this.#reportRunEnd = options.reportRunEnd;
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
@@ -912,22 +962,34 @@ export class FactoryDecisionDispatcher {
             userId: startedBy,
             orgId: record.orgId,
           });
+          const override = item ? await this.#phaseSkillFor(record, item, decision.role) : undefined;
+          // The built-in kickoff's context (a skill's arguments or the prompt)
+          // is handed to whatever replaces it, so the run still knows the card.
+          const builtInContext = (decision.skillName === undefined ? decision.prompt : decision.arguments)?.trim();
           const resolved =
-            decision.skillName === undefined
+            override !== undefined
               ? await resolvePromptInvocation(this.#controller, {
                   resourceId: binding.resourceId,
-                  prompt: decision.prompt,
+                  prompt:
+                    'skill' in override
+                      ? formatLibrarySkillMessage({ ...override.skill, arguments: builtInContext })
+                      : `${override.prompt}${builtInContext ? `\n\n${builtInContext}` : ''}`,
                 })
-              : decision.resume === true
-                ? await resolveSkillResumeInvocation(this.#controller, {
+              : decision.skillName !== undefined
+                ? decision.resume === true
+                  ? await resolveSkillResumeInvocation(this.#controller, {
+                      resourceId: binding.resourceId,
+                      name: decision.skillName,
+                      arguments: decision.arguments,
+                    })
+                  : await resolveSkillInvocation(this.#controller, {
+                      resourceId: binding.resourceId,
+                      name: decision.skillName,
+                      arguments: decision.arguments,
+                    })
+                : await resolvePromptInvocation(this.#controller, {
                     resourceId: binding.resourceId,
-                    name: decision.skillName,
-                    arguments: decision.arguments,
-                  })
-                : await resolveSkillInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
-                    name: decision.skillName,
-                    arguments: decision.arguments,
+                    prompt: decision.prompt ?? '',
                   });
           await this.#switchThread(session, binding);
           const deliveryId =

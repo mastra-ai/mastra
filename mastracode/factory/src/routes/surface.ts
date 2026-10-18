@@ -7,7 +7,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem } from '../boards/index.js';
-import type { BoardRegistry } from '../boards/index.js';
+import type { BoardRegistry, LiveBoardRegistry } from '../boards/index.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -32,11 +32,14 @@ import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.j
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import type { FactoryBoardsStorage } from '../storage/domains/factory-boards/base.js';
+import type { FactorySkillLibraryStorage } from '../storage/domains/factory-skills/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import type { PhaseSkillsStorage } from '../storage/domains/phase-skills/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -53,12 +56,14 @@ import {
 } from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
+import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { PhaseSkillRoutes } from './phase-skills.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -112,6 +117,9 @@ export interface FactoryApiRoutesDeps {
     customProviders: CustomProvidersStorage;
     filesystem: FilesystemStorage;
     modelDefaults: ModelDefaultsStorage;
+    phaseSkills: PhaseSkillsStorage;
+    skillLibrary: FactorySkillLibraryStorage;
+    storedBoards: FactoryBoardsStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
@@ -128,7 +136,7 @@ export interface FactoryApiRoutesDeps {
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
   /** Boards installed for this Factory instance. */
-  boardRegistry: BoardRegistry;
+  boardRegistry: LiveBoardRegistry;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -763,6 +771,21 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),
+    ...new BoardRoutes({
+      auth: deps.auth,
+      storedBoards: deps.domains.storedBoards,
+      phaseSkills: deps.domains.phaseSkills,
+      workItems: deps.domains.workItems,
+      projects: deps.domains.projects,
+      boards: deps.boardRegistry,
+    }).routes(),
+    ...new PhaseSkillRoutes({
+      auth: deps.auth,
+      phaseSkills: deps.domains.phaseSkills,
+      skillLibrary: deps.domains.skillLibrary,
+      projects: deps.domains.projects,
+      boards: deps.boardRegistry,
+    }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
     ...providerRoutes,
@@ -801,6 +824,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          reloadStoredBoards: deps.boardRegistry ? () => deps.boardRegistry!.reloadStored() : undefined,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,

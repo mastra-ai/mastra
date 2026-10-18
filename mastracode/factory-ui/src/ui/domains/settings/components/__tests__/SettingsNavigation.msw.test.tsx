@@ -50,7 +50,7 @@ describe('SettingsNavigation', () => {
     ).toEqual([
       'Factory models',
       'Factory memory',
-      'Skills',
+      'Boards',
       'Behavior',
       'Repositories',
       'Environment',

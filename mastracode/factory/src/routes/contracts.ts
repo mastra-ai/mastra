@@ -587,6 +587,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
         z.object({
           id: z.string(),
           title: z.string(),
+          /** Built in Settings → Boards (editable) rather than defined in code. */
+          custom: z.boolean(),
           initialPhase: z.string(),
           phases: z.array(
             z.object({

@@ -257,6 +257,41 @@ describe('factory_list_work_items', () => {
 const TARGET = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 const FOREIGN = 'f0e1d2c3-b4a5-4697-8879-6a5b4c3d2e1f';
 
+it('finds Work items whose Factory review asked for changes, and which have no push since', async () => {
+  const work = { work: { sessionId: 's-work', branch: 'b', threadId: 't', startedBy: 'x' } };
+  const reviewed = (id: string, verdict: string, headSha?: string) =>
+    item({
+      id,
+      title: id,
+      stages: ['review'],
+      sessions: work,
+      metadata: { reviewVerdict: verdict, reviewedHeadSha: 'aaa', ...(headSha ? { pullRequestHeadSha: headSha } : {}) },
+    });
+  const rows = [
+    reviewed('waiting', 'request changes', 'AAA'),
+    reviewed('pushed', 'request changes', 'bbb'),
+    reviewed('approved', 'approve', 'aaa'),
+    { ...reviewed('review-card', 'request changes', 'aaa'), board: 'review' },
+    item({ id: 'plain', title: 'plain' }),
+  ];
+  const { run } = setup({ items: rows });
+  const ids = async (review: string) =>
+    (await run<ListResult>('factory_list_work_items', { review })).items.map(row => row.id).sort();
+
+  expect(await ids('changes-requested')).toEqual(['pushed', 'waiting']);
+  expect(await ids('awaiting-response')).toEqual(['waiting']);
+  const [waiting] = (
+    await run<{ items: Array<{ review: unknown }> }>('factory_list_work_items', {
+      review: 'awaiting-response',
+    })
+  ).items;
+  expect(waiting?.review).toMatchObject({
+    verdict: 'request changes',
+    awaitingResponse: true,
+    workSessionId: 's-work',
+  });
+});
+
 describe('factory_inspect_work_item', () => {
   const target = item({
     id: TARGET,

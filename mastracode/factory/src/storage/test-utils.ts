@@ -13,10 +13,13 @@ import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './domains/comments/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
+import { FactoryBoardsStorage } from './domains/factory-boards/base.js';
+import { FactorySkillLibraryStorage } from './domains/factory-skills/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
 import { IntegrationStorage } from './domains/integrations/base.js';
 import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
+import { PhaseSkillsStorage } from './domains/phase-skills/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
@@ -32,6 +35,9 @@ export interface FactoryStorageTestSeed {
   projects: FactoryProjectsStorage;
   sourceControl: SourceControlStorage;
   modelDefaults: ModelDefaultsStorage;
+  phaseSkills: PhaseSkillsStorage;
+  skillLibrary: FactorySkillLibraryStorage;
+  storedBoards: FactoryBoardsStorage;
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
@@ -56,6 +62,9 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const projects = storage.registerDomain(new FactoryProjectsStorage());
   const sourceControl = storage.registerDomain(new SourceControlStorage());
   const modelDefaults = storage.registerDomain(new ModelDefaultsStorage());
+  const phaseSkills = storage.registerDomain(new PhaseSkillsStorage());
+  const skillLibrary = storage.registerDomain(new FactorySkillLibraryStorage());
+  const storedBoards = storage.registerDomain(new FactoryBoardsStorage());
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
@@ -73,6 +82,9 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     projects,
     sourceControl,
     modelDefaults,
+    phaseSkills,
+    skillLibrary,
+    storedBoards,
     memorySettings,
     customProviders,
     queueHealth,

@@ -10,7 +10,7 @@ export type SettingsSection =
   | 'personal-models'
   | 'memory'
   | 'factory-memory'
-  | 'skills'
+  | 'boards'
   | 'behavior';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
@@ -25,7 +25,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   'personal-models': 'Your models',
   memory: 'Your memory',
   'factory-memory': 'Factory memory',
-  skills: 'Skills',
+  boards: 'Boards',
   behavior: 'Behavior',
 };
 
