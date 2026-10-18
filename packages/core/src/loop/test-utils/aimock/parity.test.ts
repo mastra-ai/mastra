@@ -8,8 +8,8 @@ import { z } from 'zod';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { PublicStructuredOutputOptions } from '../../types';
+import { Agent } from '../../../agent';
+import type { PublicStructuredOutputOptions } from '../../../agent/types';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -19,9 +19,10 @@ import type {
   ModelTape,
   ParityEngine,
   ParityStreamOptions,
-} from './parity-harness';
+} from './parity';
 import {
   chunksOfType,
+  describeParityScenario,
   expectEngineParity,
   lastUserText,
   staleKnownDifferences,
@@ -30,7 +31,7 @@ import {
   normalizeRequest,
   normalizePayload,
   normalizeChunkPayload,
-} from './parity-harness';
+} from './parity';
 
 function systemText(request: CapturedRequest): string {
   return request.prompt
@@ -1290,5 +1291,30 @@ describe('expectEngineParity', () => {
     // resumed-output divergence, not the suspension.
     const eventedLines = message.split('\n').filter(line => line.startsWith('evented differs'));
     expect(eventedLines.join('\n')).not.toContain('suspendPayload');
+  });
+});
+
+describe('describeParityScenario', () => {
+  const seen: string[] = [];
+
+  describeParityScenario(
+    'registers one test that runs every engine and hands results to then',
+    () => ({
+      model: { tapes: [textOnlyTape('Hello.')] },
+      buildAgent: ({ model }) => new Agent({ id: 'parity-describe', name: 'Describe', instructions: 'Hi', model }),
+      input: 'Say hello',
+    }),
+    {
+      then: results => {
+        for (const engine of ENGINES) {
+          expect(results[engine]!.turns[0]!.text).toBe('Hello.');
+          seen.push(engine);
+        }
+      },
+    },
+  );
+
+  it('ran the then callback for every engine', () => {
+    expect(seen).toEqual([...ENGINES]);
   });
 });
