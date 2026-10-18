@@ -270,7 +270,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId, userId }) => {
-      const usable = await this.#listUsableInstallations(userId);
+      const installations = await this.#client.request<{
+        installations: Array<{
+          installationId: number;
+          accountLogin: string;
+          accountType: string;
+          suspendedAt: string | null;
+          usable: boolean;
+        }>;
+      }>('GET', `${API_PREFIX}/github-app/installations`);
+      const usable = installations.installations.filter(
+        installation => installation.usable && !installation.suspendedAt,
+      );
       const repositories = await Promise.all(
         usable.map(async installation => {
           const storedInstallation = await this.versionControl.registerInstallation({
@@ -738,13 +749,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const originator = routeBaseUrl(ctx, c.req.url);
         logPlatformInfo('Starting Platform GitHub connect flow', {
           orgId: tenant.orgId,
-          userId: tenant.userId,
           redirectTo,
           originator,
         });
         const query = new URLSearchParams({
           action: 'install',
-          userId: tenant.userId,
           redirectTo,
           originator,
         });
@@ -814,42 +823,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  /**
-   * Usable installations visible to the org key plus those visible to the acting
-   * user (personal-account installs). Both lists are fetched and merged so org
-   * installs stay visible whether Platform treats `userId` as a filter or a widening.
-   * The user listing is best-effort: if it fails, the org-key result is still returned.
-   */
-  async #listUsableInstallations(userId: string): Promise<PlatformGithubInstallation[]> {
-    const [orgResult, userResult] = await Promise.all([
-      this.#client.request<{ installations: PlatformGithubInstallation[] }>(
-        'GET',
-        `${API_PREFIX}/github-app/installations`,
-      ),
-      this.#client
-        .request<{ installations: PlatformGithubInstallation[] }>(
-          'GET',
-          `${API_PREFIX}/github-app/installations?${new URLSearchParams({ userId })}`,
-        )
-        .catch(error => {
-          logPlatformWarn('Platform GitHub user installation listing failed', {
-            userId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          return { installations: [] as PlatformGithubInstallation[] };
-        }),
-    ]);
-    const byId = new Map<number, PlatformGithubInstallation>();
-    for (const installation of [...orgResult.installations, ...userResult.installations]) {
-      if (installation.usable && !installation.suspendedAt && !byId.has(installation.installationId)) {
-        byId.set(installation.installationId, installation);
-      }
-    }
-    return [...byId.values()];
-  }
-
   async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
-    const usableInstallations = await this.#listUsableInstallations(userId);
+    const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
+      'GET',
+      `${API_PREFIX}/github-app/installations`,
+    );
+    const usableInstallations = result.installations.filter(
+      installation => installation.usable && !installation.suspendedAt,
+    );
     return Promise.all(
       usableInstallations.map(installation =>
         this.versionControl.registerInstallation({
