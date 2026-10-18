@@ -1,5 +1,5 @@
 ---
-'create-factory': patch
+'create-factory': minor
 ---
 
 Production Factory servers no longer start with unsafe fallbacks when security configuration is missing. Outside development and tests, the server now refuses to boot when:
