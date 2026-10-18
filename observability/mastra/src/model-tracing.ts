@@ -1002,11 +1002,17 @@ export class ModelSpanTracker {
     if (chunk.type !== 'tool-call-approval') return;
     const payload = chunk.payload;
 
-    this.#ensureStepAndInference();
+    // Only the first approval request of a step carries its usage. A later one (surfaced after
+    // that step was closed, e.g. in the leg resumed by the first approval) belongs to no model
+    // call, so record it under the generation instead of opening empty step spans.
+    if (payload.usage || this.#currentStepSpan) {
+      this.#ensureStepAndInference();
+    }
+    const parent = this.#chunkParent() ?? this.#modelSpan;
 
     // Create an event span for the approval request
     // Using createEventSpan since approvals are point-in-time events (not time ranges)
-    const span = this.#chunkParent()?.createEventSpan({
+    const span = parent?.createEventSpan({
       name: `chunk: 'tool-call-approval'`,
       type: SpanType.MODEL_CHUNK,
       attributes: {

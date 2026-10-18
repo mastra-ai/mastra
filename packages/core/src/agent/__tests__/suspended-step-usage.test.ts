@@ -176,4 +176,40 @@ describe('token usage when a tool call suspends', () => {
       });
     });
   }
+
+  it('keeps the suspended step usage when a resumed tool suspends again', async () => {
+    const askTwiceTool = createTool({
+      id: 'ask',
+      description: 'Ask a person until they answer',
+      inputSchema: z.object({}),
+      resumeSchema: z.object({ answer: z.string() }),
+      execute: async (_input, { agent }) => {
+        const answer = (agent?.resumeData as { answer?: string } | undefined)?.answer;
+        if (!answer || answer === 'again') return agent!.suspend({ question: 'which one?' });
+        return { answer };
+      },
+    });
+    const agent = new Agent({
+      id: 'usage-agent',
+      name: 'usage-agent',
+      instructions: 'use the tool',
+      model: createModel([{ toolName: 'ask', usage: SUSPENDED_STEP_USAGE }, { usage: RESUMED_STEP_USAGE }]),
+      tools: { ask: askTwiceTool },
+    });
+    new Mastra({ agents: { 'usage-agent': agent }, storage: new InMemoryStore(), logger: false });
+
+    const first = await agent.stream('go');
+    expect((await first.getFullOutput()).finishReason).toBe('suspended');
+
+    const again = await agent.resumeStream({ answer: 'again' }, { runId: first.runId });
+    const againOutput = await again.getFullOutput();
+    expect(againOutput.finishReason).toBe('suspended');
+    expect(pickTokens(againOutput.totalUsage)).toEqual(SUSPENDED_STEP_USAGE);
+    expect(pickTokens(await again.usage)).toEqual(SUSPENDED_STEP_USAGE);
+
+    const resumed = await agent.resumeStream({ answer: 'blue' }, { runId: first.runId });
+    const resumedOutput = await resumed.getFullOutput();
+    expect(resumedOutput.text).toBe('done');
+    expect(pickTokens(resumedOutput.totalUsage)).toEqual(addUsage(SUSPENDED_STEP_USAGE, RESUMED_STEP_USAGE));
+  });
 });

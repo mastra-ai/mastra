@@ -1192,6 +1192,11 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   runId?: string;
   /** Model messages the run added to the conversation (the response messages). */
   messages?: ModelMessage[];
+  /**
+   * @internal Cumulative usage already recorded by earlier suspended legs of this run, so the
+   * MODEL_GENERATION span of a resumed leg records only its own share.
+   */
+  generationReportedUsage?: LanguageModelUsage;
 };
 
 /**
