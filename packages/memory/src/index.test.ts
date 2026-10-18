@@ -311,6 +311,60 @@ describe('Memory', () => {
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Hello  world' });
     });
 
+    describe('Gemini thought signatures on parallel updateWorkingMemory calls (#27231)', () => {
+      it('keeps the step signature on the first surviving call so it replays signed', () => {
+        const surviving = {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'result' as const,
+            toolCallId: 'call-1',
+            toolName: 'lookupWeather',
+            args: {},
+            result: 'sunny',
+          },
+        };
+        const message: MastraDBMessage = {
+          id: 'assistant-gemini',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:01Z'),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'wm-1',
+                  toolName: 'updateWorkingMemory',
+                  args: {},
+                  result: { success: true },
+                },
+                providerMetadata: { google: { thoughtSignature: 'SIG_GEMINI' } },
+              },
+              surviving,
+            ],
+          },
+        };
+
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          { ...surviving, providerMetadata: { google: { thoughtSignature: 'SIG_GEMINI' } } },
+        ]);
+
+        const list = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' }).add(result!, 'memory');
+        const toolCalls = list.get.all.aiV5
+          .prompt()
+          .flatMap(m => (m.role === 'assistant' && Array.isArray(m.content) ? m.content : []))
+          .filter(part => part.type === 'tool-call');
+        expect(toolCalls).toHaveLength(1);
+        expect(toolCalls[0]?.providerOptions?.google).toEqual({ thoughtSignature: 'SIG_GEMINI' });
+      });
+    });
+
     describe('signed reasoning around updateWorkingMemory calls (#22798)', () => {
       const reasoning = (signature: string) => ({
         type: 'reasoning' as const,
