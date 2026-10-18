@@ -15,3 +15,13 @@ channels: {
   resolveResourceId: ({ requestContext }) => `tenant:${requestContext.get('tenantId')}`,
 }
 ```
+
+`requestContext` is a required field on `ResolveResourceIdContext` and `ResolveThreadIdContext`. Code that builds these objects by hand, such as tests that call a resolver directly, now needs to pass one:
+
+```ts
+// Before
+await resolveResourceId({ platform, thread, message, defaultResourceId });
+
+// After
+await resolveResourceId({ platform, thread, message, defaultResourceId, requestContext: new RequestContext() });
+```
