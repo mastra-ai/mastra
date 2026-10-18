@@ -187,10 +187,10 @@ describe('DurableAgent tool metadata serialization', () => {
 });
 
 // ============================================================================
-// Tool Concurrency Configuration Tests
+// Workflow Input Option Serialization Tests
 // ============================================================================
 
-describe('DurableAgent tool concurrency configuration', () => {
+describe('DurableAgent workflow input options', () => {
   let pubsub: EventEmitterPubSub;
 
   beforeEach(() => {
@@ -223,5 +223,38 @@ describe('DurableAgent tool concurrency configuration', () => {
     const result = await durableAgent.prepare('Test', { toolCallConcurrency: 5 });
 
     expect(result.workflowInput.options.toolCallConcurrency).toBe(5);
+  });
+
+  // In-process engines read the approval policy from the run registry, so this
+  // serialized copy is only exercised by cross-process engines (e.g. Inngest).
+  it('should serialize toolChoice and requireToolApproval into workflow input', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', textDelta: 'Hello' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'options-agent',
+      name: 'Options Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    for (const toolChoice of ['auto', 'none', 'required'] as const) {
+      const result = await durableAgent.prepare('Test', { toolChoice });
+      expect(result.workflowInput.options.toolChoice).toBe(toolChoice);
+    }
+
+    const approvalResult = await durableAgent.prepare('Test', { requireToolApproval: true });
+    expect(approvalResult.workflowInput.options.requireToolApproval).toBe(true);
+
+    const policyResult = await durableAgent.prepare('Test', { requireToolApproval: () => false });
+    expect(policyResult.workflowInput.options.requireToolApproval).toBe(true);
   });
 });
