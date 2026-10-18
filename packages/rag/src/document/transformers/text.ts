@@ -44,14 +44,24 @@ export abstract class TextTransformer implements Transformer {
     texts.forEach((text, i) => {
       let index = 0;
       let previousChunkLen = 0;
+      let previousIndex = -1;
 
       this.splitText({ text }).forEach(chunk => {
         const metadata = { ..._metadatas[i] };
         if (this.addStartIndex) {
           const offset = index + previousChunkLen - this.overlap;
-          index = text.indexOf(chunk, Math.max(0, offset));
-          metadata.startIndex = index;
-          previousChunkLen = chunk.length;
+          let found = text.indexOf(chunk, Math.max(0, offset));
+          if (found === -1) {
+            // overlap is measured by lengthFunction (e.g. tokens), not characters, so the
+            // character offset can overshoot; retry from just after the previous chunk's start
+            found = text.indexOf(chunk, previousIndex + 1);
+          }
+          metadata.startIndex = found;
+          if (found !== -1) {
+            index = found;
+            previousIndex = found;
+            previousChunkLen = chunk.length;
+          }
         }
         documents.push(
           new Document({

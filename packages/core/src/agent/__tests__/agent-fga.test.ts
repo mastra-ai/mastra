@@ -438,7 +438,16 @@ describe('DurableAgent FGA checks', () => {
       requestContext,
       actor: initialActor,
     });
-    const resumeWorkflow = vi.fn().mockResolvedValue({ status: 'suspended' });
+    // Like a real suspension, persist the suspended row so the next resume finds it.
+    const resumeWorkflow = vi.fn(async (_params: any) => {
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        snapshot: { runId, status: 'suspended', context: {} } as any,
+      });
+      return { status: 'suspended' };
+    });
     vi.spyOn(durableAgent, 'getWorkflow').mockReturnValue({
       createRun: vi.fn().mockResolvedValue({ resume: resumeWorkflow }),
     } as any);
@@ -620,9 +629,8 @@ describe('DurableAgent FGA checks', () => {
     try {
       await (durableAgent as any)[method]({ runId: 'run-1', toolCallId: 'tool-call-1' });
       expect(resumeGenerate).toHaveBeenCalledWith(
-        'run-1',
         { approved },
-        expect.objectContaining({ toolCallId: 'tool-call-1' }),
+        expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-call-1' }),
       );
     } finally {
       await pubsub.close();

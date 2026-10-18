@@ -248,6 +248,7 @@ export class AgentControllerChannels extends AgentChannels {
     chatThread: Thread;
     message: Message;
     defaultResourceId: string;
+    requestContext: RequestContext;
   }): string | (() => string | Promise<string>) {
     const base = super.resolveChannelResourceId(args);
     // The base returns a thunk only when a custom resolveResourceId was

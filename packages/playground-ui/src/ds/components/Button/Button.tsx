@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 // `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:-ml-[.3em]',
+  '[&>[data-slot=button-icon]]:ml-[-.3em]',
   '[&>[data-slot=button-icon-end]]:-mr-1',
   '[&>svg]:mx-[-.3em]',
 );
