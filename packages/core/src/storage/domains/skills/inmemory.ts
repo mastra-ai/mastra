@@ -1,3 +1,4 @@
+import { deepEqual } from '../../../utils/deep-equal';
 import { normalizePerPage, calculatePagination } from '../../base';
 import type {
   StorageSkillType,
@@ -268,12 +269,22 @@ export class InMemorySkillsStorage extends SkillsStorage {
       configs = configs.filter(config => config.visibility === visibility);
     }
 
-    // Filter by metadata if provided (AND logic) — skills don't have metadata on the record,
-    // but we support the filter interface for consistency
+    // Filter by metadata (AND logic) against the resolved version: the active version
+    // (falling back to latest), or the latest version when listing drafts.
     if (metadata && Object.keys(metadata).length > 0) {
-      configs = configs.filter(_config => {
-        // StorageSkillType doesn't have metadata on the thin record
-        return false;
+      configs = configs.filter(config => {
+        const versions = Array.from(this.db.skillVersions.values()).filter(v => v.skillId === config.id);
+        const latest = versions.reduce<(typeof versions)[number] | undefined>(
+          (acc, v) => (!acc || v.versionNumber > acc.versionNumber ? v : acc),
+          undefined,
+        );
+        const resolved =
+          status === 'draft'
+            ? latest
+            : ((config.activeVersionId ? versions.find(v => v.id === config.activeVersionId) : undefined) ?? latest);
+        const versionMetadata = resolved?.metadata;
+        if (!versionMetadata) return false;
+        return Object.entries(metadata).every(([key, value]) => deepEqual(versionMetadata[key], value));
       });
     }
 

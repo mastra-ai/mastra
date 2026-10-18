@@ -3,7 +3,6 @@ import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { RequestContext } from '../../../request-context';
-import type { ToolHooks } from '../../../tools/types';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
 import type { AnyWorkspace } from '../../../workspace/workspace';
@@ -226,10 +225,6 @@ export interface RunLoopScenarioOptions {
    * modifications. Combine with AIMock error fixtures to test error recovery paths.
    */
   errorProcessors?: any[];
-  /** Tool hooks registered on the Agent constructor (`hooks: {...}`). */
-  hooks?: ToolHooks;
-  /** Per-execution tool hooks, forwarded to `agent.stream({ hooks })`. */
-  toolHooks?: ToolHooks;
   /**
    * Error callback fired on tool execution errors or API errors.
    * Forwarded to `agent.stream({ onError })`. Useful for asserting error handling

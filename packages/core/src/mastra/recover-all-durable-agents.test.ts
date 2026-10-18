@@ -15,6 +15,7 @@ import { Agent } from '../agent';
 import { DurableStepIds } from '../agent/durable/constants';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import type { DurableAgent } from '../agent/durable/durable-agent';
+import { globalRunRegistry } from '../agent/durable/run-registry';
 import { InMemoryStore } from '../storage';
 import type { WorkflowRunState } from '../workflows/types';
 import { Mastra } from './index';
@@ -452,6 +453,145 @@ describe('Mastra.recoverAllDurableAgents', () => {
     expect(spy).toHaveBeenLastCalledWith({ runId: 'live-elsewhere' });
     await vi.advanceTimersByTimeAsync(120_000);
     expect(spy).toHaveBeenCalledTimes(3);
+  });
+
+  describe('transient per-run recovery failures', () => {
+    const runId = 'transient-boot-recovery';
+    let durable: DurableAgent;
+    let mastra: Mastra;
+    let restart: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      durable = makeDurable('transient-agent');
+      mastra = new Mastra({ agents: { durable: durable as any }, storage: store });
+      const workflows = (await store.getStore('workflows'))!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          value: {},
+          context: {
+            input: {
+              __workflowKind: 'durable-agent',
+              runId,
+              agentId: durable.id,
+              messageListState: { memoryInfo: null },
+            },
+          },
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as WorkflowRunState,
+      });
+      restart = vi.fn(async () => ({ status: 'success' }));
+      vi.spyOn(durable, 'getWorkflow').mockReturnValue({
+        createRun: vi.fn(async () => ({ restart })),
+      } as any);
+    });
+
+    afterEach(async () => {
+      await mastra.shutdown();
+      globalRunRegistry.delete(runId);
+    });
+
+    it('automatically recovers a transiently skipped run at retryAt without another boot or manual recovery', async () => {
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'));
+      const bulkRecover = vi.spyOn(durable, 'recoverActiveRuns');
+      const before = Date.now();
+
+      await expect(mastra.recoverAllDurableAgents()).resolves.toEqual({
+        agents: 1,
+        recovered: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 1,
+      });
+      await expect(bulkRecover.mock.results[0]!.value).resolves.toEqual({
+        recovered: [{ runId, status: 'skipped', reason: 'transient-error', retryAt: before + 30_000 }],
+        succeeded: 0,
+        failed: 0,
+      });
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(restart).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(recover).toHaveBeenCalledTimes(2);
+      expect(bulkRecover).toHaveBeenLastCalledWith({ runId });
+      expect(restart).toHaveBeenCalledTimes(1);
+      await expect(bulkRecover.mock.results[1]!.value).resolves.toEqual({
+        recovered: [{ runId, status: 'success' }],
+        succeeded: 1,
+        failed: 0,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps scheduling resolved transient skips until recovery succeeds', async () => {
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'))
+        .mockRejectedValueOnce(Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }));
+      const bulkRecover = vi.spyOn(durable, 'recoverActiveRuns');
+
+      await mastra.recoverAllDurableAgents();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+      await expect(bulkRecover.mock.results[1]!.value).resolves.toMatchObject({
+        recovered: [{ runId, status: 'skipped', reason: 'transient-error', retryAt: Date.now() + 30_000 }],
+        failed: 0,
+      });
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(recover).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(recover).toHaveBeenCalledTimes(3);
+      expect(restart).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops scheduling when the next per-run recovery fails permanently', async () => {
+      const permanentError = new Error('invalid agent configuration');
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'))
+        .mockRejectedValueOnce(permanentError);
+      const bulkRecover = vi.spyOn(durable, 'recoverActiveRuns');
+
+      await mastra.recoverAllDurableAgents();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+      await expect(bulkRecover.mock.results[1]!.value).resolves.toEqual({
+        recovered: [{ runId, status: 'failed', error: permanentError }],
+        succeeded: 0,
+        failed: 1,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+      expect(restart).not.toHaveBeenCalled();
+    });
+
+    it('cancels a pending transient retry on shutdown', async () => {
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'));
+
+      await expect(mastra.recoverAllDurableAgents()).resolves.toMatchObject({ skipped: 1, failed: 0 });
+      await mastra.shutdown();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(restart).not.toHaveBeenCalled();
+    });
   });
 
   it('shutdown() cancels pending re-checks', async () => {

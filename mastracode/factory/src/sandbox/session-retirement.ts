@@ -1,4 +1,6 @@
-import { releaseSessionSandbox } from '../integrations/github/sandbox-release.js';
+import type { FactorySandbox } from '@mastra/core/workspace';
+
+import { destroyDetachedSessionSandbox, releaseSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { DEFAULT_COMMAND_TIMEOUT_MS, runTeardownCommand } from '../integrations/github/sandbox.js';
 import { peekSessionEnvironmentTeardown } from '../session/environment-state-processor.js';
 import type {
@@ -14,6 +16,12 @@ type WarningLogger = (message: string, details: Record<string, unknown>) => void
 
 export interface SessionRetirementCoordinatorOptions {
   invalidateSession?: (sessionId: string) => Promise<void> | void;
+  /**
+   * The deploy's sandbox configuration. Used to destroy a deleted session's
+   * VM by identity when this process never attached to it (after a restart,
+   * or on another replica).
+   */
+  sandbox?: FactorySandbox;
   warn?: WarningLogger;
 }
 
@@ -39,17 +47,21 @@ function boundedError(error: unknown): string {
  *
  * Sandbox identity is the session id: retirement stops (or, for deleted
  * sessions, destroys) the sandbox this process holds in the session memo.
- * Sessions opened on another replica have no memo entry here — their VMs are
- * left to the provider's idle lifecycle (pause / idle GC), which is the
- * provider-owned half of the contract.
+ * Sessions opened on another replica (or before a restart) have no memo entry
+ * here: stopping them is left to the provider's idle lifecycle, but deleting a
+ * materialized session destroys its VM by identity through the configured
+ * sandbox. Providers such as E2B keep paused VMs forever, so the row's
+ * deletion must never orphan one.
  */
 export class SessionRetirementCoordinator {
   readonly #invalidateSession: NonNullable<SessionRetirementCoordinatorOptions['invalidateSession']>;
+  readonly #sandbox: FactorySandbox | undefined;
   readonly #warn: WarningLogger;
   readonly #locks = new Map<string, Promise<void>>();
 
   constructor(options: SessionRetirementCoordinatorOptions = {}) {
     this.#invalidateSession = options.invalidateSession ?? (() => {});
+    this.#sandbox = options.sandbox;
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
   }
 
@@ -135,7 +147,10 @@ export class SessionRetirementCoordinator {
 
   async #teardownSessionSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
     const entry = peekSessionSandbox(session.id);
-    if (!entry) return;
+    if (!entry) {
+      await this.#destroyDetachedSandbox(input, session);
+      return;
+    }
 
     // A session booted from its factory environment tears every repository
     // down in position order, each in its own directory; a failure is logged
@@ -193,6 +208,25 @@ export class SessionRetirementCoordinator {
     }
 
     await this.#releaseSandbox(input, session);
+  }
+
+  /**
+   * Destroy a deleted session's VM that this process never attached to. Only
+   * for sessions that materialized (a persisted `sandboxId`): nothing is
+   * started, no teardown command runs — the provider kills by identity.
+   */
+  async #destroyDetachedSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
+    if (!input.deleteSession || !session.sandboxId || !this.#sandbox) return;
+    try {
+      await destroyDetachedSessionSandbox({ sandbox: this.#sandbox, session });
+    } catch (error) {
+      this.#warn('Factory detached session sandbox destroy failed', {
+        orgId: session.orgId,
+        sessionId: session.sessionId,
+        projectRepositoryId: session.projectRepositoryId,
+        error: boundedError(error),
+      });
+    }
   }
 
   async #releaseSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {

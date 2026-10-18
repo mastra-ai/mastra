@@ -72,6 +72,7 @@ import {
   ExtendedRunRegistry,
   getRunRegistryEntry,
   globalRunRegistry,
+  markResumeInFlight,
 } from './run-registry';
 import {
   createDurableAgentStream,
@@ -116,7 +117,33 @@ const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
 /** Stores already reported as unable to fence run writes, so each is warned about once per process. */
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
 
-/** Why `recover()` refused a run that is not orphaned, or `undefined` for a real failure. */
+const TRANSIENT_RECOVERY_RETRY_DELAY_MS = 30_000;
+const TRANSIENT_RECOVERY_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ESOCKETTIMEDOUT',
+  'LOADING',
+]);
+
+function isTransientRecoveryError(error: unknown): boolean {
+  const seen = new Set<object>();
+  let transient = false;
+  while (typeof error === 'object' && error !== null && !seen.has(error)) {
+    seen.add(error);
+    if ('name' in error && error.name === 'AbortError') return false;
+    if ('code' in error && typeof error.code === 'string' && TRANSIENT_RECOVERY_ERROR_CODES.has(error.code)) {
+      transient = true;
+    }
+    if ('message' in error && typeof error.message === 'string' && /^LOADING(?:\s|$)/.test(error.message)) {
+      transient = true;
+    }
+    error = 'cause' in error ? error.cause : undefined;
+  }
+  return transient;
+}
+
+/** Why `recover()` should be deferred, or `undefined` for a permanent failure. */
 function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' | 'retryAt'> | undefined {
   const { id, details } = (error ?? {}) as { id?: unknown; details?: { retryAt?: unknown } };
   switch (id) {
@@ -129,7 +156,9 @@ function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' |
     case RECOVER_ALREADY_IN_PROGRESS_ERROR_ID:
       return { reason: 'already-in-progress' };
     default:
-      return undefined;
+      return isTransientRecoveryError(error)
+        ? { reason: 'transient-error', retryAt: Date.now() + TRANSIENT_RECOVERY_RETRY_DELAY_MS }
+        : undefined;
   }
 }
 
@@ -629,7 +658,7 @@ export interface DurableAgentListActiveRunsResult {
  * {@link DurableAgent.recoverActiveRuns}. `success` means `run.restart()`
  * returned; `failed` means it threw and the error was captured so recovery
  * of remaining runs could proceed; `skipped` means the run was not orphaned,
- * its recovery wait timed out, or recovery was interrupted by shutdown.
+ * recovery hit a transient error, its recovery wait timed out, or recovery was interrupted by shutdown.
  */
 export interface DurableAgentRecoveredRun {
   runId: string;
@@ -642,10 +671,11 @@ export interface DurableAgentRecoveredRun {
    *   Check again at `retryAt`.
    * - `run-active-locally`: this process is executing the run.
    * - `already-in-progress`: this process is already recovering the run.
+   * - `transient-error`: recovery hit a transient infrastructure error. Check again at `retryAt`.
    * - `recovery-timeout`: the 30-second wait expired; the attempt continues without an automatic retry.
    */
-  reason?: 'run-active' | 'run-active-locally' | 'already-in-progress' | 'recovery-timeout';
-  /** Epoch ms after which the live execution's claim lapses unless it is renewed. Set for `run-active`. */
+  reason?: 'run-active' | 'run-active-locally' | 'already-in-progress' | 'transient-error' | 'recovery-timeout';
+  /** Epoch ms to check again: claim expiry for `run-active`, or a retry delay for `transient-error`. */
   retryAt?: number;
 }
 
@@ -3073,6 +3103,37 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    // Marked before the first await, so a second resume of the same tool call
+    // fails fast even when both start in the same tick (#27365).
+    const toolCallId = options?.toolCallId;
+    let releaseResumeMarker = () => {};
+    if (toolCallId !== undefined) {
+      const release = markResumeInFlight(runId, toolCallId);
+      if (!release) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_ALREADY_CLAIMED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it is already running.`,
+          details: { agentName: this.name, runId, toolCallId },
+        });
+      }
+      releaseResumeMarker = release;
+    }
+    try {
+      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker);
+    } catch (error) {
+      releaseResumeMarker();
+      throw error;
+    }
+  }
+
+  async #resumeRun(
+    runId: string,
+    resumeData: unknown,
+    options: DurableAgentResumeOptions<TOutput> | undefined,
+    releaseResumeMarker: () => void,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
     let entry = this.#runRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
     // the caller passes its own request context.
@@ -3140,17 +3201,11 @@ export class DurableAgent<
         const hasExplicitVersion = !!callSiteSelector && 'versionId' in callSiteSelector;
         const currentVersionId = this.toRawConfig()?.resolvedVersionId as string | undefined;
         if (!hasExplicitVersion && pinnedVersionId !== currentVersionId) {
+          let resolved: Agent | undefined;
           try {
-            const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
+            resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
               versionId: pinnedVersionId,
             });
-            if (resolved !== (this as unknown as Agent)) {
-              return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(
-                runId,
-                resumeData,
-                options,
-              );
-            }
           } catch (versionError) {
             // The pinned version may have been deleted while the run sat
             // suspended — resume on the current definition rather than
@@ -3161,6 +3216,12 @@ export class DurableAgent<
               pinnedVersionId,
               error: versionError,
             });
+          }
+          if (resolved && resolved !== (this as unknown as Agent)) {
+            // Hand the tool-call marker to the pinned agent's resume(), which
+            // re-takes it synchronously before its first await.
+            releaseResumeMarker();
+            return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(runId, resumeData, options);
           }
         }
       }
@@ -3290,6 +3351,8 @@ export class DurableAgent<
     if (resolvedOptions.untilIdle) {
       const { untilIdle, ...rest } = resolvedOptions;
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      // The idle-loop wrapper re-enters resume() for this same tool call.
+      releaseResumeMarker();
       const resolvedOptionsAgent = {
         id: this.id,
         getDefaultOptions: () => ({}),
@@ -3370,18 +3433,32 @@ export class DurableAgent<
     }
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
-    const executionFence = await this.#claimExecution(runId, 'acquire', resumeRequestContext);
+    // Memory is covered only once the run is known to be resumable below, so a
+    // resume that lost the race never raises the memory fence past the winner.
+    const executionFence = await this.#claimExecution(runId, 'acquire');
     let initialToolCalls: ToolCallChunk[];
     let resumeOffset: number | 'latest';
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
-      const current = await (
-        await this.#mastra?.getStorage()?.getStore('workflows')
-      )?.loadWorkflowSnapshot({
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const current = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: DurableStepIds.AGENTIC_LOOP,
         runId,
       });
+      // The row is gone once a run finishes (possibly in another process). When
+      // this process already ran a segment of the run (settled above), a missing
+      // row means there is nothing left to resume; resuming anyway would write a
+      // fresh `pending` row. A run that was only prepared has no row yet.
+      if (workflowsStore && !current && priorExecution) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}) could not find a suspended run for this runId. The run has already finished (for example, an earlier approval or resume already handled it), never suspended, or the runId is invalid.`,
+          details: { agentName: this.name, runId },
+        });
+      }
       // Only a settled run counts: a just-suspended run's row can still read `running`
       // briefly, because the suspension chunk is emitted before the row is durable.
       if (current && !['suspended', 'running', 'pending', 'waiting'].includes(current.status)) {
@@ -3393,6 +3470,7 @@ export class DurableAgent<
           details: { agentName: this.name, runId },
         });
       }
+      if (resumeRequestContext) await this.#coverMemory(executionFence, resumeRequestContext);
       await this.#loadRecalledMessages(runId, coldSnapshot, resumeRequestContext);
       initialToolCalls = await this.#loadSuspendedToolCalls(runId);
       // Skip events already broadcast by the original run (e.g. the SUSPENDED
@@ -3406,7 +3484,9 @@ export class DurableAgent<
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
     for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
-      if (reg) reg.executionFence = executionFence;
+      if (!reg) continue;
+      reg.executionFence = executionFence;
+      reg.resumeToolCallId = resolvedOptions.toolCallId;
     }
 
     // Install a fresh abort controller for the resumed segment. The original
@@ -3454,6 +3534,8 @@ export class DurableAgent<
     // closure can unsubscribe the pubsub reader (via streamCleanup) from both
     // the auto-cleanup timer and the explicit cleanup() path — mirroring observe().
     let streamCleanup: (() => void) | undefined;
+    // Set when a concurrent resume ran the run first: the topic is that resume's.
+    let lostResumeRace = false;
 
     // Single cleanup path for both the auto-cleanup timer and the explicit
     // cleanup(). Revokes continuation before unsubscribing the pubsub reader,
@@ -3478,7 +3560,9 @@ export class DurableAgent<
         }
         if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
           globalRunRegistry.delete(runId);
-          if (!(globalEntryForAbort?.executionFence ?? executionFence).isLost()) this.#clearPubsubTopic(runId);
+          if (!lostResumeRace && !(globalEntryForAbort?.executionFence ?? executionFence).isLost()) {
+            this.#clearPubsubTopic(runId);
+          }
         }
       }
       cleanedUp = true;
@@ -3498,6 +3582,8 @@ export class DurableAgent<
     // Opened before the stream adapter so per-chunk processor spans parent under it.
     const origTraceId = entry.agentSpan?.traceId;
     const origSpanId = entry.agentSpan?.id;
+    // Spans this resume opened, ended by it alone if it turns out to have lost the run.
+    const ownResumeSpans: Array<{ error: (options: { error: Error; endSpan: boolean }) => void } | undefined> = [];
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.#wrappedAgent as Agent<string, any, any>;
@@ -3532,6 +3618,7 @@ export class DurableAgent<
           metadata: { runId, resumed: true },
           requestContext: resolvedOptions.requestContext,
         });
+        ownResumeSpans.push(resumeModelSpan, resumeAgentSpan);
         for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
@@ -3555,6 +3642,7 @@ export class DurableAgent<
       output,
       cleanup: createdStreamCleanup,
       detach: detachResumeStream,
+      fail: failResumeStream,
       waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
@@ -3647,15 +3735,22 @@ export class DurableAgent<
             );
           } catch (error) {
             // This resume saw the run suspended when it claimed it, so the workflow no longer
-            // being suspended means a concurrent resume ran it first.
+            // being suspended means a concurrent resume ran it first. The run, its topic and
+            // its spans belong to that resume: release the claim without writing run state
+            // and report the lost race to this caller only.
             if (error instanceof MastraError && error.id === 'WORKFLOW_RUN_NOT_SUSPENDED') {
-              throw new MastraError({
+              const lost = new MastraError({
                 id: 'AGENT_RESUME_ALREADY_CLAIMED',
                 domain: ErrorDomain.AGENT,
                 category: ErrorCategory.USER,
                 text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it already ran.`,
                 details: { agentName: this.name, runId },
               });
+              lostResumeRace = true;
+              await executionFence.settle(async () => {});
+              for (const span of ownResumeSpans) span?.error({ error: lost, endSpan: true });
+              await failResumeStream(lost);
+              return;
             }
             throw error;
           } finally {
@@ -3690,6 +3785,7 @@ export class DurableAgent<
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
     }
+    void workflowExecution.then(releaseResumeMarker, releaseResumeMarker);
 
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...resolvedOptions,
@@ -4782,7 +4878,17 @@ export class DurableAgent<
             // The run finished or suspended between discovery and its recovery.
             if (errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID || errorId === RECOVER_RUN_SUSPENDED_ERROR_ID) return;
             const skipped = recoverySkip(error);
-            if (skipped) return { runId: targetRunId, status: 'skipped', ...skipped };
+            if (skipped) {
+              if (skipped.reason === 'transient-error') {
+                this.#mastra
+                  ?.getLogger()
+                  ?.warn(`[DurableAgent] Deferring recovery of run ${targetRunId} after a transient error`, {
+                    error,
+                    retryAt: skipped.retryAt,
+                  });
+              }
+              return { runId: targetRunId, status: 'skipped', ...skipped };
+            }
           }
           const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
           this.#mastra
