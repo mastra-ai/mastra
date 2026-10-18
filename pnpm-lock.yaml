@@ -3846,6 +3846,9 @@ importers:
 
   packages/_test-utils:
     devDependencies:
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config

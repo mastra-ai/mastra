@@ -41,6 +41,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
     "@types/node": "22.20.1",
