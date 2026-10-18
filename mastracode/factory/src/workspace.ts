@@ -59,7 +59,7 @@ import type { SessionEnvironmentRepositoryState } from './session/environment-st
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { instrumentMethods, timedPhase } from './timing.js';
+import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -585,7 +585,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // than on the context it was constructed with.
   const skillReviewChecks = new Map<string, () => Promise<boolean>>();
 
-  return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
+  const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const resolvedSession = ctx?.resourceId ? await resolveSourceControlSession(sourceControls, ctx.resourceId) : null;
     const session = resolvedSession?.session ?? null;
@@ -1535,4 +1535,5 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     fireEagerStart();
     return workspace;
   };
+  return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));
 }
