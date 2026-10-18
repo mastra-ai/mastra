@@ -22,7 +22,6 @@ type Case = {
   input: string | Array<{ role: 'system' | 'user'; content: string }>;
   options?: Record<string, unknown>;
   expected: string[];
-  absent?: string[];
 };
 
 const CASES: Case[] = [
@@ -34,7 +33,6 @@ const CASES: Case[] = [
     input: 'hi',
     options: { system: EXTRA, instructions: OVERRIDDEN },
     expected: [OVERRIDDEN, EXTRA],
-    absent: [INSTR],
   },
   {
     name: 'system messages inside the input',
@@ -80,13 +78,7 @@ describeForAllEngines('AIMock loop scenario: system messages', engine => {
         .map(m => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
         .join('\n');
 
-      let last = -1;
-      for (const line of c.expected) {
-        const at = system.indexOf(line);
-        expect(at, `${line} reaches the model after the previous line`).toBeGreaterThan(last);
-        last = at;
-      }
-      for (const line of c.absent ?? []) expect(system).not.toContain(line);
+      expect(system.split('\n').filter(Boolean)).toEqual(c.expected);
 
       const { messages: saved } = await memory.recall({ threadId, resourceId });
       expect(saved.map(m => m.role)).toEqual(['user', 'assistant']);
