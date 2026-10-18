@@ -211,6 +211,60 @@ describe('createTerminalStageCleanup', () => {
     );
   });
 
+  it('does not abort a close-out seat minted on the same session while cleanup is running', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const old = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-1' });
+    const moved = await new FactoryTransitionService({ storage, configVersion: 'rules-v1' }).transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: old.item.id,
+      board: 'work',
+      stage: 'done',
+      expectedRevision: old.item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-done' },
+      cause: 'test',
+    });
+    if (moved.status !== 'accepted') throw new Error(`Expected accepted transition, got ${moved.status}`);
+    const stageEnteredAt = currentStageEnteredAt((await storage.get({ orgId: 'org-1', id: old.item.id }))!)!;
+
+    // The dispatcher mints the close-out seat on the same session after cleanup
+    // listed the old binding but before it looks up the session's current
+    // binding. The mint revokes the old binding, so the session now belongs to
+    // the close-out run, and aborting the session would kill that run.
+    let closeOutBindingId: string | undefined;
+    const find = storage.findRunBindingBySession.bind(storage);
+    vi.spyOn(storage, 'findRunBindingBySession').mockImplementation(async address => {
+      if (!closeOutBindingId) {
+        const closeOut = await prepareBinding(storage, {
+          issue: 1,
+          role: 'work',
+          session: 'session-1',
+          kickoffKey: 'close-out',
+        });
+        closeOutBindingId = closeOut.binding.id;
+      }
+      return find(address);
+    });
+
+    const abortSession = vi.fn(async (_binding: { id: string }) => {});
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession });
+    await cleanup({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: old.item.id,
+      revision: moved.revision,
+      stageEnteredAt,
+    });
+
+    expect(closeOutBindingId).toBeDefined();
+    expect(abortSession).not.toHaveBeenCalled();
+    const statuses = Object.fromEntries(
+      (await storage.listRunBindings('org-1', PROJECT_ID, old.item.id)).map(b => [b.id, b.status]),
+    );
+    expect(statuses).toEqual({ [old.binding.id]: 'revoked', [closeOutBindingId!]: 'active' });
+  });
+
   it('skips reconcile for bindings that are already revoked', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);

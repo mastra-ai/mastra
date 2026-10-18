@@ -90,8 +90,10 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
           if (binding.status !== 'active' || !retired(binding)) continue;
           // The seat that drove this transition is already ending gracefully.
           if (binding.id === args.initiatingBindingId) continue;
-          // A role handoff or reopen may have rebound this session to a newer
-          // active run for another item; aborting would kill that successor.
+          // A role handoff, reopen, or this stage's own close-out may have
+          // rebound this session to a newer active run since the listing (for
+          // this item or another); aborting the session would kill that
+          // successor. Only abort while this binding still owns the session.
           // If the lookup fails we cannot rule out a successor, so skip the
           // abort — revocation below still severs this seat's authority, and a
           // false abort would kill a live run for a different work item.
@@ -106,7 +108,7 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
           } catch {
             continue;
           }
-          if (current && current.status === 'active' && current.workItemId !== args.workItemId) continue;
+          if (current?.status === 'active' && current.id !== binding.id) continue;
           await options.abortSession(binding).catch(() => {});
         }
       } catch {
