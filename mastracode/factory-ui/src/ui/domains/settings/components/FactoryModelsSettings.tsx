@@ -1,22 +1,14 @@
-import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
-import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
-import { ModelSettings } from './SettingsPanel.parts';
 
-interface FactoryModelsSettingsProps {
-  models: AvailableModelOption[];
-  settings: AgentControllerSessionSettings | null;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
-}
-
-export function FactoryModelsSettings({ models, settings, onBehaviorChange }: FactoryModelsSettingsProps) {
+export function FactoryModelsSettings({ models }: { models: AvailableModelOption[] }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
 
   const providerSubsections = (
@@ -34,41 +26,31 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
       </SettingsSubsection>
     </>
   );
+  const factoryDefaultsSubsection = (
+    <SettingsSubsection
+      scope="factory"
+      title="Factory defaults"
+      description="Where this Factory's sessions and work-item runs get their model, credentials, and thinking level."
+    >
+      <SettingsContainer>
+        <FactoryModelScopeSection />
+        {(!providersKnown || anyConnected) && <FactoryDefaultModelSection models={models} />}
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
 
   if (providersKnown && !anyConnected) {
-    return <div className="flex flex-col gap-8">{providerSubsections}</div>;
+    return (
+      <div className="flex flex-col gap-8">
+        {factoryDefaultsSubsection}
+        {providerSubsections}
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection
-        scope="factory"
-        title="Factory defaults"
-        description="Applied to Factory runs (triage, board work items) and channel sessions."
-      >
-        <SettingsContainer>
-          <FactoryDefaultModelSection models={models} />
-        </SettingsContainer>
-      </SettingsSubsection>
-      <SettingsSubsection
-        scope="deployment"
-        title="Thinking defaults"
-        description="Fallback for every run without its own level. One settings file, shared by every Factory on this server."
-      >
-        <SettingsContainer>
-          <BaseThinkingSection />
-          <ModeThinkingDefaultsSection />
-        </SettingsContainer>
-      </SettingsSubsection>
-      <SettingsSubsection
-        scope="factory"
-        title="Chat defaults"
-        description="Applied to chats opened from this Factory, and shared with everyone working in it."
-      >
-        <SettingsContainer>
-          <ModelSettings settings={settings} onBehaviorChange={onBehaviorChange} />
-        </SettingsContainer>
-      </SettingsSubsection>
+      {factoryDefaultsSubsection}
       {providerSubsections}
     </div>
   );

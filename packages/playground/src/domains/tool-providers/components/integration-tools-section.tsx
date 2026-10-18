@@ -3,7 +3,7 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/pl
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
-import { useToolProviders } from '@mastra/react/hooks';
+import { useToolProviders } from '@mastra/react/hooks/tool-providers';
 import { Plug } from 'lucide-react';
 import { useMemo, useState } from 'react';
 

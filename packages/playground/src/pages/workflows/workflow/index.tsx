@@ -11,7 +11,7 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useWorkflow } from '@mastra/react/hooks';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Panel } from 'react-resizable-panels';
 import { useParams } from 'react-router';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';

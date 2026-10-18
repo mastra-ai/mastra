@@ -1,4 +1,4 @@
-import { useChannelPlatforms } from '@mastra/react/hooks';
+import { useChannelPlatforms } from '@mastra/react/hooks/agents';
 import { useMemo } from 'react';
 import { useBuilderAgentFeatures } from './use-builder-agent-features';
 import { useBuilderModelPolicy } from './use-builder-settings';

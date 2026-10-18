@@ -1,42 +1,43 @@
 export { MetricsProvider, useMetrics, isValidPreset, DATE_PRESETS } from './use-metrics';
 export type { DatePreset, DateRange } from './use-metrics';
 export { useMetricsFilters } from './use-metrics-filters';
-export { useAgentRunsKpiMetrics } from '@mastra/react/hooks';
-export { useModelCostKpiMetrics } from '@mastra/react/hooks';
-export { useTotalTokensKpiMetrics } from '@mastra/react/hooks';
-export { useModelUsageCostMetrics, type ModelUsageRow } from '@mastra/react/hooks';
-export { useLatencyMetrics, type LatencyPoint } from '@mastra/react/hooks';
-export { useTraceVolumeMetrics, type VolumeRow } from '@mastra/react/hooks';
-export { useScoresMetrics, type ScorerSummary, type ScoresOverTimePoint } from '@mastra/react/hooks';
-export { useTokenUsageByAgentMetrics, type TokenUsageByAgentRow } from '@mastra/react/hooks';
+export { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
+export { useModelCostKpiMetrics } from '@mastra/react/hooks/metrics';
+export { useTotalTokensKpiMetrics } from '@mastra/react/hooks/metrics';
+export { useModelUsageCostMetrics, type ModelUsageRow } from '@mastra/react/hooks/metrics';
+export { useLatencyMetrics, type LatencyPoint } from '@mastra/react/hooks/metrics';
+export { useTraceVolumeMetrics, type VolumeRow } from '@mastra/react/hooks/metrics';
+export { useScoresMetrics, type ScorerSummary, type ScoresOverTimePoint } from '@mastra/react/hooks/metrics';
+export { useTokenUsageByAgentMetrics, type TokenUsageByAgentRow } from '@mastra/react/hooks/metrics';
 export {
   useTokenUsageTimeSeries,
   type TokenTimelinePoint,
   type TokenUsageTimeSeriesData,
   type TokenUsageTimeSeriesInterval,
-} from '@mastra/react/hooks';
-export { useActiveThreadsKpiMetrics } from '@mastra/react/hooks';
-export { useActiveResourcesKpiMetrics } from '@mastra/react/hooks';
-export { useTopActiveThreadsMetrics, type ActiveThreadRow } from '@mastra/react/hooks';
-export { useTopResourcesByThreadsMetrics, type ResourceThreadsRow } from '@mastra/react/hooks';
-export { useDrilldown } from './use-drilldown';
-export {
-  buildLogsDrilldownUrl,
-  buildTracesDrilldownUrl,
-  narrowWindowToBucket,
-  type DrilldownScope,
-  type DrilldownWindow,
-} from '../drilldown';
-export { chooseMetricsInterval, formatMetricsBucketLabel, type MetricsInterval } from '@mastra/react/hooks';
+} from '@mastra/react/hooks/metrics';
+export { useActiveThreadsKpiMetrics } from '@mastra/react/hooks/metrics';
+export { useActiveResourcesKpiMetrics } from '@mastra/react/hooks/metrics';
+export { useTopActiveThreadsMetrics, type ActiveThreadRow } from '@mastra/react/hooks/metrics';
+export { useTopResourcesByThreadsMetrics, type ResourceThreadsRow } from '@mastra/react/hooks/metrics';
+export { buildLogsDrilldownUrl, buildTracesDrilldownUrl, type DrilldownScope, type TimeRange } from '../drilldown';
+export { chooseMetricsInterval, formatMetricsBucketLabel, type MetricsInterval } from '@mastra/react/hooks/metrics';
 export {
   applyMetricsPropertyFilterTokens,
   buildMetricsDimensionalFilter,
   clearSavedMetricsFilters,
+  createMetricsFilterBarFields,
   createMetricsPropertyFilterFields,
+  filterBarItemsToMetricsTokens,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
   loadMetricsFiltersFromStorage,
+  metricsTokensToFilterBarItems,
+  METRICS_FILTER_BAR_OPERATORS,
   saveMetricsFiltersToStorage,
   type MetricsDimensionalFilter,
   type MetricsPropertyFilterFieldId,
 } from '../metrics-filters';
+export { useMetricsActivity, type ActivityBucket } from './use-metrics-activity';
+export { useMetricsLatency, type LatencyBucket, type LatencyEntity } from './use-metrics-latency';
+export { useMetricsScores, type MetricsScores, type ScorerAverage, type ScoresBucket } from './use-metrics-scores';
+export { useTokenSpend, type SpendDimension, type SpendRow } from './use-token-spend';

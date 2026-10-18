@@ -1,6 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
 import { coreFeatures } from '@mastra/core/features';
-import { isNonRetryableError } from '../query-utils';
+import { isNonRetryableError } from '../query/query-utils';
 import { hasMethod } from './client-utils';
 
 /**

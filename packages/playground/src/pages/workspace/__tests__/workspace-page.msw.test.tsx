@@ -1,7 +1,7 @@
 import type { WorkspaceInfoResponse } from '@mastra/client-js';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';

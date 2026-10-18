@@ -10,7 +10,7 @@ import {
   useAgentBuilderWorkflow,
   useGetTemplateInstallRun,
   useObserveStreamTemplateInstall,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/templates';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';

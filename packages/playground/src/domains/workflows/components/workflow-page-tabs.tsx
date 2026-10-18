@@ -5,7 +5,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useSchedules } from '@mastra/react/hooks';
+import { useSchedules } from '@mastra/react/hooks/schedules';
 import { CalendarClockIcon } from 'lucide-react';
 
 export type WorkflowPageTab = 'graph' | 'traces' | 'schedules';

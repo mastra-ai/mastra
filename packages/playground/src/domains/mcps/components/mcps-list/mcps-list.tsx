@@ -9,7 +9,7 @@ import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMastraClient } from '@mastra/react';
-import { useMCPServerTools } from '@mastra/react/hooks';
+import { useMCPServerTools } from '@mastra/react/hooks/mcps';
 import { useMemo } from 'react';
 
 type McpServer = McpServerListResponse['servers'][number];

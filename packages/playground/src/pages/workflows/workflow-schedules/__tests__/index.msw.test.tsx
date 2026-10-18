@@ -48,8 +48,8 @@ describe('WorkflowSchedules page', () => {
       const { container } = renderWithSchedules();
 
       await screen.findByText('sched-weather');
-      const main = container.querySelector('[data-slot="page-layout"] > main');
-      expect(main?.className).toContain('p-4');
+      const body = container.querySelector<HTMLElement>('[data-slot="page-layout"] > main [style*="overflow"]');
+      expect(body?.className).toContain('p-4');
     });
   });
 });

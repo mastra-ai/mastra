@@ -1,4 +1,4 @@
-import { isModelNotAllowedError } from '@mastra/react/hooks';
+import { isModelNotAllowedError } from '@mastra/react/hooks/agents';
 import { describe, expect, it } from 'vitest';
 
 // The wire-level code the server emits on a 422. Kept as a local literal so this

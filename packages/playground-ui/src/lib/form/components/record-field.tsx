@@ -70,38 +70,40 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
   };
 
   return (
-    <div className="space-y-3">
+    <div className="grid gap-2">
       {pairs.map(pair => (
-        <div key={pair.id} className="relative space-y-2 rounded-lg border p-4">
+        // One row per pair: the field already sits in the form's surface, so no card of its own.
+        <div key={pair.id} className="flex items-center gap-2">
+          <Input
+            placeholder="Key"
+            className="flex-1"
+            aria-label="Key"
+            value={pair.key}
+            onChange={e => handleChange(pair.id, 'key', e.target.value)}
+            onBlur={handleBlur}
+          />
+          <Input
+            placeholder="Value"
+            className="flex-1"
+            aria-label="Value"
+            value={pair.value}
+            onChange={e => handleChange(pair.id, 'value', e.target.value)}
+            onBlur={handleBlur}
+          />
           <Button
             type="button"
+            variant="ghost"
+            size="icon-md"
+            tooltip="Remove pair"
             aria-label="Remove pair"
-            className="absolute top-2 right-2"
             onClick={() => removePair(pair.id)}
           >
-            <TrashIcon className="size-4" />
+            <TrashIcon />
           </Button>
-
-          <div className="space-y-2 pt-4">
-            <Input
-              aria-label="Key"
-              placeholder="Key"
-              value={pair.key}
-              onChange={e => handleChange(pair.id, 'key', e.target.value)}
-              onBlur={handleBlur}
-            />
-            <Input
-              aria-label="Value"
-              placeholder="Value"
-              value={pair.value}
-              onChange={e => handleChange(pair.id, 'value', e.target.value)}
-              onBlur={handleBlur}
-            />
-          </div>
         </div>
       ))}
-      <Button type="button" className="w-full" onClick={addPair} icon={<Plus />}>
-        Add Key-Value Pair
+      <Button type="button" variant="ghost" size="sm" className="justify-self-start" onClick={addPair} icon={<Plus />}>
+        Add pair
       </Button>
     </div>
   );

@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
@@ -10,7 +11,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
-import { useCompareAgentVersions } from '@mastra/react/hooks';
+import { useCompareAgentVersions } from '@mastra/react/hooks/agents';
 import { Braces, Wrench, Cpu } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -47,7 +48,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <code className="text-caption text-foreground">{name}</code>
+        <InlineCode className="text-caption text-foreground">{name}</InlineCode>
         <Txt as="span" variant="caption" tone="muted">
           {typeLabel}
         </Txt>
@@ -182,27 +183,29 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="relative overflow-hidden rounded-md border border-border text-body">
+      <div className="relative overflow-hidden rounded-md border border-border">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
           </div>
         )}
         {diffLines.map((line, idx) => (
-          <div
+          <Txt
+            as="p"
+            variant="body"
+            tone="muted"
             key={idx}
             className={cn(
               'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
               line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
               line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
-              line.type === 'equal' && 'text-muted-foreground',
             )}
           >
             <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
               {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
             </span>
             {line.text || '\u00A0'}
-          </div>
+          </Txt>
         ))}
       </div>
     );
@@ -220,7 +223,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-success-edge bg-success-subtle p-3 text-body">
+            <div key={idx} className="rounded-md border border-success-edge bg-success-subtle p-3">
               <Txt variant="meta" className="mb-1 text-success-subtle-foreground">
                 + Added block
               </Txt>
@@ -233,10 +236,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (prevBlock && !currBlock) {
           return (
-            <div
-              key={idx}
-              className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3 text-body"
-            >
+            <div key={idx} className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3">
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
               </div>
@@ -267,27 +267,29 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <div key={idx} className="relative overflow-hidden rounded-md border border-border text-body">
+          <div key={idx} className="relative overflow-hidden rounded-md border border-border">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />
               </div>
             )}
             {diffLines.map((line, lidx) => (
-              <div
+              <Txt
+                as="p"
+                variant="body"
+                tone="muted"
                 key={lidx}
                 className={cn(
                   'px-3 py-0.5 wrap-break-word whitespace-pre-wrap',
                   line.type === 'removed' && 'bg-destructive-subtle text-destructive-subtle-foreground',
                   line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
-                  line.type === 'equal' && 'text-muted-foreground',
                 )}
               >
                 <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
                   {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
                 </span>
                 {line.text || '\u00A0'}
-              </div>
+              </Txt>
             ))}
           </div>
         );
@@ -693,7 +695,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const showDiff = readOnly && !!selectedVersionId && !!latestVersionId && selectedVersionId !== latestVersionId;
 
   return (
-    <div className={cn('flex h-full flex-col')}>
+    <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3" />
 
       <ScrollArea className="min-h-0 flex-1">
@@ -754,8 +756,8 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="start" className="max-w-72">
                       <span>
-                        Use <code className="font-medium text-foreground">{'{{variableName}}'}</code> syntax to insert
-                        dynamic values into your instruction blocks.
+                        Use <InlineCode className="text-column text-foreground">{'{{variableName}}'}</InlineCode> syntax
+                        to insert dynamic values into your instruction blocks.
                       </span>
                     </TooltipContent>
                   </Tooltip>{' '}

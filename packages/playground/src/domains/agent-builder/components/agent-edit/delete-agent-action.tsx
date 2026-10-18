@@ -2,7 +2,7 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useStoredAgentMutations, useStoredAgentDependents } from '@mastra/react/hooks';
+import { useStoredAgentMutations, useStoredAgentDependents } from '@mastra/react/hooks/agents';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';

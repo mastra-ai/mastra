@@ -69,9 +69,7 @@ function stubBoard({ items, factory }: { items: unknown[]; factory: Record<strin
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
@@ -109,7 +107,37 @@ describe('Board automation settings', () => {
     expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
   });
 
-  it('keeps the two automation switches separate', async () => {
+  it('turns review test checks on, defaulting to off for older projects', async () => {
+    stubBoard({ items: [], factory: project() });
+    const user = userEvent.setup();
+    const { client } = renderBoard('review');
+
+    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
+    const testChecks = await screen.findByRole('switch', { name: 'Publish review test checks' });
+    expect(testChecks).not.toBeChecked();
+    await user.click(testChecks);
+
+    await waitForMutationsIdle(client);
+    expect(patchBodies).toEqual([{ reviewTestChecksEnabled: true }]);
+    expect(await screen.findByRole('switch', { name: 'Publish review test checks' })).toBeChecked();
+  });
+
+  it('turns self-review on, defaulting to off for older projects', async () => {
+    stubBoard({ items: [], factory: project() });
+    const user = userEvent.setup();
+    const { client } = renderBoard('work');
+
+    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
+    const selfReview = await screen.findByRole('switch', { name: 'Self-review before pull requests' });
+    expect(selfReview).not.toBeChecked();
+    await user.click(selfReview);
+
+    await waitForMutationsIdle(client);
+    expect(patchBodies).toEqual([{ selfReviewEnabled: true }]);
+    expect(await screen.findByRole('switch', { name: 'Self-review before pull requests' })).toBeChecked();
+  });
+
+  it('keeps the automation switches separate', async () => {
     stubBoard({ items: [], factory: project() });
     const user = userEvent.setup();
     const { client } = renderBoard('review');

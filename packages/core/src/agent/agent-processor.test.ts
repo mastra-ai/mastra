@@ -11,6 +11,7 @@ import { PrefillErrorHandler } from '../processors/prefill-error-handler';
 import { ProviderHistoryCompat } from '../processors/provider-history-compat';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { StreamErrorRetryProcessor } from '../processors/stream-error-retry-processor';
+import { UnsupportedFileHandler } from '../processors/unsupported-file-handler';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools/tool';
@@ -3931,8 +3932,159 @@ describe('output tripwire text disclosure (#24443)', () => {
       }
       if (result.steps.length > 0) expect(result.steps.map(s => s.text).join('')).toBe(result.text);
       if (hook !== 'processOutputStep') expect(result.text).toBe(ANSWER);
+      else expect(result.text).toBe('');
     });
   }
+});
+
+describe('processOutputStep tripwire that ends the run drops the rejected reply (#26048)', () => {
+  const REJECTED = 'REJECTED: this reply must never be shown or remembered.';
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+  const makeModel = () =>
+    new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text' as const, text: REJECTED }],
+        finishReason: 'stop' as const,
+        usage,
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: REJECTED },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage },
+        ]),
+      }),
+    });
+
+  const makeAgent = (retry: boolean) => {
+    const memory = new Memory({ storage: new InMemoryStore(), options: { lastMessages: 20 } });
+    const guard: Processor = {
+      id: 'guard',
+      processOutputStep: async ({ text, abort, messageList }: any) => {
+        if (text?.includes('REJECTED')) return abort('Not allowed, try again.', { retry });
+        return messageList;
+      },
+    };
+    const agent = new Agent({
+      id: 'guarded',
+      name: 'guarded',
+      instructions: 'test',
+      model: makeModel(),
+      memory,
+      outputProcessors: [guard],
+      ...(retry ? { maxProcessorRetries: 2 } : {}),
+    });
+    return { agent, memory };
+  };
+
+  const savedMessages = async (memory: Memory) => {
+    const { messages } = await memory.recall({ threadId: 't1', perPage: false });
+    return messages;
+  };
+
+  for (const retry of [true, false]) {
+    const label = retry ? 'retries exhausted' : 'abort without retry';
+
+    it(`generate(): ${label}`, async () => {
+      const { agent, memory } = makeAgent(retry);
+      const result = await agent.generate('hello', { memory: { thread: 't1', resource: 'r1' } });
+
+      expect(result.finishReason).toBe('tripwire');
+      expect(result.tripwire).toBeDefined();
+      expect(result.text).toBe('');
+      expect(JSON.stringify(result.response?.messages ?? [])).not.toContain('REJECTED');
+
+      const messages = await savedMessages(memory);
+      expect(messages.some(m => m.role === 'user')).toBe(true);
+      expect(JSON.stringify(messages)).not.toContain('REJECTED');
+    });
+
+    it(`stream(): ${label}`, async () => {
+      const { agent, memory } = makeAgent(retry);
+      const stream = await agent.stream('hello', { memory: { thread: 't1', resource: 'r1' } });
+      const full = await stream.getFullOutput();
+
+      expect(stream.tripwire).toBeDefined();
+      expect(full.text).toBe('');
+      expect(JSON.stringify(full.response?.messages ?? [])).not.toContain('REJECTED');
+
+      const messages = await savedMessages(memory);
+      expect(messages.some(m => m.role === 'user')).toBe(true);
+      expect(JSON.stringify(messages)).not.toContain('REJECTED');
+    });
+  }
+
+  it('keeps an accepted tool step when a later text step is rejected', async () => {
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => {
+        call++;
+        if (call === 1) {
+          return {
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'lookup',
+                input: JSON.stringify({ q: 'x' }),
+              },
+            ],
+            finishReason: 'tool-calls' as const,
+            usage,
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: REJECTED }],
+          finishReason: 'stop' as const,
+          usage,
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const memory = new Memory({ storage: new InMemoryStore(), options: { lastMessages: 20 } });
+    const agent = new Agent({
+      id: 'guarded-tools',
+      name: 'guarded-tools',
+      instructions: 'test',
+      model,
+      memory,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ found: 'TOOL_RESULT_OK' }),
+        }),
+      },
+      outputProcessors: [
+        {
+          id: 'guard',
+          processOutputStep: async ({ text, abort, messageList }: any) => {
+            if (text?.includes('REJECTED')) return abort('Not allowed.', { retry: true });
+            return messageList;
+          },
+        },
+      ],
+      maxProcessorRetries: 1,
+    });
+
+    const result = await agent.generate('hello', { memory: { thread: 't1', resource: 'r1' } });
+    expect(result.finishReason).toBe('tripwire');
+    expect(result.text).toBe('');
+
+    const saved = JSON.stringify(await savedMessages(memory));
+    expect(saved).toContain('TOOL_RESULT_OK');
+    expect(saved).not.toContain('REJECTED');
+  });
 });
 
 describe('error processors — shared stability defaults', () => {
@@ -3949,6 +4101,7 @@ describe('error processors — shared stability defaults', () => {
   const DEFAULT_ERROR_PROCESSOR_IDS = [
     'provider-history-compat',
     'prefill-error-handler',
+    'unsupported-file-handler',
     'stream-error-retry-processor',
   ] as const;
 
@@ -3995,6 +4148,7 @@ describe('error processors — shared stability defaults', () => {
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
     ]);
     // The caller's instance is the one that runs, and it stays in the caller's position.
@@ -4004,12 +4158,17 @@ describe('error processors — shared stability defaults', () => {
   it('leaves a caller list that already names every default untouched', async () => {
     const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
     const agent = bareAgent({
-      errorProcessors: [new ProviderHistoryCompat(), customRetry, new PrefillErrorHandler()],
+      errorProcessors: [
+        new ProviderHistoryCompat(),
+        customRetry,
+        new PrefillErrorHandler(),
+        new UnsupportedFileHandler(),
+      ],
     });
 
     const resolved = await agent.listErrorProcessors();
 
-    expect(resolved).toHaveLength(3);
+    expect(resolved).toHaveLength(4);
     expect(resolved[1]).toBe(customRetry);
   });
 
@@ -4036,6 +4195,7 @@ describe('error processors — shared stability defaults', () => {
       'provider-history-compat',
       'custom-error-processor',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
     ]);
     expect(resolved[0]).toBe(customCompat);
@@ -4062,9 +4222,9 @@ describe('error processors — shared stability defaults', () => {
 
     // Naming only the retry processor must not put it ahead of the repairs: error processors
     // short-circuit on the first `{ retry: true }`, and a retry processor configured with broad
-    // matchers would claim errors the repairs could fix, so both repairs have to stay ahead of it.
+    // matchers would claim errors the repairs could fix, so every repair has to stay ahead of it.
     expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
-    expect(resolved[2]).toBe(customRetry);
+    expect(resolved[3]).toBe(customRetry);
   });
 
   it('inserts added defaults in canonical order around a caller processor naming the last one', async () => {
@@ -4092,12 +4252,14 @@ describe('error processors — shared stability defaults', () => {
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
       'custom-error-processor',
     ]);
     expect(resolved[1]).toBeInstanceOf(PrefillErrorHandler);
-    expect(resolved[2]).toBe(customRetry);
-    expect(resolved[3]).toBe(customProcessor);
+    expect(resolved[2]).toBeInstanceOf(UnsupportedFileHandler);
+    expect(resolved[3]).toBe(customRetry);
+    expect(resolved[4]).toBe(customProcessor);
   });
 
   it('leaves getConfiguredProcessorIds reporting only what the caller configured', async () => {

@@ -25,13 +25,8 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import {
-  useDatasetMutations,
-  useDataset,
-  useScoresByExperimentId,
-  useReviewItems,
-  useCompletedItems,
-} from '@mastra/react/hooks';
+import { useDatasetMutations, useDataset, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import { useReviewItems, useCompletedItems } from '@mastra/react/hooks/review';
 import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -43,7 +38,7 @@ import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
 const REVIEW_LIST_COLUMNS = [
   { name: 'itemId', label: 'Item ID', size: 'auto' },
-  { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
+  { name: 'input', label: 'Input', size: '20rem' },
   { name: 'tags', label: 'Tags', size: 'auto' },
   { name: 'scores', label: 'Scores', size: '6rem' },
 ];
@@ -175,15 +170,6 @@ export function DatasetReview({
     }
     return [...tags].sort();
   }, [dataset, items]);
-
-  const syncTagToDataset = useCallback(
-    (tag: string) => {
-      if (!dataset || !datasetId) return;
-      const currentTags = dataset.tags ?? [];
-      if (currentTags.includes(tag)) return;
-    },
-    [dataset, datasetId],
-  );
 
   const filteredItems = useMemo(() => {
     if (!activeTagFilter) return items;
@@ -565,19 +551,6 @@ export function DatasetReview({
           ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId)
           : undefined
       }
-      tagVocabulary={datasetTagVocabulary}
-      onTagsChange={
-        showCompleted || !featuredItem
-          ? undefined
-          : tags => {
-              setItemTags(featuredItem.id, tags);
-              for (const tag of tags) {
-                if (!datasetTagVocabulary.includes(tag)) {
-                  syncTagToDataset(tag);
-                }
-              }
-            }
-      }
       onComplete={showCompleted || !featuredItem ? undefined : () => completeItem(featuredItem.id)}
       onPrevious={toPreviousItem}
       onNext={toNextItem}
@@ -611,11 +584,11 @@ export function DatasetReview({
             <Field className="gap-1">
               <FieldLabel>Instructions (optional)</FieldLabel>
               <Textarea
+                className="text-caption"
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-caption"
               />
             </Field>
           </DialogBody>

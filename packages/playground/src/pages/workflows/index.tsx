@@ -9,7 +9,7 @@ import { NoWorkflowsInfo } from '@mastra/playground-ui/domains/workflows/compone
 import { WorkflowsList } from '@mastra/playground-ui/domains/workflows/components/workflows-list/workflows-list';
 import type { WorkflowsSort } from '@mastra/playground-ui/domains/workflows/components/workflows-list/workflows-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useWorkflows } from '@mastra/react/hooks';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';

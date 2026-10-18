@@ -49,9 +49,20 @@ function makeProvider(config: Partial<TeamsProviderConfig> = {}) {
   return { provider, storage };
 }
 
+/** Tenant id baked into the fake Graph token's `tid` claim. */
+const TOKEN_TENANT_ID = 'token-tenant-id';
+
+/** A minimal unsigned JWT so `decodeTenantId` can read claims from test tokens. */
+function fakeJwt(claims: Record<string, unknown>): string {
+  const b64 = (obj: object) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+  return `${b64({ alg: 'none', typ: 'JWT' })}.${b64(claims)}.`;
+}
+
+const GRAPH_TOKEN = fakeJwt({ tid: TOKEN_TENANT_ID });
+
 /** A scope-aware manager resolver returning a distinct token per audience. */
 function makeTokenResolver(): TeamsTokenResolver & ReturnType<typeof vi.fn> {
-  return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? 'graph-token' : 'dev-portal-token'));
+  return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? GRAPH_TOKEN : 'dev-portal-token'));
 }
 
 /**
@@ -286,15 +297,19 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     const result = await provider.connect('agent-1', { name: 'Sales Bot' });
     expect(result).toMatchObject({ type: 'deep_link', url: DEV_PORTAL_BOTS_URL });
 
-    // Two audiences resolved — Graph for the Entra app, Dev Portal for the bot.
+    // Two audiences resolved — Graph for the Entra app, Dev Portal for the
+    // bot. No tenant is configured, so the Graph resolve runs tenant-less and
+    // the Dev Portal resolve uses the tenant derived from the token's `tid`.
     expect(tokenResolver).toHaveBeenCalledWith(TEAMS_GRAPH_SCOPE, undefined);
-    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, undefined);
-    expect(stubs.createAppAuth()).toBe('Bearer graph-token');
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, TOKEN_TENANT_ID);
+    expect(stubs.createAppAuth()).toBe(`Bearer ${GRAPH_TOKEN}`);
     expect(stubs.botRegistrationAuth()).toBe('Bearer dev-portal-token');
 
+    // New multitenant bot registrations are deprecated — provisioning
+    // defaults to a single-tenant app in the token's tenant.
     expect(stubs.createAppBody()).toMatchObject({
       displayName: 'Sales Bot',
-      signInAudience: 'AzureADMultipleOrgs',
+      signInAudience: 'AzureADMyOrg',
     });
     expect(stubs.addPasswordBody()).toMatchObject({ passwordCredential: { displayName: 'mastra-teams' } });
 
@@ -302,6 +317,8 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     expect(record?.status).toBe('active');
     expect(record?.data.appId).toBe(MINTED_APP_ID);
     expect(record?.data.entraObjectId).toBe(OBJECT_ID);
+    expect(record?.data.appTenantId).toBe(TOKEN_TENANT_ID);
+    expect(record?.data.appType).toBe('SingleTenant');
     expect(isEncrypted(String(record?.data.appPassword))).toBe(true);
 
     expect(stubs.botRegistrationBody()).toMatchObject({
@@ -309,6 +326,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
       name: 'Sales Bot',
       messagingEndpoint: `${BASE_URL}/${PLATFORM}/events/${record?.webhookId}`,
       callingEndpoint: '',
+      isSingleTenant: true,
     });
   });
 
@@ -335,6 +353,20 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     const storage = new InMemoryChannelsStorage();
     const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
     await expect(provider.connect('agent-1')).rejects.toThrow(/needs a baseUrl/);
+  });
+
+  it('registers the messaging endpoint against MASTRA_SERVER_URL when no baseUrl is set', async () => {
+    vi.stubEnv('MASTRA_SERVER_URL', 'https://my-app.server.example.com/');
+    const storage = new InMemoryChannelsStorage();
+    const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
+    const stubs = stubProvisioning();
+
+    await provider.connect('agent-1');
+
+    const record = await storage.getInstallationByAgent(PLATFORM, 'agent-1');
+    expect(String(stubs.botRegistrationBody()?.messagingEndpoint)).toBe(
+      `https://my-app.server.example.com/${PLATFORM}/events/${record?.webhookId}`,
+    );
   });
 
   it('rolls back the Entra application when the Dev Portal registration fails', async () => {
@@ -375,13 +407,26 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     await expect(provider.connect('agent-1')).rejects.toThrow('platform credential fetch failed');
   });
 
-  it('rejects SingleTenant provisioning without a tenant id', async () => {
+  it('rejects SingleTenant provisioning when no tenant id is available (opaque token, no tid claim)', async () => {
     const { provider } = makeProvider({
-      tokenResolver: makeTokenResolver(),
+      // Opaque token — decodeTenantId cannot derive a tenant from it.
+      tokenResolver: vi.fn(async () => 'opaque-token'),
       encryptionKey: ENC_KEY,
       appType: 'SingleTenant',
     });
     await expect(provider.connect('agent-1')).rejects.toThrow(/no appTenantId is available/);
+  });
+
+  it('still provisions MultiTenant bots when explicitly configured', async () => {
+    const stubs = stubProvisioning();
+    const { provider } = makeProvider({
+      tokenResolver: makeTokenResolver(),
+      encryptionKey: ENC_KEY,
+      appType: 'MultiTenant',
+    });
+    await provider.connect('agent-1');
+    expect(stubs.createAppBody()).toMatchObject({ signInAudience: 'AzureADMultipleOrgs' });
+    expect(stubs.botRegistrationBody()).toMatchObject({ isSingleTenant: false });
   });
 
   it('provisions SingleTenant bots with the tenant stored and passed to the resolver', async () => {

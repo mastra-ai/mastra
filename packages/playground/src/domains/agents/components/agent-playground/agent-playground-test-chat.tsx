@@ -5,7 +5,7 @@ import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/co
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useAgent } from '@mastra/react/hooks';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { Save } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';

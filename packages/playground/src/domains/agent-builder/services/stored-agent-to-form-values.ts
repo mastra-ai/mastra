@@ -1,4 +1,4 @@
-import type { StoredAgent } from '@mastra/react/hooks';
+import type { StoredAgent } from '@mastra/react/hooks/agents';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import { extractWorkspaceId } from './extract-workspace-id';
 import { extractFormToolProviders } from '@/domains/tool-providers/mappers/tool-providers-form-mappers';

@@ -3,7 +3,7 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { Trash2 } from 'lucide-react';
 
 export interface DeleteExperimentDialogProps {

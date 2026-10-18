@@ -3,7 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useProcessor } from '@mastra/react/hooks';
+import { useProcessor } from '@mastra/react/hooks/processors';
 import { useParams, Navigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb, processorCrumb } from '@/domains/navigation/crumbs';

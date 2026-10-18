@@ -1,7 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useWorkflows, useWorkflowSchema } from '@mastra/react/hooks';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
 

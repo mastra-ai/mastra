@@ -31,6 +31,7 @@ import type {
 import {
   validateStepInput,
   createDeprecationProxy,
+  defineLazyWriter,
   omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
@@ -105,6 +106,11 @@ export async function executeStep(
   const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = globalThis.crypto.randomUUID();
+  const persistedNestedRunId =
+    executionContext.foreachIndex !== undefined
+      ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]?.metadata
+          ?.nestedRunId
+      : stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId;
   // Nested workflows get their own child run per repeated occurrence so the child's
   // operation ids (which include its run id) don't repeat. Loop iterations derive the
   // id deterministically so a restarted or replayed iteration finds the same child run.
@@ -113,7 +119,7 @@ export async function executeStep(
     step.component !== 'WORKFLOW'
       ? undefined
       : executionContext.foreachIndex !== undefined
-        ? globalThis.crypto.randomUUID()
+        ? (persistedNestedRunId ?? globalThis.crypto.randomUUID())
         : loopIteration !== undefined && loopIteration > 1
           ? `${runId}-iter-${loopIteration}`
           : undefined;
@@ -155,8 +161,12 @@ export async function executeStep(
   }
 
   // Extract suspend data if this step was previously suspended
+  // A resumed step re-run after a crash is stored as 'running' but still carries its suspendPayload.
+  const priorStatus = stepResults[step.id]?.status;
   let suspendDataToUse =
-    stepResults[step.id]?.status === 'suspended' ? stepResults[step.id]?.suspendPayload : undefined;
+    priorStatus === 'suspended' || (priorStatus === 'running' && resumeDataToUse !== undefined)
+      ? stepResults[step.id]?.suspendPayload
+      : undefined;
 
   // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended
   // iteration's payload. When resuming a specific iteration, use that iteration's own payload
@@ -187,6 +197,10 @@ export async function executeStep(
     // (e.g. suspendPayload/suspendedAt after resume, or startedAt > suspendedAt on loops).
     ...omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>),
     ...(hasResumeData ? { resumePayload: resumeDataToUse } : { payload: inputData, resumePayload: undefined }),
+    // Keep the suspend payload while the resumed step runs so a restart after a crash still sees it.
+    ...(hasResumeData && stepResults[step.id]?.suspendPayload !== undefined
+      ? { suspendPayload: stepResults[step.id]?.suspendPayload }
+      : {}),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
     status: 'running',
@@ -389,10 +403,38 @@ export async function executeStep(
           : wrapMastra(engine.mastra, { currentSpan: stepSpan })
         : undefined;
 
-      const output = await runStep({
+      let completedNestedOutput: { found: boolean; value?: unknown } = { found: false };
+      if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
+        const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
+        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: step.id,
+          runId: persistedNestedRunId,
+        });
+        if (nestedSnapshot?.status === 'success') {
+          completedNestedOutput = { found: true, value: nestedSnapshot.result };
+        }
+      }
+
+      if (completedNestedOutput.found) {
+        if (engine.requiresDurableContextSerialization()) {
+          contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
+        }
+        return {
+          output: completedNestedOutput.value,
+          suspended,
+          bailed,
+          contextMutations,
+          nestedWflowStepPaused: !!perStep,
+        };
+      }
+
+      const stepParams = {
         runId: nestedRunId ?? runId,
         resourceId,
         workflowId,
+        parentWorkflow: isNestedWorkflow
+          ? { workflowId, runId, stepId: step.id, foreachIndex: executionContext.foreachIndex }
+          : undefined,
         mastra: mastraForStep,
         requestContext,
         actor,
@@ -484,21 +526,27 @@ export async function executeStep(
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
-        writer: new ToolStream(
-          {
-            prefix: 'workflow-step',
-            callId: stepCallId,
-            name: step.id,
-            runId,
-          },
-          outputWriter,
-        ),
         outputWriter,
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
         perStep,
-      });
+      };
+      const output = await runStep(
+        defineLazyWriter(
+          stepParams,
+          () =>
+            new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: stepCallId,
+                name: step.id,
+                runId,
+              },
+              outputWriter,
+            ),
+        ),
+      );
 
       // Capture requestContext state after step execution (only for engines that need it)
       if (engine.requiresDurableContextSerialization()) {

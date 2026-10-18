@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { EXPERIMENTS_PER_PAGE } from '@mastra/react/hooks';
+import { EXPERIMENTS_PER_PAGE } from '@mastra/react/hooks/experiments';
 import { act, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';

@@ -1,4 +1,4 @@
-import { useTraceSpans } from '@mastra/react/hooks';
+import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { Minimize2 } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ComponentProps } from 'react';

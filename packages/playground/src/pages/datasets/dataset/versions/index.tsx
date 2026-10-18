@@ -6,7 +6,7 @@ import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useDataset, useDatasetItems } from '@mastra/react/hooks';
+import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';

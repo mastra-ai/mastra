@@ -9,6 +9,7 @@ import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { AISDKV7LanguageModel } from './aisdk/v7/model';
 import { ModelRouterLanguageModel } from './router';
 import type {
+  IdentifiedModelConfig,
   MastraModelConfig,
   OpenAICompatibleConfig,
   MastraLanguageModel,
@@ -19,6 +20,19 @@ import type {
  * Type guard to check if a model config is an OpenAICompatibleConfig object
  * @internal
  */
+/** Whether a model config is a `{ model, id }` labeled model. */
+function isIdentifiedModelConfig(modelConfig: unknown): modelConfig is IdentifiedModelConfig {
+  return (
+    modelConfig !== null &&
+    typeof modelConfig === 'object' &&
+    !('specificationVersion' in modelConfig) &&
+    'model' in modelConfig &&
+    'id' in modelConfig &&
+    typeof modelConfig.id === 'string' &&
+    Boolean(modelConfig.model)
+  );
+}
+
 export function isOpenAICompatibleObjectConfig(
   modelConfig:
     | MastraModelConfig
@@ -90,6 +104,14 @@ export async function resolveModelConfig(
   // If it's a function, resolve it first
   if (typeof modelConfig === 'function') {
     modelConfig = await modelConfig({ requestContext, mastra });
+  }
+
+  if (isIdentifiedModelConfig(modelConfig)) {
+    const resolved = await resolveModelConfig(modelConfig.model, requestContext, mastra);
+    if ('specificationVersion' in resolved && resolved.specificationVersion !== 'v1') {
+      (resolved as MastraLanguageModel).id = modelConfig.id;
+    }
+    return resolved;
   }
 
   // Filter out custom language model instances

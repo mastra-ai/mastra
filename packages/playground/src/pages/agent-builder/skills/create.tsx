@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useStoredWorkspaces, useStoredSkills } from '@mastra/react/hooks';
+import { useStoredSkills } from '@mastra/react/hooks/agents';
+import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { SkillBuilderStarter } from '@/domains/agent-builder/components/skill-starter/skill-builder-starter';

@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -126,7 +126,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ connected: false })),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-1/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
     // Label-routed intake refetches issues per routed label; keep that lane empty so candidates aren't duplicated.
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
       HttpResponse.json({
@@ -145,7 +145,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
   );
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/${kind}${initialSearch}`]}>
-      <MainSidebarProvider storageKey="board-filters-test" mobileBreakpoint={0}>
+      <SidebarProvider storageKey="board-filters-test" mobileBreakpoint={0}>
         <OverlaysProvider>
           <Location />
           <Routes>
@@ -155,7 +155,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
             </Route>
           </Routes>
         </OverlaysProvider>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }

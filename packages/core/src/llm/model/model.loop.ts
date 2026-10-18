@@ -6,9 +6,10 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
-import { calculateObservedUsage, isUsageIncomplete } from '../../observability/usage';
+import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
+import { sendsNativeResponseFormat } from '../../stream/aisdk/v5/execute';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -136,6 +137,7 @@ export class MastraLLMVNext extends MastraBase {
     _internal,
     agentId,
     agentVersionId,
+    resolvedScopes,
     agentName,
     toolCallId,
     requestContext,
@@ -153,6 +155,7 @@ export class MastraLLMVNext extends MastraBase {
     goal,
     onIterationComplete,
     workspace,
+    agentRunSpan,
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -176,7 +179,12 @@ export class MastraLLMVNext extends MastraBase {
     // Serialized once per generation so exporters can surface the tool schemas
     // the model received; skipped entirely when tracing is off.
     const toolDefinitions = parentSpan
-      ? getToolDefinitionsForTracing({ tools, toolChoice, activeTools: activeTools as string[] | undefined })
+      ? getToolDefinitionsForTracing({
+          tools,
+          toolChoice,
+          activeTools: activeTools as string[] | undefined,
+          stripToolsWhenNone: sendsNativeResponseFormat(structuredOutput, firstModel),
+        })
       : undefined;
 
     const modelSpan = parentSpan?.createChildSpan({
@@ -218,7 +226,7 @@ export class MastraLLMVNext extends MastraBase {
     // Create model span tracker that will be shared across all LLM execution steps.
     // The agentic loop calls setInferenceContext + startInference per-step so the
     // MODEL_INFERENCE span reflects the post-processor tool set / parameters.
-    const modelSpanTracker = modelSpan?.createTracker();
+    const modelSpanTracker = modelSpan?.createTracker({ agentRunSpan });
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
@@ -248,6 +256,7 @@ export class MastraLLMVNext extends MastraBase {
         eagerToolExecution,
         agentId,
         agentVersionId,
+        resolvedScopes,
         agentName,
         requestContext,
         actor,
@@ -319,7 +328,10 @@ export class MastraLLMVNext extends MastraBase {
 
           onFinish: async (props, context) => {
             const usageIncomplete = isUsageIncomplete(props?.totalUsage);
-            const observedUsage = usageIncomplete ? calculateObservedUsage(props?.steps ?? []) : props?.totalUsage;
+            const steps = props?.steps ?? [];
+            // Aborted payloads carry no steps, so keep their reported totalUsage instead of an empty recount.
+            const observedUsage =
+              usageIncomplete && steps.length > 0 ? calculateObservedUsage(steps) : props?.totalUsage;
 
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
@@ -352,13 +364,14 @@ export class MastraLLMVNext extends MastraBase {
                 // response to the model that actually generated it.
                 responseModel: resolveResponseModelId(props?.providerMetadata, props?.response.modelId),
               },
-              usage: observedUsage,
+              usage: subtractReportedUsage(observedUsage, props?.generationReportedUsage),
               providerMetadata: props?.providerMetadata,
               stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
 
             try {
-              await options?.onFinish?.({ ...props, runId: runId! }, context);
+              const { generationReportedUsage: _generationReportedUsage, ...userProps } = props;
+              await options?.onFinish?.({ ...userProps, runId: runId! }, context);
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {

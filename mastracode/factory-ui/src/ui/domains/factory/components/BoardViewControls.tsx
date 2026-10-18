@@ -12,9 +12,11 @@ import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardViewSettings } from '../boardSavedViews';
 import type { BoardKind } from '../boardStages';
+import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, BoardFilters, boardFilterFields } from './BoardFilters';
 import { BOARD_SORT_LABELS, BoardSortControl } from './BoardSortControl';
+import { BoardViewControlsLayout } from './BoardViewControlsLayout';
 
 const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
 
@@ -43,10 +45,14 @@ export function BoardViewControls({
 }) {
   const { savedViews } = view;
   const [pageFiltersOpen, setPageFiltersOpen] = useState(false);
+  const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
     kind,
     participants,
     availableLabels,
+    connectedSources,
+    selectedSources: view.filters.sources,
+    linearProjects,
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,
   });
@@ -56,9 +62,9 @@ export function BoardViewControls({
   const showFilters = Boolean(savedViews.draft) || (!savedViews.applied && pageFiltersOpen);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="flex min-w-0 grow basis-80 flex-wrap items-center gap-3 max-sm:contents">
+    <BoardViewControlsLayout
+      views={
+        <>
           <SavedViewTabs
             aria-label="Board views"
             className="max-sm:w-full"
@@ -84,24 +90,18 @@ export function BoardViewControls({
               </Button>
             )}
             <BoardSortControl value={view.sort} currentUserId={currentUserId} onChange={view.setSort} />
-            {savedViews.applied && (
-              <SegmentedControl
-                aria-label="Layout"
-                size="sm"
-                iconOnly
-                value={view.layout}
-                onValueChange={view.setLayout}
-              >
-                <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
-                  <List aria-hidden />
-                </SegmentedControlItem>
-                <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
-                  <Kanban aria-hidden />
-                </SegmentedControlItem>
-              </SegmentedControl>
-            )}
+            <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
+              <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
+                <List aria-hidden />
+              </SegmentedControlItem>
+              <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
+                <Kanban aria-hidden />
+              </SegmentedControlItem>
+            </SegmentedControl>
           </div>
-        </div>
+        </>
+      }
+      search={
         <SearchInput
           label="Search cards"
           placeholder={savedViews.applied ? 'Search this view…' : 'Search cards…'}
@@ -116,33 +116,35 @@ export function BoardViewControls({
             }
           }}
         />
-        {aside && <div className="shrink-0">{aside}</div>}
-      </div>
-      {showFilters && (
-        <div
-          role="group"
-          aria-label="Board view controls"
-          className="flex min-h-8 min-w-0 flex-wrap items-center gap-2"
-        >
-          <SavedViewEditor views={savedViews} className="flex-1">
-            <div className="max-w-full min-w-0">
-              <BoardFilters
-                kind={kind}
-                fields={fields}
-                filters={view.filters}
-                onFiltersChange={view.setFilters}
-                removable
-                aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
-              />
-            </div>
-            {pageFiltersActive && (
-              <Button type="button" variant="ghost" size="sm" onClick={saveAsView}>
-                Save as view
-              </Button>
-            )}
-          </SavedViewEditor>
-        </div>
-      )}
-    </div>
+      }
+      aside={aside}
+      filters={
+        showFilters && (
+          <div
+            role="group"
+            aria-label="Board view controls"
+            className="flex min-h-8 min-w-0 flex-wrap items-center gap-2"
+          >
+            <SavedViewEditor views={savedViews} className="flex-1">
+              <div className="max-w-full min-w-0">
+                <BoardFilters
+                  kind={kind}
+                  fields={fields}
+                  filters={view.filters}
+                  onFiltersChange={view.setFilters}
+                  removable
+                  aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
+                />
+              </div>
+              {pageFiltersActive && (
+                <Button type="button" variant="ghost" size="sm" onClick={saveAsView}>
+                  Save as view
+                </Button>
+              )}
+            </SavedViewEditor>
+          </div>
+        )
+      }
+    />
   );
 }

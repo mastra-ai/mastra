@@ -1,11 +1,12 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   useAuthorize,
   useDisconnectConnection,
   useExistingConnections,
   useToolProviders,
   useToolkits,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/tool-providers';
 import { useMemo, useState } from 'react';
 import { ExistingConnectionsPanel } from './components/existing-connections-panel';
 import { ProviderToolkitSelector } from './components/provider-toolkit-selector';
@@ -63,10 +64,10 @@ export default function IntegrationsPage() {
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Integrations</h1>
-      <div className="max-w-3xl space-y-6 text-body">
-        <p className="text-muted-foreground">
+      <div className="max-w-3xl space-y-6">
+        <Txt as="p" variant="body" tone="muted">
           Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.
-        </p>
+        </Txt>
 
         <ProviderToolkitSelector
           providers={providers}

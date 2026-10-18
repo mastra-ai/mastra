@@ -226,6 +226,7 @@ export async function persistStepUpdate(
 
     const snapshot: WorkflowRunState = {
       runId,
+      parentWorkflow: executionContext.parentWorkflow,
       status: workflowStatus,
       value: executionContext.state,
       context: stepResults as any,

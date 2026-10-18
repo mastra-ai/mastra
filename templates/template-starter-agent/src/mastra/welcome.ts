@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
-import { connectTools, hasConnectEnv } from './agents/agent';
+import { agentName, connectTools, hasConnectEnv } from './agents/agent';
 import { integrationIdForToolKey } from './workflows/activity-digest';
 
 /** Studio scopes an agent's threads to its registered id. */
@@ -43,6 +43,10 @@ export async function seedWelcomeThread(mastra: Mastra) {
  * voice and capabilities; a directive user turn gives the guidelines. If the
  * model call fails (no gateway key, offline, …) we fall back to a static
  * greeting so first boot still ends with a usable Welcome thread.
+ *
+ * The welcome generation runs on `mastra/openai/gpt-6-luna` — fast and
+ * cheap for a one-shot greeting — regardless of the agent's configured model,
+ * so first-boot latency and cost stay predictable.
  */
 async function composeWelcome(mastra: Mastra): Promise<string> {
   const agent = mastra.getAgent(AGENT_ID);
@@ -80,6 +84,7 @@ Guidelines:
       scratchThreadId = scratch.id;
     }
     const result = await agent.generate([{ role: 'user', content: directive }], {
+      model: 'mastra/openai/gpt-6-luna',
       activeTools: [],
       ...(scratchThreadId ? { memory: { thread: scratchThreadId, resource: AGENT_ID } } : {}),
     });
@@ -110,13 +115,13 @@ function staticWelcome(integrations: string[]): string {
     ? `I can currently reach these connected integrations: ${integrations.map(id => `**${id}**`).join(', ')}.`
     : 'No integrations are attached yet — attach some to your Mastra platform project and set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to unlock their tools live.';
 
-  return `👋 Hi, I'm your **Starter Agent**.
+  return `👋 Hi, I'm **${agentName}**.
 
 I can research the web, work with files and shell commands in a sandboxed workspace (reads first, deletes need your approval), set up recurring schedules, and run long tasks that survive reloads and restarts.
 
 ${integrationLine}
 
-My system prompt lives in Studio — open **Agents → Starter Agent** to edit it. Your changes save to files under \`./mastra/editor\` and version with the project.
+My system prompt lives in Studio — open **Agents → ${agentName}** to edit it. Your changes save to files under \`./mastra/editor\` and version with the project.
 
 What should we try first?`;
 }

@@ -564,6 +564,23 @@ describe('get_process_output tool', () => {
     expect(result).toContain('Exit code: 0');
   });
 
+  it('tells the model when the handle dropped the start of its output', async () => {
+    const handle = Object.assign(createMockHandle({ pid: '13', stdout: 'newest output\n', stderr: '', exitCode: 0 }), {
+      stdoutDroppedBytes: 4096,
+      stderrDroppedBytes: 0,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await getProcessOutputTool.execute({ pid: '13' }, ctx);
+    expect(result).toContain('[stdout: the first 4096 bytes were dropped;');
+    expect(result).toContain('newest output');
+    expect(result).not.toContain('[stderr:');
+  });
+
   it('labels stdout and stderr when both present', async () => {
     const handle = createMockHandle({
       pid: '17',

@@ -7,7 +7,7 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';

@@ -5,6 +5,7 @@ import { Button } from '../Button';
 import { Combobox } from '../Combobox';
 import { DropdownMenu } from '../DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
 
@@ -92,6 +93,23 @@ export const AsSplitButton: Story = {
           <DropdownMenu.Item>Save a copy</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
+    </ButtonsGroup>
+  ),
+};
+
+export const PopoverFirstSegmentOpen: Story = {
+  render: () => (
+    <ButtonsGroup size="sm">
+      <Popover defaultOpen>
+        <PopoverTrigger variant="ghost" size="sm">
+          Claude Opus 5.5
+          <ChevronDownIcon />
+        </PopoverTrigger>
+        <PopoverContent align="start">Model menu</PopoverContent>
+      </Popover>
+      <Button variant="ghost" size="sm">
+        Thinking
+      </Button>
     </ButtonsGroup>
   ),
 };

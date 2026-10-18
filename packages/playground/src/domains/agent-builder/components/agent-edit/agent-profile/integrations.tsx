@@ -4,11 +4,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { surfaceRimFocus } from '@mastra/playground-ui/primitives/form-element';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks';
+import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks/agents';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface IntegrationsProps {
   agentId: string;
@@ -114,6 +115,8 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
     queryOptions: { enabled: Boolean(platform.id && agentId) },
   });
   const installation = installations.find(i => i.status === 'active');
+  const hasPendingInstall = installations.some(i => i.status === 'pending');
+  useReconcilePendingInstallOnFocus({ platform: platform.id, agentId, hasPendingInstall });
 
   const description = PLATFORM_DESCRIPTION[platform.id];
 

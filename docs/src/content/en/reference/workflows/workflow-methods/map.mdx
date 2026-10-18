@@ -34,8 +34,9 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`)
     properties: [
       {
         name: 'id',
-        type: 'string',
-        description: 'Stable entry id. Overrides the generated mapping id.',
+        type: 'string | null',
+        description:
+          'Stable entry id. A non-empty string overrides the generated mapping id. Pass null or an empty string to use the generated id.',
         isOptional: true,
       },
       {

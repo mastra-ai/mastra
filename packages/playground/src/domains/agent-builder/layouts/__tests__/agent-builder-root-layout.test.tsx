@@ -1,6 +1,6 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

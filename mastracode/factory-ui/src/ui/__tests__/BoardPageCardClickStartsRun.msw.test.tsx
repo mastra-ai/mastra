@@ -213,9 +213,7 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, configured: false })),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
@@ -296,7 +294,6 @@ describe('Board card buttons move the card', () => {
       workItems: [{ ...linearWorkItem, stages: ['intake'] }],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
@@ -339,7 +336,6 @@ describe('Board card buttons move the card', () => {
     });
     renderWorkBoard();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Linear' }));
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
@@ -383,7 +379,6 @@ describe('Board card buttons move the card', () => {
       ],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('Fix intake sync', 'Investigate');
 
@@ -412,7 +407,6 @@ describe('Board card buttons move the card', () => {
       ],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 

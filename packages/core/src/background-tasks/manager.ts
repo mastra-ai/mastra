@@ -748,6 +748,10 @@ export class BackgroundTaskManager {
    * - `task.resumed` (status: 'running') — suspended task resumed
    *
    * The stream stays open until the caller's AbortSignal fires (client disconnect).
+   *
+   * Events are scoped to a resource: when `resourceId` is omitted, only tasks without a
+   * `resourceId` are delivered. Pass `allResources: true` to receive events for every
+   * resource (privileged consumers only — payloads include task args and results).
    */
   stream(options?: {
     agentId?: string;
@@ -757,10 +761,24 @@ export class BackgroundTaskManager {
     taskId?: string;
     abortSignal?: AbortSignal;
     includeExisting?: boolean;
+    allResources?: boolean;
   }): ReadableStream<Record<string, unknown>> {
     const manager = this;
     const pubsub = this.pubsub;
-    const { agentId, runId, threadId, resourceId, abortSignal, taskId, includeExisting = true } = options ?? {};
+    const {
+      agentId,
+      runId,
+      threadId,
+      resourceId,
+      abortSignal,
+      taskId,
+      includeExisting = true,
+      allResources = false,
+    } = options ?? {};
+    const matchesResource = (taskResourceId: string | null | undefined) => {
+      if (resourceId !== undefined) return taskResourceId === resourceId;
+      return allResources || taskResourceId == null;
+    };
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
       'task.running': 'running',
@@ -793,7 +811,7 @@ export class BackgroundTaskManager {
           if (agentId && data.agentId !== agentId) return;
           if (runId && data.runId !== runId) return;
           if (threadId && data.threadId !== threadId) return;
-          if (resourceId && data.resourceId !== resourceId) return;
+          if (!matchesResource(data.resourceId)) return;
           if (taskId && data.taskId !== taskId) return;
 
           const payload: Record<string, unknown> = {
@@ -866,7 +884,7 @@ export class BackgroundTaskManager {
           const storage = await manager.getStorage();
           if (taskId) {
             const task = await storage.getTask(taskId);
-            if (task && task.status === 'running') {
+            if (task && task.status === 'running' && matchesResource(task.resourceId)) {
               controller.enqueue({
                 type: 'background-task-running',
                 payload: {
@@ -891,6 +909,7 @@ export class BackgroundTaskManager {
 
             for (const task of existing) {
               if (abortSignal?.aborted) break;
+              if (!matchesResource(task.resourceId)) continue;
               try {
                 controller.enqueue({
                   type: 'background-task-running',

@@ -26,5 +26,5 @@ export {
   useWorkflows,
   useWorkflowsRunCounts,
   workflowRunQueryKey,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/workflows';
 export * from './components/workflow-layout';

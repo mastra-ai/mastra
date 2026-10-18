@@ -1,6 +1,11 @@
 import { MemoryStudioPanel } from '@mastra/playground-ui/domains/memory/components/memory-studio-panel';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useMemoryThreadMessages, useObservationalMemory, useMemoryConfig, useThread } from '@mastra/react/hooks';
+import {
+  useMemoryThreadMessages,
+  useObservationalMemory,
+  useMemoryConfig,
+  useThread,
+} from '@mastra/react/hooks/memory';
 import { useEffect } from 'react';
 
 import { getObservationWindowTokens } from './lib/observation-window';

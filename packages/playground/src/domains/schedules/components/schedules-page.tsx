@@ -1,6 +1,6 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { useSchedules } from '@mastra/react/hooks';
+import { useSchedules } from '@mastra/react/hooks/schedules';
 import { useState } from 'react';
 import { SchedulesList } from './schedules-list';
 import type { SchedulesSort } from './schedules-list';

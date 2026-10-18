@@ -1,5 +1,5 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
-import { useWorkspaceDirectory } from '@mastra/react/hooks';
+import { useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleAlertIcon, FolderPlusIcon, LockIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';

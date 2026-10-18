@@ -1,4 +1,4 @@
-import type { ProcessorInfo } from '@mastra/react/hooks';
+import type { ProcessorInfo } from '@mastra/react/hooks/processors';
 import { describe, expect, it } from 'vitest';
 
 import { ProcessorsList } from '../processors-list';

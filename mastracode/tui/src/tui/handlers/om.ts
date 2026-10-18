@@ -1,17 +1,14 @@
 /**
  * Event handlers for Observational Memory (OM) events:
  * om_status, om_observation_start/end, om_reflection_start/end,
- * om_buffering_start/end/failed, om_activation, and om_*_failed.
+ * om_buffering_start, om_activation, and om_*_failed.
  *
  * All omProgress state updates are handled by the AgentController display state.
  * These handlers focus on UI component creation/removal.
  */
 import type { Component } from '@earendil-works/pi-tui';
 
-import {
-  insertChatComponentWithBoundarySpacing,
-  reconcileChatBoundarySpacers,
-} from '../chat-boundary-reconciliation.js';
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { OMMarkerComponent } from '../components/om-marker.js';
 import type { OMMarkerData } from '../components/om-marker.js';
@@ -48,15 +45,6 @@ function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Com
     }
   }
   return false;
-}
-
-function removeChatChild(ctx: EventHandlerContext, child: Component | undefined): void {
-  if (!child) return;
-  const idx = ctx.state.chatContainer.children.indexOf(child);
-  if (idx >= 0) {
-    ctx.state.chatContainer.children.splice(idx, 1);
-    reconcileChatBoundarySpacers(ctx.state.chatContainer);
-  }
 }
 
 export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: string, tokensToObserve: number): void {
@@ -172,77 +160,11 @@ export function handleOMFailed(
   state.ui.requestRender();
 }
 
-export function handleOMBufferingStart(
-  ctx: EventHandlerContext,
-  operationType: 'observation' | 'reflection',
-  tokensToBuffer: number,
-): void {
+export function handleOMBufferingStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
   state.activeActivationMarker = undefined;
   state.activeActivationData = undefined;
   state.activeActivationProviderChangeMarker = undefined;
-  if (state.quietMode) {
-    removeChatChild(ctx, state.activeBufferingMarker);
-    state.activeBufferingMarker = undefined;
-    state.ui.requestRender();
-    return;
-  }
-  state.activeBufferingMarker = new OMMarkerComponent({
-    type: 'om_buffering_start',
-    operationType,
-    tokensToBuffer,
-  });
-  addChildBeforeStreaming(ctx, state.activeBufferingMarker);
-  state.ui.requestRender();
-}
-
-export function handleOMBufferingEnd(
-  ctx: EventHandlerContext,
-  operationType: 'observation' | 'reflection',
-  tokensBuffered: number,
-  bufferedTokens: number,
-  observations?: string,
-): void {
-  const { state } = ctx;
-  if (state.quietMode) {
-    removeChatChild(ctx, state.activeBufferingMarker);
-    state.activeBufferingMarker = undefined;
-    state.ui.requestRender();
-    return;
-  }
-  if (state.activeBufferingMarker) {
-    state.activeBufferingMarker.update({
-      type: 'om_buffering_end',
-      operationType,
-      tokensBuffered,
-      bufferedTokens,
-      observations,
-    });
-  }
-  state.activeBufferingMarker = undefined;
-  state.ui.requestRender();
-}
-
-export function handleOMBufferingFailed(
-  ctx: EventHandlerContext,
-  operationType: 'observation' | 'reflection',
-  error: string,
-): void {
-  const { state } = ctx;
-  if (state.quietMode) {
-    removeChatChild(ctx, state.activeBufferingMarker);
-    state.activeBufferingMarker = undefined;
-    state.ui.requestRender();
-    return;
-  }
-  if (state.activeBufferingMarker) {
-    state.activeBufferingMarker.update({
-      type: 'om_buffering_failed',
-      operationType,
-      error,
-    });
-  }
-  state.activeBufferingMarker = undefined;
   state.ui.requestRender();
 }
 
@@ -306,17 +228,5 @@ export function handleOMActivation(
   }
 
   state.activeActivationData = activationData;
-  state.activeBufferingMarker = undefined;
   state.ui.requestRender();
-}
-
-export function handleOMThreadTitleUpdated(ctx: EventHandlerContext, newTitle: string, oldTitle?: string): void {
-  if (ctx.state.quietMode) return;
-  const marker = new OMMarkerComponent({
-    type: 'om_thread_title_updated',
-    newTitle,
-    oldTitle,
-  });
-  addChildBeforeStreaming(ctx, marker);
-  ctx.state.ui.requestRender();
 }

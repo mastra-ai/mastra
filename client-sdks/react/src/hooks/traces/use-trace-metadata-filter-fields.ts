@@ -99,6 +99,7 @@ export const useTraceMetadataFilterFields = ({
   });
 
   const observedFields = query.data?.observedFields;
+  const canonicalFields = query.data?.canonicalFields ?? EMPTY_FIELDS.canonicalFields;
 
   const fields = useMemo<TraceMetadataFilterField[]>(
     () =>
@@ -109,5 +110,5 @@ export const useTraceMetadataFilterFields = ({
     [observedFields, client, timeRange],
   );
 
-  return { fields, isLoading: query.isLoading, error: query.error };
+  return { fields, canonicalFields, isLoading: query.isLoading, error: query.error };
 };

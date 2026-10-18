@@ -7,7 +7,7 @@ import type {
   StoredAgentResponse,
 } from '@mastra/client-js';
 
-import type { AuthCapabilities, CurrentUser } from '@mastra/react/hooks';
+import type { AuthCapabilities, CurrentUser } from '@mastra/react/hooks/auth';
 
 export const TEST_AGENT_ID = 'agent_test';
 

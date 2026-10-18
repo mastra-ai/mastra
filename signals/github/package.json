@@ -1,6 +1,6 @@
 {
   "name": "@mastra/github-signals",
-  "version": "0.5.1",
+  "version": "0.5.2-alpha.0",
   "description": "GitHub PR notification signal provider for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,8 +25,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build:lib --watch",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "test": "vitest run"
   },
   "keywords": [

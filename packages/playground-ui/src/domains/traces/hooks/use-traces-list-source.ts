@@ -1,7 +1,19 @@
-import { useTraceQuery } from '@mastra/react/hooks';
-import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks';
+import { MastraClientError } from '@mastra/client-js';
+import { useTraceQuery } from '@mastra/react/hooks/traces';
+import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useEffect, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
+
+export const TRACES_LIST_REFETCH_INTERVAL_MS = 10_000;
+
+/** The server refused the request (e.g. a time range over its cap); retrying cannot change that. */
+export function isRejectedTraceListRequest(error: unknown): boolean {
+  return error instanceof MastraClientError && error.status >= 400 && error.status < 500;
+}
+
+export function fixedWindowRefetchInterval(error: unknown): number | false {
+  return isRejectedTraceListRequest(error) ? false : TRACES_LIST_REFETCH_INTERVAL_MS;
+}
 
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
@@ -27,10 +39,17 @@ export function useTracesListSource({
 }: UseTracesListSourceArgs) {
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
+  // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
+  // list), but a request the server refuses ends it: each retry would only clear the error, flash
+  // the placeholder list, and fail again.
+  const refetchInterval =
+    autoRefetch && !rolling
+      ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
+      : false;
   const result = useTraceQuery({
     queryOptions: {
-      traceQuery: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
-      legacy: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
+      traceQuery: { refetchInterval, refetchOnWindowFocus: autoRefetch },
+      legacy: { refetchInterval, refetchOnWindowFocus: autoRefetch },
     },
     query: orderBy ? { ...buildQuery(now), orderBy } : buildQuery(now),
     withQueryTrace,
@@ -42,7 +61,7 @@ export function useTracesListSource({
   // Moving the query key refreshes the cursor chain once, without a second polling request.
   useEffect(() => {
     if (!autoRefetch || !rolling || result.error) return;
-    const timer = setInterval(() => setNow(new Date()), 10_000);
+    const timer = setInterval(() => setNow(new Date()), TRACES_LIST_REFETCH_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [autoRefetch, rolling, result.error]);
 

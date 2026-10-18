@@ -387,11 +387,13 @@ async function startMastraCodeApp(
     appName: 'Mastra Code',
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,
+    initialModelOverride: Boolean(initialState?.currentModelId),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     storageMaintenance: result.storageMaintenance,
     knowledgeInspector: result.knowledgeInspector,
+    knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,
     threadScheduler: result.threadScheduler,
     terminal,
     ...(options?.tui ?? {}),
@@ -430,6 +432,9 @@ async function startMastraCodeApp(
         result.controller.getMastra()?.stopWorkers(),
         result.controller.stopIntervals(),
       ]);
+      // Let background memory work (buffered observations, indexing) finish before storage
+      // closes and the scenario's temp HOME is deleted, so none of it leaks into later scenarios.
+      if (result.memory && 'settled' in result.memory) await result.memory.settled();
       // The signals pubsub is Mastra's event bus, so close it after the workers
       // stop (as the production asyncCleanup() does after Mastra shutdown). Call
       // close() on the object; a detached method loses `this` and rejects silently.

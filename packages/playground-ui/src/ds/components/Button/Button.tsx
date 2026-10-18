@@ -23,8 +23,23 @@ import { cn } from '@/lib/utils';
 // `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:-ml-[.3em]',
+  '[&>[data-slot=button-icon]]:ml-[-.3em]',
+  '[&>[data-slot=button-icon-end]]:-mr-1',
   '[&>svg]:mx-[-.3em]',
+);
+
+const LINK_LAYOUT = cn(
+  'relative size-auto gap-1 rounded-xs px-0 text-label',
+  'before:absolute before:-inset-x-2',
+  '[&>[data-slot=button-icon-end]]:mr-0 [&>[data-slot=button-icon]]:ml-0 [&>svg]:mx-0',
+);
+
+const LINK_LABEL = cn(
+  'relative inline-flex items-center gap-1',
+  iconSizeClasses.sm,
+  '[&>svg]:shrink-0',
+  'after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-current',
+  'after:transition-transform after:duration-fast after:ease-out-custom motion-reduce:after:transition-none',
 );
 
 // An icon is secondary to the label beside it, and on a neutral surface it says so with
@@ -81,6 +96,12 @@ export const buttonVariants = cva(
           'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
           'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
+        link: cn(
+          'border-0 bg-transparent text-muted-foreground not-disabled:hover:text-foreground',
+          'not-disabled:hover:[&>[data-slot=button-label]]:after:scale-x-100 not-disabled:hover:[&>[data-slot=button-label]]:after:duration-normal',
+          focusRingOffset,
+          'disabled:text-placeholder aria-disabled:text-placeholder',
+        ),
       },
       size: {
         sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
@@ -94,6 +115,11 @@ export const buttonVariants = cva(
         'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
       },
     },
+    compoundVariants: [
+      { variant: 'link', className: LINK_LAYOUT },
+      { variant: 'link', size: ['sm', 'md', 'icon-sm', 'icon-md'], className: 'before:-inset-y-1' },
+      { variant: 'link', size: ['lg', 'icon-lg'], className: 'before:-inset-y-1.5' },
+    ],
     defaultVariants: {
       variant: 'default',
       size: 'md',
@@ -116,7 +142,10 @@ export interface ButtonProps
   children: React.ReactNode;
   /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
   icon?: React.ReactNode;
+  iconEnd?: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** Side of the trigger the tooltip opens on. Defaults to `top`. */
+  tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
   /** @deprecated Pass the element through `render` instead: `render={<Link href="/x" />}`. */
   as?: React.ElementType;
   /** @deprecated Set it on the element passed to `render`. */
@@ -147,6 +176,8 @@ function preventLinkActivation(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
 
+type LinkRenderProps = { href?: string; to?: string; target?: string; className?: string };
+
 // One icon step per control step: a glyph is sized by the rung it sits in, so the
 // same nominal size renders the same icon whether it arrives as an icon-mode child,
 // the `icon` prop, or a bare SVG.
@@ -158,6 +189,29 @@ const iconSizeMap: Record<ButtonSize, IconSize> = {
   'icon-md': 'md',
   'icon-lg': 'lg',
 };
+
+function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {
+  if (variant === 'link') return 'sm';
+  return iconSizeMap[size];
+}
+
+function ButtonAdornment({ slot, size, children }: { slot: string; size: IconSize; children: React.ReactNode }) {
+  if (!children) return undefined;
+  return (
+    <Icon data-slot={slot} size={size}>
+      {children}
+    </Icon>
+  );
+}
+
+function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
+  if (variant !== 'link') return children;
+  return (
+    <span data-slot="button-label" className={LINK_LABEL}>
+      {children}
+    </span>
+  );
+}
 
 // Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
 // elements inside. `<Button><><Icon/></></Button>` should still count as icon-only.
@@ -202,16 +256,20 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       disabled,
       children,
       icon,
+      iconEnd,
       tooltip,
+      tooltipPosition,
       'aria-label': ariaLabelProp,
       type,
       ...props
     },
     ref,
   ) => {
-    const iconMode = isIconButtonSize(size);
+    const iconMode = variant !== 'link' && isIconButtonSize(size);
     const resolvedSize: ButtonSize = size ?? 'md';
+    const resolvedVariant: ButtonVariant = variant ?? 'default';
     const isLabelless = !iconMode && isIconOnly(children);
+    const adornmentSize = adornmentIconSize(resolvedVariant, resolvedSize);
 
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.
     const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
@@ -220,12 +278,13 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>
     ) : (
       <>
-        {icon ? (
-          <Icon data-slot="button-icon" size={iconSizeMap[resolvedSize]}>
-            {icon}
-          </Icon>
-        ) : null}
-        {children}
+        <ButtonAdornment slot="button-icon" size={adornmentSize}>
+          {icon}
+        </ButtonAdornment>
+        <ButtonLabel variant={resolvedVariant}>{children}</ButtonLabel>
+        <ButtonAdornment slot="button-icon-end" size={adornmentSize}>
+          {iconEnd}
+        </ButtonAdornment>
       </>
     );
 
@@ -263,14 +322,25 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       ...(prefetch === undefined ? null : { prefetch }),
     };
 
-    const renderedLink = React.isValidElement(render) && isLinkElement(render) ? render : undefined;
+    const isLinkVariant = resolvedVariant === 'link';
+    const linkHref = href ?? to;
+    const linkRenderProps: LinkRenderProps = {
+      ...(linkHref === undefined ? null : { href: linkHref }),
+      ...(target === undefined ? null : { target }),
+    };
+    const renderedLink =
+      React.isValidElement(render) && isLinkElement(render)
+        ? render
+        : isLinkVariant
+          ? React.createElement('a', linkRenderProps)
+          : undefined;
     const renderedLinkProps = renderedLink?.props;
     const disabledHref = renderedLink?.type !== 'a' && renderedLinkProps?.href !== undefined ? '' : undefined;
     const disabledTo = renderedLinkProps?.to !== undefined ? '' : undefined;
     const disabledLinkProps = disabled
       ? {
-          href: disabledHref,
-          to: disabledTo,
+          ...(isLinkVariant ? null : { href: disabledHref }),
+          ...(isLinkVariant ? null : { to: disabledTo }),
           'aria-disabled': true,
           onClick: preventLinkActivation,
           onAuxClick: preventLinkActivation,
@@ -303,7 +373,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       return (
         <Tooltip>
           <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
+          <TooltipContent side={tooltipPosition}>{tooltip}</TooltipContent>
         </Tooltip>
       );
     }

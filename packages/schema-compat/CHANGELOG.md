@@ -1,5 +1,75 @@
 # @mastra/schema-compat
 
+## 1.3.16-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.15
+
+### Patch Changes
+
+- Fixed Azure OpenAI GPT models filling optional tool inputs with made-up values. They now leave optional inputs empty, as they already do through `@ai-sdk/openai`. This applies when the Azure deployment name contains an OpenAI model name, such as `gpt-4o`, `my-gpt5-deployment` or `o3-mini`. Deployments with other names, such as `production`, and non-OpenAI models served through Azure behave as before. ([#26680](https://github.com/mastra-ai/mastra/pull/26680))
+
+- Fixed two OpenAI errors with tool inputs and structured output: ([#26979](https://github.com/mastra-ai/mastra/pull/26979))
+
+  - Optional tool inputs that accept more than one type can now be left empty. Before, OpenAI models filled them with made-up values.
+  - Structured output with a field that has free-form keys, such as `z.record(z.string(), z.string())`, now works on OpenAI instead of failing with a 400 error. These schemas are sent without strict mode. To keep strict mode anyway, set `providerOptions.openai.strictJsonSchema: true`.
+
+## 1.3.15-alpha.0
+
+### Patch Changes
+
+- Fixed Azure OpenAI GPT models filling optional tool inputs with made-up values. They now leave optional inputs empty, as they already do through `@ai-sdk/openai`. This applies when the Azure deployment name contains an OpenAI model name, such as `gpt-4o`, `my-gpt5-deployment` or `o3-mini`. Deployments with other names, such as `production`, and non-OpenAI models served through Azure behave as before. ([#26680](https://github.com/mastra-ai/mastra/pull/26680))
+
+- Fixed two OpenAI errors with tool inputs and structured output: ([#26979](https://github.com/mastra-ai/mastra/pull/26979))
+
+  - Optional tool inputs that accept more than one type can now be left empty. Before, OpenAI models filled them with made-up values.
+  - Structured output with a field that has free-form keys, such as `z.record(z.string(), z.string())`, now works on OpenAI instead of failing with a 400 error. These schemas are sent without strict mode. To keep strict mode anyway, set `providerOptions.openai.strictJsonSchema: true`.
+
+## 1.3.14
+
+### Patch Changes
+
+- Fixed TypeScript types for Standard Schemas that transform their input, such as Effect's `Schema.toStandardSchemaV1(Schema.DateFromString)`. Tool `execute` functions now receive the transformed output type instead of a union of input and output types. Tool `requestContextSchema` now accepts these schemas, and tool request context is typed with the transformed output. ([#26815](https://github.com/mastra-ai/mastra/pull/26815))
+
+  ```typescript
+  const DateSchema = Schema.toStandardSchemaV1(Schema.Struct({ date: Schema.DateFromString }));
+
+  const tool = createTool({
+    id: 'schedule',
+    description: 'Schedules an event',
+    inputSchema: DateSchema,
+    requestContextSchema: DateSchema,
+    execute: async ({ date }, { requestContext }) => {
+      date.toISOString(); // date is typed as Date
+      requestContext.get('date').toISOString(); // request context value is typed as Date
+    },
+  });
+  ```
+
+## 1.3.14-alpha.0
+
+### Patch Changes
+
+- Fixed TypeScript types for Standard Schemas that transform their input, such as Effect's `Schema.toStandardSchemaV1(Schema.DateFromString)`. Tool `execute` functions now receive the transformed output type instead of a union of input and output types. Tool `requestContextSchema` now accepts these schemas, and tool request context is typed with the transformed output. ([#26815](https://github.com/mastra-ai/mastra/pull/26815))
+
+  ```typescript
+  const DateSchema = Schema.toStandardSchemaV1(Schema.Struct({ date: Schema.DateFromString }));
+
+  const tool = createTool({
+    id: 'schedule',
+    description: 'Schedules an event',
+    inputSchema: DateSchema,
+    requestContextSchema: DateSchema,
+    execute: async ({ date }, { requestContext }) => {
+      date.toISOString(); // date is typed as Date
+      requestContext.get('date').toISOString(); // request context value is typed as Date
+    },
+  });
+  ```
+
 ## 1.3.13
 
 ### Patch Changes

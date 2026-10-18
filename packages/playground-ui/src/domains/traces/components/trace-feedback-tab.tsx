@@ -1,9 +1,5 @@
-import {
-  useCreateFeedback,
-  useDeleteFeedback,
-  useTraceFeedback,
-  useUpdateFeedbackReviewStatus,
-} from '@mastra/react/hooks';
+import { useUpdateFeedbackReviewStatus } from '@mastra/react/hooks/feedback';
+import { useCreateFeedback, useDeleteFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
 
 import { FeedbackThread } from './feedback-thread';

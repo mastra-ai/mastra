@@ -1,6 +1,6 @@
 import type { BuilderAvailableModelsResponse, ListMemoryThreadMessagesResponse } from '@mastra/client-js';
 
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 
 /**
  * `GET /api/auth/capabilities` fixture. RBAC disabled, so `usePermissions`

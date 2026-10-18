@@ -1,5 +1,5 @@
 import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/message-list';
-import { useMcpAppTools } from '@mastra/react/hooks';
+import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers } from '@mastra/react/ui';
 import { memo, useMemo } from 'react';

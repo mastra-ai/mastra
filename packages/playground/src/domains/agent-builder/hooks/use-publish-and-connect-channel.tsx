@@ -9,8 +9,8 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks';
-import { useStoredAgentMutations } from '@mastra/react/hooks';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
+import { useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';

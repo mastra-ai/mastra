@@ -1,14 +1,15 @@
 'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useWorkflows, useWorkflowSchema } from '@mastra/react/hooks';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import type { JSONSchema7 } from 'json-schema';
-import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
@@ -175,8 +176,8 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2 text-subheading')}>
-        <ChevronRight className="h-4 w-4" />
+      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2', 'text-subheading')}>
+        <DisclosureChevron direction="right" className="size-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
 

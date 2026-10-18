@@ -1,7 +1,7 @@
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useDatasetVersions } from '@mastra/react/hooks';
+import { useDatasetVersions } from '@mastra/react/hooks/datasets';
 
 export interface DatasetCompareVersionToolbarProps {
   datasetId: string;

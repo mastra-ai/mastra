@@ -1,5 +1,5 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { InMemoryChannelsStorage } from '@mastra/core/storage';
 import { Mastra } from '@mastra/core';
@@ -18,6 +18,7 @@ import {
   normalizeCommands,
   resolveDiscordAdapterConfig,
 } from './index';
+import { SNAPSHOT_TTL_MS } from './reconcile';
 
 const API_ORIGIN = 'https://discord.com';
 const APP = {
@@ -121,6 +122,21 @@ function stubGuild(guildId: string, present: boolean) {
     );
 }
 
+/** Stub one `GET /users/@me/guilds` page: guild ids, or a failure status. */
+function stubBotGuilds(idsOrError: string[] | { status: number }) {
+  const interceptor = mockAgent
+    .get(API_ORIGIN)
+    .intercept({ path: '/api/v10/users/@me/guilds?limit=200', method: 'GET' });
+  if (Array.isArray(idsOrError)) {
+    interceptor.reply(
+      200,
+      idsOrError.map(id => ({ id, name: `Guild ${id}` })),
+    );
+  } else {
+    interceptor.reply(idsOrError.status, { message: 'oops', code: 0 });
+  }
+}
+
 /** Persistently stub the guild command PUT, capturing every payload. */
 function stubGuildCommands(guildId: string, appId: string = APP.applicationId): () => Record<string, unknown>[] {
   const calls: Record<string, unknown>[] = [];
@@ -133,6 +149,15 @@ function stubGuildCommands(guildId: string, appId: string = APP.applicationId): 
     })
     .persist();
   return () => calls;
+}
+
+/** Stub one guild command PUT that only resolves after `ms` (in-flight races). */
+function stubDelayedGuildCommands(guildId: string, ms: number, appId: string = APP.applicationId) {
+  mockAgent
+    .get(API_ORIGIN)
+    .intercept({ path: `/api/v10/applications/${appId}/guilds/${guildId}/commands`, method: 'PUT' })
+    .reply(200, [])
+    .delay(ms);
 }
 
 /** Persistently stub the global command PUT, capturing every payload. */
@@ -291,6 +316,34 @@ describe('DiscordProvider.connect', () => {
     expect(inst).toMatchObject({ status: 'pending', guildIds: [] });
   });
 
+  it('does not flip a concurrently-activated install back to pending on re-connect', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // pending invite
+    const pending = await provider.getInstallation('agent-1');
+
+    // The operator clicks Connect again; the re-connect reads the (still
+    // pending) row, then parks on token validation — and a first interaction
+    // activates the install in that window. The re-connect's pending save
+    // must re-read behind the activation chain and keep the active row — an
+    // unserialized save would flip it back to pending and drop the guild.
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: '/api/v10/applications/@me', method: 'GET' })
+      .reply(200, { id: APP.applicationId, name: 'Test App', verify_key: APP.publicKey })
+      .delay(30);
+    stubGuildCommands(GUILD);
+    const reconnect = provider.connect('agent-1');
+    await provider.activateGuild(pending!.webhookId, GUILD);
+    const result = await reconnect;
+
+    expect(result).toMatchObject({ type: 'immediate', installationId: pending!.id });
+    expect(await provider.getInstallation('agent-1')).toMatchObject({ status: 'active', guildIds: [GUILD] });
+    expect(seen).toEqual(['agent-1']); // onInstall fired by the activation only
+  });
+
   it('enforces one active install per agent (reconnect requires disconnect)', async () => {
     const { provider } = makeProvider();
     stubValidateApp();
@@ -383,6 +436,283 @@ describe('DiscordProvider.activateGuild — lazy activation (first interaction)'
   });
 });
 
+describe('DiscordProvider — pending-install reconcile (invite completed in another tab)', () => {
+  it('snapshots the bot’s guild membership on the pending install, stamped with app + time', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([GUILD]); // a guild the bot was already in when the invite was issued
+
+    await provider.connect('agent-1');
+
+    const pending = await provider.getInstallation('agent-1');
+    expect(pending).toMatchObject({
+      status: 'pending',
+      guildSnapshot: [GUILD],
+      snapshotApplicationId: APP.applicationId,
+    });
+    expect(pending?.snapshotAt).toBeInstanceOf(Date);
+  });
+
+  it('listInstallations is a pure read — it never fetches membership or mutates installs', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // pending WITH a reconcilable snapshot
+
+    // No stubBotGuilds registered: a membership fetch would throw under
+    // disableNetConnect. The install must come back exactly as stored.
+    const installs = await provider.listInstallations();
+    expect(installs[0]).toMatchObject({ agentId: 'agent-1', status: 'pending' });
+  });
+
+  it('activates the install off reconcileInstallation when exactly one guild appeared since the invite', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]); // snapshot: bot in no guilds at invite time
+    await provider.connect('agent-1');
+
+    stubBotGuilds([GUILD]); // operator finished the invite in another tab
+    stubGuildCommands(GUILD); // activation registers the new guild's commands
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ agentId: 'agent-1', status: 'active' });
+    expect(seen).toEqual(['agent-1']);
+    const full = await provider.getInstallation('agent-1');
+    expect(full).toMatchObject({ status: 'active', guildIds: [GUILD] });
+    // The reconcile baseline is spent once a guild is confirmed.
+    expect(full?.guildSnapshot).toBeUndefined();
+    expect(full?.snapshotAt).toBeUndefined();
+    expect(full?.snapshotApplicationId).toBeUndefined();
+  });
+
+  it('returns null for an agent with no installation', async () => {
+    const { provider } = makeProvider();
+    expect(await provider.reconcileInstallation('ghost')).toBeNull();
+  });
+
+  it('returns an active installation as-is without fetching membership', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, true);
+    stubGuildCommands(GUILD);
+    await provider.connect('agent-1', { guildId: GUILD }); // eager bind — active
+
+    // No stubBotGuilds registered: an unexpected fetch would throw under
+    // disableNetConnect.
+    const info = await provider.reconcileInstallation('agent-1');
+    expect(info).toMatchObject({ status: 'active' });
+  });
+
+  it('stays pending when multiple guilds appeared (ambiguous diff), keeping the snapshot', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    stubBotGuilds([GUILD, OTHER_GUILD]);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([]);
+  });
+
+  it('stays pending when the same new guild could belong to two pending installs', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2');
+
+    stubBotGuilds([GUILD]); // one new guild, two possible claimants — can't tell whose
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    const installs = await provider.listInstallations();
+    expect(installs.map(i => i.status)).toEqual(['pending', 'pending']);
+  });
+
+  it('never claims a guild another install already owns, even when it is new to this snapshot', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // pending, snapshot []
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2'); // pending, snapshot []
+
+    // agent-2 activates on GUILD through a first interaction — GUILD joined
+    // after both snapshots were taken, so it still looks "new" to agent-1.
+    stubGuildCommands(GUILD);
+    const agent2 = await provider.getInstallation('agent-2');
+    await provider.activateGuild(agent2!.webhookId, GUILD);
+
+    stubBotGuilds([GUILD]);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    expect((await provider.getInstallation('agent-2'))?.guildIds).toEqual([GUILD]);
+  });
+
+  it('stays pending when the membership listing fails (reconcile is best-effort)', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    stubBotGuilds({ status: 500 });
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+  });
+
+  it('skips the membership fetch when the agent’s install carries no baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds({ status: 500 }); // snapshot fails at connect time
+    await provider.connect('agent-1');
+
+    // No stubBotGuilds registered: the pre-check must skip the fetch — an
+    // unexpected one would throw under disableNetConnect.
+    const info = await provider.reconcileInstallation('agent-1');
+    expect(info).toMatchObject({ status: 'pending' });
+  });
+
+  it('does not reconcile once the invite claim window has expired', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { provider } = makeProvider();
+      stubValidateApp();
+      stubBotGuilds([]);
+      await provider.connect('agent-1');
+
+      vi.setSystemTime(Date.now() + SNAPSHOT_TTL_MS + 1);
+      // No stubBotGuilds registered: an expired window must skip the
+      // membership fetch entirely. The abandoned flow activates only via a
+      // first interaction now.
+      const info = await provider.reconcileInstallation('agent-1');
+      expect(info).toMatchObject({ status: 'pending' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('re-connecting after the claim window expired takes a fresh snapshot', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { provider } = makeProvider();
+      stubValidateApp();
+      stubBotGuilds([]);
+      await provider.connect('agent-1'); // baseline: no guilds
+
+      // The bot joined GUILD for unrelated reasons during the dead window —
+      // an expired baseline must not attribute it to the revived flow.
+      vi.setSystemTime(Date.now() + SNAPSHOT_TTL_MS + 1);
+      stubValidateApp();
+      stubBotGuilds([GUILD]);
+      await provider.connect('agent-1');
+
+      expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([GUILD]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('defers to first-interaction activation when any live pending install lacks a baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds({ status: 500 }); // snapshot fails — agent-1 is pending with NO baseline
+    await provider.connect('agent-1');
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2'); // baseline: no guilds
+
+    // One new guild appears. Counted against agent-2's baseline alone it looks
+    // unambiguous — but it could just as well be agent-1's invite landing, and
+    // agent-1 has no baseline to say otherwise. Nobody may claim it.
+    stubBotGuilds([GUILD]);
+    const info = await provider.reconcileInstallation('agent-2');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    const installs = await provider.listInstallations();
+    expect(installs.map(i => i.status)).toEqual(['pending', 'pending']);
+  });
+
+  it('does not auto-activate an explicitly targeted install on a different guild', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, false); // target requested, bot not a member → invite flow
+    stubBotGuilds([]);
+    await provider.connect('agent-1', { guildId: GUILD });
+
+    // A different guild appears — not what the caller asked for. It can still
+    // activate through a real first interaction, never from membership alone.
+    stubBotGuilds([OTHER_GUILD]);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+  });
+
+  it('auto-activates an explicitly targeted install once its target appears', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, false);
+    stubBotGuilds([]);
+    await provider.connect('agent-1', { guildId: GUILD });
+
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'active' });
+    expect((await provider.getInstallation('agent-1'))?.guildIds).toEqual([GUILD]);
+  });
+
+  it('re-connecting while pending preserves the original reconcile baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // baseline: no guilds
+
+    // The operator completes the invite, then clicks connect again before any
+    // reconcile ran. A fresh snapshot would now include the new guild and hide
+    // it from the diff forever — the original baseline must survive. (No
+    // stubBotGuilds here: a re-snapshot would throw under disableNetConnect.)
+    stubValidateApp();
+    await provider.connect('agent-1');
+    expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([]);
+
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'active' });
+  });
+
+  it('activates a completed invite exactly once across concurrent reconcile calls', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    // ONE membership stub: concurrent reconciles must share a single pass (a
+    // second fetch would throw under disableNetConnect).
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const [a, b] = await Promise.all([
+      provider.reconcileInstallation('agent-1'),
+      provider.reconcileInstallation('agent-1'),
+    ]);
+
+    expect(a).toMatchObject({ status: 'active' });
+    expect(b).toMatchObject({ status: 'active' });
+    expect(seen).toEqual(['agent-1']);
+  });
+});
+
 describe('DiscordProvider.disconnect', () => {
   it('removes the installation', async () => {
     const { provider } = makeProvider();
@@ -399,6 +729,26 @@ describe('DiscordProvider.disconnect', () => {
 
   it('throws when no installation exists', async () => {
     await expect(makeProvider().provider.disconnect('ghost')).rejects.toThrow(/no discord installation/i);
+  });
+
+  it('cannot be resurrected by an activation whose command PUT is still in flight', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+    const pending = await provider.getInstallation('agent-1');
+
+    // The activation's command PUT is still in flight when disconnect lands.
+    // The delete must serialize behind the activation — otherwise the post-PUT
+    // command-version save re-creates the row disconnect just removed.
+    stubDelayedGuildCommands(GUILD, 50);
+    const activation = provider.activateGuild(pending!.webhookId, GUILD);
+    await new Promise(resolve => setTimeout(resolve, 10)); // let it reach the PUT
+    await provider.disconnect('agent-1');
+    await activation;
+
+    expect(await provider.getInstallation('agent-1')).toBeNull();
+    expect(await provider.listInstallations()).toHaveLength(0);
   });
 });
 

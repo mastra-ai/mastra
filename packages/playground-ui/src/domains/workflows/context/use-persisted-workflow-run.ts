@@ -1,5 +1,5 @@
 import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
-import { useWorkflowRun } from '@mastra/react/hooks';
+import { useWorkflowRun } from '@mastra/react/hooks/workflows';
 import { useMemo } from 'react';
 
 import { getRunTimestamp, isWorkflowRunFinished } from '../utils';

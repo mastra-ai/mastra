@@ -1121,6 +1121,23 @@ describe('TokenCounter', () => {
       expect(modelOutputTokens).toBeLessThan(rawResultTokens);
     });
 
+    it('counts the raw tool result when stored mastra.modelOutput is null', () => {
+      const counter = new TokenCounter();
+      const result = { longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}`) };
+      const toolPart = {
+        type: 'tool-invocation' as const,
+        toolInvocation: { state: 'result' as const, toolCallId: 'tool-1', toolName: 'bg', args: {}, result },
+      };
+
+      const withoutMetadata = createMessage({ format: 2, parts: [toolPart] });
+      const withNullModelOutput = createMessage({
+        format: 2,
+        parts: [{ ...toolPart, providerMetadata: { mastra: { modelOutput: null } } }],
+      });
+
+      expect(counter.countMessage(withNullModelOutput)).toBe(counter.countMessage(withoutMetadata));
+    });
+
     it('counts stored multimodal tool modelOutput as media instead of base64 JSON text', () => {
       const counter = new TokenCounter();
       const modelOutput = {

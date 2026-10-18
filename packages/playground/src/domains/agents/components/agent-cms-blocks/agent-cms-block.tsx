@@ -290,6 +290,7 @@ export const AgentCMSBlock = ({
       <AgentCMSRefBlock
         index={index}
         block={block}
+        onBlockChange={onBlockChange}
         onDelete={readOnly ? undefined : onDelete}
         onDereference={readOnly ? undefined : onDereference}
         className={className}

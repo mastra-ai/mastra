@@ -1,5 +1,5 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
-import { useStoredScorer } from '@mastra/react/hooks';
+import { useStoredScorer } from '@mastra/react/hooks/scores';
 import { useParams } from 'react-router';
 import { ScorerCombobox } from './components/scorer-combobox';
 import { useScorers } from './hooks/use-scorers';

@@ -1,4 +1,4 @@
-import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks';
+import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDetailsView } from '@/domains/traces/components/trace-details-view';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';

@@ -147,6 +147,45 @@ describe('Postgres trace aggregate compiler', () => {
       }),
     ).toThrow('Unsupported trusted trace-aggregate measure');
   });
+
+  it('omits the usage join for plans without token or cost measures', () => {
+    const compiled = compilePostgresTraceAggregate('public', plan({ measures: ['count', 'duration.p95'] }));
+
+    expect(compiled.text).not.toContain('mastra_metric_events');
+    expect(compiled.text).not.toContain('usage');
+  });
+
+  it('joins usage per trace, pruning metric rows by the lower time bound only', () => {
+    const compiled = compilePostgresTraceAggregate(
+      'custom',
+      planTraceAggregate(
+        parseTraceAggregateRequest({ timeRange: TIME_RANGE, measures: ['tokens.total.sum', 'cost.avg'] }),
+        { scope: { organizationId: 'org-a', resourceId: 'res-1' } },
+      ),
+    );
+
+    const usageRows = compiled.text.slice(compiled.text.indexOf('usage_rows AS'), compiled.text.indexOf('usage AS'));
+    expect(usageRows).toContain('FROM "custom"."mastra_metric_events" m');
+    expect(usageRows).toContain('SELECT DISTINCT ON (m."metricId")');
+    expect(usageRows).toContain('m."traceId" IN (SELECT "traceId" FROM candidates)');
+    expect(usageRows).toMatch(/m\."timestamp" >= \$\d+::timestamptz/);
+    expect(usageRows).not.toMatch(/m\."timestamp" </);
+    expect(usageRows).toMatch(/m\."organizationId" = \$\d+/);
+    expect(usageRows).toMatch(/m\."resourceId" = \$\d+/);
+    expect(usageRows).not.toContain('org-a');
+    expect(usageRows).not.toContain('mastra_model');
+    expect(compiled.text).toContain('LEFT JOIN usage u ON u."traceId" = r."traceId"');
+    expect(compiled.values).toContainEqual([
+      'mastra_model_total_input_tokens',
+      'mastra_model_total_output_tokens',
+      'mastra_model_output_reasoning_tokens',
+      'mastra_model_input_cache_read_tokens',
+    ]);
+    expect(compiled.values).toContainEqual(['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens']);
+    expect(compiled.values).toEqual(expect.arrayContaining(['org-a', 'res-1', 'mixed']));
+    expect(compiled.text).toContain('(SUM("t0" + "t1"))::float8');
+    expect(compiled.text).toContain('AS "costCoverage"');
+  });
 });
 
 describe('Postgres trace aggregate execution', () => {
@@ -179,6 +218,33 @@ describe('Postgres trace aggregate execution', () => {
       rows: [{ bucket: '2026-01-01T01:00:00.000Z', measures: { count: 2 } }],
       truncated: true,
     });
+  });
+
+  it('keeps null token and cost measures null and attaches row cost fields', async () => {
+    const { client } = mockClient([
+      { d0: 'research', m0: 2, m1: null, m2: 1500, costCoverage: 1, costUnit: 'mixed' },
+      { d0: 'scheduler', m0: 2, m1: null, m2: null, costCoverage: null, costUnit: null },
+    ]);
+
+    const response = await aggregateTraces(
+      client,
+      'public',
+      plan({ groupBy: ['entityName'], measures: ['count', 'cost.sum', 'tokens.input.avg'] }),
+      15000,
+    );
+
+    expect(response.rows).toEqual([
+      {
+        dimensions: { entityName: 'research' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': 1500 },
+        cost: { coverage: 1, unit: 'mixed' },
+      },
+      {
+        dimensions: { entityName: 'scheduler' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': null },
+        cost: { coverage: null, unit: null },
+      },
+    ]);
   });
 
   it('returns no rows for an empty population', async () => {

@@ -3,7 +3,7 @@ import {
   is403ForbiddenError,
   isObservabilityUnavailableError,
   isUnsupportedObservabilityOperationError,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/query';
 import { PermissionDenied } from '@/domains/auth/components/permission-denied';
 import { SessionExpired } from '@/domains/auth/components/session-expired';
 import { EmptyState } from '@/ds/components/EmptyState';

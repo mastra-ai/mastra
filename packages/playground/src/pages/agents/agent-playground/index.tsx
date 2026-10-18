@@ -4,7 +4,8 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useMemory, useAgent, useAgentVersions, useAgentVersion, useStoredAgent } from '@mastra/react/hooks';
+import { useAgent, useAgentVersions, useAgentVersion, useStoredAgent } from '@mastra/react/hooks/agents';
+import { useMemory } from '@mastra/react/hooks/memory';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';

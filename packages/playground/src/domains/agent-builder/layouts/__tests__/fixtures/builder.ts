@@ -1,6 +1,6 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
 
-import type { AuthCapabilities } from '@mastra/react/hooks';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 
 /**
  * Auth disabled → `usePermissions` treats every check as allowed and

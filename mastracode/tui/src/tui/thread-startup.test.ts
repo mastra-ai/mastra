@@ -34,6 +34,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state, 'thread-requested');
 
@@ -57,6 +58,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await expect(resumeThreadOnStartup(state, 'missing-thread')).resolves.toEqual({
       kind: 'missing',
@@ -87,6 +89,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await expect(resumeThreadOnStartup(state, 'thread-requested')).resolves.toEqual({
       kind: 'locked',
@@ -123,6 +126,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await expect(resumeThreadOnStartup(state, 'thread-requested')).resolves.toMatchObject({ kind: 'locked' });
     expect(setResourceId.mock.calls.map(([, input]) => input.resourceId)).toEqual(['resource-2', 'resource-1']);
@@ -143,6 +147,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await expect(resumeThreadOnStartup(state, 'thread-requested')).rejects.toThrow('storage offline');
   });
@@ -165,6 +170,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -190,6 +196,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -213,6 +220,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -237,6 +245,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -263,6 +272,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -290,6 +300,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 

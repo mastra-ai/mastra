@@ -9,6 +9,7 @@ import {
 } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
@@ -91,7 +92,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
 
   return (
     <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
-      <Txt variant="caption" tone="ink" className="pb-2" as="div">
+      <Txt as="p" variant="caption" tone="ink" className="pb-2">
         Approval required for <InlineCode>{toolName}</InlineCode>
       </Txt>
       <div className="flex items-center gap-2">
@@ -274,27 +275,18 @@ export const Txtmessage = ({
   if (role === 'user') {
     return (
       <div className="flex justify-end">
-        <Txt
-          variant="body"
-          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
-          as="div"
-        >
+        <div className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1">
           <MarkdownRenderer className="text-black">{txt}</MarkdownRenderer>
-        </Txt>
+        </div>
       </div>
     );
   }
 
   if (role === 'assistant' || role === 'system') {
     return (
-      <Txt
-        variant="body"
-        tone="muted"
-        className="max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
-        as="div"
-      >
+      <div className="max-w-[80%] text-muted-foreground [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1">
         <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
-      </Txt>
+      </div>
     );
   }
 
@@ -311,15 +303,15 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       <div className="flex items-start gap-2.5">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
-          <Txt variant="subheading" tone="ink" as="div">
+          <Txt as="p" variant="subheading" tone="ink">
             Something went wrong while building the agent.
           </Txt>
           <Txt
+            as="p"
             variant="caption"
             tone="muted"
-            className="break-words"
-            as="div"
             data-testid="agent-builder-chat-error-summary"
+            className="break-words"
           >
             {error.summary}
           </Txt>
@@ -341,9 +333,10 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
             )}
             <CollapsibleTrigger
               className={cn(
-                'text-body underline-offset-2 hover:underline',
+                'underline-offset-2 hover:underline',
                 quietTextHover,
                 controlStateColorTransition,
+                'text-body',
               )}
               data-testid="agent-builder-chat-error-details-trigger"
             >
@@ -351,12 +344,11 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
             </CollapsibleTrigger>
           </div>
           <CollapsibleContent>
-            <pre
+            <Code
               className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
-            >
-              {error.details}
-            </pre>
+              code={error.details}
+            />
           </CollapsibleContent>
         </Collapsible>
       ) : (
@@ -438,8 +430,11 @@ const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string;
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
-    <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="font-medium text-foreground">{value}</strong>
+    <Txt tone="muted" as="p" variant="body" className="min-w-0 flex-1 truncate">
+      {label}{' '}
+      <Txt as="strong" variant="subheading" tone="ink">
+        {value}
+      </Txt>
     </Txt>
   </div>
 );

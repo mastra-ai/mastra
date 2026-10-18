@@ -1,5 +1,5 @@
-import { useMetricsQueryFilters } from '@mastra/react/hooks';
-import type { MetricsQueryFilters } from '@mastra/react/hooks';
+import { useMetricsQueryFilters } from '@mastra/react/hooks/metrics';
+import type { MetricsQueryFilters } from '@mastra/react/hooks/metrics';
 
 import { useMetrics } from './use-metrics';
 

@@ -1,7 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { useAuthCapabilities, useAllProviderTools } from '@mastra/react/hooks';
+import { useAuthCapabilities } from '@mastra/react/hooks/auth';
+import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';

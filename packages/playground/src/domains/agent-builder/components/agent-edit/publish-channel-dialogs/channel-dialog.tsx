@@ -1,5 +1,5 @@
 import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { useEffect, useState } from 'react';
 import { DisconnectChannelContent } from './disconnect-channel-content';
 import { PublishChannelContent } from './publish-channel-content';

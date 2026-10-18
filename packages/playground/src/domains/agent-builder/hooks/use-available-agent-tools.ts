@@ -1,4 +1,4 @@
-import { useAllConnections, useAllProviderTools } from '@mastra/react/hooks';
+import { useAllConnections, useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 

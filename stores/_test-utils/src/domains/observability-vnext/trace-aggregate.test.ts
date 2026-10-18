@@ -10,6 +10,8 @@ import {
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
   traceAggregatePercentile,
   traceAggregateResponseMismatch,
@@ -346,8 +348,8 @@ describe('trace-aggregate token and cost conformance cases', () => {
   });
 
   it('counts exactly the traces evaluateTraceQuery returns for the token fixture', () => {
-    // Trace queries are capped at 31 days; August holds every token trace but `early-1` and
-    // `tenant-check`, and the resumed trace counts once.
+    // August holds every token trace but `early-1` and `tenant-check`, and the resumed trace
+    // counts once.
     const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
     const traces = evaluateTraceQuery(
       TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
@@ -360,6 +362,15 @@ describe('trace-aggregate token and cost conformance cases', () => {
     });
     expect(aggregate.rows).toEqual([{ measures: { count: traces.traces.length } }]);
     expect(traces.traces.length).toBe(11);
+  });
+
+  it.each(TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES)('$name', testCase => {
+    const actual = evaluateTraceAggregateRequest(
+      TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+      testCase.request,
+      testCase.scope,
+    );
+    expect(actual).toEqual(testCase.expected);
   });
 
   it('counts duplicate metricId rows once', () => {

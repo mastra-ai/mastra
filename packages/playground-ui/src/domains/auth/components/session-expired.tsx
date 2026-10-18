@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { makeSSOLoginRequest } from '@mastra/react/hooks';
+import { makeSSOLoginRequest } from '@mastra/react/hooks/auth';
 import { LogInIcon, TimerOffIcon } from 'lucide-react';
 import { useState } from 'react';
 

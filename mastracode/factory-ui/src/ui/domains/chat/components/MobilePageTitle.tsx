@@ -3,14 +3,12 @@ import type { ReactNode, Ref } from 'react';
 import { useLocation } from 'react-router';
 
 const PAGE_TITLES: Record<string, string> = {
-  audit: 'Audit log',
+  activity: 'Activity',
   knowledge: 'Knowledge',
   new: 'New session',
   'new-factory': 'New factory',
-  overview: 'Overview',
   review: 'Review',
   rules: 'Rules',
-  supervisor: 'Supervisor',
   work: 'Work',
 };
 
@@ -36,7 +34,7 @@ export function MobilePageTitle({
   const { pathname } = useLocation();
 
   return (
-    <Txt as="h1" variant="heading" ref={ref} tabIndex={tabIndex} className="text-foreground min-w-0 truncate md:hidden">
+    <Txt tone="ink" as="h1" variant="heading" ref={ref} tabIndex={tabIndex} className="min-w-0 truncate md:hidden">
       {children ?? routeTitle(pathname)}
     </Txt>
   );

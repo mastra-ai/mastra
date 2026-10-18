@@ -1,8 +1,8 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/react/hooks';
+import type { LightSpanRecord } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
 
-export type { LightSpanRecord, SpanRecord } from '@mastra/react/hooks';
+export type { LightSpanRecord, SpanRecord } from '@mastra/react/hooks/traces';
 
 /**
  * A light span carrying a precomputed haystack of everything it holds.

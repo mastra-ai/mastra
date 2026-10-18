@@ -29,7 +29,7 @@ overrides:
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.8: 4.13.8
+  hono@<4.13.11: 4.13.11
   better-auth: ^1.6.26
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
@@ -49,10 +49,10 @@ importers:
         version: 3.0.14
       '@hono/node-server':
         specifier: ^1.19.15
-        version: 1.19.17(hono@4.13.8)
+        version: 1.19.17(hono@4.13.11)
       '@hono/node-ws':
         specifier: ^1.1.1
-        version: 1.3.1(@hono/node-server@1.19.17(hono@4.13.8))(hono@4.13.8)
+        version: 1.3.1(@hono/node-server@1.19.17(hono@4.13.11))(hono@4.13.11)
       '@mastra/ai-sdk':
         specifier: link:../../client-sdks/ai-sdk
         version: link:../../client-sdks/ai-sdk
@@ -102,8 +102,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.233(zod@4.6.5)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -149,14 +149,14 @@ packages:
     resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/node-ws@1.3.1':
     resolution: {integrity: sha512-vo/MwCnpJAVHBkGzWjCJ28wF45fYHAfbPZcH2rodZODHtch2GHA94KtMfusmVycTUtsLAsaNsHhtY6P8X3RQsA==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       '@hono/node-server': ^1.19.11
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@inquirer/ansi@2.0.7':
     resolution: {integrity: sha512-3eTuUO1vH2cZm2ZKHeQxnOqlTi9EfZDGgIe3BL3I4u+rJHocr9Fz86M4fjYABPvFnQG/gGK551HqDiIcETwU6Q==}
@@ -290,8 +290,8 @@ packages:
   headers-polyfill@5.0.1:
     resolution: {integrity: sha512-1TJ6Fih/b8h5TIcv+1+Hw0PDQWJTKDKzFZzcKOiW1wJza3XoAQlkCuXLbymPYB8+ZQyw8mHvdw560e8zVFIWyA==}
 
-  hono@4.13.8:
-    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
+  hono@4.13.11:
+    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
     engines: {node: '>=16.9.0'}
 
   is-node-process@1.2.0:
@@ -439,14 +439,14 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@hono/node-server@1.19.17(hono@4.13.8)':
+  '@hono/node-server@1.19.17(hono@4.13.11)':
     dependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.17(hono@4.13.8))(hono@4.13.8)':
+  '@hono/node-ws@1.3.1(@hono/node-server@1.19.17(hono@4.13.11))(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 1.19.17(hono@4.13.8)
-      hono: 4.13.8
+      '@hono/node-server': 1.19.17(hono@4.13.11)
+      hono: 4.13.11
       ws: 8.21.1
     transitivePeerDependencies:
       - bufferutil
@@ -564,7 +564,7 @@ snapshots:
       '@types/set-cookie-parser': 2.4.10
       set-cookie-parser: 3.1.2
 
-  hono@4.13.8: {}
+  hono@4.13.11: {}
 
   is-node-process@1.2.0: {}
 

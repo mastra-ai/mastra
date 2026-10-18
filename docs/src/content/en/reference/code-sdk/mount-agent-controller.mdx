@@ -81,8 +81,10 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
   {
     name: 'controllerId',
     type: 'string',
-    description: 'Id under which the controller is registered on the Mastra instance.',
+    description:
+      'Key the controller is registered under on the Mastra instance. Clients pass this key to `client.getAgentController()`.',
     isOptional: true,
+    defaultValue: 'controller.id',
   },
   {
     name: 'modes',
@@ -122,6 +124,13 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     name: 'disabledTools',
     type: 'string[]',
     description: 'Tools removed from the dynamic tool set before exposure to the model.',
+    isOptional: true,
+  },
+  {
+    name: 'disableBuiltinTools',
+    type: 'BuiltinToolId[]',
+    description:
+      "Agent controller built-in tools (for example, 'submit_plan') removed from every session. Tool guidance skips disabled tools, and plan mode writes the plan file instead of calling 'submit_plan' when it's disabled.",
     isOptional: true,
   },
   {

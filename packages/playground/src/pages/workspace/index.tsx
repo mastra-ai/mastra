@@ -20,8 +20,8 @@ import {
   useDeleteWorkspaceFile,
   useCreateWorkspaceDirectory,
   useWorkspaceSkills,
-} from '@mastra/react/hooks';
-import type { WorkspaceItem } from '@mastra/react/hooks';
+} from '@mastra/react/hooks/workspace';
+import type { WorkspaceItem } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';

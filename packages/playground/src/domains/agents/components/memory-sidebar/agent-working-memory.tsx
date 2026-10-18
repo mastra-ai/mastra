@@ -11,7 +11,7 @@ import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surf
 import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useMemoryConfig } from '@mastra/react/hooks';
+import { useMemoryConfig } from '@mastra/react/hooks/memory';
 import { RefreshCcwIcon, ExternalLink, X, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
@@ -101,13 +101,13 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg text-body')}
+                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg')}
                     />
                   ) : (
                     <>
                       <div className={cn(raisedSurfaceStyle, 'rounded-lg')} style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
-                          <div className="group relative cursor-pointer p-3 text-meta hover:bg-fill-subtle">
+                          <div className="group relative cursor-pointer p-3 hover:bg-fill-subtle">
                             <button
                               type="button"
                               onClick={handleCopy}
@@ -141,9 +141,9 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="text-body text-muted-foreground">
+                <Txt as="p" variant="body" tone="muted">
                   No working memory content yet. Click "Edit Working Memory" to add content.
-                </div>
+                </Txt>
               )}
             </>
           ) : (
@@ -170,7 +170,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                         type="button"
                         aria-disabled="true"
                         onClick={event => event.preventDefault()}
-                        className="cursor-not-allowed text-caption opacity-50"
+                        className="cursor-not-allowed opacity-50"
                       >
                         Edit Working Memory
                       </Button>
@@ -180,12 +180,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <Button
-                    icon={<Pencil />}
-                    onClick={() => setIsEditing(true)}
-                    disabled={isUpdating}
-                    className="text-caption"
-                  >
+                  <Button icon={<Pencil />} onClick={() => setIsEditing(true)} disabled={isUpdating}>
                     Edit Working Memory
                   </Button>
                 )}
@@ -203,7 +198,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     }
                   }}
                   disabled={isUpdating}
-                  className="text-caption"
                 >
                   {isUpdating ? <RefreshCcwIcon className="h-3 w-3 animate-spin" /> : 'Save Changes'}
                 </Button>
@@ -214,7 +208,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     setIsEditing(false);
                   }}
                   disabled={isUpdating}
-                  className="text-caption"
                 >
                   Cancel
                 </Button>
@@ -232,11 +225,13 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-              'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
+              'inline-flex items-center gap-2 text-info-indicator hover:underline',
               controlStateColorTransition,
             )}
           >
-            Learn about working memory
+            <Txt as="span" variant="body" className="block">
+              Learn about working memory
+            </Txt>
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>

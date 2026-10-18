@@ -8,4 +8,4 @@ export {
   isUnsupportedObservabilityOperationError,
   shouldRetryQuery,
   type UnsupportedObservabilityOperation,
-} from '@mastra/react/hooks';
+} from '@mastra/react/hooks/query';

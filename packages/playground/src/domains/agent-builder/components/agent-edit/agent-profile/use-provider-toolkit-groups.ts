@@ -1,4 +1,4 @@
-import { useToolProviders } from '@mastra/react/hooks';
+import { useToolProviders } from '@mastra/react/hooks/tool-providers';
 import { useMemo } from 'react';
 import type { AgentTool } from '../../../types/agent-tool';
 

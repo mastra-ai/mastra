@@ -1,4 +1,10 @@
-import { isImageFile, isMarkdownFile, isVideoFile, videoMimeType, useWorkspaceFileContent } from '@mastra/react/hooks';
+import {
+  isImageFile,
+  isMarkdownFile,
+  isVideoFile,
+  videoMimeType,
+  useWorkspaceFileContent,
+} from '@mastra/react/hooks/workspace';
 import type { ReactNode } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';

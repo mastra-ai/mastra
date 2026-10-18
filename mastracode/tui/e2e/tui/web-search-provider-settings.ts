@@ -17,7 +17,6 @@ export const webSearchProviderSettingsScenario = {
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
     settings.preferences = {
       ...settings.preferences,
-      quietMode: false,
       webSearchProvider: 'auto',
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

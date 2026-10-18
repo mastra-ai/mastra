@@ -1,4 +1,4 @@
-import { useFetchTraceSpans } from '@mastra/react/hooks';
+import { useFetchTraceSpans } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
 import { downloadJson } from '@/lib/file';
 import { toast } from '@/lib/toast';

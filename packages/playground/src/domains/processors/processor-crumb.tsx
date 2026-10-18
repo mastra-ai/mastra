@@ -1,5 +1,5 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
-import { useProcessors } from '@mastra/react/hooks';
+import { useProcessors } from '@mastra/react/hooks/processors';
 import { useParams } from 'react-router';
 import { ProcessorCombobox } from './components/processor-combobox';
 

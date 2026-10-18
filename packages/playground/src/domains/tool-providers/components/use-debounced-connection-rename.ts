@@ -1,5 +1,5 @@
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useUpdateConnection } from '@mastra/react/hooks';
+import { useUpdateConnection } from '@mastra/react/hooks/tool-providers';
 import { useEffect, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 

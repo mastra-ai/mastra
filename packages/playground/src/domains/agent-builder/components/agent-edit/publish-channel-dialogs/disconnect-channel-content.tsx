@@ -7,8 +7,8 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDisconnectChannel } from '@mastra/react/hooks';
-import type { ChannelPlatformInfo } from '@mastra/react/hooks';
+import { useDisconnectChannel } from '@mastra/react/hooks/agents';
+import type { ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 
 export interface DisconnectChannelContentProps {
   platform: ChannelPlatformInfo;

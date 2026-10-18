@@ -19,7 +19,9 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     traceQueryContextIds: true,
+    traceAggregate: true,
     threadQuery: true,
+    spanQuery: true,
     feedback: true,
   },
 };
@@ -41,6 +43,43 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: false,
     traceQueryTenantScope: false,
     traceQueryContextIds: false,
+    traceAggregate: false,
     threadQuery: false,
+    spanQuery: false,
+  },
+};
+
+/** Store runs trace queries but does not declare `trace-aggregate`. */
+export const noTraceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceAggregate: false,
+  },
+};
+
+/** Response from a server released before the `traceAggregate` key existed. */
+export const preAggregateCapabilities = {
+  observabilityStorageType: 'ObservabilityStorageClickhouseVNext',
+  capabilities: Object.fromEntries(
+    Object.entries(traceQueryCapabilities.capabilities).filter(([key]) => key !== 'traceAggregate'),
+  ),
+};
+
+/** Store declares `trace-query` but not `trace-query-root-duration`. */
+export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryRootDuration: false,
+  },
+};
+
+/** Store declares `trace-query` but not `trace-query-discovery` (or the core lacks the discovery planners). */
+export const traceQueryWithoutDiscoveryCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryDiscovery: false,
   },
 };

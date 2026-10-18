@@ -1,4 +1,4 @@
-import { useScorers } from '@mastra/react/hooks';
+import { useScorers } from '@mastra/react/hooks/scores';
 import { useState, type ComponentProps } from 'react';
 import { SpanScoring } from '@/domains/scores';
 import { TraceDataPanelView, type TraceSideView } from '@/domains/traces/components/trace-data-panel-view';

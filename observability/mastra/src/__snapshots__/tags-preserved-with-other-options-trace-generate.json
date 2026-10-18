@@ -4,6 +4,7 @@
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    └── model_step: \"step: 0\"",
     "        ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "        ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "        └── model_inference: \"inference: 0\"",
     "            └── model_chunk: \"chunk: 'text'\""
   ],
@@ -20,7 +21,8 @@
         "entityType": "agent",
         "entityId": "test-agent-preserve-tags",
         "attributes": {
-          "instructions": "You are a test agent"
+          "instructions": "You are a test agent",
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -52,10 +54,10 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -113,6 +115,7 @@
                 "attributes": {
                   "stepIndex": 0,
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -203,6 +206,52 @@
                   "span": {
                     "id": "<span-5>",
                     "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "someKey": "someValue",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a test agent"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Hello"
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-6>",
+                    "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
@@ -241,6 +290,16 @@
                       "someKey": "someValue",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Hello"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 generate response",
                       "toolCalls": []
@@ -249,14 +308,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-6>",
+                        "id": "<span-7>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'text'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-5>",
+                        "parentId": "<span-6>",
                         "entityType": "agent",
                         "entityId": "test-agent-preserve-tags",
                         "attributes": {

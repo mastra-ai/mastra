@@ -12,14 +12,14 @@ let currentSearch: string;
 let setSearch: SetURLSearchParamsLike;
 let setSearchWithoutPersistence: (next: string) => void;
 
-function Harness({ initial }: { initial: string }) {
+function Harness({ initial, excludeParams }: { initial: string; excludeParams?: readonly string[] }) {
   const [params, setParams] = useState(() => new URLSearchParams(initial));
   currentSearch = params.toString();
   setSearchWithoutPersistence = next => setParams(new URLSearchParams(next));
   const setSearchParams = useCallback<SetURLSearchParamsLike>(next => {
     setParams(prev => (typeof next === 'function' ? next(new URLSearchParams(prev)) : new URLSearchParams(next)));
   }, []);
-  setSearch = useTraceFilterPersistence(params, setSearchParams, { storageKey: KEY });
+  setSearch = useTraceFilterPersistence(params, setSearchParams, { storageKey: KEY, excludeParams });
   return null;
 }
 
@@ -88,5 +88,26 @@ describe('useTraceFilterPersistence', () => {
     act(() => setSearchWithoutPersistence('status=success'));
 
     expect(localStorage.getItem(KEY)).toBe('status=error');
+  });
+
+  describe('when some params are excluded from persistence', () => {
+    const excludeParams = ['filterThreadId'];
+
+    it('keeps an excluded filter in the URL without saving it or its operator', () => {
+      render(<Harness initial="" excludeParams={excludeParams} />);
+
+      act(() => setSearch(new URLSearchParams('status=error&filterThreadId=t1&filterThreadId.op=isNot')));
+
+      expect(currentSearch).toBe('status=error&filterThreadId=t1&filterThreadId.op=isNot');
+      expect(localStorage.getItem(KEY)).toBe('status=error');
+    });
+
+    it('does not restore an excluded filter saved by an earlier visit', () => {
+      localStorage.setItem(KEY, 'status=error&filterThreadId=t1');
+
+      render(<Harness initial="" excludeParams={excludeParams} />);
+
+      expect(currentSearch).toBe('status=error');
+    });
   });
 });

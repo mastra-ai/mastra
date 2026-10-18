@@ -7,6 +7,40 @@ import { InMemoryStore } from '../storage';
 import { MockMemory } from './mock';
 
 describe('MastraMemory FGA', () => {
+  it('includes the acting agent in thread authorization metadata', async () => {
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+    const requestContext = new RequestContext();
+    const user = { id: 'user-1', organizationMembershipId: 'membership-1' };
+
+    await MockMemory.checkThreadFGA({
+      mastra: {
+        getServer: () => ({ fga: fgaProvider }),
+      } as any,
+      user,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      agentId: 'agent-1',
+      requestContext,
+      permission: MastraFGAPermissions.MEMORY_READ,
+    });
+
+    expect(fgaProvider.require).toHaveBeenCalledWith(user, {
+      resource: { type: 'thread', id: 'thread-1' },
+      permission: MastraFGAPermissions.MEMORY_READ,
+      context: {
+        requestContext,
+        resourceId: 'resource-1',
+        metadata: {
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          agentId: 'agent-1',
+        },
+      },
+    });
+  });
+
   it('bypasses thread membership resolution for a tenant-scoped trusted actor', async () => {
     const fgaProvider = {
       require: vi.fn().mockResolvedValue(undefined),

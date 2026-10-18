@@ -21,8 +21,12 @@ import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL 
 import {
   compileClickHouseThreadQuery,
   compileClickHouseTraceQuery,
+  compileClickHouseTraceQueryKeys,
   compileClickHouseTraceQueryObservedFields,
+  compileClickHouseTraceQueryTotal,
   compileClickHouseTraceQueryValues,
+  compileClickHouseTraceRootPayloads,
+  compileClickHouseTraceRowsByKey,
   queryThreads,
   queryTraces,
   runWithClickHouseTraceQueryTimeout,
@@ -35,13 +39,17 @@ function plan(input: Record<string, unknown> = {}): TrustedTraceQueryPlan {
   return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }));
 }
 
+function decodeCursorValues(cursor: string): Record<string, unknown> {
+  return JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')).values;
+}
+
 function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan {
   return planThreadQuery(parseQueryThreadsInput({ traces: { timeRange: TIME_RANGE }, ...input }));
 }
 
 describe('ClickHouse advanced trace query', () => {
   it('compiles root duration predicates from root timestamps', () => {
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
     );
 
@@ -63,7 +71,7 @@ describe('ClickHouse advanced trace query', () => {
       expect(query).toHaveBeenCalledTimes(1);
       query
         .mockResolvedValueOnce({ json: async () => [{ cursorId: '7', traceId: 'trace-a' }] })
-        .mockResolvedValueOnce({ json: async () => [{ __metadata: 1, total: 0 }] });
+        .mockResolvedValueOnce({ json: async () => [] });
       const numbered = await queryTraces(
         { query } as unknown as ClickHouseClient,
         plan({ pagination: { page: 0, perPage: 2 } }),
@@ -90,6 +98,21 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('GROUP BY traceId');
     expect(compiled.query).toContain('INNER JOIN delta_candidates');
     expect(compiled.query).toContain('ORDER BY d.latestCursorId ASC, c.traceId ASC');
+    // The delta index has no tenant columns: it is limited to the tenant's window roots before grouping.
+    const deltaCte = compiled.query.slice(
+      compiled.query.indexOf('delta_candidates AS ('),
+      compiled.query.indexOf('root_scope AS ('),
+    );
+    expect(deltaCte).toMatch(/FROM mastra_trace_roots_delta[\s\S]*AND traceId IN \([\s\S]*FROM mastra_trace_roots\s/);
+    const scoped = compileClickHouseTraceQuery(
+      planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, mode: 'delta' }), {
+        scope: { organizationId: 'org-1' },
+      }),
+      { cursorId: '9', traceId: 'trace-z' },
+    ).query;
+    expect(scoped.slice(scoped.indexOf('delta_candidates AS ('), scoped.indexOf('root_scope AS ('))).toMatch(
+      /AND organizationId = \{trace_query_\d+:String\}[\s\S]*GROUP BY traceId/,
+    );
     expect(Object.values(compiled.query_params)).toContain(3);
     expect(Object.values(compiled.query_params)).toContain('trace-a');
     expect(compiled.sharedSnapshot).toBe(true);
@@ -104,15 +127,14 @@ describe('ClickHouse advanced trace query', () => {
         'clickhouse',
         JSON.stringify({ cursorId: '7', traceId: 'trace-a' }),
       );
-      const query = vi
-        .fn()
-        .mockResolvedValueOnce({ json: async () => [{ cursorId: '9', traceId: 'trace-z' }] })
-        .mockResolvedValueOnce({
-          json: async () => [
-            { ...traceRow('trace-b', TIME_RANGE.from), __delta_cursor: '8' },
-            { ...traceRow('trace-c', TIME_RANGE.from), __delta_cursor: '8' },
-          ],
-        });
+      const query = mockTraceStatements({
+        traces: 0,
+        deltaHead: { cursorId: '9', traceId: 'trace-z' },
+        rows: [
+          { ...traceRow('trace-b', TIME_RANGE.from), __delta_cursor: '8' },
+          { ...traceRow('trace-c', TIME_RANGE.from), __delta_cursor: '8' },
+        ],
+      });
       const result = await queryTraces(
         { query } as unknown as ClickHouseClient,
         plan({ mode: 'delta', after, limit: 1 }),
@@ -121,6 +143,10 @@ describe('ClickHouse advanced trace query', () => {
       );
       expect(result).toMatchObject({ traces: [{ traceId: 'trace-b' }], delta: { limit: 1, hasMore: true } });
       expect(result).not.toHaveProperty('page');
+      // The batch's payloads are fetched for the visible row only.
+      expect(query).toHaveBeenCalledTimes(3);
+      expect(query.mock.calls[2]![0].query).toContain('metadataRaw AS metadata');
+      expect(Object.values(query.mock.calls[2]![0].query_params)).not.toContain('trace-c');
       query.mockResolvedValue({ json: async () => [] });
       const empty = await queryTraces(
         { query } as unknown as ClickHouseClient,
@@ -277,8 +303,8 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).not.toContain('JSONExtractString(r.metadataRaw, entry.1)');
   });
 
-  it('uses named parameters and one correlated existence check per collection clause', () => {
-    const compiled = compileClickHouseTraceQuery(
+  it('uses named parameters and one set-based membership check per collection clause', () => {
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           scores: {
@@ -307,8 +333,8 @@ describe('ClickHouse advanced trace query', () => {
 
     expect(compiled.query).not.toContain("factuality' OR 1");
     expect(Object.values(compiled.query_params)).toContain("factuality' OR 1");
-    expect(compiled.query.match(/EXISTS \(/g)).toHaveLength(1);
-    expect(compiled.query).toContain('s.traceId = r.traceId');
+    expect(compiled.query.match(/r\.traceId IN \(/g)).toHaveLength(1);
+    expect(compiled.query).not.toContain('EXISTS (');
     expect(compiled.query).toContain('FROM mastra_score_events_current FINAL');
     expect(compiled.query).not.toContain('FROM mastra_score_events FINAL');
     expect(compiled.query).not.toContain('LIMIT 1 BY scoreId');
@@ -328,7 +354,7 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('projects canonical span values with guarded JSON strings and typed parameters', () => {
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           spans: {
@@ -366,7 +392,7 @@ describe('ClickHouse advanced trace query', () => {
   it('parameterizes metadata keys and values with total missing semantics', () => {
     const key = ` message'id `;
     const value = `message' OR 1`;
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           op: 'and',
@@ -400,7 +426,7 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('pushes root-row conjuncts into the window seed and keeps relation conjuncts after the dedupe', () => {
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           op: 'and',
@@ -413,18 +439,18 @@ describe('ClickHouse advanced trace query', () => {
     );
 
     const seed = compiled.query.slice(
-      compiled.query.indexOf('SELECT traceId\n        FROM mastra_trace_roots r'),
-      compiled.query.indexOf('ORDER BY dedupeKey'),
+      compiled.query.indexOf('FROM mastra_trace_roots r'),
+      compiled.query.indexOf('current_spans AS ('),
     );
     expect(seed).toContain('AND (ifNull(r.entityName = {trace_query_3:String}, 0))');
     expect(seed).not.toContain('current_spans');
     expect(compiled.query).toMatch(
-      /candidates AS \(\s+SELECT [\s\S]+FROM root_scope r\s+WHERE \(ifNull\(r\.entityName = \{trace_query_\d+:String\}, 0\)\) AND \(EXISTS/,
+      /candidates AS \(\s+SELECT [\s\S]+FROM root_scope r\s+WHERE \(ifNull\(r\.entityName = \{trace_query_\d+:String\}, 0\)\) AND \(r\.traceId IN \(/,
     );
   });
 
   it('does not push a disjunction that reads related spans into the window seed', () => {
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           op: 'or',
@@ -446,7 +472,7 @@ describe('ClickHouse advanced trace query', () => {
       timeRange: TIME_RANGE,
       where: { scores: { some: { op: 'exists', path: 'score' } } },
     });
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       planTraceQuery(request, { scope: { organizationId: 'org-1', resourceId: 'res-1' } }),
     );
 
@@ -457,13 +483,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(rootStart).toBeGreaterThan(-1);
     expect(scoresStart).toBeGreaterThan(rootStart);
     const rootScope = compiled.query.slice(rootStart, scoresStart);
-    // The range prefilter is a root scan too, so it carries the tenant conditions.
-    const prefilterStart = compiled.query.indexOf('WHERE traceId IN (');
-    expect(prefilterStart).toBeGreaterThan(-1);
-    expect(prefilterStart).toBeLessThan(rootStart);
-    const prefilter = compiled.query.slice(prefilterStart, rootStart);
-    expect(prefilter).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
-    expect(prefilter).toMatch(/AND resourceId = \{trace_query_\d+:String\}/);
+    // root_scope reads the window's roots once, with the tenant conditions.
+    expect(rootScope.match(/AND organizationId = \{trace_query_\d+:String\}/g)).toHaveLength(1);
+    expect(rootScope.match(/AND resourceId = \{trace_query_\d+:String\}/g)).toHaveLength(1);
     const scores = compiled.query.slice(scoresStart);
     for (const cte of [rootScope, scores]) {
       expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
@@ -474,7 +496,7 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('emits no tenant conditions for an unscoped plan', () => {
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({ where: { scores: { some: { op: 'exists', path: 'score' } } } }),
     );
 
@@ -482,8 +504,8 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).not.toContain('resourceId =');
   });
 
-  it('deduplicates completed span deliveries without relying on background merges', () => {
-    const compiled = compileClickHouseTraceQuery(
+  it('reads one root per trace and tests span existence without relying on background merges', () => {
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           spans: { some: { op: 'exists', path: 'error' } },
@@ -494,13 +516,15 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('FROM mastra_trace_roots');
     expect(compiled.query).toContain('FROM mastra_span_events');
     expect(compiled.query).not.toContain('WHERE parentSpanId IS NULL');
-    expect(compiled.query).toContain('ORDER BY dedupeKey');
-    expect(compiled.query).toContain('ORDER BY traceId, dedupeKey');
-    expect(compiled.query).toContain('LIMIT 1 BY dedupeKey');
-    expect(compiled.query).toContain('LIMIT 1 BY traceId');
-    // The time range narrows the dedupe input instead of filtering the whole deduped table.
+    // One root per trace: root_scope is the window's root rows, with no current-root re-read.
+    expect(compiled.query).not.toContain('current_roots');
+    expect(compiled.query).not.toContain('OVER (PARTITION BY traceId)');
+    // Unmerged copies of a root collapse to one row per trace.
+    expect(compiled.query).toContain('GROUP BY traceId');
+    // Span relations are existence checks, which duplicate span copies cannot change.
+    expect(compiled.query).not.toContain('LIMIT 1 BY dedupeKey');
     expect(compiled.query).toMatch(
-      /FROM mastra_trace_roots\s+WHERE traceId IN \(\s+SELECT traceId\s+FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:DateTime64\(3, 'UTC'\)\}/,
+      /root_scope AS \(\s+SELECT \*\s+FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:DateTime64\(3, 'UTC'\)\}/,
     );
     expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b|\bFINAL\b|\bOPTIMIZE\b/);
   });
@@ -512,16 +536,23 @@ describe('ClickHouse advanced trace query', () => {
     const scoreClause = {
       scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } },
     };
-    const traceOnly = compileClickHouseTraceQuery(plan()).query;
-    const spanOnly = compileClickHouseTraceQuery(plan({ where: spanClause })).query;
-    const scoreOnly = compileClickHouseTraceQuery(plan({ where: scoreClause })).query;
-    const repeated = compileClickHouseTraceQuery(
+    const traceOnly = compileClickHouseTraceQueryKeys(plan()).query;
+    const spanOnly = compileClickHouseTraceQueryKeys(plan({ where: spanClause })).query;
+    const scoreOnly = compileClickHouseTraceQueryKeys(plan({ where: scoreClause })).query;
+    const repeated = compileClickHouseTraceQueryKeys(
       plan({ where: { op: 'and', args: [spanClause, spanClause, scoreClause, scoreClause] } }),
     ).query;
 
-    for (const query of [traceOnly, spanOnly, scoreOnly, repeated]) {
-      // One deduped reconstruction plus its time-range prefilter.
+    for (const query of [traceOnly, scoreOnly]) {
+      // One read of the window's roots.
+      expect(query.match(/FROM mastra_trace_roots/g)).toHaveLength(1);
+    }
+    // Span existence checks are seeded with the window's traces rather than root_scope.
+    for (const query of [spanOnly, repeated]) {
       expect(query.match(/FROM mastra_trace_roots/g)).toHaveLength(2);
+      expect(query).toMatch(
+        /FROM mastra_span_events\s+WHERE isNotNull\(traceId\)\s+AND traceId IN \(\s+SELECT traceId\s+FROM mastra_trace_roots w/,
+      );
     }
     expect(traceOnly).not.toContain('mastra_span_events');
     expect(traceOnly).not.toContain('mastra_score_events');
@@ -541,8 +572,8 @@ describe('ClickHouse advanced trace query', () => {
     expect(repeated.match(/FROM current_scores s/g)).toHaveLength(2);
   });
 
-  it('compiles typed feedback relations with one correlated existence check per clause', () => {
-    const compiled = compileClickHouseTraceQuery(
+  it('compiles typed feedback relations with one set-based membership check per clause', () => {
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           op: 'and',
@@ -570,13 +601,15 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query.match(/current_feedback AS/g)).toHaveLength(1);
     expect(compiled.query.match(/FROM current_feedback s/g)).toHaveLength(2);
     expect(compiled.query).toContain('isNotNull(s.traceId)');
-    expect(compiled.query).toContain('s.traceId = r.traceId');
+    expect(compiled.query).toContain('SELECT s.traceId FROM current_feedback s');
     expect(compiled.query).toMatch(/s\.valueNumber < \{trace_query_\d+:Float64\}/);
     expect(compiled.query).toMatch(/s\.valueString IN \(\{trace_query_\d+:String\}/);
     expect(compiled.query).toContain('(isNotNull(s.valueString) OR isNotNull(s.valueNumber))');
-    expect(compiled.query).toContain(`FROM (
-      SELECT *
-      FROM mastra_feedback_events FINAL
+    expect(compiled.query).toContain(`WHERE feedbackId IN (
+        SELECT feedbackId
+        FROM mastra_feedback_events
+        WHERE traceId IN (SELECT traceId FROM root_scope)
+      )
       ORDER BY feedbackId, writeVersion DESC, timestamp DESC
       LIMIT 1 BY feedbackId
     ) AS current
@@ -588,8 +621,8 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('emits feedback scope only when referenced', () => {
-    const traceOnly = compileClickHouseTraceQuery(plan()).query;
-    const feedbackOnly = compileClickHouseTraceQuery(
+    const traceOnly = compileClickHouseTraceQueryKeys(plan()).query;
+    const feedbackOnly = compileClickHouseTraceQueryKeys(
       plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
     ).query;
 
@@ -599,7 +632,7 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('uses total nullable semantics for negative predicates', () => {
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),
     );
 
@@ -607,7 +640,7 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('compiles tag predicates against the non-nullable root array', () => {
-    const compiled = compileClickHouseTraceQuery(
+    const compiled = compileClickHouseTraceQueryKeys(
       plan({
         where: {
           op: 'and',
@@ -655,12 +688,65 @@ describe('ClickHouse advanced trace query', () => {
         }),
       },
     });
-    const compiled = compileClickHouseTraceQuery(after);
+    const keys = compileClickHouseTraceQueryKeys(after);
 
-    expect(compiled.query).toMatch(/endedAt < \{trace_query_3:DateTime64/);
-    expect(compiled.query).toContain('traceId > {trace_query_4:String}');
-    expect(compiled.query).toContain('ORDER BY endedAt DESC, traceId ASC');
-    expect(Object.values(compiled.query_params).at(-1)).toBe(3);
+    expect(keys.query).toContain('max(endedAt) AS sortValue');
+    expect(keys.query).toContain('ORDER BY sortValue DESC, traceId ASC');
+    expect(keys.query).toContain('traceId > {trace_query_4:String}');
+    expect(Object.values(keys.query_params).at(-1)).toBe(3);
+    // The cursor applies to each trace's sort value, not to root rows, so a trace with several
+    // roots can't return on a later page.
+    expect(keys.query).toMatch(/GROUP BY traceId\n {2}HAVING \(sortValue < \{trace_query_\d+:DateTime64/);
+    expect(keys.query).toMatch(/sortValue = \{trace_query_\d+:DateTime64\(3, 'UTC'\)\} AND traceId > \{/);
+    expect(keys.query).not.toMatch(/WHERE \(endedAt </);
+  });
+
+  it('compiles keyset and page lists only as keys and rows-by-key statements', () => {
+    expect(() => compileClickHouseTraceQuery(plan())).toThrow('compileClickHouseTraceQueryKeys');
+    expect(() => compileClickHouseTraceQuery(plan({ pagination: { page: 0, perPage: 10 } }))).toThrow(
+      'compileClickHouseTraceQueryKeys',
+    );
+  });
+
+  it('lists a delta trace with several candidate rows under the same row on every poll', () => {
+    const after = encodeTraceQueryDeltaCursor(
+      plan({ mode: 'delta' }),
+      'clickhouse',
+      JSON.stringify({ cursorId: '0', traceId: '' }),
+    );
+    // Delta lists in the default order (startedAt DESC): the row that sorts first, as in the keys
+    // statement; then the lowest dedupeKey, then the latest endedAt.
+    expect(compileClickHouseTraceQuery(plan({ mode: 'delta', after })).query).toContain(
+      'ORDER BY d.latestCursorId ASC, c.traceId ASC, c.startedAt DESC, c.dedupeKey ASC, c.endedAt DESC\nLIMIT 1 BY c.traceId',
+    );
+  });
+
+  it("looks up each listed row's payload by that row's own identity and tenant", () => {
+    const compiled = compileClickHouseTraceRootPayloads(
+      [
+        {
+          traceId: 'trace-a',
+          dedupeKey: 'trace-a:root',
+          startedAt: '2026-01-01T12:00:00.000Z',
+          endedAt: '2026-01-01T12:00:01.000Z',
+          organizationId: 'org-1',
+          resourceId: null,
+        },
+      ],
+      undefined,
+      'previewPayloads',
+    );
+    expect(compiled.query).toContain(
+      "WHERE (startedAt, traceId, dedupeKey, endedAt, ifNull(organizationId, ''), isNull(organizationId), ifNull(resourceId, ''), isNull(resourceId)) IN (",
+    );
+    expect(compiled.query).toContain('LIMIT 1 BY traceId, dedupeKey, organizationId, resourceId');
+    expect(compiled.query).toContain(', 0, {trace_query_6:String}, 1)');
+    expect(compiled.query_params).toMatchObject({
+      trace_query_2: 'trace-a',
+      trace_query_3: 'trace-a:root',
+      trace_query_5: 'org-1',
+      trace_query_6: '',
+    });
   });
 
   it('compiles grouped queries as distinct non-null thread IDs', () => {
@@ -672,41 +758,61 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params).at(-1)).toBe(5);
   });
 
-  it('compiles list-compatible rows and metadata into one typed query', () => {
-    const compiled = compileClickHouseTraceQuery(
-      plan({
-        orderBy: [{ field: 'endedAt', direction: 'asc' }],
-        pagination: { page: 2, perPage: 25 },
-      }),
+  it('compiles numbered pages as a keys statement and a read of those roots by key', () => {
+    const pagePlan = plan({
+      orderBy: [{ field: 'endedAt', direction: 'asc' }],
+      pagination: { page: 2, perPage: 25 },
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'entityName' }, right: { literal: 'triage' } },
+          { spans: { some: { op: 'exists', path: 'error' } } },
+        ],
+      },
+    });
+
+    const keys = compileClickHouseTraceQueryKeys(pagePlan);
+    // One sort value per trace (its first root row, which also gives the key), the page by offset,
+    // and the total on every row.
+    expect(keys.query).toContain('min(endedAt) AS sortValue');
+    expect(keys.query).toContain('argMin((dedupeKey, startedAt), endedAt) AS root');
+    expect(keys.query).toContain('root.1 AS dedupeKey');
+    expect(keys.query).toContain('root.2 AS rootStartedAt');
+    expect(keys.query).toContain('count() OVER () AS __total');
+    expect(keys.query).toMatch(
+      /ORDER BY sortValue ASC, traceId ASC\nLIMIT \{trace_query_\d+:UInt64\} OFFSET \{trace_query_\d+:UInt64\}$/,
     );
+    expect(Object.values(keys.query_params).slice(-2)).toEqual([25, 50]);
+    // No blob columns are read to pick the page.
+    expect(keys.query).not.toMatch(/\bmetadata|\binput\b/);
+    expect(keys.sharedSnapshot).toBe(true);
 
-    expect(compiled.query).toContain('page_rows AS');
-    expect(compiled.query).toContain('ORDER BY endedAt ASC, traceId ASC');
-    expect(compiled.query).toContain('LIMIT {trace_query_3:UInt64} OFFSET {trace_query_4:UInt64}');
-    expect(compiled.query).toContain('SELECT count() AS total\n  FROM candidates');
-    expect(compiled.query).toContain('UNION ALL');
-    expect(compiled.query).toContain("'' AS name");
-    expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS metadata");
-    expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS input");
-    expect(compiled.query).toContain('1 AS __metadata');
-
-    const candidatesProjection = /candidates AS \(\n\s*SELECT ([\s\S]*?)\n\s*FROM root_scope r/.exec(
-      compiled.query,
-    )?.[1];
-    const metadataProjection = /UNION ALL\nSELECT\n([\s\S]*?)\nFROM page_total/.exec(compiled.query)?.[1];
-    expect(candidatesProjection).toBeDefined();
-    expect(metadataProjection).toBeDefined();
-    const aliases = (projection: string | undefined) =>
-      Array.from(projection?.matchAll(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)/g) ?? [], match => match[1]);
-    expect(aliases(metadataProjection)).toEqual([
-      ...aliases(candidatesProjection),
-      '__row_position',
-      'total',
-      '__metadata',
+    const rows = compileClickHouseTraceRowsByKey(pagePlan, [
+      {
+        traceId: 'trace-a',
+        dedupeKey: 'trace-a:root-a',
+        sortValue: '2026-01-01T12:00:00.000Z',
+        rootStartedAt: '2026-01-01T11:00:00.000Z',
+      },
     ]);
+    // The keyed roots by full key, with their payloads; root conjuncts are re-applied, relations aren't.
+    expect(rows.query).toMatch(
+      /WHERE \(r\.startedAt, r\.traceId, r\.dedupeKey, r\.endedAt\) IN \(\(\{trace_query_1:DateTime64\(3, 'UTC'\)\}, \{trace_query_2:String\}, \{trace_query_3:String\}, \{trace_query_4:DateTime64\(3, 'UTC'\)\}\)\)/,
+    );
+    expect(rows.query).toContain('r.metadataRaw AS metadata');
+    expect(rows.query).toContain('AND (ifNull(r.entityName =');
+    expect(rows.query).not.toContain('mastra_span_events');
+    expect(rows.query).toContain('LIMIT 1 BY traceId');
+    expect(rows.query_params).toMatchObject({
+      trace_query_1: '2026-01-01 11:00:00.000',
+      trace_query_2: 'trace-a',
+      trace_query_3: 'trace-a:root-a',
+      trace_query_4: '2026-01-01 12:00:00.000',
+    });
 
-    expect(compiled.query_params).toMatchObject({ trace_query_3: 25, trace_query_4: 50 });
-    expect(compiled.sharedSnapshot).toBe(true);
+    const total = compileClickHouseTraceQueryTotal(pagePlan);
+    expect(total.query).toContain('SELECT uniqExact(traceId) AS traces');
+    expect(total.query).not.toMatch(/\bmetadata|\binput\b/);
   });
 
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
@@ -754,9 +860,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('FROM mastra_feedback_events FINAL');
     expect(compiled.query).toContain('eligible_roots AS');
     expect(compiled.query).toContain('SELECT *\n    FROM root_scope r');
-    expect(compiled.query).toContain('SELECT 1 FROM eligible_roots r');
-    expect(compiled.query).toContain('r.threadId = t.threadId');
-    expect(compiled.query).toContain('NOT EXISTS (');
+    expect(compiled.query).toContain('SELECT r.threadId FROM eligible_roots r');
+    expect(compiled.query).toContain('t.threadId IN (');
+    expect(compiled.query).not.toContain('EXISTS (');
     expect(compiled.query).not.toContain(metadataKey);
     expect(compiled.query).not.toContain(metadataValue);
     expect(Object.values(compiled.query_params)).toEqual([
@@ -798,7 +904,7 @@ describe('ClickHouse advanced trace query', () => {
       where: { type: 'comparison', field: 'rawSql', operator: 'eq', value: 'x' },
     } as unknown as TrustedTraceQueryPlan;
 
-    expect(() => compileClickHouseTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+    expect(() => compileClickHouseTraceQueryKeys(invalid)).toThrow('Unsupported trusted trace-query field');
 
     const thread = threadPlan({
       where: { traces: { some: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } } },
@@ -822,27 +928,35 @@ describe('ClickHouse advanced trace query', () => {
       orderBy: { ...trusted.orderBy, field: 'endedAt DESC; DROP TABLE mastra_trace_roots' },
     } as unknown as TrustedTraceQueryPlan;
 
-    expect(() => compileClickHouseTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+    expect(() => compileClickHouseTraceQueryKeys(invalid)).toThrow('Unsupported trusted trace-query field');
   });
 
   it('returns fixed records and computes the next cursor from the last visible row', async () => {
-    const json = vi
-      .fn()
-      .mockResolvedValue([
-        traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
-        traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
-      ]);
-    const query = vi.fn().mockResolvedValue({ json });
+    const query = mockTraceStatements({
+      traces: 2,
+      rows: [traceRow('trace-a', '2026-01-01T12:00:00.000Z'), traceRow('trace-b', '2026-01-01T11:00:00.000Z')],
+    });
     const response = await queryTraces({ query } as unknown as ClickHouseClient, plan({ page: { limit: 1 } }), 15_000);
 
-    expect(query).toHaveBeenCalledWith(
-      expect.objectContaining({ clickhouse_settings: expect.objectContaining({ max_execution_time: 15 }) }),
+    expect(query).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 15,
+          enable_shared_storage_snapshot_in_query: 1,
+        }),
+      }),
     );
+    // The page's keys (with one look-ahead trace), then the rows of the visible trace only.
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1]![0].query).toContain('r.metadataRaw AS metadata');
+    expect(Object.values(query.mock.calls[1]![0].query_params)).toContain('trace-a');
+    expect(Object.values(query.mock.calls[1]![0].query_params)).not.toContain('trace-b');
     expect(response).toMatchObject({
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
@@ -854,15 +968,51 @@ describe('ClickHouse advanced trace query', () => {
     expect(response.traces[0]).not.toHaveProperty('input');
   });
 
+  it('builds the keyset cursor from the keys when a merge leaves the rows short', async () => {
+    const rows = [
+      traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+      traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
+      traceRow('trace-c', '2026-01-01T10:00:00.000Z'),
+    ];
+    const short = await queryTraces(
+      { query: mockTraceStatements({ traces: 3, rows, merged: ['trace-b'] }) } as unknown as ClickHouseClient,
+      plan({ page: { limit: 2 } }),
+      15_000,
+    );
+    expect(short.traces.map(trace => trace.traceId)).toEqual(['trace-a']);
+    // The page's last key, not the last returned row.
+    expect(decodeCursorValues(short.page.next!)).toEqual({
+      result: 'traces',
+      sortValue: '2026-01-01T11:00:00.000Z',
+      traceId: 'trace-b',
+    });
+
+    const empty = await queryTraces(
+      {
+        query: mockTraceStatements({ traces: 3, rows, merged: ['trace-a', 'trace-b'] }),
+      } as unknown as ClickHouseClient,
+      plan({ page: { limit: 2 } }),
+      15_000,
+    );
+    expect(empty.traces).toEqual([]);
+    expect(decodeCursorValues(empty.page.next!)).toMatchObject({ traceId: 'trace-b' });
+  });
+
   it('returns null for absent optional root span details', async () => {
-    const row = {
-      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
-      entityId: null,
-      metadata: null,
-      input: null,
-    };
-    const json = vi.fn().mockResolvedValue([row]);
-    const query = vi.fn().mockResolvedValue({ json });
+    const query = mockTraceStatements({
+      traces: 1,
+      rows: [
+        {
+          ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+          entityId: null,
+          metadata: null,
+          input: null,
+          inputPreview: '',
+          outputPreview: '',
+          errorPreview: '',
+        },
+      ],
+    });
     const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
 
     expect(response.traces[0]).toMatchObject({
@@ -875,40 +1025,79 @@ describe('ClickHouse advanced trace query', () => {
     expect(response.page.next).toBeNull();
   });
 
-  it('returns exact list-compatible pagination metadata from one shared-snapshot query', async () => {
-    const json = vi.fn().mockResolvedValue([
-      { ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: '3', __metadata: 0 },
-      { total: '3', __metadata: 1 },
+  it('builds previews from the payloads only for rows stored without them', async () => {
+    const query = mockTraceStatements({
+      traces: 2,
+      rows: [
+        {
+          ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+          inputPreview: 'Stored preview',
+          outputPreview: 'Stored output',
+        },
+        {
+          ...traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
+          inputPreview: null,
+          outputPreview: null,
+          errorPreview: null,
+          output: JSON.stringify({ text: 'Your order shipped' }),
+          error: JSON.stringify({ message: 'Late delivery' }),
+        },
+      ],
+    });
+    const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
+
+    // Keys, rows by key, then the payloads of the row without stored previews.
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[1]![0].query).toContain('r.inputPreview AS inputPreview');
+    expect(query.mock.calls[1]![0].query).toContain('r.errorPreview AS errorPreview');
+    expect(query.mock.calls[1]![0].query).not.toMatch(/\b(input|output)\b/);
+    expect(query.mock.calls[2]![0].query).toMatch(
+      /^SELECT traceId, spanId AS rootSpanId, dedupeKey, organizationId, resourceId, input, output, error\n/,
+    );
+    expect(Object.values(query.mock.calls[2]![0].query_params)).toContain('trace-b');
+    expect(Object.values(query.mock.calls[2]![0].query_params)).not.toContain('trace-a');
+    expect(
+      response.traces.map(({ inputPreview, outputPreview, errorPreview }) => [
+        inputPreview,
+        outputPreview,
+        errorPreview,
+      ]),
+    ).toEqual([
+      ['Stored preview', 'Stored output', null],
+      ['Help with my order', 'Your order shipped', 'Late delivery'],
     ]);
-    const query = vi.fn().mockResolvedValue({ json });
+  });
+
+  it('returns exact list-compatible pagination metadata and fetches payloads for the page only', async () => {
+    const query = mockTraceStatements({ traces: 3, rows: [traceRow('trace-c', '2026-01-01T10:00:00.000Z')] });
     const response = await queryTraces(
       { query } as unknown as ClickHouseClient,
       plan({ pagination: { page: 1, perPage: 2 } }),
       15_000,
     );
 
-    expect(query).toHaveBeenCalledTimes(1);
-    expect(query).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clickhouse_settings: expect.objectContaining({
-          max_execution_time: 15,
-          enable_shared_storage_snapshot_in_query: 1,
-        }),
-      }),
-    );
+    // The page's keys and total, then the page's rows (with payloads) by key.
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0]![0].clickhouse_settings).toMatchObject({ max_execution_time: 15 });
+    expect(query.mock.calls[1]![0].query).toContain('WHERE (r.startedAt, r.traceId, r.dedupeKey) IN (');
+    expect(Object.values(query.mock.calls[1]![0].query_params)).toEqual([
+      '2026-01-01 10:00:00.000',
+      'trace-c',
+      'trace-c:root-trace-c',
+    ]);
     expect(response).toMatchObject({
-      traces: [{ traceId: 'trace-c' }],
+      traces: [{ traceId: 'trace-c', metadata: { customer: { id: 'customer-1' }, count: 2 } }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
+    expect(response.traces?.[0]?.inputPreview).toBeTruthy();
     expect(response).not.toHaveProperty('page');
   });
 
   it.each([
     ['empty', 0, 0],
-    ['out-of-range', 3, 7],
+    ['out-of-range', 3, 6],
   ])('preserves totals for %s pages without trace rows', async (_case, page, total) => {
-    const json = vi.fn().mockResolvedValue([{ total: String(total), __metadata: 1 }]);
-    const query = vi.fn().mockResolvedValue({ json });
+    const query = mockTraceStatements({ traces: total, rows: [] });
 
     const response = await queryTraces(
       { query } as unknown as ClickHouseClient,
@@ -916,6 +1105,10 @@ describe('ClickHouse advanced trace query', () => {
       15_000,
     );
 
+    // No keys on the page: the first page's keys carry the (zero) total; a later page asks for the
+    // total separately. No rows are read either way.
+    expect(query).toHaveBeenCalledTimes(page === 0 ? 1 : 2);
+    if (page > 0) expect(query.mock.calls[1]![0].query).toContain('uniqExact(traceId) AS traces');
     expect(response).toEqual({
       traces: [],
       pagination: { total, page, perPage: 2, hasMore: false },
@@ -956,20 +1149,122 @@ describe('ClickHouse advanced trace query', () => {
       expect(ddl).not.toMatch(/\bingestionVersion\b|\bisPending\b|ReplacingMergeTree\s*\(/);
     }
 
-    const compiled = compileClickHouseTraceQuery(plan({ where: { spans: { some: { op: 'exists', path: 'error' } } } }));
+    const compiled = compileClickHouseTraceQueryKeys(
+      plan({ where: { spans: { some: { op: 'exists', path: 'error' } } } }),
+    );
     expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b/);
   });
 });
+
+/**
+ * Answers each `queryTraces()` statement by its SQL: the total-and-bound statement, the narrow
+ * list, and the payload lookup for the listed rows.
+ */
+function mockTraceStatements({
+  traces,
+  rows,
+  deltaHead,
+  merged = [],
+}: {
+  traces: number;
+  rows: Array<Record<string, unknown>>;
+  deltaHead?: { cursorId: string; traceId: string };
+  /** Traces whose rows a merge removed between the keys statement and the rows-by-key read. */
+  merged?: string[];
+}) {
+  return vi.fn(async ({ query, query_params }: { query: string; query_params: Record<string, unknown> }) => ({
+    json: async () => {
+      if (query.includes('_delta ORDER BY cursorId DESC')) return deltaHead ? [deltaHead] : [];
+      // Keyset / page: the page's root keys with the total, the total alone, then the keyed rows.
+      if (query.includes(' AS __total')) {
+        return rows.map(row => ({
+          traceId: row.traceId,
+          dedupeKey: row.dedupeKey,
+          sortValue: row.startedAt,
+          rootStartedAt: row.startedAt,
+          __total: String(traces),
+        }));
+      }
+      if (query.includes('uniqExact(traceId) AS traces')) return [{ traces: String(traces) }];
+      const requested = new Set(Object.values(query_params));
+      // Rows written before the stored preview existed: `input` for those rows only.
+      if (query.includes('resourceId, input, output, error\n')) {
+        return rows
+          .filter(row => requested.has(row.traceId))
+          .map(({ traceId, rootSpanId, dedupeKey, organizationId, resourceId, input, output, error }) => ({
+            traceId,
+            rootSpanId,
+            dedupeKey,
+            organizationId,
+            resourceId,
+            input,
+            output,
+            error,
+          }));
+      }
+      if (query.includes('r.metadataRaw AS metadata')) {
+        return rows
+          .filter(row => requested.has(row.traceId) && !merged.includes(row.traceId as string))
+          .map(({ input: _input, output: _output, error: _error, ...row }) => row);
+      }
+      // Delta: the narrow list, then the payloads of its visible rows.
+      if (query.includes('metadataRaw AS metadata')) {
+        return rows.map(
+          ({
+            traceId,
+            rootSpanId,
+            dedupeKey,
+            organizationId,
+            resourceId,
+            metadata,
+            inputPreview,
+            outputPreview,
+            errorPreview,
+          }) => ({
+            traceId,
+            rootSpanId,
+            dedupeKey,
+            organizationId,
+            resourceId,
+            metadata,
+            inputPreview,
+            outputPreview,
+            errorPreview,
+          }),
+        );
+      }
+      return rows.map(
+        ({
+          metadata: _metadata,
+          input: _input,
+          output: _output,
+          error: _error,
+          inputPreview: _inputPreview,
+          outputPreview: _outputPreview,
+          errorPreview: _errorPreview,
+          ...row
+        }) => row,
+      );
+    },
+  }));
+}
 
 function traceRow(traceId: string, startedAt: string) {
   return {
     traceId,
     rootSpanId: `root-${traceId}`,
+    dedupeKey: `${traceId}:root-${traceId}`,
+    organizationId: null as string | null,
     name: 'Agent run',
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
     input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    inputPreview: 'Help with my order' as string | null,
+    outputPreview: '' as string | null,
+    output: null as string | null,
+    error: null as string | null,
+    errorPreview: '' as string | null,
     threadId: null,
     resourceId: null,
     startedAt,

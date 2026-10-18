@@ -89,6 +89,8 @@ import { handleError } from './error';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
+  assertObservabilitySpanQuerySupported,
+  assertObservabilitySpanQueryFieldsSupported,
   assertObservabilityThreadQuerySupported,
   assertObservabilityTraceAggregateSupported,
   assertObservabilityTraceQueryTenantScopeSupported,
@@ -107,6 +109,8 @@ import {
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
+  supportsObservabilityTraceAggregate,
+  supportsSpanQueryCore,
   supportsTraceAggregateCore,
   supportsTraceQueryDiscoveryCore,
   withDiscoveryFallback,
@@ -277,7 +281,8 @@ function resolveTraceQueryScope(
   unsupportedCode:
     | 'TRACE_QUERY_UNSUPPORTED'
     | 'TRACE_QUERY_DISCOVERY_UNSUPPORTED'
-    | 'TRACE_AGGREGATE_UNSUPPORTED' = 'TRACE_QUERY_UNSUPPORTED',
+    | 'TRACE_AGGREGATE_UNSUPPORTED'
+    | 'SPAN_QUERY_UNSUPPORTED' = 'TRACE_QUERY_UNSUPPORTED',
 ): coreStorage.TraceQueryTenantScope | undefined {
   const organizationId = requestContext.get('organizationId');
   if (typeof organizationId !== 'string' || organizationId.length === 0) return undefined;
@@ -527,6 +532,133 @@ if (AGGREGATE_TRACES.openapi) {
   };
 }
 
+// ============================================================================
+// Span query route
+// ============================================================================
+
+const spanQueryUnsupportedErrorSchema = z
+  .object({
+    code: z.literal('SPAN_QUERY_UNSUPPORTED'),
+    message: z.string(),
+  })
+  .strict();
+
+const spanQueryValidationError: ValidationErrorHook = error => ({
+  status: 422,
+  body: {
+    code: 'TRACE_QUERY_INVALID',
+    message: 'The span query is invalid',
+    issues: error.issues.map(issue => ({
+      code: 'invalid_request',
+      path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
+      message: issue.message,
+    })),
+  },
+});
+
+export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
+  bodySchema: coreStorage.spanQueryRequestSchema,
+  responseSchema: coreStorage.spanQueryResponseSchema,
+  onValidationError: spanQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  isCoreSupported: supportsSpanQueryCore,
+  onUnsupportedCore: () =>
+    throwTraceQueryError(501, {
+      code: 'SPAN_QUERY_UNSUPPORTED',
+      message: 'Span queries require a newer @mastra/core. Please upgrade.',
+    }),
+  handler: async ({ mastra, requestContext, timeRange, where, orderBy, page }) => {
+    let plan;
+    try {
+      plan = coreStorage.planSpanQuery(
+        { timeRange, where, orderBy, page },
+        { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED') },
+      );
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: 'The span query is invalid', issues: error.issues });
+      }
+      if (error instanceof coreStorage.TraceQueryCursorError) {
+        throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
+          code: error.code,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
+
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilitySpanQuerySupported(observabilityStore);
+      assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: 'The span query is invalid', issues: error.issues });
+      }
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'SPAN_QUERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.querySpans(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryCursorError) {
+        throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
+          code: error.code,
+          message: error.message,
+        });
+      }
+      if (error instanceof coreStorage.TraceQueryResourceLimitError) {
+        throwTraceQueryError(503, { code: error.code, message: error.message });
+      }
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+if (QUERY_SPANS.openapi) {
+  QUERY_SPANS.openapi.responses[400] = {
+    description: 'Malformed JSON or malformed cursor',
+    content: {
+      'application/json': {
+        schema: z.union([traceQueryMalformedBodyErrorSchema, traceQueryMalformedCursorErrorSchema]),
+      },
+    },
+  };
+  QUERY_SPANS.openapi.responses[409] = {
+    description: 'Cursor does not match the normalized query',
+    content: { 'application/json': { schema: traceQueryCursorConflictErrorSchema } },
+  };
+  QUERY_SPANS.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  QUERY_SPANS.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid span query',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  QUERY_SPANS.openapi.responses[501] = {
+    description: 'The configured observability store does not support span queries',
+    content: { 'application/json': { schema: spanQueryUnsupportedErrorSchema } },
+  };
+  QUERY_SPANS.openapi.responses[503] = {
+    description: 'Span query exceeded a bounded execution resource limit',
+    content: { 'application/json': { schema: traceQueryResourceLimitErrorSchema } },
+  };
+  QUERY_SPANS.openapi.responses[504] = {
+    description: 'Span query exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
+}
+
 export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_FIELDS, {
   bodySchema: coreStorage.getTraceQueryFieldsArgsSchema,
   responseSchema: coreStorage.getTraceQueryFieldsResponseSchema,
@@ -566,7 +698,22 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
           field =>
             !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
         );
-      return { canonicalFields, ...observed };
+      // Older Core's strict response schema has no `aggregate` key, so only send it when Core can describe it.
+      const describesAggregate =
+        predicateScope === 'trace' &&
+        supportsTraceAggregateCore() &&
+        coreStorage.traceAggregateDiscoverySchema !== undefined &&
+        supportsObservabilityTraceAggregate(observabilityStore);
+      return {
+        canonicalFields,
+        ...observed,
+        ...(describesAggregate && {
+          aggregate: {
+            dimensions: coreStorage.getTraceAggregateDimensionDescriptors(),
+            measures: coreStorage.getTraceAggregateMeasureDescriptors(),
+          },
+        }),
+      };
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });
@@ -1177,6 +1324,7 @@ export const GET_CAPABILITIES = createRoute({
 export const NEW_ROUTES = {
   QUERY_TRACES,
   QUERY_THREADS,
+  QUERY_SPANS,
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,

@@ -9,7 +9,7 @@ import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideD
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useDatasetMutations } from '@mastra/react/hooks';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import {
   HashIcon,
   FileInputIcon,

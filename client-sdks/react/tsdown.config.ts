@@ -37,7 +37,7 @@ async function rewritePathAliases(rootDir: string) {
 }
 
 export default defineConfig(options => ({
-  entry: ['src/index.ts', 'src/ui/index.ts', 'src/hooks/index.ts'],
+  entry: ['src/index.ts', 'src/ui/index.ts', 'src/chat/index.ts', 'src/hooks/!(shared|__tests__)/index.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',

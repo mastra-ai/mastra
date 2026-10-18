@@ -5,7 +5,7 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { useAgent } from '@mastra/react/hooks';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { CopyIcon, Check } from 'lucide-react';
 
 export interface AgentEntityHeaderProps {

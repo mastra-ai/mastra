@@ -1,4 +1,4 @@
-import { useMcpAppTools } from '@mastra/react/hooks';
+import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -78,7 +78,7 @@ export const ToolCardInner = ({
   const { isRunning } = useChatRunning();
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
-      send({ message: content });
+      void send({ message: content });
     },
     [send],
   );

@@ -1,6 +1,6 @@
 import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
 import { describe, expectTypeOf, it } from 'vitest';
-import { Classifier } from '../classifier';
+import { Classifier, type RefusalAnswer } from '../classifier';
 import { Mastra } from './index';
 
 const model = null as unknown as EvaluationModelV4;
@@ -18,7 +18,7 @@ describe('Mastra classifier registration types', () => {
     // @ts-expect-error unknown classifier keys are rejected
     mastra.getClassifier('missing');
 
-    const result = await mastra.getClassifier('safety').evaluate({ state: 'test' });
-    expectTypeOf(result.answers.unsafe).toEqualTypeOf<{ type: 'boolean'; probability: number }>();
+    const result = await mastra.getClassifier('safety').decide({ state: 'test' });
+    expectTypeOf(result.answers.unsafe).toEqualTypeOf<{ type: 'boolean'; probability: number } | RefusalAnswer>();
   });
 });

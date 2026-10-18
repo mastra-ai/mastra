@@ -1,5 +1,5 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { useTriggerScorer } from '@mastra/react/hooks';
+import { useTriggerScorer } from '@mastra/react/hooks/scores';
 import { InfoIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Combobox } from '@/ds/components/Combobox';

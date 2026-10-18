@@ -1,4 +1,4 @@
-import type { BrowserSessionProbe } from '@mastra/react/hooks';
+import type { BrowserSessionProbe } from '@mastra/react/hooks/agents';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 

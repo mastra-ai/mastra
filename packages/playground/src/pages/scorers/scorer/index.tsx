@@ -9,8 +9,10 @@ import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useWorkflows, useScorer, useScoresByScorerId, useAgents } from '@mastra/react/hooks';
-import { MoreVertical, Pencil, Play } from 'lucide-react';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useScorer, useScoresByScorerId } from '@mastra/react/hooks/scores';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
+import { MoreVertical, Pencil, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -265,8 +267,8 @@ export default function Scorer() {
           </ActionRow.Start>
           <ActionRow.End>
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
-            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
-              Run Experiment
+            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Plus />}>
+              New experiment
             </Button>
             {scorerActionsMenu}
           </ActionRow.End>

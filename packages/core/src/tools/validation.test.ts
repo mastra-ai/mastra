@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { RequestContext } from '../request-context';
@@ -863,6 +863,79 @@ describe('Tool Output Validation Tests', () => {
     } else {
       throw new Error('Result is not a validation error');
     }
+  });
+
+  it("should return the tool's real result and log when outputValidation is 'warn'", async () => {
+    const tool = createTool({
+      id: 'created-order',
+      description: 'Creates an order; the side effect has happened by the time the result is returned',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string(), total: z.number() }),
+      outputValidation: 'warn',
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ orderId: 'ord_1', total: '12.50' }),
+    });
+    const warn = vi.fn();
+    const mastra = { getLogger: () => ({ warn }) };
+
+    const result = await tool.execute({ sku: 'sku_1' }, { mastra } as any);
+
+    expect(result).toEqual({ orderId: 'ord_1', total: '12.50' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Tool output validation failed for created-order'), {
+      toolId: 'created-order',
+    });
+  });
+
+  it("should still return the validated result when outputValidation is 'warn' and the output is valid", async () => {
+    const tool = createTool({
+      id: 'created-order-valid',
+      description: 'Creates an order',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string(), total: z.coerce.number() }),
+      outputValidation: 'warn',
+      execute: async () => ({ orderId: 'ord_1', total: '12.50' as unknown as number }),
+    });
+
+    const result = await tool.execute({ sku: 'sku_1' });
+
+    expect(result).toEqual({ orderId: 'ord_1', total: 12.5 });
+  });
+
+  it('should log output validation failures in strict mode and still return the error', async () => {
+    const tool = createTool({
+      id: 'strict-order',
+      description: 'Creates an order',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string() }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ orderId: 1 }),
+    });
+    const warn = vi.fn();
+    const mastra = { getLogger: () => ({ warn }) };
+
+    const result: any = await tool.execute({ sku: 'sku_1' }, { mastra } as any);
+
+    expect(result).toMatchObject({ error: true });
+    expect(result.message).toContain('Tool output validation failed for strict-order');
+    expect(warn).toHaveBeenCalledWith(result.message, { toolId: 'strict-order' });
+  });
+
+  it('should redact sensitive keys from the output echoed in the validation error', async () => {
+    const tool = createTool({
+      id: 'leaky-output',
+      description: 'Returns credentials alongside invalid data',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ count: z.number() }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ count: 'nope', apiKey: 'sk-live-123', nested: { token: 'tok-456' } }),
+    });
+
+    const result: any = await tool.execute({});
+
+    expect(result).toMatchObject({ error: true });
+    expect(result.message).toContain('[REDACTED]');
+    expect(result.message).not.toContain('sk-live-123');
+    expect(result.message).not.toContain('tok-456');
   });
 
   it('should validate output types correctly', async () => {
@@ -2411,51 +2484,6 @@ describe('Standard Schema path segment format (PathSegment objects) — mock sch
   });
 });
 
-describe('Standard Schema path segment format (PathSegment objects)', () => {
-  // The Standard Schema spec allows path segments to be either a plain PropertyKey
-  // (e.g. 'fieldName') OR a PathSegment object (e.g. { key: 'fieldName' }).
-  // Valibot and ArkType use the { key: PropertyKey } object format.
-  // This mock schema simulates that format without requiring those libraries.
-  function makeMockSchemaWithObjectPaths(issues: { message: string; path: { key: string }[] }[]) {
-    const jsonSchemaFn = () => ({ type: 'object' as const, properties: { name: { type: 'string' } } });
-    return {
-      '~standard': {
-        vendor: 'mock',
-        version: 1 as const,
-        validate: (_data: unknown) => ({ issues }),
-        types: undefined,
-        jsonSchema: { input: jsonSchemaFn, output: jsonSchemaFn },
-      },
-    } as any;
-  }
-
-  it('validateToolInput: nested error path renders field names, not [object Object]', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Invalid type', path: [{ key: 'user' }, { key: 'email' }] },
-    ]);
-
-    const result = validateToolInput(schema, { user: { email: 123 } });
-
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('user.email');
-    expect(result.error!.message).not.toContain('[object Object]');
-  });
-
-  it('validateToolInput: multiple nested paths all render correctly', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Required', path: [{ key: 'address' }, { key: 'city' }] },
-      { message: 'Too short', path: [{ key: 'address' }, { key: 'zip' }] },
-    ]);
-
-    const result = validateToolInput(schema, { address: {} });
-
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('address.city');
-    expect(result.error!.message).toContain('address.zip');
-    expect(result.error!.message).not.toContain('[object Object]');
-  });
-});
-
 describe('validateToolInput - Errors After Null-Strip Retry (GitHub #24539)', () => {
   it('reports the retry failure instead of already-stripped optional nulls', () => {
     const schema = z.object({
@@ -2510,5 +2538,73 @@ describe('validateRequestContext', () => {
     const result = validateRequestContext(schema as any, requestContext, 'tenant-tool');
 
     expect(result.error?.message).toContain('tenantId');
+  });
+});
+
+describe('validateToolInput - combined fallback corrections (GitHub #25825)', () => {
+  it('combines stringified JSON coercion with null stripping', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'] });
+  });
+
+  it('combines prompt alias normalization with null stripping', () => {
+    const schema = z.object({ prompt: z.string(), threadId: z.string().optional() });
+    const result = validateToolInput(schema, { query: 'hi', threadId: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({ prompt: 'hi' });
+  });
+
+  it('strips nulls inside stringified JSON objects', () => {
+    const schema = z.object({ meta: z.object({ a: z.string().optional() }) });
+    const result = validateToolInput(schema, { meta: '{"a":null}' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ meta: {} });
+  });
+
+  it('preserves nullable fields while combining corrections', () => {
+    const schema = z.object({
+      args: z.array(z.string()),
+      note: z.string().optional(),
+      parent: z.string().nullable(),
+    });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'], parent: null });
+  });
+
+  it('applies the prompt alias with a root refinement and keeps nullable fields', () => {
+    const schema = z
+      .object({ prompt: z.string(), parent: z.string().nullable() })
+      .refine(value => value.prompt.length > 0, { message: 'prompt required' });
+    const result = validateToolInput(schema, { query: 'hi', prompt: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'hi', parent: null });
+  });
+
+  it('reports only remaining issues when corrections are not enough', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('count');
+    expect(result.error?.message).not.toContain('- args');
+    expect(result.error?.message).not.toContain('- note');
+  });
+
+  it('reports remaining issues after a failed prompt alias retry', () => {
+    const schema = z.object({ prompt: z.string(), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { query: 'hi', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- prompt');
+    expect(result.error?.message).not.toContain('- note');
+  });
+
+  it('does not report fields already fixed by coercion', () => {
+    const schema = z.object({ args: z.array(z.string()), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a"]', count: 'x' });
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- args');
   });
 });
