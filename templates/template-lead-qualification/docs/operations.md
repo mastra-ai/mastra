@@ -1,4 +1,4 @@
-# Running and verifying intake
+# Running and verifying qualification
 
 Use the runtime declared in `package.json` (Node 24). The install path is `npm install`; its dependency-free postinstall creates the local directory and copies the environment example only if `.env` is absent. Existing configuration is preserved. All direct Mastra dependencies use `latest`; the lockfile records the installation tested for this template.
 
@@ -25,10 +25,28 @@ Integration tests use isolated temporary persistent databases, the native Mastra
 
 ## Backups and rollback
 
-Stop the process, then make a consistent backup of the whole `data/` directory before changing persisted schemas or reverting application code. The initial schema is additive and has no destructive migration. Reverting to the earlier scaffold leaves the ignored data files for diagnosis, but that scaffold cannot resume intake. Restore this implementation with the same data to recover pending runs. Do not delete accepted operational data during rollback.
+Stop the process, then make a consistent backup of the whole `data/` directory before changing persisted schemas or reverting application code. The schema changes are additive and have no destructive migration. New qualification, round and reservation tables leave earlier intake rows intact. Reverting to the earlier scaffold leaves the ignored data files for diagnosis, but that scaffold cannot resume intake. Restore this implementation with the same data to recover pending runs. Do not delete accepted operational data during rollback.
 
 There is no destructive retention command in this version. For disposable development data, stop the server and explicitly choose whether to archive or remove it. Production use needs an operator-managed data lifecycle until retention maintenance is implemented.
 
 Customization prompt:
 
 > Adapt operations for [deployment] while preserving standard Mastra dev/build/start, one process, persistent LibSQL/DuckDB files, production authentication and durable replay. Keep operational scripts in scripts/ and tests under tests/. Test acceptance-to-dispatch interruption with an actual child-process kill, successful restart and exactly one logical run association. Document shutdown, backup and schema rollback behavior.
+
+## Research recovery and interpretation
+
+The native lead-intake workflow records intake, then runs qualify-company. New snapshots use ordered missing-attribute rounds within the qualification step. Trusted inbound inquiry evidence is considered first; public research then targets model, workforce and headquarters gaps. The default plan performs no public buying-intent search. Completed round results and count diagnostics are persisted independently; restart reuses them and the immutable final assessment without repeating saved paid work. In-flight attempts with unknown usage retain reservations. The absolute processing deadline is set once, independently of queue wait, and remains unchanged across restart. No provider/model fallback occurs.
+
+Short atomic SQL batches record reservations and counters together without holding a write transaction across JavaScript awaits. The application database remains authoritative for decisions and budget allowance; DuckDB is technical observability only. An output/export failure cannot authorize another research allowance. The read route exposes conservative search, page, output-token, compressed-byte and decoded-byte consumption. Check its structured failures before submitting a deliberate new cycle; never edit old counters or historical scores.
+
+Each targeted round retrieves at most one useful approved page returned by search, then extracts and verifies using that page plus earlier authorized evidence. The first actual search uses official company domains; later searches may use configured additional domains. Within returned approved URLs, official and target-relevant paths take priority. Previously inspected URLs are skipped. A follow-up never starts without retrieval allowance and remaining downstream model headroom. Failed pages, redirects, duplicate content and retries share the four-request allowance; oversized responses are discarded completely. Page size failures retain only the failure phase, declared length when valid, encoding category, observed byte counters and cap. Candidate rejection diagnostics distinguish unknown evidence IDs, absent exact quotes and semantic-support rejection, retaining typed proposed values, hashed IDs and validation checks. These diagnostics contain no page content or quotations. Round URL outcomes retain only sanitized URLs without query, fragment or credentials. Research does not guarantee headcount or headquarters will be available. Employee intervals crossing a policy boundary, accepted contradictory values, rejected-only facts and undated buying requests remain uncertain. Independent firmographic support survives rejected restatements, while every rejection remains available for diagnosis. No usable source material after provider failure or exhaustion produces a failed diagnostic assessment; partial successes remain reviewable. This version persists recommendations only and has no CRM output or review callback.
+
+## Separate live verification
+
+Default tests explicitly select unit and integration folders and use controlled provider/page material. The live configuration is opt-in and has no credential-based skip. After configuring OPENAI_API_KEY and explicitly approving a real request run, use:
+
+```sh
+node --env-file=.env node_modules/vitest/vitest.mjs run --config vitest.live.config.ts
+```
+
+This selects researches_real_company_with_filtered_responses_and_bounded_usage on attio.com. It permits at most four hosted searches, four HTTPS GETs including redirects/retries, 12000 aggregate model output tokens, 180 seconds of processing, 2 MiB compressed/decoded per response and 8 MiB aggregate per byte dimension. The retained evidence excerpt remains limited to 24000 characters. It captures bounded raw completed-call metadata and fails if the provider exceeds the declared per-request search ceiling, usage is unavailable, or no real supported material is obtained. This scenario also requires an accepted b2b_saas classification with a persisted matching inference and exact supporting passages linked to the fact and named source evidence. An unrelated accepted fact or a direct-only classification does not satisfy the inference proof. Safe diagnostics include targeted-round reasons/counts, employee interval, observed/inferred basis, headquarters country and sanitized URL outcomes/gap codes, score and contribution states. Other missing company facts may still yield needs_review. The test uses a dedicated temporary operational/telemetry directory and removes it, including source excerpts, in finally after shutdown. No CRM is contacted. A failed live proof remains a failed proof; controlled fixtures cannot substitute for it.

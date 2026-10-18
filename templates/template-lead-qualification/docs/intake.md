@@ -1,6 +1,6 @@
 # Lead event intake
 
-`POST /lead-qualification/events` accepts a strict JSON object. A successful response is HTTP 202 with `runId` and `statusUrl`, after the event and association commit to operational storage. `GET /lead-qualification/runs/:runId` reports intake status, source and destination references, receipt/update times, a safe failure code, and telemetry availability. It omits contact details and raw input.
+`POST /lead-qualification/events` accepts a strict JSON object. A successful response is HTTP 202 with `runId` and `statusUrl`, after the event, effective qualification snapshot and association commit to operational storage. `GET /lead-qualification/runs/:runId` reports intake status, source and destination references, receipt/update times, a safe failure code, and telemetry availability. It omits raw input and contact email; the assessment includes attributed inquiry text when supplied as evidence.
 
 ```json
 {
@@ -16,7 +16,7 @@
 }
 ```
 
-`occurredAt` and `destinationReference` are optional. Occurrence cannot follow the server's receipt time. A lead needs at least one `domain`, `email`, or `crm` reference. Additional fields are rejected. Email/domain combinations must agree after normalization. A domain is a public DNS hostname, never a URL, IP address, path, or private/local hostname. An email provides a candidate domain; intake does not resolve identity. A CRM reference has `providerId` and `recordId` strings and must belong to the configured source's permitted CRM providers. No CRM API is called.
+`occurredAt` and `destinationReference` are optional. `lead.declaredCompanyName` is optional submitted context, not a verified legal name. `lead.inquiry` optionally records an authenticated inbound request: `{ "type": "demo_request", "occurredAt": "2026-10-17T12:00:00Z", "text": "Please show our procurement team a demo." }`. Supported types are `demo_request`, `sales_contact_request` and `purchase_inquiry`; the timestamp cannot follow receipt. The source adapter must supply genuine request provenance rather than manufacture intent from a public demo offer. Occurrence cannot follow the server's receipt time. A lead needs at least one `domain`, `email`, or `crm` reference. Additional fields are rejected. Email/domain combinations must agree after normalization. A domain is a public DNS hostname, never a URL, IP address, path, or private/local hostname. An email provides a candidate domain; qualification asks for confirmation instead of researching a guessed company. A CRM reference has `providerId` and `recordId` strings and must belong to the configured source's permitted CRM providers. No CRM API is called.
 
 Event, lead and destination references contain 1–200 ASCII letters, digits, periods, underscores, colons, at signs or hyphens, beginning with a letter or digit. References are database values and never become file paths. Domain and email lengths are bounded by their schemas. Source ID, input adapter, and destination provider come from application configuration. `destinationReference` defaults to `lead.reference`; an incoming event cannot choose a destination provider, secret, URL or runtime mode.
 
@@ -34,7 +34,7 @@ Event, lead and destination references contain 1–200 ASCII letters, digits, pe
 
 Delivery identity is `(configured source ID, eventId)`. Redelivery keeps the original receipt time and association and succeeds even when admission is full. A changed payload must use a new event identity. While a destination has accepted or dispatching work, a distinct event targeting it receives 429 without persistence. Retry later with that same new event ID. After intake completes, a deliberate new event may start a new cycle for the same destination or domain. A domain is never a permanent deduplication key.
 
-The terminal status `intake_received` means the workflow verified the accepted association. It does not represent research, qualification, or a CRM update. `failed` exposes a failed native workflow through `failureCode`. Temporary persistence errors leave work pending for reconciliation.
+The terminal status `intake_received` means the workflow verified the association and completed its qualification step. Inspect `qualification.status` and `qualification.assessment` for sourced facts, policy snapshot, score contributions, summary and failures. Identity ambiguity completes with needs_review without research. Exhaustion/provider failure without usable material persists a failed diagnostic assessment and ends the workflow with `failed`; partial evidence remains reviewable. Historical intake-only rows have `qualification: null`. No status implies a CRM update or a human decision. Temporary persistence errors leave work pending for reconciliation.
 
 ## Add an input adapter
 

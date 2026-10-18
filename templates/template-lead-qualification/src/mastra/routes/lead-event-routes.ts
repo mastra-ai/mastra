@@ -7,6 +7,8 @@ import { AdmissionError, DeliveryConflictError } from '../persistence/lead-event
 import type { LeadEventStore } from '../persistence/lead-event-store';
 import { inputProviders } from '../providers/input';
 import type { Telemetry } from '../telemetry';
+import { snapshotConfiguration } from '../config/qualification';
+import type { QualificationConfig } from '../config/qualification';
 
 class BodyTooLargeError extends Error {}
 async function readBody(request: Request, maxBytes: number) {
@@ -33,7 +35,12 @@ async function readBody(request: Request, maxBytes: number) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
-export function createLeadRoutes(store: LeadEventStore, config: IntakeConfig, telemetry: Telemetry) {
+export function createLeadRoutes(
+  store: LeadEventStore,
+  config: IntakeConfig,
+  telemetry: Telemetry,
+  qualification: QualificationConfig,
+) {
   const provider = inputProviders.get(config.source.inputProviderId);
   if (!provider) throw new Error('Configured input provider is unavailable');
   return [
@@ -51,7 +58,11 @@ export function createLeadRoutes(store: LeadEventStore, config: IntakeConfig, te
             if (event.lead.crm && !config.source.crmProviderIds.includes(event.lead.crm.providerId)) {
               return c.json({ error: 'unconfigured_crm_reference' }, 400);
             }
-            const run = await store.accept(event, config.limits.maxPendingRuns);
+            const run = await store.accept(
+              event,
+              config.limits.maxPendingRuns,
+              snapshotConfiguration(qualification, event.receivedAt),
+            );
             await telemetry.diagnostic({ code: 'intake.accepted', runId: run.runId });
             return c.json({ runId: run.runId, statusUrl: `/lead-qualification/runs/${run.runId}` }, 202);
           } catch (error) {
@@ -79,6 +90,7 @@ export function createLeadRoutes(store: LeadEventStore, config: IntakeConfig, te
         try {
           const run = await store.get(id.data.runId);
           if (!run) return c.json({ error: 'run_not_found' }, 404);
+          const qualification = await store.qualifications.get(run.runId);
           return c.json({
             runId: run.runId,
             status: run.status,
@@ -88,6 +100,14 @@ export function createLeadRoutes(store: LeadEventStore, config: IntakeConfig, te
             updatedAt: run.updatedAt,
             failureCode: run.failureCode,
             telemetryDegraded: telemetry.isDegraded(),
+            qualification: qualification
+              ? {
+                  snapshotDigest: qualification.snapshot.digest,
+                  budget: qualification.budget,
+                  status: qualification.assessment?.processingStatus ?? 'pending',
+                  assessment: qualification.assessment,
+                }
+              : null,
           });
         } catch {
           return c.json({ error: 'persistence_unavailable' }, 503);

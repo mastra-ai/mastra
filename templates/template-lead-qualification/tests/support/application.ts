@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
@@ -7,6 +8,33 @@ import { Hono } from 'hono';
 import { createApplicationRuntime } from '../../src/mastra/application';
 import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
 import type { IntakeConfig } from '../../src/mastra/config/lead-ingestion';
+import type { QualificationConfig } from '../../src/mastra/config/qualification';
+import type { EvidenceProvider } from '../../src/mastra/providers/evidence';
+import type { PageRetriever } from '../../src/mastra/research/page-retrieval';
+
+const controlledText = 'Controlled intake-only provider material; no company attributes asserted.';
+const emptyEvidence: EvidenceProvider = {
+  id: 'openai-web',
+  search: async (_branch, context) => ({
+    sourceUrls: [],
+    evidence: [
+      {
+        id: 'intake-fixture',
+        kind: 'website',
+        source: `https://${context.domain}/`,
+        title: 'Controlled fixture',
+        retrievedAt: context.snapshot.assessmentTime,
+        publishedAt: null,
+        excerpt: controlledText,
+        digest: createHash('sha256').update(controlledText).digest('hex'),
+        providerId: 'openai-web',
+        retrieval: 'api',
+      },
+    ],
+  }),
+  extract: async () => ({ companyName: null, identityAmbiguous: false, candidates: [], intentCoverageComplete: false }),
+  verify: async () => ({ supportedCandidateIds: [], intentCoverageComplete: false }),
+};
 
 export const productionToken = 'example-token-for-functional-tests-1234567890';
 export function event(eventId = 'delivery-1', lead: Record<string, unknown> = { domain: 'example.com' }) {
@@ -19,6 +47,9 @@ export async function harness(
     dispatch?: boolean;
     config?: IntakeConfig;
     directory?: string;
+    qualification?: QualificationConfig;
+    evidence?: EvidenceProvider[];
+    pages?: PageRetriever;
   } = {},
 ) {
   const directory = options.directory ?? (await mkdtemp(join(tmpdir(), 'lead-intake-')));
@@ -31,6 +62,9 @@ export async function harness(
       observabilityPath: join(directory, 'observability.duckdb'),
     },
     config: options.config ?? intakeConfig,
+    qualification: options.qualification,
+    evidence: options.evidence ?? [emptyEvidence],
+    pages: options.pages,
   });
   const mastra = new Mastra(application.mastraConfig);
   const http = new Hono();

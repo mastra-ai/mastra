@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@libsql/client';
-import type { Client, Row } from '@libsql/client';
+import type { Client, InStatement, Row } from '@libsql/client';
 import { z } from 'zod';
 import { normalizedEventSchema } from '../contracts';
 import type { NormalizedEvent } from '../contracts';
+import type { QualificationSnapshot } from '../config/qualification';
+import { QualificationStore } from './qualification-store';
 
 export type RunStatus = 'accepted' | 'dispatching' | 'intake_received' | 'failed';
 export interface RunRecord {
@@ -31,9 +33,11 @@ function project(row: Row): RunRecord {
 
 export class LeadEventStore {
   readonly client: Client;
+  readonly qualifications: QualificationStore;
   private admission: Promise<unknown> = Promise.resolve();
   constructor(url: string) {
     this.client = createClient({ url });
+    this.qualifications = new QualificationStore(this.client);
   }
 
   async init() {
@@ -62,76 +66,74 @@ export class LeadEventStore {
         PRIMARY KEY (source_id, event_id)
       );
     `);
+    await this.qualifications.init();
   }
 
-  accept(event: NormalizedEvent, maxPendingRuns: number): Promise<RunRecord> {
-    const accepted = this.admission.then(() => this.acceptTransaction(event, maxPendingRuns));
+  accept(event: NormalizedEvent, maxPendingRuns: number, snapshot?: QualificationSnapshot): Promise<RunRecord> {
+    const accepted = this.admission.then(() => this.acceptTransaction(event, maxPendingRuns, snapshot));
     this.admission = accepted.catch(() => undefined);
     return accepted;
   }
 
-  private async acceptTransaction(event: NormalizedEvent, maxPendingRuns: number): Promise<RunRecord> {
-    const tx = await this.client.transaction('write');
-    try {
-      const delivery = await tx.execute({
-        sql: 'SELECT r.*, d.payload_json FROM lead_deliveries d JOIN lead_runs r USING (run_id) WHERE d.source_id=? AND d.event_id=?',
-        args: [event.sourceId, event.eventId],
-      });
-      if (delivery.rows[0]) {
-        // Receipt time belongs to the original delivery; a replay must preserve its semantic payload.
-        const previous = normalizedEventSchema.parse(JSON.parse(z.string().parse(delivery.rows[0].payload_json)));
-        if (JSON.stringify({ ...previous, receivedAt: '' }) !== JSON.stringify({ ...event, receivedAt: '' })) {
-          throw new DeliveryConflictError('Event identity already belongs to a different payload');
-        }
-        await tx.commit();
-        return project(delivery.rows[0]);
-      }
-      const active = await tx.execute({
-        sql: "SELECT * FROM lead_runs WHERE destination_provider=? AND destination_reference=? AND status IN ('accepted','dispatching')",
-        args: [event.destination.providerId, event.destination.reference],
-      });
-      let record: RunRecord;
-      if (active.rows[0]) {
-        throw new AdmissionError('Destination already has active work; retry after it completes');
-      } else {
-        const count = await tx.execute(
-          "SELECT count(*) AS total FROM lead_runs WHERE status IN ('accepted','dispatching')",
-        );
-        if (Number(count.rows[0]!.total) >= maxPendingRuns) throw new AdmissionError('Pending work limit reached');
-        const runId = randomUUID();
-        await tx.execute({
-          sql: 'INSERT INTO lead_runs (run_id,event_json,destination_provider,destination_reference,status,accepted_at,updated_at) VALUES (?,?,?,?,?,?,?)',
-          args: [
-            runId,
-            JSON.stringify(event),
-            event.destination.providerId,
-            event.destination.reference,
-            'accepted',
-            event.receivedAt,
-            event.receivedAt,
-          ],
-        });
-        record = {
-          runId,
-          event,
-          status: 'accepted',
-          acceptedAt: event.receivedAt,
-          updatedAt: event.receivedAt,
-          failureCode: null,
-        };
-      }
-      await tx.execute({
-        sql: 'INSERT INTO lead_deliveries (source_id,event_id,run_id,payload_json) VALUES (?,?,?,?)',
-        args: [event.sourceId, event.eventId, record.runId, JSON.stringify(event)],
-      });
-      await tx.commit();
-      return record;
-    } catch (error) {
-      await tx.rollback();
-      throw error;
-    } finally {
-      tx.close();
+  private async acceptTransaction(
+    event: NormalizedEvent,
+    maxPendingRuns: number,
+    snapshot?: QualificationSnapshot,
+  ): Promise<RunRecord> {
+    const delivery = await this.client.execute({
+      sql: 'SELECT r.*, d.payload_json FROM lead_deliveries d JOIN lead_runs r USING (run_id) WHERE d.source_id=? AND d.event_id=?',
+      args: [event.sourceId, event.eventId],
+    });
+    if (delivery.rows[0]) {
+      const previous = normalizedEventSchema.parse(JSON.parse(z.string().parse(delivery.rows[0].payload_json)));
+      if (JSON.stringify({ ...previous, receivedAt: '' }) !== JSON.stringify({ ...event, receivedAt: '' }))
+        throw new DeliveryConflictError('Event identity already belongs to a different payload');
+      return project(delivery.rows[0]);
     }
+    const active = await this.client.execute({
+      sql: "SELECT run_id FROM lead_runs WHERE destination_provider=? AND destination_reference=? AND status IN ('accepted','dispatching')",
+      args: [event.destination.providerId, event.destination.reference],
+    });
+    if (active.rows[0]) throw new AdmissionError('Destination already has active work; retry after it completes');
+    const count = await this.client.execute(
+      "SELECT count(*) AS total FROM lead_runs WHERE status IN ('accepted','dispatching')",
+    );
+    if (Number(count.rows[0]!.total) >= maxPendingRuns) throw new AdmissionError('Pending work limit reached');
+    const runId = randomUUID();
+    const statements: InStatement[] = [
+      {
+        sql: 'INSERT INTO lead_runs (run_id,event_json,destination_provider,destination_reference,status,accepted_at,updated_at) VALUES (?,?,?,?,?,?,?)',
+        args: [
+          runId,
+          JSON.stringify(event),
+          event.destination.providerId,
+          event.destination.reference,
+          'accepted',
+          event.receivedAt,
+          event.receivedAt,
+        ],
+      },
+    ];
+    if (snapshot)
+      statements.push({
+        sql: 'INSERT INTO lead_qualifications(run_id,snapshot_json) VALUES(?,?)',
+        args: [runId, JSON.stringify(snapshot)],
+      });
+    statements.push({
+      sql: 'INSERT INTO lead_deliveries (source_id,event_id,run_id,payload_json) VALUES (?,?,?,?)',
+      args: [event.sourceId, event.eventId, runId, JSON.stringify(event)],
+    });
+    // Admission is serialized in this single-process deployment; the acknowledgement
+    // follows an atomic batch containing the event, snapshot and delivery association.
+    await this.client.batch(statements, 'write');
+    return {
+      runId,
+      event,
+      status: 'accepted',
+      acceptedAt: event.receivedAt,
+      updatedAt: event.receivedAt,
+      failureCode: null,
+    };
   }
 
   async get(runId: string) {

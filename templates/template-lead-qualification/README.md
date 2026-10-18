@@ -1,47 +1,50 @@
 # Lead Qualification
 
-A contact form, signup flow, or CRM can submit a company domain, contact email, or CRM reference. The template turns each submission into a persistent lead event with a workflow run that your team can track and safely retry.
+A contact form, signup flow, or CRM can submit a company domain and a dated buying inquiry. The template researches approved sources, checks supporting text, and returns company attributes, a reproducible ICP score, and reasons for qualification or further review.
 
-This version provides the receiving stage of qualification: it records the lead and confirms that its intake workflow completed. It does not yet research the company, calculate an ICP score, recommend a sales action, or update the CRM.
+The default profile is B2B SaaS with 20–500 employees, headquarters in the configured Brazil/US/European markets, and recent buying intent. Missing or conflicting facts stay visible. Assessments are saved locally; this version does not apply CRM updates or collect review decisions.
 
 ## Why we built this
 
-A sales development representative (SDR) identifies potential customers and qualifies their interest before handing them over to the sales team. They need to know which company expressed interest, where that interest came from, and what happened to the submission before deciding how to follow up. Forms and CRM webhooks can resend events, and a server restart should not turn an acknowledged lead into missing work.
+A sales development representative (SDR) identifies potential customers and qualifies their interest before handing them to sales. They need to know which company expressed interest, what supports its fit, and which facts still need confirmation. A score should explain the decision, while a restart or repeated webhook should preserve the original work.
 
-This template establishes that handoff between a lead source and a qualification workflow. Developers can adapt the input provider to their own sales process while keeping a consistent record of each lead, its origin, and its processing status. That record is the foundation for adding company research, qualification rules, and review decisions.
+Developers can connect their lead source while keeping provenance and qualification rules visible. A confirmed exclusion still disqualifies a company even when its remaining criteria earn points.
 
 ## Prerequisites
 
-- **[OpenAI API key](https://platform.openai.com/api-keys)**: `OPENAI_API_KEY` is reserved for research when that capability is added. The current intake workflow makes no model or CRM calls and requires no external credentials.
-- Local mode uses loopback access without an authentication token. Set `LEAD_QUALIFICATION_MODE=production` and a random `LEAD_QUALIFICATION_TOKEN` of at least 32 characters before exposing the API through HTTPS ingress.
+- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for GPT-6 Luna through Responses, including web search and structured extraction. Default research needs no enrichment-service or Attio account.
+- Local mode uses loopback access. Set `LEAD_QUALIFICATION_MODE=production` and a random `LEAD_QUALIFICATION_TOKEN` of at least 32 characters before exposing the API through HTTPS ingress.
 
 ## Quickstart 🚀
 
-1. **Install the extracted template**
-   - From this template's directory, run `npm install`. Setup creates `data/` and copies `.env.example` to `.env` if it is absent.
-2. **Start the development server**
+1. **Create the project**
+   - When this template is available in the catalog, run `npx create-mastra@latest lead-qualification --template template-lead-qualification`, then `cd lead-qualification`. For an already extracted template, use its directory.
+   - Run `npm install`. Setup creates `data/` and copies `.env.example` to `.env` if it is absent.
+2. **Add your API key**
+   - Set the value in `.env` using Prerequisites. If preparing environment files manually, copy `.env.example` to `.env` first.
+3. **Start the development server**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
-3. **Submit a lead event**
-   - Send the request below. Follow its `statusUrl` to see `accepted`, then `intake_received`. The **lead-intake** workflow in Studio shows its persisted execution. Intake begins through the event API so the workflow can verify its accepted association.
+4. **Research a company**
+   - Send the request below, then GET its returned `statusUrl`. The result contains `qualification.assessment`: sourced facts, score contributions, gaps and a next action.
+   - The **lead-intake** workflow in Studio shows **record-intake** followed by **qualify-company**. Submit through the event API to create its durable association.
 
 ```sh
 curl -s http://127.0.0.1:4111/lead-qualification/events \
   -H 'Content-Type: application/json' \
-  -d '{"version":1,"type":"lead.received","eventId":"demo-domain-1","lead":{"reference":"example-company","domain":"example.com"}}'
+  -d '{"version":1,"type":"lead.received","eventId":"demo-domain-1","lead":{"reference":"mastra-company","domain":"mastra.ai"}}'
 ```
 
 ## Try it out
 
-- Resend the same event. Its `runId` stays the same, including after completion or restart.
-- Replace `domain` with `email: "sales@example.com"` and use a new event and lead reference. The submitted contact stays in operational storage; it is excluded from telemetry.
-- Submit `crm: {"providerId":"attio","recordId":"company-42"}` with a new event and lead reference. This records a configured reference without calling Attio or claiming the company is resolved.
-- Restart the server with the same `data/` directory. Accepted pending runs resume through the dispatcher.
-- Enable production mode and call an API without a bearer token. Custom intake/read routes and native Mastra workflow/agent APIs require authentication.
+- Inspect a real company's assessment. If approved material does not substantiate headcount or headquarters, expect an explicit `needs_review` reason rather than an invented value.
+- Add an authentic `lead.inquiry` with `type`, `occurredAt` and `text` using the [input contract](docs/intake.md). A company's own “Book a demo” page does not establish its intent to buy from you.
+- Replace `domain` with an email or CRM reference and use a new event/lead reference. The result asks for a confirmed company domain and makes no research calls for the unresolved identity.
+- Resend the same event or restart with the same `data/` directory. The association, captured configuration, completed research rounds and consumed allowance are preserved.
 
 ## Customization
 
-- Ask your coding agent: “Explore the intake schemas, provider map, and persistence before proposing a new event input adapter. Preserve durable acknowledgement, authentication, conflict handling, and restart recovery. Add functional tests and update the intake guide.” See [extending intake](docs/intake.md).
-- Change source bindings and operational limits in `src/mastra/config/lead-ingestion.ts`. See [configuration](docs/configuration.md), [observability](docs/observability.md), and [operations](docs/operations.md).
+- Ask your coding agent: “Explore the evidence contracts and policy, then propose a plan to qualify [my target market]. Preserve sourced facts, shared budgets and deterministic scoring. Add functional examples before changing the policy.” See [configuration](docs/configuration.md).
+- Add an approved source domain or adapter using [research sources](docs/research-sources.md), or connect a different [input](docs/intake.md). See [operations](docs/operations.md) and [observability](docs/observability.md) for recovery and storage.
 
 ## About Mastra templates
 

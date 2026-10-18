@@ -42,6 +42,14 @@ export const leadSchema = z
     domain: domainSchema.optional(),
     email: emailSchema.optional(),
     crm: z.strictObject({ providerId: reference, recordId: reference }).optional(),
+    declaredCompanyName: z.string().trim().min(1).max(200).optional(),
+    inquiry: z
+      .strictObject({
+        type: z.enum(['demo_request', 'sales_contact_request', 'purchase_inquiry']),
+        occurredAt: timestamp,
+        text: z.string().trim().min(1).max(2000),
+      })
+      .optional(),
   })
   .refine(value => Boolean(value.domain || value.email || value.crm), 'Provide a domain, email, or CRM reference')
   .refine(
@@ -70,7 +78,9 @@ export const normalizedEventSchema = z
     destination: z.strictObject({ providerId: reference, reference }),
   })
   .refine(
-    value => !value.occurredAt || Date.parse(value.occurredAt) <= Date.parse(value.receivedAt),
+    value =>
+      (!value.occurredAt || Date.parse(value.occurredAt) <= Date.parse(value.receivedAt)) &&
+      (!value.lead.inquiry || Date.parse(value.lead.inquiry.occurredAt) <= Date.parse(value.receivedAt)),
     'Occurrence time cannot follow receipt time',
   );
 
