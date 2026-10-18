@@ -345,29 +345,44 @@ describe('__subscribeToRunStream() lifecycle', () => {
     }
   });
 
-  it.each([
-    {
-      ending: AgentStreamEventTypes.ERROR,
-      emit: (pubsub: EventEmitterPubSub, runId: string) => emitErrorEvent(pubsub, runId, new Error('model failed')),
-    },
-    {
-      ending: AgentStreamEventTypes.SUSPENDED,
-      emit: (pubsub: EventEmitterPubSub, runId: string) =>
-        emitSuspendedEvent(pubsub, runId, { type: 'approval', toolCallId: 'call-1', toolName: 'deploy' }),
-    },
-  ])('replays and completes a finished run whose last event is $ending', async ({ ending, emit }) => {
+  it('replays and completes a finished run whose last event is an error', async () => {
     const { durable, pubsub, transport } = await observedAgent();
     const runId = crypto.randomUUID();
     await emitChunkEvent(pubsub, runId, textChunk('partial'));
-    await emit(pubsub as EventEmitterPubSub, runId);
+    await emitErrorEvent(pubsub, runId, new Error('model failed'));
     const onComplete = vi.fn();
     const events: any[] = [];
     const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, event => {
       events.push(event);
     });
     try {
-      expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK, ending]);
+      expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK, AgentStreamEventTypes.ERROR]);
       expect(onComplete).toHaveBeenCalledTimes(1);
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps a run suspended for approval observed until its resumed segment finishes', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    await emitChunkEvent(pubsub, runId, textChunk('before approval'));
+    await emitSuspendedEvent(pubsub, runId, { type: 'approval', toolCallId: 'call-1', toolName: 'deploy' });
+    const onComplete = vi.fn();
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, event => {
+      events.push(event);
+    });
+    try {
+      await delay(50);
+      expect(onComplete).not.toHaveBeenCalled();
+      await emitChunkEvent(pubsub, runId, textChunk('after approval'));
+      await emitFinishEvent(pubsub, runId, finishData);
+      await vi.waitFor(() => expect(events.at(-1)?.type).toBe(AgentStreamEventTypes.FINISH));
+      expect(
+        texts(events.filter(event => event.type === AgentStreamEventTypes.CHUNK).map(event => event.data)),
+      ).toEqual(['before approval', 'after approval']);
     } finally {
       await unsubscribe();
       await transport.close();

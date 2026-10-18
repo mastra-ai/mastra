@@ -2733,7 +2733,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                   if (closed) return;
                   const type = event.type === 'chunk' ? event.data?.type : event.type;
                   controller.enqueue(event);
-                  if (type === 'finish' || type === 'error' || type === 'abort' || type === 'suspended') {
+                  if (type === 'finish' || type === 'error' || type === 'abort') {
                     cleanup(controller);
                   } else {
                     resetIdleTimer(controller);

@@ -175,7 +175,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     }
   }, 30_000);
 
-  it('closes an observation beyond the last frame of a run suspended for approval', async () => {
+  it('keeps observing beyond the last frame of a run suspended for approval', async () => {
     const searchTool = createTool({
       id: 'searchTool',
       description: 'Search for information',
@@ -193,7 +193,8 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     });
     try {
       await vi.waitFor(() => expect(suspended).toBe(true), { timeout: 15_000 });
-      expect(await observeBeyondLastFrame(agent, runId)).toEqual({ chunks: [], timedOut: false });
+      // Approval resumes the same run, so its observers must stay attached.
+      expect(await observeBeyondLastFrame(agent, runId)).toEqual({ chunks: [], timedOut: true });
     } finally {
       cleanup();
     }

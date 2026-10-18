@@ -2534,23 +2534,21 @@ describe('Agent Routes Authorization', () => {
       expect(await collectWithDeadline(await observe(runId, { offset: 100 }))).toEqual([]);
     });
 
-    it.each(['finish', 'error', 'abort', 'suspended'])(
-      'forwards and closes on a chunk-enveloped %s event',
-      async type => {
-        const runId = `observe-enveloped-${type}`;
-        const event = { runId, type: 'chunk', data: { type }, index: 0 };
-        const unsubscribe = vi.fn(async () => {});
-        vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, onEvent) => {
-          onEvent(event);
-          return unsubscribe;
-        });
+    it.each(['finish', 'error', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
+      const runId = `observe-enveloped-${type}`;
+      const event = { runId, type: 'chunk', data: { type }, index: 0 };
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, onEvent) => {
+        onEvent(event);
+        return unsubscribe;
+      });
 
-        expect(await collectWithDeadline(await observe(runId))).toEqual([event]);
-        expect(unsubscribe).toHaveBeenCalledTimes(1);
-      },
-    );
+      expect(await collectWithDeadline(await observe(runId))).toEqual([event]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
 
-    it.each(['abort', 'suspended'])('forwards and closes on a top-level %s event', async type => {
+    it('forwards and closes on a top-level abort event', async () => {
+      const type = 'abort';
       const runId = `observe-control-${type}`;
       const event = { runId, type, data: {} };
       const unsubscribe = vi.fn(async () => {});
@@ -2561,6 +2559,37 @@ describe('Agent Routes Authorization', () => {
 
       expect(await collectWithDeadline(await observe(runId))).toEqual([event]);
       expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      { name: 'top-level', suspended: { type: 'suspended', data: {} } },
+      { name: 'chunk-enveloped', suspended: { type: 'chunk', data: { type: 'suspended' } } },
+    ])('keeps a $name suspended run open until its resumed segment finishes', async ({ suspended }) => {
+      let onEvent!: (event: any) => void;
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, deliver) => {
+        onEvent = deliver;
+        return unsubscribe;
+      });
+      const reader = (await observe('observe-approval-suspend')).getReader();
+      try {
+        await vi.waitFor(() => expect(onEvent).toBeDefined());
+        onEvent(suspended);
+        expect((await reader.read()).value).toEqual(suspended);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(unsubscribe).not.toHaveBeenCalled();
+
+        const resumed = { type: 'chunk', data: { type: 'text-delta', payload: { text: 'after approval' } } };
+        const finish = { type: 'finish', data: {} };
+        onEvent(resumed);
+        onEvent(finish);
+        expect((await reader.read()).value).toEqual(resumed);
+        expect((await reader.read()).value).toEqual(finish);
+        expect(await reader.read()).toEqual({ done: true, value: undefined });
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+      } finally {
+        reader.releaseLock();
+      }
     });
 
     it('does not end a legacy subscription on a step finish or empty replay', async () => {

@@ -4969,7 +4969,7 @@ export class DurableAgent<
       );
       if (latest) {
         const type = latest.type === AgentStreamEventTypes.CHUNK ? latest.data?.type : latest.type;
-        if (type !== 'finish' && type !== 'error' && type !== 'abort' && type !== 'suspended') return false;
+        if (type !== 'finish' && type !== 'error' && type !== 'abort') return false;
       }
       const ownership =
         workflowsStore && (await supportsRunFencing(workflowsStore))
@@ -4987,7 +4987,7 @@ export class DurableAgent<
         if (!(await keepGeneration(event as unknown as AgentStreamEvent))) continue;
         hasHistory = true;
         const type = event.type === AgentStreamEventTypes.CHUNK ? event.data?.type : event.type;
-        if (type === 'finish' || type === 'error' || type === 'abort' || type === 'suspended') terminal = true;
+        if (type === 'finish' || type === 'error' || type === 'abort') terminal = true;
       }
       if (!terminal) {
         if (hasHistory || ownership?.live) return false;
