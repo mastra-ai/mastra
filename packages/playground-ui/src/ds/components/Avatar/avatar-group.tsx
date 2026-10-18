@@ -7,18 +7,16 @@ export type AvatarGroupProps = ComponentProps<'div'> & {
   size?: AvatarSize;
 };
 
-// The notch around the avatar on top: a gap, then a soft edge. Small avatars
-// get a thinner one so it doesn't swallow the avatar behind.
-const thinNotch = '[--avatar-group-gap:1px] [--avatar-group-edge:0.5px]';
-const notch = '[--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]';
-
+// Small avatars get a thinner gap around the avatar on top, so it doesn't
+// swallow the avatar behind.
 const groupSizeClasses: Record<AvatarSize, string> = {
-  xs: `[--avatar-group-size:var(--spacing-icon-xs)] ${thinNotch}`,
-  inline: `[--avatar-group-size:var(--spacing-icon-md)] ${thinNotch}`,
-  sm: `[--avatar-group-size:var(--spacing-avatar-sm)] ${notch}`,
-  md: `[--avatar-group-size:var(--spacing-avatar-md)] ${notch}`,
-  lg: `[--avatar-group-size:var(--spacing-avatar-lg)] ${notch}`,
-  control: `[--avatar-group-size:var(--spacing-control-md)] ${notch}`,
+  xs: '[--avatar-group-size:var(--spacing-icon-xs)] [--avatar-group-gap:1px] [--avatar-group-edge:0.5px]',
+  inline: '[--avatar-group-size:var(--spacing-icon-md)] [--avatar-group-gap:1px] [--avatar-group-edge:0.5px]',
+  sm: '[--avatar-group-size:var(--spacing-avatar-sm)] [--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]',
+  md: '[--avatar-group-size:var(--spacing-avatar-md)] [--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]',
+  lg: '[--avatar-group-size:var(--spacing-avatar-lg)] [--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]',
+  control:
+    '[--avatar-group-size:var(--spacing-control-md)] [--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]',
 };
 
 const overlapClasses = [
