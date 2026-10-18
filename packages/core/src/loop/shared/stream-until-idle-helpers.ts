@@ -10,9 +10,16 @@
  * - A `buildResult` callback to construct the caller-specific return value
  * - Optional `postPipeInner` hooks for durable-specific cleanup/abort tracking
  */
+import { resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { MastraMemory } from '../../memory/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import {
+  MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '../../request-context';
 import { deepMerge } from '../../utils';
 
 // ---------------------------------------------------------------------------
@@ -52,12 +59,29 @@ export interface ResolvedScope {
  * falls through to a plain stream in that case.
  */
 export async function resolveScope(
-  agent: { getMemory: (opts?: any) => Promise<MastraMemory | undefined> },
+  agent: {
+    getMemory: (opts?: any) => Promise<MastraMemory | undefined>;
+    getScopes?: (opts?: any) => Promise<string[] | undefined>;
+  },
   mergedOptions: Record<string, any>,
 ): Promise<ResolvedScope | null> {
   const requestContext = (mergedOptions?.requestContext as RequestContext | undefined) ?? new RequestContext();
   const memory = await agent.getMemory({ requestContext });
   if (!memory) return null;
+
+  // With agent scopes, the run's thread/resource come from the same resolver stream() uses.
+  const agentScopes = (await agent.getScopes?.({ requestContext })) ?? [];
+  const callScopes = mergedOptions?.scopes as string[] | undefined;
+  if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
+    const { threadId, resourceId } = resolveAgentScopes({
+      requestContext,
+      agentScopes,
+      callScopes,
+      memory: mergedOptions?.memory,
+    });
+    const scopeKey = threadId || resourceId ? `${threadId ?? ''}|${resourceId ?? ''}` : null;
+    return { threadId, resourceId, scopeKey };
+  }
 
   const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
   const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
@@ -176,10 +200,31 @@ export function buildContinuationOpts(
   batch: Array<Record<string, unknown>>,
 ): Record<string, any> {
   const directive = buildContinuationDirective(batch);
+  const toolCallIds = batch
+    .map(chunk => (chunk as { payload?: { toolCallId?: unknown } }).payload?.toolCallId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  // Share the caller's context so tool/processor updates stay visible to it. IDs are merged with
+  // any set by an overlapping continuation on the same context; releaseContinuationToolCallIds
+  // removes only this continuation's IDs once it finishes.
+  const requestContext = (baseContinuationOpts.requestContext as RequestContext | undefined) ?? new RequestContext();
+  const existing = (requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY) as string[] | undefined) ?? [];
+  requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, [...new Set([...existing, ...toolCallIds])]);
   return {
     ...baseContinuationOpts,
+    requestContext,
+    continuationToolCallIds: toolCallIds,
     context: [...(callerContext ?? []), { role: 'system' as const, content: directive }],
   };
+}
+
+export function releaseContinuationToolCallIds(requestContext: RequestContext | undefined, toolCallIds: string[]) {
+  if (!requestContext) return;
+  const own = new Set(toolCallIds);
+  const remaining = ((requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY) as string[] | undefined) ?? []).filter(
+    id => !own.has(id),
+  );
+  if (remaining.length) requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, remaining);
+  else requestContext.delete(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +507,8 @@ export async function runIdleLoop<
   const processIfIdle = async () => {
     if (isProcessing || closed || runningTaskIds.size > 0 || pendingCompletions.length === 0) return;
     isProcessing = true;
+    let continuationContext: RequestContext | undefined;
+    let continuationToolCallIds: string[] = [];
     try {
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
       for (const chunk of batch) {
@@ -470,6 +517,9 @@ export async function runIdleLoop<
         if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
+      continuationContext = continuationOpts.requestContext;
+      continuationToolCallIds = continuationOpts.continuationToolCallIds;
+      delete continuationOpts.continuationToolCallIds;
       const segmentAbort = new AbortController();
       continuationAbort = segmentAbort;
       activeInnerRunId = undefined;
@@ -496,6 +546,7 @@ export async function runIdleLoop<
       forceClose();
       return;
     } finally {
+      releaseContinuationToolCallIds(continuationContext, continuationToolCallIds);
       isProcessing = false;
       if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
         void processIfIdle();

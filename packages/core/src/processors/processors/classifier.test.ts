@@ -209,7 +209,7 @@ describe('ClassifierProcessor', () => {
       });
 
       expect(doEvaluate).toHaveBeenCalledTimes(1);
-      expect(doEvaluate.mock.calls[0]![0].state).toBe('third');
+      expect(doEvaluate.mock.calls[0]![0].state).toEqual([{ type: 'text', text: 'third' }]);
     });
 
     it('skips messages with no text', async () => {
@@ -241,7 +241,7 @@ describe('ClassifierProcessor', () => {
 
       await processor.processInput({ messages: [message('1', 'abcdefghij')], abort: abortThatThrows() });
 
-      expect(doEvaluate.mock.calls[0]![0].state).toBe('abcde');
+      expect(doEvaluate.mock.calls[0]![0].state).toEqual([{ type: 'text', text: 'abcde' }]);
     });
   });
 
@@ -373,7 +373,7 @@ describe('ClassifierProcessor', () => {
         abort: abortThatThrows(),
       });
 
-      expect(doEvaluate.mock.calls[0]![0].state).toBe('b c');
+      expect(doEvaluate.mock.calls[0]![0].state).toEqual([{ type: 'text', text: 'b c' }]);
     });
 
     it('emits the chunk when classification fails with errorStrategy warn', async () => {

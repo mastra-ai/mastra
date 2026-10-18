@@ -51,6 +51,7 @@ describe('shared workflow builder authoring schema', () => {
       'Default agents consume { prompt: string } and return { text: string }',
     );
     expect(workflowBuilderClassifierEntrySchema.description).toContain('{ answers, usage }');
+    expect(workflowBuilderClassifierEntrySchema.description).toContain('{ type: "refusal" }');
     expect(workflowBuilderClassifierEntrySchema.description).toContain('following conditional entry');
     // The call-site id addresses the nested workflow's result; it is independent
     // of the referenced workflowId (registry keys and intrinsic ids can differ).

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed evented workflows so a failing `.foreach()` iteration now fails the run. Previously the run hung forever with `concurrency > 1`, and with `concurrency: 1` it was reported as `success` with corrupted output. The run now ends with `status: 'failed'` and the iteration's error, matching the default engine.
+Fixed evented `.foreach()` runs where more than one iteration fails. The run now keeps the first iteration's error instead of the last one, and fails exactly once. Previously, an iteration failing after the run had already failed replaced the stored error and published a second `workflow.fail`. Time-travel replays that hit a failure again also failed twice.

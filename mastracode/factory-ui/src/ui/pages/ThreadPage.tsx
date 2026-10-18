@@ -13,6 +13,7 @@ import { PageTitle } from '../domains/chat/components/PageTitle';
 import { SessionChatSurface } from '../domains/chat/components/SessionChatSurface';
 import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
+import { TeammateSessionLine } from '../domains/chat/components/TeammateSessionLine';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
@@ -85,6 +86,7 @@ function ThreadPageMain({
           secondaryBar={<GoalPanel />}
           emptyState={<EmptyThreadState />}
           composerLabel="Thread composer"
+          composerFooter={<TeammateSessionLine />}
           className={threadShellClass}
           contentRef={railBoxRef}
           contentOverlay={railFits ? <ThreadRailLayer /> : undefined}

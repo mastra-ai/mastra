@@ -1,5 +1,5 @@
 import type { AgentControllerSessionState } from '@mastra/client-js';
-import type { DefaultModelResponse, OMConfigInfo, ProvidersResponse, ThinkingConfigInfo } from '../../../api/types';
+import type { DefaultModelResponse, OMConfigInfo, ProvidersResponse } from '../../../api/types';
 import type { FactoryProjectPayload } from '../../domains/workspaces/services/github';
 
 export const settingsFactory: FactoryProjectPayload = {
@@ -44,12 +44,4 @@ export const settingsMemory: OMConfigInfo = {
   observationThreshold: 1000,
   reflectionThreshold: 2000,
   observeAttachments: 'auto',
-};
-
-export const settingsThinking: ThinkingConfigInfo = {
-  globalDefault: 'off',
-  modeDefaults: {},
-  modes: [],
-  levels: ['off', 'low', 'medium', 'high'],
-  editable: false,
 };

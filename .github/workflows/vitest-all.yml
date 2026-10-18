@@ -34,6 +34,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -98,6 +100,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

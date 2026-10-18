@@ -1,9 +1,5 @@
-import {
-  getAvailableThinkingLevelsForModel,
-  resolveDefaultThinkingLevel,
-  runThinkingLevel,
-} from '@mastra/code-sdk/thinking';
-import type { ThinkingDefaults, ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
+import { THINKING_LEVEL_VALUES, getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 
@@ -22,53 +18,53 @@ const THINKING_LEVEL_EMPHASIS: Partial<Record<ThinkingLevelSetting, ThinkingLeve
   max: 'warning',
 };
 
-export function thinkingLevelOptionsForModel(
-  modelId: string,
-  reasoningOptions: readonly ModelReasoningOption[] | undefined,
-): ThinkingLevelOption<ThinkingLevelSetting>[] {
-  return getAvailableThinkingLevelsForModel(modelId, reasoningOptions).map(level => ({
+function thinkingLevelOptions(levels: readonly ThinkingLevelSetting[]): ThinkingLevelOption<ThinkingLevelSetting>[] {
+  return levels.map(level => ({
     value: level,
     label: THINKING_LEVEL_LABELS[level],
     emphasis: THINKING_LEVEL_EMPHASIS[level],
   }));
 }
 
-export type ThinkingLevelOrigin = 'session' | ThinkingLevelSource;
+export const ALL_THINKING_LEVEL_OPTIONS = thinkingLevelOptions(THINKING_LEVEL_VALUES);
+
+export function thinkingLevelOptionsForModel(
+  modelId: string,
+  reasoningOptions: readonly ModelReasoningOption[] | undefined,
+): ThinkingLevelOption<ThinkingLevelSetting>[] {
+  return thinkingLevelOptions(getAvailableThinkingLevelsForModel(modelId, reasoningOptions));
+}
+
+export type ThinkingLevelOrigin = 'session' | 'factory';
+
+export const FACTORY_THINKING_SOURCE_LABEL = 'Factory default';
 
 export interface EffectiveThinkingLevel {
   level: ThinkingLevelSetting;
   origin: ThinkingLevelOrigin;
 }
 
-export function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | undefined): string {
-  return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
-}
-
 function chosenThinkingLevel(
   override: ThinkingLevelSetting | undefined,
-  defaults: ThinkingDefaults | undefined,
-  modeId: string | undefined,
+  factoryDefault: ThinkingLevelSetting | undefined,
 ): EffectiveThinkingLevel | undefined {
   if (override) return { level: override, origin: 'session' };
-  if (!defaults) return undefined;
-  const { level, source } = resolveDefaultThinkingLevel(defaults, modeId);
-  return { level, origin: source };
+  if (!factoryDefault) return undefined;
+  return { level: factoryDefault, origin: 'factory' };
 }
 
 export function resolveEffectiveThinkingLevel({
   modelId,
   reasoningOptions,
   override,
-  defaults,
-  modeId,
+  factoryDefault,
 }: {
   modelId: string | undefined;
   reasoningOptions: readonly ModelReasoningOption[] | undefined;
   override: ThinkingLevelSetting | undefined;
-  defaults: ThinkingDefaults | undefined;
-  modeId: string | undefined;
+  factoryDefault: ThinkingLevelSetting | undefined;
 }): EffectiveThinkingLevel | undefined {
-  const chosen = chosenThinkingLevel(override, defaults, modeId);
+  const chosen = chosenThinkingLevel(override, factoryDefault);
   if (!chosen || !modelId) return chosen;
   return { ...chosen, level: runThinkingLevel(modelId, chosen.level, reasoningOptions) };
 }

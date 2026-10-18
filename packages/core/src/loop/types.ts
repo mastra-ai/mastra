@@ -37,6 +37,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type {
   ChunkType,
+  LanguageModelUsage,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   MastraStreamTransformOptions,
@@ -135,6 +136,8 @@ export type StreamInternal = {
   stepWorkspace?: Workspace;
   /** @deprecated Use `runScope.get(TOOL_APPROVAL_VERDICTS_KEY)` from `loop/run-scope-keys`. */
   toolApprovalVerdicts?: Map<string, boolean>;
+  /** @deprecated Use `runScope.get(STEP_USAGE_KEY)` from `loop/run-scope-keys`. */
+  stepUsage?: LanguageModelUsage;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
   /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
@@ -280,6 +283,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * version instead of whatever a status selector points at later.
    */
   agentVersionId?: string;
+  resolvedScopes?: string[];
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
   /**

@@ -90,6 +90,7 @@ import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
+  assertObservabilitySpanQueryFieldsSupported,
   assertObservabilityThreadQuerySupported,
   assertObservabilityTraceAggregateSupported,
   assertObservabilityTraceQueryTenantScopeSupported,
@@ -108,6 +109,7 @@ import {
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
+  supportsObservabilityTraceAggregate,
   supportsSpanQueryCore,
   supportsTraceAggregateCore,
   supportsTraceQueryDiscoveryCore,
@@ -590,8 +592,12 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
+      assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: 'The span query is invalid', issues: error.issues });
+      }
       if (error instanceof HTTPException && error.status === 501) {
         throwTraceQueryError(501, { code: 'SPAN_QUERY_UNSUPPORTED', message: error.message });
       }
@@ -692,7 +698,22 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
           field =>
             !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
         );
-      return { canonicalFields, ...observed };
+      // Older Core's strict response schema has no `aggregate` key, so only send it when Core can describe it.
+      const describesAggregate =
+        predicateScope === 'trace' &&
+        supportsTraceAggregateCore() &&
+        coreStorage.traceAggregateDiscoverySchema !== undefined &&
+        supportsObservabilityTraceAggregate(observabilityStore);
+      return {
+        canonicalFields,
+        ...observed,
+        ...(describesAggregate && {
+          aggregate: {
+            dimensions: coreStorage.getTraceAggregateDimensionDescriptors(),
+            measures: coreStorage.getTraceAggregateMeasureDescriptors(),
+          },
+        }),
+      };
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });

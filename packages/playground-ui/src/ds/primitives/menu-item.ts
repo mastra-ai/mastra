@@ -42,6 +42,8 @@ export const menuItemTrailingIconClass =
 
 export const menuItemCheckClass = cn(menuItemTrailingIconClass, 'text-foreground');
 
+export const menuItemHintClass = 'ml-auto min-w-0 truncate text-muted-foreground';
+
 // Left padding matching icon width + gap, for items aligned with iconed siblings.
 export const menuItemInsetClass = 'pl-[calc(.9em+1.1em+.75em)]';
 
@@ -56,14 +58,22 @@ export const menuPopupClass = cn(
   'z-50 max-h-[min(var(--spacing-dropdown),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
-  cn('rounded-xl p-1 text-foreground/90 outline-none', overlaySurfaceStyle),
+  // `scrollbar-inset-xl` keeps a ScrollArea's scrollbar ends clear of the `rounded-xl` corners.
+  cn('rounded-xl p-1 text-foreground/90 outline-none scrollbar-inset-xl', overlaySurfaceStyle),
   // A destructive row tints the travelling highlight instead of painting its own.
   '[&:has([data-variant=destructive][data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:bg-destructive-subtle',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
 
-export const menuLabelClass = 'px-[.9em] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
+// Lines a section label up with the item text under it: an item's `.9em` side padding is
+// relative to the label text size (`.9em` here would follow the smaller meta text), plus
+// the item's 1px border.
+export const menuLabelClass =
+  'px-[calc(var(--text-label)*.9+1px)] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
+
+// `menuItemInsetClass` (.9em + 1.1em + .75em) for a label, measured the same way.
+export const menuLabelInsetClass = 'pl-[calc(var(--text-label)*2.75+1px)]';
 
 export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border';
 

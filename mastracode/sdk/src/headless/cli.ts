@@ -7,6 +7,7 @@
  * result to an exit code, and owns teardown + `process.exit`.
  */
 import { existsSync } from 'node:fs';
+import type { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 
 import { createMastraCode } from '../index.js';
@@ -22,7 +23,7 @@ import { setupDebugLogging } from '../utils/debug-log.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 
 import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
-import { createHumanFormatState, formatHuman, formatJsonl, renderJsonResult } from './format.js';
+import { createHumanFormatState, formatHuman, formatJsonl, isJsonlEvent, renderJsonResult } from './format.js';
 import { permissionModeToPolicy } from './policy.js';
 import { runMC } from './run-mc.js';
 import type { PermissionMode, RunMode, ThinkingLevel } from './types.js';
@@ -155,6 +156,22 @@ Examples:
 }
 
 /**
+ * Wait until everything written to `stream` has been handed to the OS, since
+ * `process.exit()` drops writes a pipe has not accepted yet. Resolves `false`
+ * if the stream fails or closes first; never rejects or hangs on a gone reader.
+ */
+export function flushWritable(stream: Writable): Promise<boolean> {
+  if (stream.destroyed || stream.errored) return Promise.resolve(false);
+  if (stream.writableLength === 0) return Promise.resolve(true);
+  return new Promise(resolve => {
+    // Left attached: a stream can emit `error` after failing pending callbacks.
+    stream.once('error', () => resolve(false));
+    stream.once('close', () => resolve(false));
+    stream.write('', error => resolve(!error));
+  });
+}
+
+/**
  * Headless CLI entry point: parse arguments, read stdin, initialize MastraCode,
  * run via `runMC`, render output, and exit with the mapped code.
  */
@@ -276,7 +293,7 @@ export async function runMCCli(
         const out = formatHuman(event, humanState);
         if (out.stdout) process.stdout.write(out.stdout);
         if (out.stderr) process.stderr.write(out.stderr);
-      } else if (args.output === 'jsonl') {
+      } else if (args.output === 'jsonl' && isJsonlEvent(event)) {
         process.stdout.write(JSON.stringify(formatJsonl(event)) + '\n');
       }
     }
@@ -340,5 +357,9 @@ export async function runMCCli(
     });
   }
 
+  // Let piped output (the final result line in particular) reach the reader
+  // before exiting. Output that never arrived must not count as success.
+  const [stdoutFlushed] = await Promise.all([flushWritable(process.stdout), flushWritable(process.stderr)]);
+  if (!stdoutFlushed && exitCode === 0) exitCode = 1;
   process.exit(exitCode);
 }

@@ -18,6 +18,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -224,11 +225,22 @@ const steerBodySchema = z.object({
   requestContext: bodyRequestContextSchema,
   files: messageFilesSchema,
 });
-const toolApprovalBodySchema = z.object({
-  toolCallId: z.string(),
-  approved: z.boolean(),
-  requestContext: bodyRequestContextSchema,
-});
+const toolApprovalBodySchema = z
+  .object({
+    toolCallId: z.string(),
+    approved: z.boolean(),
+    /**
+     * Grants the gated tool's category to the thread that owns the call, then
+     * approves — the same "always allow" the in-process TUI offers. Requires
+     * `approved: true`.
+     */
+    alwaysAllowCategory: z.boolean().optional(),
+    requestContext: bodyRequestContextSchema,
+  })
+  .refine(body => !body.alwaysAllowCategory || body.approved, {
+    message: 'alwaysAllowCategory requires approved: true',
+    path: ['alwaysAllowCategory'],
+  });
 const toolSuspensionBodySchema = z.object({
   toolCallId: z.string().min(1),
   runId: z.string().min(1).optional(),
@@ -328,6 +340,7 @@ const createSessionResponseSchema = z.object({
 const ackResponseSchema = z.object({
   ok: z.boolean(),
 });
+const transferOwnershipResponseSchema = ackResponseSchema.extend({ ownerId: z.string() });
 
 const toolCommandAckResponseSchema = z.object({
   ok: z.boolean(),
@@ -743,7 +756,16 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, approved, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    toolCallId,
+    approved,
+    alwaysAllowCategory,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -756,7 +778,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       if (gated || !toolCallId) {
         const result = session.respondToToolApproval({
           toolCallId,
-          decision: approved ? 'approve' : 'decline',
+          decision: !approved ? 'decline' : alwaysAllowCategory ? 'always_allow_category' : 'approve',
           requestContext,
         });
         if (!result.accepted) return { ok: false, reason: result.reason };
@@ -774,7 +796,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
         if (!session.claimToolResponse(toolCallId)) return { ok: false, reason: 'not_pending' as const };
         ackBackgroundSessionWork({
           work: session
-            .respondToPersistedToolApproval({ toolCallId, approved, requestContext })
+            .respondToPersistedToolApproval({ toolCallId, approved, alwaysAllowCategory, requestContext })
             .finally(() => session.releaseToolResponse(toolCallId)),
           session,
           mastra,
@@ -942,6 +964,48 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller thread');
+    }
+  },
+});
+
+export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner',
+  responseType: 'json' as const,
+  pathParamSchema: threadPathParams,
+  queryParamSchema: sessionScopeQuerySchema,
+  responseSchema: transferOwnershipResponseSchema,
+  summary: 'Take ownership of a thread',
+  description:
+    "Transfers ownership of the specified thread to the authenticated user from the request context. The thread must belong to the session's resource, and the caller needs memory write access to it. The session's active thread does not change.",
+  tags: ['AgentController', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:execute',
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, requestContext }) => {
+    try {
+      const ownerId = getRequestMessageAuthor(requestContext)?.id;
+      if (!ownerId) {
+        throw new HTTPException(401, { message: 'An authenticated user is required to transfer thread ownership' });
+      }
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      await controller.init();
+      const thread = await controller.queryThreadById({ threadId });
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId,
+        thread,
+        effectiveResourceId: resourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      await session.thread.transferOwnership({ toOwnerId: ownerId, threadId });
+      return { ok: true, ownerId };
+    } catch (error) {
+      return handleError(error, 'error transferring controller thread ownership');
     }
   },
 });

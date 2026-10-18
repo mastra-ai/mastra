@@ -12,10 +12,13 @@
  *   throws     execute throws
  *   unknown    the model calls a tool that does not exist
  *
- * `undefined` and `throws` diverge from plain on the wrapped engines, so each
- * declares its difference against COR-1390 (durable and evented re-serialise
- * the failed tool call, and for `undefined` they also surface a `tool-result`
- * chunk plain never emits). On durable and evented the `tool-error` chunk
+ * `undefined` used to stop the loop as if the call were waiting on a client
+ * result (#27370); an executed tool's `undefined` is now recorded as `null`,
+ * so it continues like the other green variants on every engine.
+ *
+ * `throws` diverges from plain on the wrapped engines, so it declares its
+ * difference against COR-1390 (durable and evented re-serialise the failed
+ * tool call). On durable and evented the `tool-error` chunk
  * carries the raw serialised error
  * (`{ toolCallId, toolName, args, error: { name, message, stack } }`) where
  * plain carries the MastraError envelope
@@ -61,7 +64,7 @@ const VARIANTS = ['non-json', 'bad-args', 'undefined', 'throws', 'unknown'] as c
 type Variant = (typeof VARIANTS)[number];
 
 /** Variants whose difference from plain is declared against COR-1390. */
-const HELD_VARIANTS = ['undefined', 'throws'] as const;
+const HELD_VARIANTS = ['throws'] as const;
 type HeldVariant = (typeof HELD_VARIANTS)[number];
 
 const CALLS: Record<Variant, { name: string; args: Record<string, unknown> }> = {
@@ -82,7 +85,7 @@ interface Contract {
   text: string;
 }
 
-/** The harness's contract, identical on all three engines for both green variants. */
+/** The harness's contract, identical on all three engines for the green variants. */
 const EXPECTED_CONTRACT: Contract = {
   modelCalls: 2,
   notableTypes: ['tool-call', 'tool-result', 'finish'],
@@ -104,29 +107,8 @@ function toolErrorContract(tool: string): Contract {
   };
 }
 
-/**
- * The held variants' contracts, pinned from plain. Durable and evented add the
- * `tool-result` chunk for `undefined` (COR-1390) and are otherwise the same.
- */
+/** The held variants' contracts, pinned from plain; the wrapped engines match. */
 const HELD_CONTRACTS: Record<HeldVariant, { plain: Contract; wrapped: Contract }> = {
-  undefined: {
-    plain: {
-      modelCalls: 1,
-      notableTypes: ['tool-call', 'finish'],
-      toModel: [],
-      finishReason: 'tool-calls',
-      errors: 0,
-      text: '',
-    },
-    wrapped: {
-      modelCalls: 1,
-      notableTypes: ['tool-call', 'tool-result', 'finish'],
-      toModel: [],
-      finishReason: 'tool-calls',
-      errors: 0,
-      text: '',
-    },
-  },
   throws: { plain: toolErrorContract('misbehave'), wrapped: toolErrorContract('misbehave') },
 };
 
@@ -134,64 +116,27 @@ const HELD_CONTRACTS: Record<HeldVariant, { plain: Contract; wrapped: Contract }
 const UNKNOWN_CONTRACT = toolErrorContract('nonexistent');
 
 /**
- * COR-1390: a tool that returns undefined makes durable and evented emit a
- * `tool-result` chunk (and a `toolResults` entry) for the call; plain emits
- * neither, so the wrapped streams are one chunk longer.
- */
-const UNDEFINED_DIFFERENCE: EngineDifference = {
-  reason:
-    'COR-1390: durable and evented emit a `tool-result` chunk (and a toolResults entry) for a tool that ' +
-    'returned undefined; plain emits neither.',
-  expect: plain => ({
-    ...plain,
-    turns: plain.turns.map(turn => {
-      const index = turn.chunkTypes.indexOf('tool-call') + 1;
-      const chunkTypes = [...turn.chunkTypes];
-      const chunks = [...turn.chunks];
-      const chunkPayloads = [...turn.chunkPayloads];
-      chunkTypes.splice(index, 0, 'tool-result');
-      chunks.splice(index, 0, 'AGENT:tool-result:misbehave');
-      chunkPayloads.splice(index, 0, {
-        toolCallId: TOOL_CALL_ID,
-        toolName: 'misbehave',
-        args: { n: 1 },
-        providerExecuted: false,
-      });
-      return {
-        ...turn,
-        chunkTypes,
-        chunks,
-        chunkPayloads,
-        // The wrapped engines record the call without a result for it.
-        toolResults: [{ toolCallId: TOOL_CALL_ID, toolName: 'misbehave', result: undefined }],
-      };
-    }),
-  }),
-};
-
-/**
  * COR-1390: durable and evented re-emit the thrown error as the raw serialised
- * error (`{ name, message, stack }`) instead of plain's MastraError envelope
- * (`{ name, message, cause, domain, category, details }`). The serialised stack
- * carries absolute paths from this checkout, so the payload value cannot be
- * pinned; every other field of the turn stays compared, and the difference
- * fails once the two shapes converge. The shape itself is asserted below.
- * COR-1429 strips `stack` from a `tool-error` chunk the way the helper already
- * strips it from an `error` chunk, which is what retires the `ignore`.
+ * error instead of plain's MastraError envelope. The helper removes the
+ * checkout-specific stack, so the stable payload shape can be pinned exactly.
  */
 const THROWS_DIFFERENCE: EngineDifference = {
   reason:
     "COR-1390: durable and evented re-emit a thrown tool error as the raw serialised error instead of plain's " +
-    'MastraError envelope; the serialised stack embeds checkout-specific paths, so the payload cannot be pinned.',
-  // Tried without this `ignore` on the COR-1417 helper: the wrapped payloads
-  // still carry `stack` (an absolute checkout path) and drop plain's
-  // `category`/`cause`/`details`/`domain`, so the comparison still forces it
-  // until COR-1429 stops the helper comparing a `tool-error` stack.
-  ignore: ['chunkPayloads'],
+    'MastraError envelope.',
+  expect: plain => {
+    const expected = structuredClone(plain);
+    for (const turn of expected.turns) {
+      const index = turn.chunkTypes.indexOf('tool-error');
+      if (index < 0) continue;
+      const payload = turn.chunkPayloads[index] as { error?: Record<string, unknown> };
+      payload.error = { name: payload.error?.name, message: payload.error?.message };
+    }
+    return expected;
+  },
 };
 
 const HELD_DIFFERENCES: Record<HeldVariant, EngineDifference> = {
-  undefined: UNDEFINED_DIFFERENCE,
   throws: THROWS_DIFFERENCE,
 };
 
@@ -284,7 +229,7 @@ async function runT32(
 }
 
 describe('T32 tool errors (plain, durable, evented)', () => {
-  for (const variant of ['non-json', 'bad-args'] as const) {
+  for (const variant of ['non-json', 'bad-args', 'undefined'] as const) {
     it(`${variant}: the tool call is surfaced, the loop continues and the model is told`, async () => {
       const results = await runT32(variant);
 
@@ -337,11 +282,8 @@ describe('T32 tool errors (plain, durable, evented)', () => {
         // The harness's contract, pinned per engine.
         expect(contractOf(turn, requests)).toEqual(engine === 'plain' ? contracts.plain : contracts.wrapped);
         if (variant === 'throws') {
-          // The payload's `chunkPayloads` comparison is ignored because the
-          // wrapped engines serialise a `stack` with an absolute checkout path
-          // (see THROWS_DIFFERENCE), so the fields that do not depend on the
-          // process are asserted directly here — a wrapped engine reporting a
-          // different failure or a different call would still fail.
+          // A wrapped engine reporting a different failure or call still fails
+          // the precise scenario-level payload expectation above.
           const payload = turn.chunkPayloads[turn.chunkTypes.indexOf('tool-error')] as {
             toolCallId?: string;
             toolName?: string;
@@ -353,13 +295,11 @@ describe('T32 tool errors (plain, durable, evented)', () => {
             args: { n: 1 },
           });
           // COR-1390's payload shapes. The two engines differ by the
-          // classification fields and the stack, not by the failure's name or
-          // message: plain forwards the live `Error`, the wrappers serialise it.
+          // classification fields, not by the failure's name or message:
+          // plain forwards the live `Error`, the wrappers serialise it.
           const error = toolErrorOf(turn);
           expect(Object.keys(error).sort()).toEqual(
-            engine === 'plain'
-              ? ['category', 'cause', 'details', 'domain', 'message', 'name']
-              : ['message', 'name', 'stack'],
+            engine === 'plain' ? ['category', 'cause', 'details', 'domain', 'message', 'name'] : ['message', 'name'],
           );
           expect(error.name).toBe('Error');
           expect(error.message).toBe('T32 tool failure');

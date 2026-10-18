@@ -256,9 +256,9 @@ test.describe('CMS create scorer page', () => {
       // Verify description
       await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(description);
 
-      // Verify provider/model selections persisted on the edit page.
-      await expect(page.getByRole('combobox').nth(1)).not.toContainText('Select provider');
-      await expect(page.getByRole('combobox').nth(2)).not.toContainText('Select model');
+      // Verify provider/model selections persisted on the edit page (the fields show the picked values).
+      await expect(page.getByRole('combobox').nth(1)).toHaveValue('OpenAI');
+      await expect(page.getByRole('combobox').nth(2)).toHaveValue('gpt-4o-mini');
 
       // Verify score range
       await expect(page.getByPlaceholder('Min')).toHaveValue('0');

@@ -7,7 +7,7 @@ description: "Browse 302.AI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/302ai.svg" alt="302.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />302.AI
 
-Access 124 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
+Access 125 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
 
 Learn more in the [302.AI documentation](https://doc.302.ai).
 
@@ -596,6 +596,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 3.75
+  },
+  {
+    "model": "302ai/gemini-4-argon",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 4,
+    "outputCost": 10
   },
   {
     "model": "302ai/glm-4.5",

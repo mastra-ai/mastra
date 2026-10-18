@@ -98,7 +98,7 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
  */
 const findResultPanel = async (resultId: string) => {
   const panel = await screen.findByRole('region', { name: `Experiment item ${resultId.replace('res-', 'item-')}` });
-  await within(panel).findByRole('heading', { name: 'Experiment result' });
+  await within(panel).findByText('Item Id');
   return panel;
 };
 
@@ -230,7 +230,7 @@ describe('experiment item sub-route', () => {
       expect((await screen.findByRole('button', { name: '0 selected' })).hasAttribute('disabled')).toBe(true);
       expect(screen.queryByRole('button', { name: 'Request review' })).toBeNull();
 
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
 
       expect(await screen.findByRole('button', { name: '1 selected' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Request review' })).toBeDefined();
@@ -351,47 +351,13 @@ describe('experiment item sub-route', () => {
     });
   });
 
-  describe('when the user edits tags from the open result panel', () => {
-    const patches: Array<{ resultId: string; body: unknown }> = [];
-
-    beforeEach(() => {
-      patches.length = 0;
-      server.use(
-        http.patch(
-          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
-          async ({ params, request }) => {
-            const body = await request.json();
-            patches.push({ resultId: String(params.resultId), body });
-            const original = resultsResponse.results.find(r => r.id === params.resultId)!;
-            return HttpResponse.json({ ...original, ...(body as object) });
-          },
-        ),
-      );
-    });
-
-    it('removes a tag from the metadata row', async () => {
+  describe('when a tagged result is open in the panel', () => {
+    it('does not offer to edit its tags', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-2`);
       const dialog = await findResultPanel('res-2');
 
-      fireEvent.click(await within(dialog).findByRole('button', { name: 'Remove tag alpha' }));
-
-      await waitFor(() => {
-        expect(patches).toEqual([{ resultId: 'res-2', body: { tags: [] } }]);
-      });
-    });
-
-    it('adds a known tag from the metadata row picker', async () => {
-      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
-      const dialog = await findResultPanel('res-1');
-
-      fireEvent.click(await within(dialog).findByRole('combobox'));
-      const option = await screen.findByRole('option', { name: 'alpha' });
-      fireEvent.pointerDown(option, { pointerType: 'mouse' });
-      fireEvent.click(option, { detail: 1 });
-
-      await waitFor(() => {
-        expect(patches).toEqual([{ resultId: 'res-1', body: { tags: ['alpha'] } }]);
-      });
+      expect(within(dialog).queryByRole('button', { name: 'Remove tag alpha' })).toBeNull();
+      expect(within(dialog).queryByRole('combobox')).toBeNull();
     });
   });
 

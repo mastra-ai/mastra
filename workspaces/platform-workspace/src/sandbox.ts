@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
@@ -766,6 +768,18 @@ export class PlatformSandbox extends MastraSandbox {
       mode,
       totalMs: Date.now() - startedAt,
       requestMs,
+      // Only a provision ran the template; on reattach the stored definition
+      // is whatever this instance provisioned earlier, not what is running.
+      ...(mode === 'provision' && this._templateDefinition
+        ? {
+            templateHash: templateHash(this._templateDefinition),
+            // `exact` means the proxy booted the requested build. `pending`
+            // means it booted a prior family build or the base image while
+            // that build runs; the proxy does not say which of the two.
+            templateBoot: this.templatePending ? 'pending' : 'exact',
+            ...(this.templatePending ? { pendingTemplateId: this.templatePending.templateId } : {}),
+          }
+        : {}),
     });
   }
 
@@ -1601,4 +1615,16 @@ export class PlatformSandbox extends MastraSandbox {
     if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
     return defaultInstructions;
   }
+}
+
+/**
+ * Diagnostic fingerprint of the serialized template a sandbox was provisioned
+ * with: the same definition (repositories, pinned heads, setup commands,
+ * resources) hashes the same on warm and cold boots. `family` is excluded, as
+ * in the server's exact-content identity. Not the server's cache digest, which
+ * also normalizes resources.
+ */
+function templateHash(definition: SerializedSandboxTemplate): string {
+  const { family: _family, ...content } = definition;
+  return createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
 }
