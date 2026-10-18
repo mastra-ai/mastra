@@ -1,10 +1,13 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import type { IMastraLogger } from '../../../logger';
 import { WORKSPACE_TOOLS } from '../../constants';
+import { UnsupportedGrepPatternError } from '../../errors';
 import { LocalFilesystem } from '../../filesystem';
+import type { FilesystemGrepOptions, FilesystemGrepResult } from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
 
@@ -968,5 +971,91 @@ describe('workspace_grep', () => {
         expect(result).toContain('1 match across 1 file');
       });
     });
+  });
+});
+
+describe('workspace_grep host-side fallback', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-grep-fallback-'));
+    await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+    for (let i = 0; i < 30; i++) {
+      await fs.writeFile(path.join(tempDir, 'src', `file${String(i).padStart(2, '0')}.ts`), `const foo${i} = ${i};`);
+    }
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  class FailingNativeGrepFilesystem extends LocalFilesystem {
+    readFileCalls = 0;
+    onReadFile?: (inputPath: string) => void;
+
+    async grep(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+      throw new UnsupportedGrepPatternError(options.pattern, 'timed out after 30s');
+    }
+
+    async readFile(inputPath: string, options?: Parameters<LocalFilesystem['readFile']>[1]) {
+      this.readFileCalls++;
+      this.onReadFile?.(inputPath);
+      return super.readFile(inputPath, options);
+    }
+  }
+
+  it('logs the native grep failure reason and returns fallback results', async () => {
+    const filesystem = new FailingNativeGrepFilesystem({ basePath: tempDir });
+    const workspace = new Workspace({ filesystem });
+    const info = vi.fn();
+    vi.spyOn(workspace, 'logger', 'get').mockReturnValue({ info, warn: vi.fn() } as unknown as IMastraLogger);
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'foo' }, { workspace });
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('timed out after 30s'));
+    expect(result).toContain('30 matches across 30 files');
+    expect(result).not.toContain('search incomplete');
+  });
+
+  it('stops the host-side walk once the time budget is spent and reports partial results', async () => {
+    const filesystem = new FailingNativeGrepFilesystem({ basePath: tempDir });
+    const realNow = Date.now.bind(Date);
+    let offset = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => realNow() + offset);
+    // Only source reads advance the clock; .gitignore is read before the walk starts.
+    filesystem.onReadFile = inputPath => {
+      if (inputPath.endsWith('.ts')) offset = 61_000;
+    };
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'foo' }, { workspace });
+
+    expect(result).toContain('search incomplete: host-side search stopped after 60s');
+    expect(result).toMatch(/\d+ files? scanned/);
+    expect(result).toContain('narrow the path or pattern');
+    expect(filesystem.readFileCalls).toBeGreaterThan(0);
+    expect(filesystem.readFileCalls).toBeLessThan(30);
+  });
+
+  it('stops the host-side walk when the run is aborted and reports partial results', async () => {
+    const filesystem = new FailingNativeGrepFilesystem({ basePath: tempDir });
+    const controller = new AbortController();
+    filesystem.onReadFile = inputPath => {
+      if (inputPath.endsWith('.ts')) controller.abort();
+    };
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'foo' },
+      { workspace, abortSignal: controller.signal },
+    );
+
+    expect(result).toContain('search incomplete: aborted');
+    expect(filesystem.readFileCalls).toBeGreaterThan(0);
+    expect(filesystem.readFileCalls).toBeLessThan(30);
   });
 });
