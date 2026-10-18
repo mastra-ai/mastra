@@ -741,8 +741,7 @@ function getPartKeys(msg: MastraDBMessage): string[] {
     if (part.type.startsWith('data-om-')) return [];
     let identity: string;
     if (part.type === 'tool-invocation') {
-      const { toolCallId, state } = part.toolInvocation;
-      identity = JSON.stringify([part.type, toolCallId, state, state === 'result' ? part.toolInvocation.result : null]);
+      identity = toolPartIdentity(part.toolInvocation);
     } else {
       const {
         providerMetadata: _providerMetadata,
@@ -760,4 +759,25 @@ function getPartKeys(msg: MastraDBMessage): string[] {
     seen.set(identity, ordinal + 1);
     return [`${identity}#${ordinal}`];
   });
+}
+
+type ToolInvocation = Extract<
+  MastraDBMessage['content']['parts'][number],
+  { type: 'tool-invocation' }
+>['toolInvocation'];
+
+/**
+ * Serializing a tool result on every step is quadratic in turn length (each step rescans every drained
+ * message), so the identity is cached per invocation object and reused while its state and result
+ * reference are unchanged. A result merged in place replaces that reference and is re-serialized.
+ */
+const toolPartIdentityCache = new WeakMap<ToolInvocation, { state: string; result: unknown; identity: string }>();
+
+function toolPartIdentity(invocation: ToolInvocation): string {
+  const result = invocation.state === 'result' ? invocation.result : null;
+  const cached = toolPartIdentityCache.get(invocation);
+  if (cached && cached.state === invocation.state && cached.result === result) return cached.identity;
+  const identity = JSON.stringify(['tool-invocation', invocation.toolCallId, invocation.state, result]);
+  toolPartIdentityCache.set(invocation, { state: invocation.state, result, identity });
+  return identity;
 }
