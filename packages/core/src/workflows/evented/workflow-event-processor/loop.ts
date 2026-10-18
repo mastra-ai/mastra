@@ -433,6 +433,17 @@ export async function processWorkflowForEach(
         ? iterationResult.output
         : ({ [FOREACH_QUEUED]: true } as { [FOREACH_QUEUED]: true }),
     );
+    // Drop failure records from the previous attempt so a replayed iteration that fails
+    // again is treated as the first failure and fails the run.
+    currentResult.suspendPayload = {
+      ...currentResult.suspendPayload,
+      __workflow_meta: {
+        ...currentResult.suspendPayload.__workflow_meta,
+        foreachOutput: preservedForeachOutput.map((iterationResult: any) =>
+          iterationResult?.status === 'failed' ? null : iterationResult,
+        ),
+      },
+    };
 
     await workflowsStore?.updateWorkflowResults({
       workflowName: workflowId,

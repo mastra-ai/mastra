@@ -521,7 +521,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         return typedInputData.stepResult.isContinued;
       }
 
-      const responseMessages = typedInputData.messages.nonUser;
+      // Read this run's response from the persisted view: with savePerStep the
+      // live response set is drained after each saved step, and a message that
+      // is no longer updated drops out of it, which would shift the content
+      // offset below and hand stopWhen the wrong parts (#25538).
+      const responseMessages = messageList.getPersisted.response.aiV5
+        .model()
+        .filter(message => message.role === 'assistant' || message.role === 'tool');
       const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
