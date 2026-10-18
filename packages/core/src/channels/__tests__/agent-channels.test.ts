@@ -1985,6 +1985,31 @@ describe('AgentChannels', () => {
       );
     });
 
+    it('passes the per-message requestContext to both resolvers', async () => {
+      const resolveResourceId = vi.fn(async ({ requestContext }: any) => `tenant:${requestContext.get('tenantId')}`);
+      const resolveThreadId = vi.fn(async ({ requestContext }: any) => `thread:${requestContext.get('tenantId')}`);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      const requestContext = new RequestContext();
+      requestContext.set('tenantId', 't-1');
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, requestContext);
+
+      expect(resolveResourceId.mock.calls[0]![0].requestContext).toBe(requestContext);
+      expect(resolveThreadId.mock.calls[0]![0].requestContext).toBe(requestContext);
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const stored = await memoryStore.getThreadById({ threadId: 'thread:t-1' });
+      expect(stored).toMatchObject({ id: 'thread:t-1', resourceId: 'tenant:t-1' });
+    });
+
     it('returning defaultThreadId keeps the built-in random id', async () => {
       const resolveThreadId = vi.fn(async ({ defaultThreadId }: any) => defaultThreadId);
       const channels = new AgentChannels({
@@ -2989,6 +3014,44 @@ describe('AgentChannels', () => {
       // The handler's write survived, and core's own enrichment sits alongside it.
       expect(dispatched!.get('user')).toEqual({ id: 'user-from-handler' });
       expect(dispatched!.get('channel')).toBeDefined();
+
+      spy.mockRestore();
+    });
+
+    it('lets resolvers read a value the handler wrote on the request context', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.requestContext.set('user', { id: 'user-from-handler' });
+        await defaultHandler(thread, msg);
+      });
+      const resolveResourceId = vi.fn(async ({ requestContext }: any) => `resource:${requestContext.get('user').id}`);
+      const resolveThreadId = vi.fn(async ({ requestContext }: any) => `thread:${requestContext.get('user').id}`);
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async () => {});
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      const handlerRequestContext = onDirectMessage.mock.calls[0]![3].requestContext;
+      expect(resolveResourceId.mock.calls[0]![0].requestContext).toBe(handlerRequestContext);
+      expect(resolveThreadId.mock.calls[0]![0].requestContext).toBe(handlerRequestContext);
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const stored = await memoryStore.getThreadById({ threadId: 'thread:user-from-handler' });
+      expect(stored).toMatchObject({ id: 'thread:user-from-handler', resourceId: 'resource:user-from-handler' });
 
       spy.mockRestore();
     });
