@@ -838,6 +838,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "title": {
                 "type": "string"
               },
+              "custom": {
+                "type": "boolean"
+              },
               "initialPhase": {
                 "type": "string"
               },
@@ -897,6 +900,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "required": [
               "id",
               "title",
+              "custom",
               "initialPhase",
               "phases"
             ]
