@@ -208,12 +208,18 @@ function evaluateNestedExpectations(
   // Search the tool-level view so steps nested under model_generation in trace-derived
   // trajectories are found, unless the expectation targets a container step itself.
   const toolLevelSteps = toToolLevelSteps(actualSteps);
+  // Same rule as compareTrajectories: an untyped expectation naming a container step matches it raw.
+  const containerNames = new Set(
+    actualSteps.filter(s => s.stepType === 'model_generation' || s.stepType === 'processor_run').map(s => s.name),
+  );
 
   for (const expectedStep of expectedSteps) {
     if (!expectedStep.children) continue;
 
     const candidates =
-      expectedStep.stepType === 'model_generation' || expectedStep.stepType === 'processor_run'
+      expectedStep.stepType === 'model_generation' ||
+      expectedStep.stepType === 'processor_run' ||
+      (!expectedStep.stepType && containerNames.has(expectedStep.name))
         ? actualSteps
         : toolLevelSteps;
     // Find the first unmatched actual step that satisfies name/type

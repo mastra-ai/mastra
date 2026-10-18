@@ -1274,4 +1274,14 @@ describe('trace-derived trajectories', () => {
     expect(result.preprocessStepResult?.nested?.[0]?.accuracy?.score).toBe(1);
     expect(result.score).toBe(1);
   });
+  test('nested expectations without stepType still match a container step by name', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        steps: [{ name: 'llm', children: { steps: [{ name: 'searchCorpus' }, { name: 'lookupSource' }] } }],
+      },
+    });
+    const result = await scorer.run(createTrajectoryTestRun({ trajectory: traceTrajectory }));
+    expect(result.preprocessStepResult?.nested?.[0]?.stepName).toBe('llm');
+    expect(result.preprocessStepResult?.nested?.[0]?.accuracy?.score).toBe(1);
+  });
 });
