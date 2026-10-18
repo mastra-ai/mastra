@@ -149,6 +149,8 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { FOREIGN_THREAD, findWakeSession, threadScopeKey } from './utils/wake-session.js';
+import type { WakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
 const CODE_AGENT_ID = 'code-agent';
@@ -920,7 +922,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       : undefined;
   const notificationDispatcher = createResourceNotificationDispatcher({
     getMastra: () => controller.getMastra(),
-    getResourceIds: () => [...liveSessions].map(session => session.identity.getResourceId()),
+    getSessionScopes: () =>
+      [...liveSessions].map(session => ({
+        resourceId: session.identity.getResourceId(),
+        scope: threadScopeKey(session.getThreadScope()),
+      })),
     leases: ownsNotificationDispatch ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider() : undefined,
     owner: `${ownerId}:${process.pid}:${randomUUID()}`,
     onError: error => console.warn('Notification dispatch failed:', error),
@@ -938,16 +944,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // workflow) — all need the target session's request context, or a woken idle
   // thread has no model to run with ("No model selected"). New wake paths must
   // build their options here so `prepareWakeRequestContext` runs for them.
-  const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
-    // Run the woken notification as the session that owns the target
-    // resource so it uses that session's model/mode/state/workspace. Never
-    // borrow another session: every Mastra Code process shares one database,
-    // so the target thread may belong to another project, and running it with
-    // this session's workspace would act on the wrong project.
-    const session = await controller.getSessionByResource(resourceId);
-    // No session here owns the resource. Return undefined so the dispatcher
+  const getWakeStreamOptions = async ({
+    resourceId,
+    threadId,
+    owner,
+  }: {
+    resourceId: string;
+    threadId: string;
+    /** The thread's wake session, when the caller already found it. */
+    owner?: WakeSession<MastraCodeState>;
+  }) => {
+    // Run the woken notification as the session that owns the target thread
+    // so it uses that session's model/mode/state/workspace. Never borrow
+    // another session: every Mastra Code process shares one database, so the
+    // target thread may belong to another project, and running it with this
+    // session's workspace would act on the wrong project.
+    const wake = owner ?? (await findWakeSession(controller, liveSessions, { resourceId, threadId }));
+    // No session here owns the thread. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
-    if (!session) return undefined;
+    if (!wake || wake === FOREIGN_THREAD) return undefined;
+    const { session } = wake;
     // A long-running system must be able to drive work unattended, so migrate
     // and restore the thread's persisted model before falling back to a real
     // mode or live-session default rather than failing the run.
@@ -1283,17 +1299,30 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // don't fall through to the active session and wake it under an
           // empty resource binding.
           if (!input.record.resourceId) return decision;
-          const streamOptions = await getWakeStreamOptions({
+          // A session here serves the resource but not the thread's project:
+          // another process sharing the resource runs it. Leave it pending for
+          // that process, whose own dispatch pass for the thread's scope
+          // delivers it, rather than running it with this one's workspace.
+          const owner = await findWakeSession(controller, liveSessions, {
             resourceId: input.record.resourceId,
             threadId: input.record.threadId,
           });
+          if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
+          const streamOptions = owner
+            ? await getWakeStreamOptions({
+                resourceId: input.record.resourceId,
+                threadId: input.record.threadId,
+                owner,
+              })
+            : undefined;
           const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
           if (!ownsNotificationDispatch) return withOptions;
           // `hold` only applies at delivery time; it is ignored when a
           // notification is first sent.
           const hold = shouldHoldNotificationDelivery({
             resourceId: input.record.resourceId,
-            ownedHere: streamOptions !== undefined,
+            scope: owner?.scope,
+            ownedHere: owner !== undefined,
             dispatcher: notificationDispatcher,
           });
           return hold ? { ...withOptions, hold: true } : withOptions;
