@@ -392,8 +392,8 @@ export function createDurableLLMMappingStep() {
             totalTokens: undefined,
           },
           steps: [], // Steps are accumulated at the loop level
-          // Same source the stream uses for the step-finish chunk, so stopWhen
-          // sees the content stream.steps later reports.
+          // Recorded on the step record; stopWhen reads it, and the deferred
+          // step-finish chunk returns it as stream.steps content.
           content: messageList.get.response.aiV5.modelContent(-1),
         },
         state: {

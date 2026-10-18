@@ -99,6 +99,11 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     const variant = withText ? ' (text and tool call in one step)' : '';
     const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
     const types = (content: Array<{ type: string }>) => content.map(part => part.type);
+    const withoutProviderFields = (content: unknown[]) =>
+      content.map(part => {
+        const { providerOptions: _o, providerMetadata: _m, ...rest } = part as Record<string, unknown>;
+        return rest;
+      });
 
     const runRecordingLastContent = async () => {
       const seenLastContent: Array<Array<{ type: string }>> = [];
@@ -123,8 +128,11 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     });
 
     it(`passes stopWhen the same last-step content stream.steps reports${variant}`, async () => {
-      const { seenLastContent } = await runRecordingLastContent();
+      const { seenLastContent, steps } = await runRecordingLastContent();
       expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
+      expect(seenLastContent.map(withoutProviderFields)).toEqual(
+        steps.slice(0, 2).map(step => withoutProviderFields(step.content)),
+      );
     });
   }
 });
