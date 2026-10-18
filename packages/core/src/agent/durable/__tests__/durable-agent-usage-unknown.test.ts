@@ -162,7 +162,8 @@ describe('durable agent usage that the provider never reported', () => {
           expect(usage?.outputTokens, `${engine}: outputTokens`).toBe(2);
         }
         const finishPayload = turn.finishChunk.payload as
-          { isContinued?: unknown; output?: { isContinued?: unknown } } | undefined;
+          | { isContinued?: unknown; output?: { isContinued?: unknown } }
+          | undefined;
         observed[engine] = {
           variant,
           usage,
