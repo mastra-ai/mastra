@@ -381,7 +381,9 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            preserveMessageIds: inFlightIds,
+            // Re-check right before removal: output merged in place while the Observer ran (e.g.
+            // a background task result) has not been read either.
+            preserveMessageIds: [...(inFlightIds ?? []), ...this.changedSinceDrain(messageList)],
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -430,7 +432,7 @@ export class ObservationStep {
       const pendingMessageIds = new Set(
         [...messageList.get.input.db(), ...messageList.get.response.db()]
           .map(msg => msg.id)
-          .concat(inFlightIds ?? [], this.turn.inputMessageIds)
+          .concat(inFlightIds ?? [], this.turn.inputMessageIds, this.changedSinceDrain(messageList))
           .filter(Boolean),
       );
 
@@ -469,6 +471,17 @@ export class ObservationStep {
    * waitForBuffering → re-check → activate buffered chunks → reflect → observe
    * (sync fallback at blockAfter when async buffering is enabled)
    */
+  /** Ids of already-drained messages that now hold parts the model has not been sent. */
+  private changedSinceDrain(messageList: MessageList): string[] {
+    return messageList.get.all
+      .db()
+      .filter(msg => {
+        const seen = this.turn.drainedPartKeys.get(msg.id);
+        return seen !== undefined && getPartKeys(msg).some(key => !seen.has(key));
+      })
+      .map(msg => msg.id);
+  }
+
   private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
     succeeded: boolean;
     record: any;

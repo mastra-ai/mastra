@@ -104,15 +104,17 @@ function observerRequestCount(): number {
   return mock.getRequests().filter(entry => (entry.body as { model?: string })?.model === OBSERVER).length;
 }
 
-function createMemory(storage = new InMemoryStore()) {
-  const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+function createMemory(storage = new InMemoryStore(), observerFetch?: typeof fetch) {
+  const baseURL = `${mock.url.replace(/\/+$/, '')}/v1`;
+  const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL });
+  const observer = observerFetch ? createOpenAI({ apiKey: 'aimock-test-key', baseURL, fetch: observerFetch }) : openai;
   const memory = new Memory({
     storage,
     options: {
       observationalMemory: {
         enabled: true,
-        observation: { model: openai.chat(OBSERVER), messageTokens: 1000, bufferTokens: false },
-        reflection: { model: openai.chat(OBSERVER), observationTokens: 100_000 },
+        observation: { model: observer.chat(OBSERVER), messageTokens: 1000, bufferTokens: false },
+        reflection: { model: observer.chat(OBSERVER), observationTokens: 100_000 },
       },
     },
   });
@@ -274,5 +276,97 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
     expect(requests[2]).toContain('User asked to look up an order status');
     // … and still carries the background result the model has not read yet.
     expect(requests[2], 'the background task result was removed before the model read it').toContain(BG_RESULT_MARKER);
+  });
+
+  it('keeps a background task result merged while the Observer is running', async () => {
+    // Step 0 dispatches `research` in the background (placeholder result) and step 1 calls
+    // `lookup`. The task is released only once step 2's observation reaches the Observer, and
+    // the Observer reply is held until the real result has been merged over the placeholder. So
+    // the merge lands after step 2 scanned for unread output but before cleanup runs.
+    let releaseResearch!: () => void;
+    const researchGate = new Promise<void>(resolve => (releaseResearch = resolve));
+    let markMerged!: () => void;
+    const merged = new Promise<void>(resolve => (markMerged = resolve));
+
+    const research = createTool({
+      id: 'research',
+      description: 'Long-running research',
+      inputSchema: z.object({ topic: z.string() }),
+      background: { enabled: true, timeoutMs: 10_000 },
+      execute: async () => {
+        await researchGate;
+        return { finding: `${BG_RESULT_MARKER}: carrier confirmed delivery window` };
+      },
+    });
+
+    mock.on({ endpoint: 'chat', model: OBSERVER }, { content: OBSERVATIONS });
+    mock.on(
+      { endpoint: 'chat', model: ACTOR, predicate: req => lastMessage(req)?.role === 'user' },
+      {
+        content: filler,
+        toolCalls: [{ id: 'call_bg', name: 'research', arguments: JSON.stringify({ topic: '4471' }) }],
+      },
+    );
+    mock.on(
+      { endpoint: 'chat', model: ACTOR, predicate: req => lastToolResultFor(req, 'call_bg') },
+      { toolCalls: [{ id: 'call_0', name: 'lookup', arguments: JSON.stringify({ orderId: '4471-0' }) }] },
+    );
+    mock.on(
+      { endpoint: 'chat', model: ACTOR, predicate: req => lastToolResultFor(req, 'call_0') },
+      { content: FINAL_ANSWER },
+    );
+    mock.on({ endpoint: 'chat', model: ACTOR }, { content: LOST });
+
+    const storage = new InMemoryStore();
+    const memoryStore = (await storage.getStore('memory'))!;
+    const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+    vi.spyOn(memoryStore, 'saveMessages').mockImplementation(async args => {
+      const saved = await saveMessages(args);
+      if (JSON.stringify(args.messages).includes(BG_RESULT_MARKER)) markMerged();
+      return saved;
+    });
+
+    let observerCalls = 0;
+    const observerFetch: typeof fetch = async (input, init) => {
+      // Step 1 observes the step-0 output; step 2 observes the lookup result.
+      if (++observerCalls === 2) {
+        releaseResearch();
+        await merged;
+      }
+      return fetch(input, init);
+    };
+
+    const { memory, openai } = createMemory(storage, observerFetch);
+    const agent = new Agent({
+      id: 'inflight-bg-race-agent',
+      name: 'inflight-bg-race-agent',
+      instructions: 'Research, then look up the order.',
+      model: openai.chat(ACTOR),
+      tools: { research, lookup },
+      backgroundTasks: { tools: { research: true } },
+      memory,
+    });
+    const mastra = new Mastra({
+      agents: { agent },
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+    });
+    await mastra.startWorkers();
+
+    try {
+      const stream = await mastra
+        .getAgent('agent')
+        .stream(USER_REQUEST, { memory: { thread: 'inflight-bg-race', resource: 'r' } });
+      expect(await stream.text).toBe(FINAL_ANSWER);
+    } finally {
+      await mastra.stopWorkers();
+    }
+
+    const requests = actorRequests();
+    expect(requests).toHaveLength(3);
+    expect(observerCalls).toBe(2);
+    expect(requests[1]).not.toContain(BG_RESULT_MARKER);
+    expect(requests[2], 'the background task result merged during observation was removed').toContain(BG_RESULT_MARKER);
   });
 });
