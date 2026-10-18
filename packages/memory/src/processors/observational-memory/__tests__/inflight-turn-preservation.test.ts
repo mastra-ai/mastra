@@ -261,6 +261,115 @@ describe('tool result merged in place into an already-drained message', () => {
   });
 });
 
+describe('background task result merged over its placeholder', () => {
+  it('keeps the real result in the live prompt when the next step observes', async () => {
+    const threadId = 'thread-bg-placeholder';
+    const resourceId = 'resource-bg-placeholder';
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const observerCalls = { count: 0 };
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observerModel(observerCalls) as any, messageTokens: 1000, bufferTokens: false },
+      reflection: { model: observerModel({ count: 0 }) as any, observationTokens: 100_000 },
+    });
+
+    const t0 = Date.now() - 60_000;
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: USER_REQUEST }] },
+        createdAt: new Date(t0),
+        threadId,
+        resourceId,
+      } as MastraDBMessage,
+      'input',
+    );
+    // A background tool dispatch: the tool part is already `result`, holding the placeholder.
+    messageList.add(
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: filler },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-bg',
+                toolName: 'lookup',
+                args: {},
+                result: 'Background task started. The result will be delivered when it completes.',
+              },
+            },
+          ],
+        },
+        createdAt: new Date(t0 + 1000),
+        threadId,
+        resourceId,
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+    await turn.step(0).prepare();
+    // Step 1 drains and observes the placeholder; the model has read only the placeholder.
+    await turn.step(1).prepare();
+    const callsAfterStep1 = observerCalls.count;
+
+    // The background task finishes: the real result replaces the placeholder in place, as
+    // background-task-result-core does. Same message, same part, state stays `result`.
+    const merged = messageList.updateToolInvocation(
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-bg',
+          toolName: 'lookup',
+          args: {},
+          result: { status: `${RESULT_MARKER}-bg`, log: filler },
+        },
+        providerMetadata: {
+          mastra: { modelOutput: null, backgroundTask: { taskId: 'task-bg', status: 'completed' } },
+        },
+      },
+      {
+        mode: 'stream',
+        backgroundTasks: { 'call-bg': { startedAt: new Date(t0), completedAt: new Date(), taskId: 'task-bg' } },
+      },
+    );
+    expect(merged).toBe(true);
+    // More output in a second response message pushes step 2 over the threshold again.
+    messageList.add(
+      {
+        id: 'assistant-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: filler }] },
+        createdAt: new Date(t0 + 2000),
+        threadId,
+        resourceId,
+      } as MastraDBMessage,
+      'response',
+    );
+
+    await turn.step(2).prepare();
+
+    expect(observerCalls.count).toBeGreaterThan(callsAfterStep1);
+    expect(
+      JSON.stringify(messageList.get.all.db()),
+      'the background task result was removed before the model read it',
+    ).toContain(`${RESULT_MARKER}-bg`);
+  });
+});
+
 describe('drained output whose save failed', () => {
   it('still treats the output as unread when the next step retries the save', async () => {
     const threadId = 'thread-failed-save';
