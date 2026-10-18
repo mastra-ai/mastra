@@ -923,7 +923,40 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
             }
           },
-          flush() {
+          async flush(controller) {
+            // Release parts processors still hold (e.g. a partial BatchPartsProcessor
+            // batch) so a model stream that ends mid-batch doesn't drop its tail.
+            const released = await processorRunner.flushHeldParts(
+              processorStates,
+              getObservabilityContext(),
+              options.requestContext,
+              self.messageList,
+              0,
+              {
+                custom: async (data, writerOptions) => {
+                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  controller.enqueue(data as ChunkType<OUTPUT>);
+                },
+              },
+              options.abortSignal,
+            );
+            for (const r of released) {
+              if (r.blocked) {
+                controller.enqueue({
+                  type: 'tripwire',
+                  payload: {
+                    reason: r.reason || 'Output processor blocked content',
+                    retry: r.tripwireOptions?.retry,
+                    metadata: r.tripwireOptions?.metadata,
+                    processorId: r.processorId,
+                  },
+                } as ChunkType<OUTPUT>);
+                break;
+              }
+              if (r.part != null) {
+                controller.enqueue(r.part as ChunkType<OUTPUT>);
+              }
+            }
             // Only this step's model stream ended; the step's tool results are still to come.
             processorRunner.endStreamProcessorSpans(processorStates, { keepStepScopedSpans: true });
           },

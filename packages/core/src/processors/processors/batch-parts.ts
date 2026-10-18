@@ -1,12 +1,13 @@
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
-import { REPROCESS_PART_KEY } from '../stream-reprocess';
+import { FLUSH_HELD_PARTS_KEY, REPROCESS_PART_KEY } from '../stream-reprocess';
 
 export type BatchPartsState = {
   batch: ChunkType[];
   timeoutId: NodeJS.Timeout | undefined;
   timeoutTriggered: boolean;
+  pendingNonText?: ChunkType;
 };
 
 export interface BatchPartsOptions {
@@ -62,6 +63,7 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     if (!state.timeoutTriggered) {
       state.timeoutTriggered = false;
     }
+    state[FLUSH_HELD_PARTS_KEY] ??= () => this.releaseAll(state as BatchPartsState);
 
     // Emit any pending non-text part that was deferred from the previous call
     if (state.pendingNonText) {
@@ -181,6 +183,18 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     state.batch = state.batch.slice(textRunEnd);
 
     return combinedChunk;
+  }
+
+  private releaseAll(state: BatchPartsState): ChunkType[] {
+    const released: ChunkType[] = [];
+    if (state.pendingNonText) {
+      released.push(state.pendingNonText);
+      state.pendingNonText = undefined;
+    }
+    for (let part = this.flushBatch(state); part; part = this.flushBatch(state)) {
+      released.push(part);
+    }
+    return released;
   }
 
   /**
