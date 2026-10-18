@@ -1,6 +1,10 @@
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect } from 'vitest';
+import { z } from 'zod';
 import type { Processor } from '../../../../processors';
+import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { SCENARIO_MODEL_ID } from '../types';
 
 /**
  * Regression class: input processors run before the model request.
@@ -52,5 +56,57 @@ describeForAllEngines('AIMock loop scenario: input processor', engine => {
 
     const text = await output.text;
     expect(text).toContain('Acknowledged.');
+  });
+
+  // #25435: strict chat templates (e.g. Qwen3.x on vLLM) reject any system message that isn't
+  // the single first message, so OpenAI-compatible chat requests must carry exactly one.
+  it('sends one leading system message to OpenAI-compatible chat models', async () => {
+    const llm = getMock();
+    const addSystemMessage: Processor = {
+      id: 'add-system-message',
+      processInput({ messages, systemMessages }) {
+        return {
+          messages,
+          systemMessages: [...systemMessages, { role: 'system', content: 'PROCESSOR_RULE: answer briefly.' }],
+        };
+      },
+    };
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look up a value',
+      inputSchema: z.object({ key: z.string() }),
+      execute: async () => ({ value: 42 }),
+    });
+    const chatModel = createOpenAI({ apiKey: 'test', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` }).chat(
+      SCENARIO_MODEL_ID,
+    );
+
+    const { requests, output } = await runLoopScenario({
+      engine,
+      llm,
+      model: chatModel,
+      prompt: 'What is the value for x?',
+      instructions: 'AGENT_RULE: you are a lookup assistant.',
+      inputProcessors: [addSystemMessage],
+      tools: { lookup },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ name: 'lookup', arguments: '{"key":"x"}' }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value is 42.' });
+      },
+    });
+
+    expect(await output.text).toContain('The value is 42.');
+    expect(requests.length).toBeGreaterThanOrEqual(2);
+    for (const request of requests) {
+      const messages = (request.body?.messages ?? []) as Array<{ role: string; content: unknown }>;
+      expect(messages.filter(m => m.role === 'system')).toHaveLength(1);
+      expect(messages[0]?.role).toBe('system');
+      const system = JSON.stringify(messages[0]?.content);
+      expect(system).toContain('AGENT_RULE');
+      expect(system).toContain('PROCESSOR_RULE');
+    }
   });
 });
