@@ -37,6 +37,7 @@ import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import {
@@ -121,8 +122,6 @@ export interface FactoryApiRoutesDeps {
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
-  /** Organization this deployment serves; its admins may edit deployment-wide settings. */
-  deploymentOrganizationId?: string;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -136,6 +135,7 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
+    startCoordinator: FactoryStartCoordinator;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   }) => void;
 }
@@ -382,7 +382,7 @@ export async function prepareFactoryRuleBinding(
         );
       }));
 
-    const modelScope = project.modelScope;
+    const modelScope = effectiveModelScope(project.modelScope, 'run');
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
@@ -696,6 +696,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   if (transitionService && startCoordinator) {
     deps.onFactoryRuntime?.({
       transitionService,
+      startCoordinator,
       ...(sourceControlRegistrations.length > 0
         ? {
             prepareBinding: async (input: FactoryBindingPreparationInput) => {
@@ -740,11 +741,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       modelCredentials: deps.domains.modelCredentials,
       modelDefaults: deps.domains.modelDefaults,
       sourceControlSessions,
+      workItems: deps.domains.workItems,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },
-      deploymentOrganizationId: deps.deploymentOrganizationId,
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,

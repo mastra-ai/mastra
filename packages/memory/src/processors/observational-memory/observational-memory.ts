@@ -465,6 +465,7 @@ export class ObservationalMemory {
   private mastra?: Mastra;
   private readonly autoModels?: ObservationalMemoryConfig['autoModels'];
   private readonly resolveAutoModelHook?: ObservationalMemoryConfig['resolveModel'];
+  private readonly canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
   private memory?: Memory;
 
   /**
@@ -602,6 +603,7 @@ export class ObservationalMemory {
     this.hooks = config.hooks;
     this.autoModels = config.autoModels;
     this.resolveAutoModelHook = config.resolveModel;
+    this.canUseProvider = config.canUseProvider;
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
@@ -1031,6 +1033,16 @@ export class ObservationalMemory {
     };
   }
 
+  private autoModelOptions(requestContext?: RequestContext) {
+    const canUseProvider = this.canUseProvider;
+    return {
+      autoModels: this.autoModels,
+      canUseProvider: canUseProvider
+        ? (providerId: string) => canUseProvider(providerId, { requestContext })
+        : undefined,
+    };
+  }
+
   private async resolveAutoModel(options?: {
     requestContext?: RequestContext;
     mainAgent?: ProcessorContext['agent'];
@@ -1044,7 +1056,7 @@ export class ObservationalMemory {
     }
     const mainModelId = getModelId(mainModel);
     const pick =
-      resolveAutoModelId(mainModelId, { autoModels: this.autoModels }) ??
+      resolveAutoModelId(mainModelId, this.autoModelOptions(options?.requestContext)) ??
       (mainModel ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
 
     // No cheaper sibling is known: reuse the main model exactly as configured.
@@ -1165,7 +1177,7 @@ export class ObservationalMemory {
       const reflectionModel = await this.resolveModelFunction(this.reflectionConfig.model, requestContext);
       const modelId =
         reflectionModel === 'auto'
-          ? (resolveAutoModelId(undefined, { autoModels: this.autoModels }) ?? '')
+          ? (resolveAutoModelId(undefined, this.autoModelOptions(requestContext)) ?? '')
           : ((await this.resolveModelContext(reflectionModel as ObservationalMemoryModel, requestContext))?.modelId ??
             '');
 

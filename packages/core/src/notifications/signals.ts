@@ -1,5 +1,6 @@
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, CreatedAgentSignal } from '../agent/signals';
+import { stripNotificationRoutingRequirement } from './routing';
 import type {
   NotificationPriority,
   NotificationRecord,
@@ -77,7 +78,12 @@ export function createNotificationSignal(notification: NotificationRecord): Crea
     tagName: 'notification',
     contents: notification.summary,
     attributes: notificationSignalAttributes(notification),
-    metadata: { ...notification.metadata, notification: notificationSignalMetadata(notification) },
+    // The routing requirement is Core's own bookkeeping, not part of the signal
+    // the recipient reads.
+    metadata: {
+      ...stripNotificationRoutingRequirement(notification.metadata),
+      notification: notificationSignalMetadata(notification),
+    },
   });
 }
 

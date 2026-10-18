@@ -196,7 +196,7 @@ The decision carries the model that was applied, the criterion that was chosen, 
   },
   {
     name: 'abstained',
-    type: "'below-threshold' | 'no-model-for-choice' | 'no-text' | 'error'",
+    type: "'below-threshold' | 'no-model-for-choice' | 'no-text' | 'error' | 'refused'",
     required: false,
     description: 'Why no model was applied. Absent on a successful routing decision and when select returns undefined.',
   },
@@ -297,7 +297,7 @@ If your decision model doesn't report choice distributions, the processor abstai
 
 ## Failure behavior
 
-Routing fails open. If the classifier errors or the classifier ID isn't registered, the processor logs a warning and the agent's configured model is used. If the request has no user text to classify, the processor abstains without logging and reports `abstained: 'no-text'` to `onDecision`. This is the safe direction for a cost optimization: the worst case is that you pay for the model you already configured.
+Routing fails open. If the classifier errors or the classifier ID isn't registered, the processor logs a warning and the agent's configured model is used. If the request has no user text to classify, the processor abstains without logging and reports `abstained: 'no-text'` to `onDecision`. With the `choices` form, if the decision model refuses the routing question, the processor abstains and reports `abstained: 'refused'`. With the `select` form, your callback receives the refusal answer and decides whether to return a model or `undefined`. This is the safe direction for a cost optimization: the worst case is that you pay for the model you already configured.
 
 This is the opposite of the fail-closed stance appropriate for [tool approval](/docs/agents/human-in-the-loop), where uncertainty should escalate rather than pass through.
 

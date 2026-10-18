@@ -66,6 +66,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
@@ -585,10 +586,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       />
 
       <TraceAsItemDialog
+        depth={isFullThreadOpen ? 3 : 2}
         rootSpanId={datasetDialogTarget?.rootSpanId}
         traceId={datasetDialogTarget?.traceId}
         isOpen={!!datasetDialogTarget}
         onClose={() => setDatasetDialogTarget(null)}
+        renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
       />
 
       <AddTraceMocksToItemDialog

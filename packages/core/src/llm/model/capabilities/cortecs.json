@@ -10,10 +10,10 @@
     "claude-opus4-6",
     "claude-opus4-7",
     "claude-opus4-8",
-    "claude-sonnet-4",
     "claude-sonnet-5",
     "claude-sonnet-5.5",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     "gemini-3.1-flash-lite",
@@ -22,6 +22,7 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
+    "gemini-4-argon",
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -80,13 +81,13 @@
     "claude-haiku-4-5",
     "claude-opus4-5",
     "claude-opus4-6",
-    "claude-sonnet-4",
     "codestral-2508",
     "deepseek-v3.2",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "devstral-2512",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -147,13 +148,13 @@
     "claude-opus4-6",
     "claude-opus4-7",
     "claude-opus4-8",
-    "claude-sonnet-4",
     "claude-sonnet-5",
     "claude-sonnet-5.5",
     "codestral-2508",
     "deepseek-v3.2",
     "deepseek-v4-pro-0813",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "devstral-2512",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -163,6 +164,7 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
+    "gemini-4-argon",
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -185,7 +187,6 @@
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
-    "llama-3.1-8b-instruct",
     "llama-3.3-70b-instruct",
     "minicpm-v-4.5",
     "minimax-m2",
@@ -195,7 +196,6 @@
     "ministral-14b-2512",
     "ministral-3b-2512",
     "ministral-8b-2512",
-    "mistral-7b-instruct-v0.3",
     "mistral-large-2402",
     "mistral-large-2512",
     "mistral-large-4-0",
@@ -398,16 +398,6 @@
         "min": 1024
       }
     ],
-    "claude-sonnet-4": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
     "gpt-5.6-luna": [
       {
         "type": "effort",
@@ -533,6 +523,12 @@
       }
     ],
     "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-4-argon": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

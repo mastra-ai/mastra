@@ -149,10 +149,10 @@ describe('Experiments page — selection and compare', () => {
       expect(await getCompareTooltip()).toBe('Select at least two experiments to compare');
     });
 
-    it('offers Run Experiment without a Reset button', async () => {
+    it('offers New experiment without a Reset button', async () => {
       await renderLoadedPage();
 
-      expect(screen.getByRole('button', { name: /run experiment/i })).toBeDefined();
+      expect(screen.getByRole('button', { name: /new experiment/i })).toBeDefined();
       expect(screen.queryByRole('button', { name: /reset/i })).toBeNull();
       expect(screen.queryByRole('button', { name: /cancel/i })).toBeNull();
     });
@@ -166,7 +166,7 @@ describe('Experiments page — selection and compare', () => {
     it('explains above the list that a selection highlights the comparable experiments', async () => {
       await renderLoadedPage();
 
-      expect(getLegend().textContent).toBe('Select an experiment to highlight the ones you can compare it with.');
+      expect(getLegend().textContent).toBe('Select an experiment to highlight comparable ones');
     });
   });
 
@@ -190,9 +190,7 @@ describe('Experiments page — selection and compare', () => {
       await renderLoadedPage();
       select('exp-a');
 
-      expect(getLegend().textContent).toBe(
-        'Highlighted experiments ran on dataset dataset-1, like your first selection, and can be compared with it.',
-      );
+      expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-1');
     });
   });
 
@@ -202,7 +200,7 @@ describe('Experiments page — selection and compare', () => {
       select('exp-a', 'exp-c', 'exp-a');
 
       expect(highlightedExperiments()).toEqual(['run c']);
-      expect(getLegend().textContent).toMatch(/ran on dataset dataset-2,/);
+      expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-2');
     });
   });
 

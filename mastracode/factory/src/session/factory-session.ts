@@ -1,11 +1,14 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
+import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import type { FactoryModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlSession,
+  type SourceControlSessionVisibility,
   type SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
@@ -22,12 +25,14 @@ export async function resolveFactorySessionModel(args: {
   factoryProjectId: string | undefined;
   orgId: string;
   ownerUserId: string;
-}): Promise<{ modelScope: FactoryModelScope; modelId?: string }> {
+  /** A work-item run or an interactive session; a hybrid Factory resolves a different scope for each. */
+  context: 'run' | 'session';
+}): Promise<{ modelScope: EffectiveModelScope; modelId?: string }> {
   if (!args.projects || !args.factoryProjectId) throw new Error('Factory model policy is unavailable.');
 
   const project = await args.projects.getById({ id: args.factoryProjectId });
   if (!project || project.orgId !== args.orgId) throw new Error('Factory model policy is unavailable.');
-  if (project.modelScope !== 'user') {
+  if (effectiveModelScope(project.modelScope, args.context) === 'factory') {
     return { modelScope: 'factory', ...(project.defaultModelId ? { modelId: project.defaultModelId } : {}) };
   }
 
@@ -47,6 +52,8 @@ export async function resolveFactorySessionModel(args: {
 export interface SourceControlSessionLookup {
   getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
   getSourceControlBySessionId(sessionId: string): Promise<SourceControlStorageHandle | null>;
+  /** Side sessions started by `originSessionId`, across every provider. */
+  listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
   rename(args: { sessionId: string; title: string }): Promise<void>;
   markFirstMessage(args: { sessionId: string }): Promise<void>;
   markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
@@ -81,6 +88,8 @@ export function createSourceControlSessionLookup(
   return {
     getBySessionId: async sessionId => (await resolve(sessionId))?.session ?? null,
     getSourceControlBySessionId: async sessionId => (await resolve(sessionId))?.sourceControl ?? null,
+    listByOrigin: async args =>
+      (await Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listByOrigin(args)))).flat(),
     rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
     markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
     markFirstMeaningfulExec: async args =>
@@ -161,6 +170,12 @@ export interface EnsureFactorySourceSessionArgs {
    * run has an interactive user — e.g. the person who approved a proposed run.
    */
   attributeToUserId?: string;
+  /** A pre-generated session id, so a caller can name the branch after it. Defaults to a fresh UUID. */
+  sessionId?: string;
+  /** Defaults to 'org'. A side session copies its parent's visibility. */
+  visibility?: SourceControlSessionVisibility;
+  /** The session and thread that started this one as a side session. */
+  origin?: { sessionId: string; threadId: string };
 }
 
 export interface EnsuredFactorySourceSession {
@@ -270,14 +285,15 @@ export async function ensureFactorySourceSession(
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
-    sessionId: globalThis.crypto.randomUUID(),
+    sessionId: args.sessionId ?? globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     factoryProjectId,
     orgId,
     userId,
     branch,
     baseBranch: resolved.baseBranch,
-    visibility: 'org',
+    visibility: args.visibility ?? 'org',
+    ...(args.origin ? { origin: args.origin } : {}),
   });
   return {
     sessionId: session.sessionId,
@@ -290,9 +306,12 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  modelScope: FactoryModelScope;
+  modelScope: EffectiveModelScope;
   ownerUserId: string;
-  /** The model selected by the Factory scope. Without it the SDK mode default is applied. */
+  /**
+   * The model selected by the Factory scope. Without it the provider default of a connected
+   * provider is applied when the SDK mode default has no credential, else the mode default.
+   */
   defaultModelId?: string;
 }
 
@@ -303,7 +322,10 @@ export interface HydrateFactorySessionArgs {
  * is otherwise ready, and the reason is logged. Observational-memory settings are resolved from the
  * authoritative row per invocation before memory processors run.
  */
-export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
+export async function hydrateFactorySession(
+  session: FactorySession,
+  args: HydrateFactorySessionArgs,
+): Promise<string | undefined> {
   // The org rung knowledge curation scopes on. Seeded first so it lands even if
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
@@ -312,12 +334,27 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
     factoryOwnerUserId: args.ownerUserId,
   });
 
-  const selectedModelId = args.defaultModelId ?? session.mode.resolve().defaultModelId;
-  if (!selectedModelId) return;
+  let selectedModelId = args.defaultModelId;
+  if (!selectedModelId) {
+    const modeModelId = session.mode.resolve().defaultModelId;
+    const providerModelId = await resolveTenantProviderDefaultModel(
+      { orgId: args.orgId, userId: args.ownerUserId, credentialScope: args.modelScope },
+      modeModelId,
+    ).catch(error => {
+      console.warn('[Factory Start] Failed to resolve a provider default model', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    });
+    selectedModelId = providerModelId ?? modeModelId;
+  }
+  if (!selectedModelId) return undefined;
 
+  let switched = true;
   try {
     await session.model.switch(selectedModelId);
   } catch (error) {
+    switched = false;
     console.warn('[Factory Start] Failed to apply scoped default model', {
       modelId: selectedModelId,
       error: error instanceof Error ? error.message : String(error),
@@ -337,4 +374,6 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
       });
     }
   }
+  // Callers pin this id to the thread, so only report a model the session actually runs on.
+  return switched ? selectedModelId : undefined;
 }

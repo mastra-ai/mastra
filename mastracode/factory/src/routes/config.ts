@@ -2,23 +2,18 @@ import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import {
-  getCustomProviderId,
-  isThinkingLevelSetting,
-  loadSettings,
-  MASTRA_GATEWAY_PROVIDER,
-  saveSettings,
-  THINKING_LEVEL_VALUES,
-} from '@mastra/code-sdk/onboarding/settings';
-import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
+import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import { getModelReasoningOptions } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
+import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
@@ -35,12 +30,13 @@ import type {
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
   tenantOrgId,
-  WEB_OAUTH_FLOW_KINDS,
+  WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
@@ -186,7 +182,7 @@ export async function listProviders({
       source = 'env';
     }
 
-    const flowKind = WEB_OAUTH_FLOW_KINDS[model.provider];
+    const flowKind = WEB_OAUTH_PROVIDERS[model.provider]?.flow;
     seen.set(model.provider, {
       provider: model.provider,
       envVar: model.apiKeyEnvVar,
@@ -454,22 +450,6 @@ export interface ProviderOMDefaultsResponse {
   config: OMConfigInfo;
 }
 
-/** `GET /web/config/thinking` — deployment-scoped reasoning-effort defaults. */
-export interface ThinkingConfigInfo {
-  /** All selectable levels, in escalation order. */
-  levels: readonly ThinkingLevelSetting[];
-  /** `preferences.thinkingLevel` — what every run uses without a session override. */
-  globalDefault: ThinkingLevelSetting;
-  /** False when the deployment refuses writes, so the UI can render read-only rows. */
-  editable: boolean;
-}
-
-/** `PUT /web/config/thinking` success payload. */
-export interface UpdateThinkingConfigResponse {
-  ok: true;
-  globalDefault: ThinkingLevelSetting;
-}
-
 function modelProvider(modelId: string): string {
   // Effective IDs keep their `mastra/` route; the provider segment after it is what
   // the SDK resolver falls back to when the gateway is not configured.
@@ -501,7 +481,7 @@ function readStoredOMConfig(
   autoModelSource: 'live-session' | 'configured-default',
   availableProviders: ReadonlySet<string>,
 ): OMConfigInfo {
-  const autoModelId = resolveAutoOMModelId(currentModelId);
+  const autoModelId = resolveAutoOMModelId(currentModelId, providerId => availableProviders.has(providerId));
   const observerModelId = record?.observerModelId ?? autoModelId;
   const reflectorModelId = record?.reflectorModelId ?? autoModelId;
   return {
@@ -600,6 +580,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   modelDefaults?: ModelDefaultsStorage;
   /** Source-control sessions available to config route integrations. */
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
+  /** Thread membership used to resolve the same model policy as an invocation. */
+  workItems?: WorkItemsStorage;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
   /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
@@ -615,17 +597,6 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * own credentials (see `DEPLOYMENT_MODEL_PROVIDERS`).
    */
   deploymentProviders?: ReadonlySet<string>;
-  /**
-   * Path of the server's settings.json backing the deployment-scoped thinking
-   * defaults. Defaults to the standard app-data location; injectable for tests.
-   */
-  settingsPath?: string;
-  /**
-   * Organization this deployment serves (`MASTRACODE_DEPLOYMENT_ORGANIZATION_ID`).
-   * When auth is enabled, only admins of this organization may write
-   * deployment-wide settings; without it those writes stay blocked.
-   */
-  deploymentOrganizationId?: string;
 }
 
 /**
@@ -638,8 +609,6 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
- *   - `GET    /web/config/thinking`                — read thinking (reasoning-effort) defaults
- *   - `PUT    /web/config/thinking`                — set the global thinking default
  *   - `GET    /web/config/om`                      — read OM models/thresholds/observe-attachments
  *   - `PUT    /web/config/om/:role/model`          — switch observer/reflector model
  *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
@@ -684,48 +653,19 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       return availableProviders;
     };
 
-    // Factory-scoped OM reads without a stored row fall back to the low-cost
-    // OM model of the factory default model's provider — not the global
-    // built-in default, whose provider may have no credential here.
+    // Without a live session, Auto previews against the factory default model
+    // (resolved with this account's providers in readStoredOMConfig) — not the
+    // global built-in default, whose provider may have no credential here.
     const factoryOmFallback = async (factoryProjectId: string | undefined): Promise<string | undefined> => {
       try {
-        const defaultModelId = factoryProjectId
+        return factoryProjectId
           ? await options.factoryProjects
               ?.getById({ id: factoryProjectId })
               .then(project => project?.defaultModelId ?? undefined)
           : controller.listModes?.().find(mode => mode.defaultModelId)?.defaultModelId;
-        return defaultModelId ? resolveAutoOMModelId(defaultModelId) : undefined;
       } catch {
         return undefined;
       }
-    };
-
-    const deploymentThinkingAccess = async (
-      c: Context,
-    ): Promise<{ ok: true } | { ok: false; status: 401 | 403; error: string; message?: string }> => {
-      if (!auth.enabled()) return { ok: true };
-      await auth.ensureUser(c);
-      const tenant = auth.tenant(c);
-      if (!tenant) return { ok: false, status: 401, error: 'unauthorized' };
-      const orgId = tenantOrgId(tenant);
-      if (!options.deploymentOrganizationId || orgId !== options.deploymentOrganizationId) {
-        return {
-          ok: false,
-          status: 403,
-          error: 'deployment_organization_required',
-          message:
-            "Deployment thinking defaults are shared by the whole deployment. Set MASTRACODE_DEPLOYMENT_ORGANIZATION_ID to let that organization's admins change them while authentication is enabled",
-        };
-      }
-      if (!(await auth.isOrganizationAdmin(c, orgId))) {
-        return {
-          ok: false,
-          status: 403,
-          error: 'organization_admin_required',
-          message: 'Only organization admins can change deployment thinking defaults while authentication is enabled',
-        };
-      }
-      return { ok: true };
     };
 
     return [
@@ -953,15 +893,60 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               auth,
               credentials: options.modelCredentials,
             });
-            // A Factory's model scope is exclusive at run time, so a picker for
-            // that Factory must only offer models its scope's credentials serve.
-            // `scope=user` serves personal defaults, which only apply in
-            // personal-scope Factories and so only run on the caller's own credentials.
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            if (allTenantCredentials && c.req.query('scope') === 'user') {
-              tenantCredentials = allTenantCredentials.filter(record => record.scope === 'user');
+            let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
+            const resourceId = c.req.query('resourceId');
+            const threadId = c.req.query('threadId');
+            if (resourceId !== undefined || threadId !== undefined) {
+              const address = z
+                .object({ resourceId: z.string().trim().min(1), threadId: z.string().trim().min(1) })
+                .safeParse({ resourceId, threadId });
+              if (!address.success) return c.json({ error: 'invalid_session_context' }, 400);
+              if (!tenant && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
+              if (tenant) {
+                if (
+                  !options.factoryProjects ||
+                  !options.sourceControlSessions ||
+                  !options.workItems ||
+                  !options.modelCredentials
+                )
+                  return c.json({ error: 'session_model_policy_unavailable' }, 503);
+                const requestContext = new RequestContext();
+                requestContext.set('user', { id: tenant.userId, organizationId: tenantOrgId(tenant) });
+                requestContext.set('controller', address.data);
+                let policy;
+                try {
+                  policy = await resolveFactoryModelPolicy(requestContext, {
+                    projects: options.factoryProjects,
+                    sourceControl: options.sourceControlSessions,
+                    workItems: options.workItems,
+                  });
+                } catch {
+                  return c.json({ error: 'session_model_policy_unavailable' }, 403);
+                }
+                if (!policy) return c.json({ error: 'unauthorized' }, 401);
+                const orgId = policy.tenant.orgId ?? tenantOrgId(tenant);
+                const modelScope = policy.tenant.credentialScope ?? 'user';
+                const storageScope = modelScope === 'factory' ? 'org' : 'user';
+                tenantCredentials = (
+                  await options.modelCredentials.listCredentials(orgId, policy.tenant.userId)
+                ).filter(record => record.scope === storageScope);
+                let defaultModelId = policy.factoryDefaultModelId ?? null;
+                if (modelScope === 'user') {
+                  if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
+                  await options.modelDefaults.ensureReady();
+                  defaultModelId =
+                    (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
+                }
+                sessionPolicy = { modelScope, defaultModelId };
+              }
+            } else if (c.req.query('scope') !== undefined) {
+              // Explicit settings scopes never override a live thread's owner and policy above.
+              const scope = z.enum(['org', 'user']).safeParse(c.req.query('scope'));
+              if (!scope.success) return c.json({ error: 'invalid_model_scope' }, 400);
+              tenantCredentials = allTenantCredentials?.filter(record => record.scope === scope.data);
             } else if (allTenantCredentials && factoryProjectId && tenant) {
               if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
               await options.factoryProjects.ensureReady();
@@ -1017,6 +1002,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               }
             }
             return c.json({
+              ...sessionPolicy,
               models: catalog.sort((a, b) =>
                 a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
               ),
@@ -1087,60 +1073,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             await context.storage.clear({ orgId: context.orgId, userId: context.userId });
             return c.json({ ok: true, modelId: null });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      // One settings.json for the whole deployment: with auth on, only deployment-org admins may write it.
-      registerApiRoute('/web/config/thinking', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          try {
-            const settings = loadSettings(options.settingsPath);
-            return c.json({
-              levels: THINKING_LEVEL_VALUES,
-              globalDefault: settings.preferences.thinkingLevel,
-              editable: (await deploymentThinkingAccess(loose(c))).ok,
-            });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/thinking', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const access = await deploymentThinkingAccess(loose(c));
-          if (!access.ok) {
-            return c.json(
-              { error: access.error, ...(access.message ? { message: access.message } : {}) },
-              access.status,
-            );
-          }
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z
-            .object({ globalDefault: z.custom<ThinkingLevelSetting>(isThinkingLevelSetting) })
-            .strict()
-            .safeParse(body);
-          if (!parsed.success) {
-            return c.json({ error: `Expected only globalDefault, one of: ${THINKING_LEVEL_VALUES.join(', ')}` }, 400);
-          }
-          const { globalDefault } = parsed.data;
-          try {
-            const settings = loadSettings(options.settingsPath);
-            settings.preferences.thinkingLevel = globalDefault;
-            saveSettings(settings, options.settingsPath);
-            return c.json({ ok: true, globalDefault: settings.preferences.thinkingLevel });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

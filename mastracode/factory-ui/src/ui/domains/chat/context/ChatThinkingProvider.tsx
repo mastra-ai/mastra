@@ -1,7 +1,7 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useChatModelScope } from './useChatModelScope';
 
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
@@ -26,10 +26,10 @@ export function ChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 }
 
 function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { catalogTarget } = useChatModelScope();
   const { activeModelId } = useChatModels();
   const [override, setOverride] = useState<ThinkingLevelSetting>();
-  const { level, loadError } = useEffectiveThinkingLevel(activeModelId, override, factoryId);
+  const { level, loadError } = useEffectiveThinkingLevel(activeModelId, override, catalogTarget);
   const value: ChatThinkingApi = {
     level,
     loadError,
@@ -47,7 +47,7 @@ function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 
 function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { catalogTarget } = useChatModelScope();
   const { activeModelId } = useChatModels();
   const sessionArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -59,7 +59,7 @@ function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const settingsQuery = useAgentControllerSettings(sessionArgs);
   const { mutateAsync: updateSettings } = useUpdateAgentControllerSettingsMutation(sessionArgs);
   const override = settingsQuery.data?.thinkingLevel;
-  const effective = useEffectiveThinkingLevel(activeModelId, override, factoryId);
+  const effective = useEffectiveThinkingLevel(activeModelId, override, catalogTarget);
   const settingsLoaded = settingsQuery.data !== undefined;
   const settingsLoadError = settingsQuery.error ?? undefined;
   const value: ChatThinkingApi = {
