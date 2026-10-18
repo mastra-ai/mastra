@@ -51,6 +51,8 @@
     "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "devDependencies": {
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
