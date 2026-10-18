@@ -1,4 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
+import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -10,14 +12,25 @@ import type { MouseEvent, ReactNode, RefCallback } from 'react';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
-import { REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
+
+// Mouse: row click opens details, right-click opens the menu; these buttons serve keyboard and touch.
+const REVEAL_ON_KEYBOARD_FOCUS =
+  'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-has-[:focus-visible,[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[:focus-visible,[aria-expanded=true]]/row-end:opacity-100';
+
+// A list of hundreds of rows reads as a wall of buttons when each shows its action, so a mouse sees it on hover
+// in place of the labels; it stays in the tab order (visually hidden, not removed) and always shows on touch.
+const REVEAL_ACTION_ON_HOVER =
+  'pointer-fine:sr-only pointer-fine:group-hover/data-list-row:not-sr-only pointer-fine:focus-within:not-sr-only pointer-fine:has-[[aria-expanded=true]]:not-sr-only';
+const SWAP_FOR_ACTION_ON_HOVER =
+  'pointer-fine:group-has-[.row-action:not(:empty)]/data-list-row:group-hover/data-list-row:hidden';
 
 type BoardListRowCells = {
   icon?: ReactNode;
   key?: ReactNode;
   title?: ReactNode;
+  links?: ReactNode;
   labels?: ReactNode;
   status?: ReactNode;
   action?: ReactNode;
@@ -35,6 +48,7 @@ export function BoardListRow({
   busy = false,
   locked = false,
   highlighted = false,
+  activityStatus,
   menu,
   createdAt,
   cells,
@@ -49,6 +63,7 @@ export function BoardListRow({
   busy?: boolean;
   locked?: boolean;
   highlighted?: boolean;
+  activityStatus?: ActivityStatus;
   menu: ReactNode;
   createdAt?: string;
   cells: BoardListRowCells;
@@ -61,22 +76,38 @@ export function BoardListRow({
       <DataList.Cell className="text-placeholder tabular-nums empty:before:content-none max-sm:hidden">
         {cells.key}
       </DataList.Cell>
-      <DataList.Cell className="text-foreground empty:before:content-none max-sm:col-start-2 max-sm:row-start-1">
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="min-w-0 flex-1 truncate">{cells.title}</span>
-          <span className="max-w-[min(18rem,45%)] min-w-0 shrink-0 empty:hidden max-sm:hidden [&>*]:max-w-full">
-            {cells.labels}
+      <DataList.Cell className="text-foreground @container flex gap-3 overflow-visible empty:before:content-none max-sm:contents">
+        <span className="flex min-w-0 shrink items-center gap-3 max-sm:col-start-2 max-sm:row-start-1">
+          <span className="min-w-0 truncate">{cells.title}</span>
+          <span
+            onClick={stopRowClick}
+            className="flex max-w-[min(14rem,30%)] min-w-0 shrink-[100] items-center gap-2 empty:hidden max-sm:hidden @max-[28rem]:hidden [&>*]:min-w-0"
+          >
+            {cells.links}
           </span>
         </span>
-      </DataList.Cell>
-      <DataList.Cell className="justify-items-end empty:before:content-none max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 max-sm:justify-items-start max-sm:empty:hidden">
-        {cells.status}
-      </DataList.Cell>
-      <DataList.Cell
-        onClick={stopRowClick}
-        className="justify-items-end overflow-visible empty:before:content-none max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-2 max-sm:justify-items-start max-sm:empty:hidden"
-      >
-        {cells.action}
+        <span aria-hidden className="flex-1 max-sm:hidden" />
+        {/* Metadata sits flush right and gives way first, so the title keeps every pixel it can use. */}
+        <span className="flex min-w-0 shrink-[100] items-center justify-end gap-3 empty:hidden max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 max-sm:justify-start">
+          <span
+            className={cn(
+              'max-w-72 min-w-0 empty:hidden max-sm:hidden @max-[32rem]:hidden [&>*]:max-w-full',
+              SWAP_FOR_ACTION_ON_HOVER,
+            )}
+          >
+            {cells.labels}
+          </span>
+          <span className="flex shrink-0 items-center empty:hidden">{cells.status}</span>
+        </span>
+        <span
+          onClick={stopRowClick}
+          className={cn(
+            'row-action flex shrink-0 items-center empty:hidden max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-2',
+            REVEAL_ACTION_ON_HOVER,
+          )}
+        >
+          {cells.action}
+        </span>
       </DataList.Cell>
       <DataList.Cell
         onClick={stopRowClick}
@@ -84,21 +115,18 @@ export function BoardListRow({
       >
         {cells.activity}
       </DataList.Cell>
-      <DataList.Cell
-        onClick={stopRowClick}
-        className="justify-items-end overflow-visible empty:before:content-none max-sm:col-start-3 max-sm:row-start-1"
-      >
+      <DataList.Cell className="group/row-end justify-items-end overflow-visible empty:before:content-none max-sm:col-start-3 max-sm:row-start-1">
         {createdAt && (
           <Txt
             as="span"
             variant="meta"
             tone="muted"
-            className="pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none max-sm:hidden pointer-coarse:hidden pointer-fine:group-focus-within:opacity-0 pointer-fine:group-hover:opacity-0"
+            className="pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none max-sm:hidden pointer-coarse:hidden pointer-fine:group-has-[:focus-visible,[aria-expanded=true]]/row-end:opacity-0"
           >
             <time dateTime={createdAt}>{relativeTime(createdAt)}</time>
           </Txt>
         )}
-        <span className="col-start-1 row-start-1 flex items-center max-sm:[&_button]:opacity-100">
+        <span className="col-start-1 row-start-1 flex items-center max-sm:[&_button]:pointer-events-auto max-sm:[&_button]:opacity-100">
           <Button
             ref={detailsRef}
             type="button"
@@ -107,8 +135,11 @@ export function BoardListRow({
             draggable={false}
             aria-label={`Details for ${title}`}
             aria-expanded={expanded}
-            onClick={onOpen}
-            className={REVEAL_ON_CARD_HOVER}
+            onClick={event => {
+              stopRowClick(event);
+              onOpen();
+            }}
+            className={REVEAL_ON_KEYBOARD_FOCUS}
           >
             <Maximize2 size={13} aria-hidden />
           </Button>
@@ -122,13 +153,14 @@ export function BoardListRow({
                   draggable={false}
                   disabled={locked}
                   aria-label={`Actions for ${title}`}
-                  className={REVEAL_ON_CARD_HOVER}
+                  onClick={stopRowClick}
+                  className={REVEAL_ON_KEYBOARD_FOCUS}
                 >
                   <EllipsisVertical size={13} aria-hidden />
                 </Button>
               }
             />
-            <DropdownMenu.Content align="end" className="min-w-44">
+            <DropdownMenu.Content align="end" className="min-w-44" onClick={stopRowClick}>
               {menu}
             </DropdownMenu.Content>
           </DropdownMenu>
@@ -140,7 +172,10 @@ export function BoardListRow({
   const row = (
     <DataList.RowWrapper
       ref={cardRef}
+      role="article"
+      aria-label={title}
       data-testid={testId}
+      data-highlighted={highlighted || undefined}
       data-featured={expanded || undefined}
       aria-busy={busy || locked || undefined}
       tabIndex={-1}
@@ -150,11 +185,12 @@ export function BoardListRow({
       }}
       onSelectRow={onOpen}
       className={cn(
-        'group min-h-10 items-center gap-x-3 px-3 py-1 max-sm:gap-y-1 max-sm:py-2',
+        'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
         locked && 'cursor-wait opacity-70',
         highlighted && 'before:bg-warning-subtle',
       )}
     >
+      {activityStatus && <ActivityWick status={activityStatus} />}
       {rowCells}
     </DataList.RowWrapper>
   );

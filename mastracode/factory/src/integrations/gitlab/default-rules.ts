@@ -1,4 +1,5 @@
 import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import { factoryRuleStage, isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GitLabRuleOverrides = Partial<
@@ -58,6 +59,13 @@ function issueOpened(context: FactoryGitLabRuleContext) {
 function retriageIssue(context: FactoryGitLabRuleContext) {
   if (!context.item || context.item.source !== 'gitlab-issue' || !context.item.url) return;
   if (context.actor.type === 'gitlab' && context.actor.factoryAuthored) return;
+  // The stage checks below use Work lane names; other boards opt in with their own rules.
+  if (context.board !== 'work') return;
+  // Re-triage would take over a card that is being built or reviewed.
+  const stage = factoryRuleStage(context.item.stages);
+  if (stage === 'execute' || stage === 'review') return;
+  // A finished card has nothing left to triage.
+  if (isTerminalFactoryRuleStage(context.item.stages)) return;
   const reason = context.event === 'issueCommented' ? 'a comment was added' : 'the issue changed';
   return {
     type: 'invokeSkill',

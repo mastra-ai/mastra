@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stagehand",
-  "version": "0.3.5",
+  "version": "0.3.6-alpha.0",
   "description": "AI-powered browser automation for Mastra agents using Stagehand",
   "type": "module",
   "files": [
@@ -25,8 +25,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -40,7 +40,6 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",

@@ -622,6 +622,43 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: workflow-finish reports the failed status of a failed run (#27547)
+  {
+    const item = z.object({ n: z.number() });
+    const boom = createStep({
+      id: 'boom',
+      inputSchema: item,
+      outputSchema: item,
+      retries: 0,
+      execute: async ({ inputData }) => {
+        if (inputData.n === 2) throw new Error('boom failed');
+        return inputData;
+      },
+    });
+
+    const failedStepWorkflow = createWorkflow({
+      id: 'stream-finish-failed-step',
+      inputSchema: item,
+      outputSchema: item,
+    });
+    failedStepWorkflow.then(boom).commit();
+    workflows['stream-finish-failed-step'] = { workflow: failedStepWorkflow, mocks: {} };
+
+    const list = createStep({
+      id: 'list',
+      inputSchema: z.object({}),
+      outputSchema: z.array(item),
+      execute: async () => [{ n: 1 }, { n: 2 }],
+    });
+    const failedForeachWorkflow = createWorkflow({
+      id: 'stream-finish-failed-foreach',
+      inputSchema: z.object({}),
+      outputSchema: z.array(item),
+    });
+    failedForeachWorkflow.then(list).foreach(boom, { concurrency: 2 }).commit();
+    workflows['stream-finish-failed-foreach'] = { workflow: failedForeachWorkflow, mocks: {} };
+  }
+
   return workflows;
 }
 
@@ -1040,6 +1077,26 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           }
         },
       );
+
+      it.each([
+        { name: 'a failing step', id: 'stream-finish-failed-step', inputData: { n: 2 } },
+        { name: 'a failing foreach iteration', id: 'stream-finish-failed-foreach', inputData: {} },
+      ])('reports workflow-finish as failed when $name fails the run (#27547)', async ({ id, inputData }) => {
+        const { stream } = ctx;
+        if (!stream) {
+          return;
+        }
+
+        const { events, result } = await stream(registry![id]!.workflow, inputData, {}, 'stream');
+
+        expect(result.status).toBe('failed');
+        const finishStatuses = events
+          .filter(event => event.type === 'workflow-finish')
+          .map(event => event.payload?.workflowStatus);
+        expect(finishStatuses, 'workflow-finish reported a different status than the failed run').toEqual([
+          result.status,
+        ]);
+      });
 
       it('should be able to use an agent as a step with detailed events (streamLegacy)', async () => {
         const { createWorkflow, createStep, Agent } = ctx;

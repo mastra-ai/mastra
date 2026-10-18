@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { Field, FieldLabel } from '../Field';
+import { InputGroupAddon, InputGroupText } from '../InputGroup';
 import {
   InputNumber,
   InputNumberDecrement,
@@ -35,6 +36,41 @@ function input() {
 }
 
 describe('InputNumber', () => {
+  it('composes trailing flush steppers with a formatted value and enforces the minimum', () => {
+    render(
+      <InputNumber defaultValue={30000} min={30000} step={1000} format={{ maximumFractionDigits: 0 }}>
+        <InputNumberGroup size="sm">
+          <InputNumberInput aria-label="Observation threshold" />
+          <InputGroupAddon align="inline-end" variant="flush">
+            <InputGroupText className="mr-2">tokens</InputGroupText>
+            <InputNumberDecrement />
+            <InputNumberIncrement />
+          </InputGroupAddon>
+        </InputNumberGroup>
+      </InputNumber>,
+    );
+
+    const control = screen.getByRole('textbox', { name: 'Observation threshold' });
+    const increase = screen.getByRole('button', { name: 'Increase' });
+    const decrease = screen.getByRole('button', { name: 'Decrease' });
+    const addon = screen.getByText('tokens').closest('[data-slot="input-group-addon"]');
+    expect(addon?.getAttribute('data-variant')).toBe('flush');
+    expect(addon?.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(['gap-0', 'pr-0', 'has-[>button]:pr-0', '[&>button]:mx-0']),
+    );
+    expect(control).toHaveProperty('value', '30,000');
+    expect(decrease.getAttribute('aria-disabled')).toBe('true');
+
+    fireEvent.click(increase);
+    expect(control).toHaveProperty('value', '31,000');
+    expect(decrease.getAttribute('aria-disabled')).toBe('false');
+
+    fireEvent.click(decrease);
+    fireEvent.click(decrease);
+    expect(control).toHaveProperty('value', '30,000');
+    expect(decrease.getAttribute('aria-disabled')).toBe('true');
+  });
+
   it('steps the value with the increment and decrement buttons', () => {
     render(<Stepper defaultValue={5} step={2} />);
 

@@ -12,6 +12,7 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/boar
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
+import { queryKeys } from '../../../../../api/keys';
 import type { InstalledBoardInfo } from '../../../../../api/types';
 import type { GithubIssue } from '../../services/factory';
 import type { GitLabIssue } from '../../services/gitlab';
@@ -269,6 +270,35 @@ describe('useBoardIntake GitLab routing', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(githubIssueRequests).toBe(0);
     expect(githubLabelRouteRequests).toBe(0);
+  });
+
+  it('settles Review even when configured GitLab intake has a disabled status query', async () => {
+    stubIntake([]);
+    let gitlabStatusRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            gitlab: { enabled: true, sourceIds: ['gitlab-project:1'] },
+            linear: { enabled: false, sourceIds: null },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => {
+        gitlabStatusRequests++;
+        return HttpResponse.json({ enabled: true, configured: true, reauthRequired: false });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
+        HttpResponse.json({ pullRequests: [], nextPage: null }),
+      ),
+    );
+
+    const { result, client } = renderIntake('factory-1', reviewBoard);
+
+    await waitFor(() => expect(client.getQueryState(queryKeys.intakeConfig())?.status).toBe('success'));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(gitlabStatusRequests).toBe(0);
   });
 
   it('uses the GitLab MR feed for a GitLab-linked Review board and never requests GitHub PRs', async () => {
@@ -649,7 +679,7 @@ describe('useBoardIntake Jira gating', () => {
     expect(result.current.candidates).toEqual([]);
   });
 
-  it('given another feed is active, when the board loads, then Jira issues still feed participant candidates', async () => {
+  it('given GitHub and Jira are available, when the board loads, then both feed intake candidates', async () => {
     stubJiraIntake([workBinding], {
       githubEnabled: true,
     });
@@ -657,38 +687,37 @@ describe('useBoardIntake Jira gating', () => {
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.available).toEqual(['github', 'jira']));
-    expect(result.current.active).toBe('github');
-
-    // The Jira feed is not displayed, but its issues are fetched for teammate filtering.
     await waitFor(() =>
-      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain(
-        'jira-issue-acme-eng-42',
-      ),
+      expect(result.current.candidates.map(candidate => candidate.sourceKey)).toContain('jira-issue-acme-eng-42'),
     );
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira-issue-acme-eng-42');
+    expect(result.current.candidates.find(candidate => candidate.source === 'jira-issue')?.column).toBe('intake');
   });
 });
 
 describe('useBoardIntake query loading', () => {
   describe('when GitHub intake is ready and Linear status is still loading', () => {
-    it('keeps the active intake feed ready', async () => {
+    it('keeps intake pending until all configured sources are discovered', async () => {
       stubIntake([]);
       let release = () => {};
       const held = new Promise<void>(resolve => {
         release = resolve;
       });
+      let statusRequested = false;
       server.use(
         http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: githubWithLinearConfig })),
         http.get(`${TEST_BASE_URL}/web/linear/status`, async () => {
+          statusRequested = true;
           await held;
           return HttpResponse.json(connectedLinear);
         }),
       );
       const { result, unmount } = renderIntake('factory-1');
       try {
+        await waitFor(() => expect(statusRequested).toBe(true));
+        expect(result.current.isPending).toBe(true);
+        release();
         await waitFor(() => expect(result.current.isPending).toBe(false));
         expect(result.current.active).toBe('github');
-        expect(result.current.isPending).toBe(false);
       } finally {
         release();
         unmount();

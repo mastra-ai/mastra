@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-elevenlabs",
-  "version": "0.13.1",
+  "version": "0.13.2-alpha.0",
   "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "files": [
@@ -26,8 +26,8 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown build --watch && tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -40,7 +40,6 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

@@ -67,6 +67,31 @@ describe('Settings', () => {
     });
   });
 
+  describe('SettingsContainer variants', () => {
+    it('defaults to the divided variant', () => {
+      render(
+        <SettingsContainer>
+          <SettingsRow label="Theme" />
+        </SettingsContainer>,
+      );
+
+      expect(document.querySelector('[data-slot="settings-container"]')?.getAttribute('data-variant')).toBe('default');
+    });
+
+    it('renders every row inside the inset variant', () => {
+      render(
+        <SettingsContainer variant="inset">
+          <SettingsRow label="Theme" />
+          <SettingsRow label="Notifications" />
+        </SettingsContainer>,
+      );
+
+      const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.getAttribute('data-variant')).toBe('inset');
+      expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
+    });
+  });
+
   describe('when a row labels an editable setting', () => {
     it('keeps the control accessible and includes its edited value in form data', () => {
       render(

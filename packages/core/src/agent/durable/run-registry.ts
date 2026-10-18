@@ -1,6 +1,7 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
+import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
@@ -42,6 +43,44 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   noDisposeOnSet: true,
 });
 
+/**
+ * Read a run's registry entry as seen from a workflow step running under `mastra`.
+ *
+ * Entries are keyed only by runId, so when another Mastra instance in this
+ * process reuses the runId, a still-running workflow from the earlier run
+ * would otherwise read (and write its transcript into) the new run's entry.
+ * An entry owned by a different Mastra instance is treated as absent. An
+ * ownerless entry (a placeholder or rehydrated entry) is claimed by the first
+ * scoped reader, so a later instance reusing the runId cannot adopt it.
+ */
+export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): RunRegistryEntry | undefined {
+  const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+  if (!entry || !mastra) return entry;
+  if (!entry.mastra) {
+    entry.mastra = mastra;
+    return entry;
+  }
+  return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
+}
+
+/**
+ * Publish an entry for `runId`, owned by `mastra`, unless the slot holds
+ * another Mastra instance's live run. Returns whether the entry was stored.
+ */
+export function setRunRegistryEntry(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined): boolean {
+  const current = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+  if (current?.mastra && mastra && unwrapMastraTracingProxy(current.mastra) !== unwrapMastraTracingProxy(mastra))
+    return false;
+  if (mastra) entry.mastra ??= mastra;
+  globalRunRegistry.set(runId, entry);
+  return true;
+}
+
+/** Remove `runId`'s entry only if it belongs to `mastra` (or has no owner). */
+export function deleteRunRegistryEntry(runId: string, mastra: Mastra | undefined): void {
+  if (getRunRegistryEntry(runId, mastra)) globalRunRegistry.delete(runId);
+}
+
 /** runId -> number of in-flight operations holding the entry alive. */
 const activeRuns = new Map<string, number>();
 let activityHeartbeat: ReturnType<typeof setInterval> | undefined;
@@ -51,6 +90,41 @@ function runActivityHeartbeat(): void {
   for (const runId of activeRuns.keys()) {
     globalRunRegistry.get(runId);
   }
+}
+
+const inFlightResumes = new Map<string, Map<string, symbol>>();
+
+/**
+ * Marks a resume of `toolCallId` on `runId` as in flight in this process,
+ * synchronously, so a concurrent resume of the same tool call can fail fast
+ * instead of queueing on the execution claim (#27365).
+ *
+ * @returns A release function, or `undefined` when that tool call already has
+ * a resume in flight. Release is idempotent and only clears its own marker.
+ */
+export function markResumeInFlight(runId: string, toolCallId: string): (() => void) | undefined {
+  let byToolCall = inFlightResumes.get(runId);
+  if (byToolCall?.has(toolCallId)) return undefined;
+  if (!byToolCall) inFlightResumes.set(runId, (byToolCall = new Map()));
+  const token = Symbol(toolCallId);
+  byToolCall.set(toolCallId, token);
+  return () => {
+    const current = inFlightResumes.get(runId);
+    if (current?.get(toolCallId) !== token) return;
+    current.delete(toolCallId);
+    if (current.size === 0) inFlightResumes.delete(runId);
+  };
+}
+
+/**
+ * Clears the in-flight marker for a tool call whose resumed segment is
+ * suspending again, so a later resume of it is not treated as a duplicate.
+ */
+export function clearResumeInFlight(runId: string, toolCallId: string): void {
+  const current = inFlightResumes.get(runId);
+  if (!current) return;
+  current.delete(toolCallId);
+  if (current.size === 0) inFlightResumes.delete(runId);
 }
 
 /**

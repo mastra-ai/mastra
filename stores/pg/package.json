@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.31.0-alpha.3",
+  "version": "1.32.0-alpha.2",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -38,8 +38,8 @@
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -58,14 +58,13 @@
     "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.68.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "files": [
     "dist"
