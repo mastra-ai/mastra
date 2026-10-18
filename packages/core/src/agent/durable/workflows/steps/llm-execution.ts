@@ -50,7 +50,7 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../../tools
 import type { ToolToConvert } from '../../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../../tools/toolchecks';
 import type { CoreTool } from '../../../../tools/types';
-import { createMastraProxy, makeCoreTool } from '../../../../utils';
+import { createMastraProxy, makeProcessorCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { isDownloadAssetsError } from '../../../message-list/prompt/download-assets';
@@ -871,7 +871,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   const convertedTools: Record<string, CoreTool> = {};
                   for (const [name, tool] of Object.entries(currentTools as Record<string, unknown>)) {
                     if (isMastraTool(tool)) {
-                      convertedTools[name] = makeCoreTool(
+                      convertedTools[name] = makeProcessorCoreTool(
                         tool as unknown as ToolToConvert,
                         {
                           name,
