@@ -74,8 +74,7 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
     execute: async () => ({ ok: true, secret: 'still-secret' }),
   });
 
-  // Streamed tool-call chunks are re-emitted synthetically without transform metadata (#27494).
-  it.fails('stamps display and transcript transforms on tool-call and tool-result chunks', async () => {
+  it('stamps display and transcript transforms on tool-call and tool-result chunks', async () => {
     const { chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
