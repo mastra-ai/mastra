@@ -47,7 +47,7 @@ import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
 import { assertExecutionNotSuperseded, assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -661,9 +661,18 @@ export function createDurableToolCallStep() {
       // Hold suspension chunks/events until the engine has saved the suspended
       // snapshot, when the running engine supports that (#26435).
       const publishAfterPersist = async (publish: () => Promise<void>) => {
-        const pending = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.pendingSuspensionEvents;
-        if (pending) pending.push(publish);
-        else await publish();
+        const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+        // Once the new suspension is saved, a later resume of the tool call is a decision on
+        // that suspension, not a duplicate. Clearing earlier would let a duplicate approval
+        // of the previous gate approve the new one (#27365).
+        const resumedToolCallId = entry?.resumeToolCallId;
+        const clearAndPublish = async () => {
+          if (resumedToolCallId !== undefined) clearResumeInFlight(runId, resumedToolCallId);
+          await publish();
+        };
+        const pending = entry?.pendingSuspensionEvents;
+        if (pending) pending.push(clearAndPublish);
+        else await clearAndPublish();
       };
       let resumeMessageList = messageList;
       // A durable engine can replay the completed LLM step on a cold resume,

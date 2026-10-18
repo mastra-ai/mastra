@@ -979,6 +979,12 @@ export interface RunRegistryEntry {
    */
   executionFence?: ExecutionFence;
   /**
+   * Tool call resumed by the `resume()` currently driving this run in this
+   * process. Its in-flight marker is cleared when the segment suspends again.
+   * @internal
+   */
+  resumeToolCallId?: string;
+  /**
    * Set while an engine that persists the suspended snapshot before returning
    * is executing. The tool-call step queues suspension chunks/events here so
    * they are published only after the snapshot is saved; otherwise a crash in
