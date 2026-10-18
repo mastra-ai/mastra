@@ -38,7 +38,9 @@ const MODEL_PORT = Number(process.env.PARITY_MODEL_PORT ?? 4555);
 /** Matches the harness: observe after 50 unobserved tokens, never reflect, no async buffering. */
 const THRESHOLDS = { messageTokens: 50, observationTokens: 100_000 } as const;
 // Set PARITY_BUFFER_TOKENS (and start the harness with the same value) to run with async buffering on.
-const BUFFER_TOKENS: number | false = process.env.PARITY_BUFFER_TOKENS ? Number(process.env.PARITY_BUFFER_TOKENS) : false;
+const BUFFER_TOKENS: number | false = process.env.PARITY_BUFFER_TOKENS
+  ? Number(process.env.PARITY_BUFFER_TOKENS)
+  : false;
 
 const BODY = `Date: Jan 1, 2026
 * 🔴 User's name is Ada and she lives in Kyoto.`;
@@ -53,7 +55,10 @@ function scriptedObserver(port: number): Promise<Server> {
   const server = createServer((req, res) => {
     let raw = '';
     req.on('data', c => (raw += c));
-    req.on('end', () => {
+    req.on('end', async () => {
+      // Slow observer: background buffering outlives the request, so the next step can reach
+      // another replica while it is still running.
+      await new Promise(r => setTimeout(r, Number(process.env.PARITY_OBSERVER_DELAY_MS ?? 0)));
       observerSeen.push(raw);
       const text = observerOutput();
       const base = { id: 'x', created: 0, model: 'scripted' };
@@ -220,16 +225,22 @@ function settling<M extends Memory>(memory: M): M {
 
 function localBackend(): Backend {
   const store = new InMemoryStore();
-  const memory = settling(new Memory({
-    storage: store,
-    options: {
-      observationalMemory: {
-        enabled: true,
-        observation: { model: localObserver() as never, messageTokens: THRESHOLDS.messageTokens, bufferTokens: BUFFER_TOKENS },
-        reflection: { model: localObserver() as never, observationTokens: THRESHOLDS.observationTokens },
+  const memory = settling(
+    new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: {
+            model: localObserver() as never,
+            messageTokens: THRESHOLDS.messageTokens,
+            bufferTokens: BUFFER_TOKENS,
+          },
+          reflection: { model: localObserver() as never, observationTokens: THRESHOLDS.observationTokens },
+        },
       },
-    },
-  }));
+    }),
+  );
   return {
     memory,
     observations: async (threadId, resourceId) =>
@@ -270,7 +281,9 @@ class StatelessStepMemory extends Memory {
         name: p.name,
         processInputStep: async (stepArgs: any) => {
           const list = new MessageList().deserialize(structuredClone(stepArgs.messageList.serialize()));
-          await (await this.freshOM(stepArgs.requestContext)).processInputStep({
+          await (
+            await this.freshOM(stepArgs.requestContext)
+          ).processInputStep({
             ...stepArgs,
             messageList: list,
             state: {},
@@ -288,14 +301,13 @@ class StatelessStepMemory extends Memory {
       return {
         id: p.id,
         name: p.name,
-        processOutputResult: async ({ messageList }: { messageList: MessageList }) => {
-          const { threadId, resourceId } = messageList.serialize().memoryInfo ?? {};
-          const om = (await this.omEngine)!;
-          const list = new MessageList().deserialize(structuredClone(messageList.serialize()));
-          const turn = om.beginTurn({ threadId: threadId!, resourceId, messageList: list });
-          await turn.start();
-          await turn.end(list);
-          return messageList;
+        processOutputResult: async (outArgs: any) => {
+          const list = new MessageList().deserialize(structuredClone(outArgs.messageList.serialize()));
+          const fresh = (await super.getOutputProcessors([], outArgs.requestContext)).find(
+            q => q.id === 'observational-memory',
+          ) as any;
+          await fresh.processOutputResult({ ...outArgs, messageList: list, state: {} });
+          return outArgs.messageList.deserialize(structuredClone(list.serialize()));
         },
       } as unknown as typeof p;
     });
@@ -304,16 +316,22 @@ class StatelessStepMemory extends Memory {
 
 function statelessBackend(): Backend {
   const store = new InMemoryStore();
-  const memory = settling(new StatelessStepMemory({
-    storage: store,
-    options: {
-      observationalMemory: {
-        enabled: true,
-        observation: { model: localObserver() as never, messageTokens: THRESHOLDS.messageTokens, bufferTokens: BUFFER_TOKENS },
-        reflection: { model: localObserver() as never, observationTokens: THRESHOLDS.observationTokens },
+  const memory = settling(
+    new StatelessStepMemory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: {
+            model: localObserver() as never,
+            messageTokens: THRESHOLDS.messageTokens,
+            bufferTokens: BUFFER_TOKENS,
+          },
+          reflection: { model: localObserver() as never, observationTokens: THRESHOLDS.observationTokens },
+        },
       },
-    },
-  }));
+    }),
+  );
   return {
     memory,
     observations: async (threadId, resourceId) =>
@@ -377,15 +395,17 @@ function stripTokenCache(value: unknown): unknown {
 }
 
 function normalize(prompt: string, run: string): string {
-  return JSON.stringify(stripTokenCache(JSON.parse(prompt)))
-    .replaceAll(run, 'RUN')
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID')
-    .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, 'ISO')
-    // Epoch-ms stamps Mastra puts in providerOptions; they differ between any two runs.
-    .replace(/"createdAt":\d{13}/g, '"createdAt":"EPOCH"')
-    .replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,? [A-Z][a-z]+ \d{1,2},? \d{4}\b/g, 'DATE')
-    .replace(/\b[A-Z][a-z]{2} \d{1,2}, \d{4}\b/g, 'DATE')
-    .replace(/\b\d{1,2}:\d{2}( ?[AP]M)?\b/g, 'TIME');
+  return (
+    JSON.stringify(stripTokenCache(JSON.parse(prompt)))
+      .replaceAll(run, 'RUN')
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID')
+      .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, 'ISO')
+      // Epoch-ms stamps Mastra puts in providerOptions; they differ between any two runs.
+      .replace(/"createdAt":\d{13}/g, '"createdAt":"EPOCH"')
+      .replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,? [A-Z][a-z]+ \d{1,2},? \d{4}\b/g, 'DATE')
+      .replace(/\b[A-Z][a-z]{2} \d{1,2}, \d{4}\b/g, 'DATE')
+      .replace(/\b\d{1,2}:\d{2}( ?[AP]M)?\b/g, 'TIME')
+  );
 }
 
 let observer: Server;
