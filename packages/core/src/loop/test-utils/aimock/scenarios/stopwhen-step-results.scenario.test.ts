@@ -83,11 +83,12 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
 
   it('is called once per tool step with the accumulated steps, never on the final text step', async () => {
     const seenStepCounts: number[] = [];
-    const { output, requests } = await runLoopScenario({
+    const { output, requests, chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'What should I be doing in Toronto today?',
       tools,
+      collectChunks: true,
       stopWhen: (({ steps }: StopWhenArgs) => {
         seenStepCounts.push(steps.length);
         return false;
@@ -99,35 +100,42 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
 
     expect(requests).toHaveLength(3);
     expect((await output.steps).length).toBe(3);
+    expect(chunks!.filter(chunk => chunk.type === 'step-start')).toHaveLength(3);
+    expect(chunks!.filter(chunk => chunk.type === 'step-finish')).toHaveLength(3);
     expect(seenStepCounts).toEqual([1, 2]);
   });
 
   for (const withText of [false, true]) {
-    itFailsOnDurable(
-      `passes the same last-step content stream.steps reports${withText ? ' (text and tool call in one step)' : ''}`,
-      async () => {
-        const seenLastContent: Array<Array<{ type: string }>> = [];
-        const { output } = await runLoopScenario({
-          engine,
-          llm: getMock(),
-          prompt: 'What should I be doing in Toronto today?',
-          tools,
-          stopWhen: (({ steps }: StopWhenArgs) => {
-            seenLastContent.push(JSON.parse(JSON.stringify(steps.at(-1)?.content)));
-            return false;
-          }) as any,
-          fixtures: llm => scriptThreeTurns(llm, withText ? 'It is sunny, so let me plan. ' : undefined),
-        });
+    const variant = withText ? ' (text and tool call in one step)' : '';
+    const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
+    const types = (content: Array<{ type: string }>) => content.map(part => part.type);
 
-        await output.consumeStream();
-        const steps = await output.steps;
-        const types = (content: Array<{ type: string }>) => content.map(part => part.type);
+    const runRecordingLastContent = async () => {
+      const seenLastContent: Array<Array<{ type: string }>> = [];
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'What should I be doing in Toronto today?',
+        tools,
+        stopWhen: (({ steps }: StopWhenArgs) => {
+          seenLastContent.push(structuredClone(steps.at(-1)?.content ?? []));
+          return false;
+        }) as any,
+        fixtures: llm => scriptThreeTurns(llm, withText ? 'It is sunny, so let me plan. ' : undefined),
+      });
+      await output.consumeStream();
+      return { seenLastContent, steps: await output.steps };
+    };
 
-        const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
-        expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
-        expect(steps.map(step => types(step.content))).toEqual([['tool-call', 'tool-result'], step2Types, ['text']]);
-        expect(seenLastContent[1]).not.toEqual(seenLastContent[0]);
-      },
-    );
+    it(`reports every step's content on stream.steps${variant}`, async () => {
+      const { steps } = await runRecordingLastContent();
+      expect(steps.map(step => types(step.content))).toEqual([['tool-call', 'tool-result'], step2Types, ['text']]);
+    });
+
+    // #27496: durable engines hand stopWhen step records without `content`.
+    itFailsOnDurable(`passes stopWhen the same last-step content stream.steps reports${variant}`, async () => {
+      const { seenLastContent } = await runRecordingLastContent();
+      expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
+    });
   }
 });
