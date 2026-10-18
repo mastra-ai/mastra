@@ -19,6 +19,7 @@ import {
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_TOOLS_KEY,
+  STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
@@ -381,6 +382,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           });
           emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           return toolCalls;
         },
         { id: 'map-tool-calls' },
