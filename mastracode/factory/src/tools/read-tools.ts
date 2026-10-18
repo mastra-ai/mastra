@@ -177,8 +177,28 @@ const listInputSchema = z
         '"changes-requested": Work items whose latest Factory review asked for changes. "awaiting-response": only those with no push since that review.',
       ),
     limit: z.number().int().min(1).max(MAX_LIST).optional().describe(`Default ${DEFAULT_LIST}, max ${MAX_LIST}.`),
+    cursor: z
+      .string()
+      .optional()
+      .describe('The nextCursor of a truncated result, with the same filters, to list the items after it.'),
   })
   .strict();
+
+/** Results are ordered newest activity first, ties broken by id, so a cursor is the last row's (updatedAt, id). */
+function encodeListCursor(item: WorkItemRow): string {
+  return `${item.updatedAt.getTime()}:${item.id}`;
+}
+
+function decodeListCursor(cursor: string): { updatedAt: number; id: string } {
+  const match = /^(\d+):(.+)$/.exec(cursor);
+  if (!match)
+    throw new Error(`Invalid cursor "${cursor}". Pass the nextCursor of a previous factory_list_work_items result.`);
+  return { updatedAt: Number(match[1]), id: match[2]! };
+}
+
+function compareListOrder(left: { updatedAt: number; id: string }, right: { updatedAt: number; id: string }): number {
+  return right.updatedAt - left.updatedAt || (left.id < right.id ? 1 : left.id > right.id ? -1 : 0);
+}
 
 export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryReadToolDependencies): IntegrationTools {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
@@ -189,6 +209,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
       description: `List this Factory's work items, newest activity first, with counts per stage for the whole Factory. Filter by text or #number, stage, board, role, whether an agent is working on it, items you filed, items this session follows, or review state. Check here for an existing item before filing a new one. To get changes-requested reviews answered, list with review: "awaiting-response" and message each item's review.workSessionId with factory_signal_session.`,
       inputSchema: listInputSchema,
       execute: async input => {
+        const after = input.cursor === undefined ? undefined : decodeListCursor(input.cursor);
         const [items, bindings, followed] = await Promise.all([
           deps.workItems.list(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
@@ -222,12 +243,18 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             }
             return true;
           })
-          .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+          .map(item => ({ item, key: { updatedAt: item.updatedAt.getTime(), id: item.id } }))
+          .filter(({ key }) => after === undefined || compareListOrder(after, key) < 0)
+          .sort((left, right) => compareListOrder(left.key, right.key))
+          .map(({ item }) => item);
         const limit = input.limit ?? DEFAULT_LIST;
+        const page = matches.slice(0, limit);
+        const truncated = matches.length > limit;
         return {
           counts: { total: items.length, byStage },
-          items: matches.slice(0, limit).map(item => summarizeItem(item, bindings)),
-          truncated: matches.length > limit,
+          items: page.map(item => summarizeItem(item, bindings)),
+          truncated,
+          ...(truncated ? { nextCursor: encodeListCursor(page[page.length - 1]!) } : {}),
         };
       },
     }),

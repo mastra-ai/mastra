@@ -158,6 +158,7 @@ type ListResult = {
   counts: { total: number; byStage: Record<string, number> };
   items: Array<{ id: string; number: number | null; activeWorker: { role: string; sessionId: string } | null }>;
   truncated: boolean;
+  nextCursor?: string;
 };
 
 function follow(workItemId: string, sessionId: string, reason: WorkItemSubscription['reason']): WorkItemSubscription {
@@ -290,6 +291,41 @@ it('finds Work items whose Factory review asked for changes, and which have no p
     awaitingResponse: true,
     workSessionId: 's-work',
   });
+});
+
+it('reaches awaiting-response reviews past the first page through the cursor', async () => {
+  const work = { work: { sessionId: 's-work', branch: 'b', threadId: 't', startedBy: 'x' } };
+  const rows = Array.from({ length: 53 }, (_, index) =>
+    item({
+      id: `r${String(index).padStart(2, '0')}`,
+      stages: ['review'],
+      sessions: work,
+      metadata: { reviewVerdict: 'request changes', reviewedHeadSha: 'aaa', pullRequestHeadSha: 'AAA' },
+    }),
+  );
+  // The reviews either side of the page boundary share a timestamp, so the cursor has to break ties by id.
+  for (const index of [1, 3]) rows[index]!.updatedAt = rows[2]!.updatedAt;
+  const { run } = setup({ items: rows });
+  const first = await run<ListResult>('factory_list_work_items', { review: 'awaiting-response', limit: 50 });
+  expect(first.items).toHaveLength(50);
+  expect(first.truncated).toBe(true);
+  expect(first.nextCursor).toEqual(expect.any(String));
+
+  const second = await run<ListResult>('factory_list_work_items', {
+    review: 'awaiting-response',
+    limit: 50,
+    cursor: first.nextCursor,
+  });
+  expect(second.truncated).toBe(false);
+  expect(second.nextCursor).toBeUndefined();
+  const seen = [...first.items, ...second.items].map(row => row.id);
+  expect(seen).toHaveLength(53);
+  expect(new Set(seen)).toEqual(new Set(rows.map(row => row.id)));
+});
+
+it('rejects a cursor it did not issue', async () => {
+  const { run } = setup({ items: [item({ id: 'one' })] });
+  await expect(run('factory_list_work_items', { cursor: 'not-a-cursor' })).rejects.toThrow(/cursor/i);
 });
 
 describe('factory_inspect_work_item', () => {
