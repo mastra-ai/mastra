@@ -77,10 +77,8 @@ const settled = <T>(value: Promise<T> | T) =>
 
 describeForAllEngines('AIMock loop scenario: token usage when a tool call suspends', engine => {
   const getMock = useLoopScenarioAimock();
-  // The #27425 fix only reached the plain loop's output. On durable and evented
-  // engines a suspended run reports no usage for the step that suspended (not on
-  // the stream result, the generate() result, or the tool-call-suspended chunk).
-  // Resumed totals are still correct there. See #27440.
+  // Durable and evented streams stay open while a tool call is suspended, so their
+  // stream() usage promises do not settle until the run resumes. See #27440.
   const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
 
   async function setup(kind: Kind, { withPriorStep = false } = {}) {
@@ -126,7 +124,7 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
       expect(await output.finishReason).toBe('suspended');
     });
 
-    itFailsOnDurable(`[${kind}] generate() reports the suspended step usage`, async () => {
+    it(`[${kind}] generate() reports the suspended step usage`, async () => {
       const { agent } = await setup(kind);
       const result = await agent.generate('go');
 
@@ -157,7 +155,7 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
     });
   }
 
-  itFailsOnDurable('keeps the suspended step usage when a resumed tool suspends again', async () => {
+  it('keeps the suspended step usage when a resumed tool suspends again', async () => {
     const { agent, toolCallId } = await setup('suspend');
     const first: RunHandle = await agent.stream('go');
     await drain(first);

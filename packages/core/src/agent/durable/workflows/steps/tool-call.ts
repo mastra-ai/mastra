@@ -88,6 +88,8 @@ const durableToolCallInputSchema = z.object({
   stepSpanData: z.any().optional(),
   // First-chunk clock of the step that produced this call, for ending spans on suspend
   completionStartTime: z.coerce.date().optional(),
+  // Model usage of the step that produced this call, reported on its suspension chunk
+  stepUsage: z.any().optional(),
 });
 
 /**
@@ -1024,7 +1026,14 @@ export function createDurableToolCallStep() {
               type: 'tool-call-approval' as const,
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema, updatedAt: Date.now() },
+              payload: {
+                toolCallId,
+                toolName,
+                args,
+                resumeSchema: approvalResumeSchema,
+                updatedAt: Date.now(),
+                usage: typedInput.stepUsage,
+              },
             },
             {
               policy: toolPayloadTransform,
@@ -1355,6 +1364,7 @@ export function createDurableToolCallStep() {
                     args: approvalArgs,
                     resumeSchema: approvalResumeSchema,
                     updatedAt: Date.now(),
+                    usage: typedInput.stepUsage,
                   },
                 },
                 {
@@ -1424,6 +1434,7 @@ export function createDurableToolCallStep() {
                     suspendPayload,
                     args,
                     resumeSchema: suspendOptions?.resumeSchema,
+                    usage: typedInput.stepUsage,
                   },
                 },
                 {
@@ -1607,7 +1618,11 @@ export function createDurableToolCallStep() {
                     toolCallId: chunk.payload.toolCallId,
                     toolName: chunk.payload.toolName,
                     args: cleanedArgs,
-                    result: chunk.payload.result,
+                    // Match the awaited step result below: a void result is reported as null.
+                    result:
+                      info.disposition === 'awaited' && chunk.payload.result === undefined
+                        ? null
+                        : chunk.payload.result,
                     providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
                     providerExecuted,
                   },
@@ -1786,7 +1801,8 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             args: cleanedArgs,
-            result: completedTask.result,
+            // Normalize a void result to null like executeToolCall does, so the loop continues.
+            result: completedTask.result === undefined ? null : completedTask.result,
             providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
             ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
             ...(processorDataParts.length ? { processorDataParts } : {}),

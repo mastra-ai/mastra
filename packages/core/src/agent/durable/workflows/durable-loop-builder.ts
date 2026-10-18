@@ -570,6 +570,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
               completionStartTime: llmOutput.completionStartTime,
+              // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
+              stepUsage: llmOutput.stepResult?.totalUsage,
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },

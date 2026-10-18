@@ -302,10 +302,45 @@ export async function dispatchDueNotifications({
   limit = 100,
   resourceId,
 }: DispatchDueNotificationsInput): Promise<DispatchDueNotificationsResult> {
-  const due = await storage.listDueNotifications({ now, limit, ...(resourceId ? { resourceId } : {}) });
-  const delivered: NotificationRecord[] = [];
-  const failed: Array<{ record: NotificationRecord; error: string }> = [];
-  const signals: CreatedAgentSignal[] = [];
+  const result: DispatchDueNotificationsResult = { delivered: [], failed: [], signals: [] };
+  // A record this pass leaves pending (held for another process's dispatcher,
+  // or waiting on its thread's active run) keeps its place at the head of the
+  // due list. Read past those, so they never crowd out records this pass can
+  // deliver: `limit` bounds the records a pass delivers or fails, not the ones
+  // it leaves.
+  const seen = new Set<string>();
+  // Notification ids are unique per thread, not across threads.
+  const key = (record: NotificationRecord) => `${record.threadId}\0${record.id}`;
+  const acted = () => result.delivered.length + result.failed.length;
+  let left = 0;
+  while (acted() < limit) {
+    const actedBefore = acted();
+    const pageSize = left + limit - actedBefore;
+    const page = await storage.listDueNotifications({ now, limit: pageSize, ...(resourceId ? { resourceId } : {}) });
+    const due = page.filter(record => !seen.has(key(record)));
+    for (const record of due) seen.add(key(record));
+    await dispatchRecords({ mastra, storage, now, due, result });
+    const leftThisPage = due.length - (acted() - actedBefore);
+    left += leftThisPage;
+    // The due list ran out, or nothing was left ahead of the records still unread.
+    if (page.length < pageSize || leftThisPage === 0) break;
+  }
+  return result;
+}
+
+async function dispatchRecords({
+  mastra,
+  storage,
+  now,
+  due,
+  result: { delivered, failed, signals },
+}: {
+  mastra: Mastra;
+  storage: NotificationsStorage;
+  now: Date;
+  due: NotificationRecord[];
+  result: DispatchDueNotificationsResult;
+}): Promise<void> {
   const groups = new Map<string, DueDispatchGroup>();
   const ungroupedIndividual: NotificationRecord[] = [];
 
@@ -414,6 +449,4 @@ export async function dispatchDueNotifications({
       failed.push({ record, error: errorMessage(error) });
     }
   }
-
-  return { delivered, failed, signals };
 }

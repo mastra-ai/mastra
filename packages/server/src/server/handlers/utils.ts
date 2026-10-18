@@ -179,6 +179,24 @@ export function getEffectiveThreadId(
 }
 
 /**
+ * Applies the effective threadId to a client memory thread option. Object
+ * threads keep their other fields (metadata, title, ...) so they reach thread
+ * creation; a client-supplied resourceId is dropped because the server decides
+ * the resource.
+ */
+export function applyEffectiveThreadId<T extends string | { id: string } | undefined>(
+  thread: T,
+  effectiveThreadId: string | undefined,
+): T | string {
+  if (!effectiveThreadId) return thread;
+  if (thread && typeof thread === 'object') {
+    const { resourceId: _resourceId, ...fields } = thread as { id: string; resourceId?: unknown };
+    return { ...fields, id: effectiveThreadId } as T;
+  }
+  return effectiveThreadId;
+}
+
+/**
  * Validates that a thread belongs to the specified resourceId.
  * Throws 403 if the thread exists but belongs to a different resource.
  * Threads with no resourceId are accessible to all (shared threads).
