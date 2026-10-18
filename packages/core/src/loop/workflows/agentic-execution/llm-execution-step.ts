@@ -157,6 +157,11 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   /** Reasoning blocks the client has seen open; maintained when interruption is possible. */
   openReasoningIds?: Set<string>;
+  /**
+   * Caller-owned buffer for the collected chunks. Lets the caller rebuild an
+   * attempt's partial output when the stream throws before returning.
+   */
+  collectedChunks?: CollectedChunk[];
   runId: string;
   messageId: string;
   includeRawChunks?: boolean;
@@ -550,9 +555,9 @@ async function processOutputStream<OUTPUT = undefined>({
   onCompleteToolCall,
   onModelFinished,
   openReasoningIds,
+  collectedChunks = [],
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
-  const collectedChunks: CollectedChunk[] = [];
   let hasStepContent = false;
   let toolResultTripwire: TripWire | null = null;
   let toolResultProcessorRunner: ProcessorRunner | null = null;
@@ -1533,6 +1538,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
+      // Set when the last attempt's stream threw after producing output. Run only
+      // once the failure is known to be terminal (no retry), so the partial reply
+      // is kept next to the error instead of being dropped.
+      let materializeFailedAttempt: (() => void) | undefined;
+      // A failure that escaped every model before a stream could defer it (e.g. a
+      // throwing input processor). It ends the turn like a deferred stream error.
+      let preStreamError: unknown;
       const maxErrorProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries,
         hasErrorProcessors: Boolean(errorProcessors?.length),
@@ -1556,6 +1568,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         throwIfInterrupted,
       )(async (modelConfig, isLastModel) => {
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
+        materializeFailedAttempt = undefined;
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -2188,8 +2201,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
 
         let toolResultTripwireFromStream: TripWire | null = null;
+        const attemptChunks: CollectedChunk[] = [];
+        let attemptChunksMaterialized = false;
         try {
           const { collectedChunks, toolResultTripwire: streamToolResultTripwire } = await processOutputStream({
+            collectedChunks: attemptChunks,
             outputStream,
             openReasoningIds: subscribePendingSignals ? openReasoningIds : undefined,
             includeRawChunks,
@@ -2413,6 +2429,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             ),
             tools: currentStep.tools,
           });
+          attemptChunksMaterialized = true;
           for (const msg of builtMessages) {
             messageList.add(msg, 'response');
           }
@@ -2564,6 +2581,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // a retried or failed-over attempt, so the attempt ends here and the foreach
           // raises the suspension instead.
           if (isLastModel || eagerCoordinator?.hasSuspendedHandback) {
+            if (!attemptChunksMaterialized && attemptChunks.length > 0) {
+              const failedAttemptMessageId = currentStep.messageId;
+              materializeFailedAttempt = () => {
+                materializeFailedAttempt = undefined;
+                const builtMessages = buildMessagesFromChunks({
+                  chunks: attemptChunks,
+                  messageId: failedAttemptMessageId,
+                  responseModelMetadata: buildResponseModelMetadata(
+                    runState,
+                    currentStep.model,
+                    modelSpanTracker?.getTracingContext() ?? tracingContext,
+                  ),
+                  tools: currentStep.tools,
+                });
+                for (const msg of builtMessages) {
+                  messageList.add(msg, 'response');
+                }
+              };
+            }
             // Defer enqueueing the error chunk — processAPIError handlers may intercept it
             // and signal a retry instead.
             runState.setState({
@@ -2694,9 +2730,39 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         };
       })
         .catch(error => {
-          if (!interruption.signal.aborted) throw error;
+          if (interruption.signal.aborted) return undefined;
+          if (
+            error instanceof TripWire ||
+            options?.abortSignal?.aborted ||
+            (isMastraTimeoutError(error) && error.timeoutType === 'total')
+          ) {
+            throw error;
+          }
+          preStreamError = error;
+          return undefined;
         })
         .finally(() => stopListening?.());
+
+      if (preStreamError !== undefined) {
+        const error = getErrorFromUnknown(preStreamError, { fallbackMessage: 'Unknown error in agent stream' });
+        recordTerminalErrorMessage({ messageList, activeId: currentMessageId, error });
+        safeEnqueue(controller, { type: 'error', runId, from: ChunkFrom.AGENT, payload: { error } });
+        await options?.onError?.({ error });
+        return bail({
+          messageId: currentMessageId,
+          ...(inputData.backgroundTaskPending !== undefined
+            ? { backgroundTaskPending: inputData.backgroundTaskPending }
+            : {}),
+          stepResult: { reason: 'error' as const, warnings, isContinued: false },
+          metadata: {},
+          output: { text: '', toolCalls: [], usage: inputData.output.usage, steps: [] },
+          messages: {
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
+          },
+        });
+      }
 
       if (!execution) {
         // Discard what this request left behind, then hand the loop an empty, continuing
@@ -3028,6 +3094,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // in thread history as an `error` part on this attempt's assistant record
         // (creating one when the attempt produced no output). The streamed chunk,
         // onError callback and result.error keep the original error identity.
+        materializeFailedAttempt?.();
         recordTerminalErrorMessage({
           messageList,
           attemptId: attemptMessageId,

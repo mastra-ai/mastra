@@ -1623,9 +1623,10 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
   it('preserves a structured error when fallback execution is exhausted', async () => {
     // Mirrors the observational-memory case: an input processor throws a
-    // structured USER error before the model is ever called. The fallback loop
-    // must rethrow the original MastraError (with details.status) instead of
-    // wrapping it in a plain "Exhausted all fallback models" Error.
+    // structured USER error before the model is ever called. The step must
+    // surface the original MastraError (with details.status) instead of a plain
+    // "Exhausted all fallback models" Error, and record it on the turn so the
+    // failed turn is persisted like the durable engines do.
     const structuredError = new MastraError({
       id: 'TEST_USER_INPUT_ERROR',
       domain: ErrorDomain.AGENT,
@@ -1694,8 +1695,21 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    await expect(llmExecutionStep.execute(createExecuteParams(createIterationInput()))).rejects.toBe(structuredError);
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    expect(result.stepResult.reason).toBe('error');
     expect(doStream).not.toHaveBeenCalled();
+
+    const errorChunks = (controller.enqueue as Mock).mock.calls
+      .map(([chunk]) => chunk)
+      .filter(chunk => chunk.type === 'error');
+    expect(errorChunks).toHaveLength(1);
+    expect(errorChunks[0].payload.error).toBe(structuredError);
+
+    const errorParts = messageList.get.response
+      .db()
+      .flatMap(message => message.content.parts)
+      .filter(part => part.type === 'error');
+    expect(errorParts).toHaveLength(1);
   });
 
   describe('fallback logging severity', () => {
