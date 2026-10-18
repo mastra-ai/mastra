@@ -1,11 +1,13 @@
 /**
  * DurableAgent abort-signal tests
  *
- * Exercises the runtime abort path added by the `abort_signal_durable` slice:
- *   - `result.abort()` mid-stream flips the registry-installed AbortController,
- *     the LLM step surfaces an AbortError, and the pubsub bridge dispatches
- *     `onAbort`.
- *   - An externally-supplied pre-aborted `abortSignal` short-circuits the run.
+ * Exercises durable-only abort APIs and internals: `result.abort()`, `observe().abort()`,
+ * `abortRunStream()`, `abortThreadStream()`, remote cancellation over pubsub, pending
+ * durable input cleanup, and which workflow steps persist after an abort.
+ *
+ * The engine-neutral abort contract (onAbort/onFinish/onError, abort chunk, partial
+ * text and usage, persistence after abort, pre-aborted signals) lives in the
+ * `abort-*` aimock scenarios under `src/loop/test-utils/aimock/scenarios`.
  *
  * The model mock honours `options.abortSignal` by rejecting `doStream` with an
  * AbortError once the signal fires, mirroring real AI SDK provider behaviour.
@@ -14,12 +16,9 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
-import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { createDurableAgent } from '../create-durable-agent';
@@ -70,27 +69,6 @@ function createAbortableModel(onCall?: () => void) {
   });
 }
 
-function createErrorModel() {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: new ReadableStream({
-        start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
-            type: 'response-metadata',
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            timestamp: new Date(0),
-          });
-          controller.enqueue({ type: 'error', error: new Error('Terminal provider failure') });
-          controller.close();
-        },
-      }),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-    }),
-  });
-}
-
 describe('DurableAgent abort signal', () => {
   let pubsub: EventEmitterPubSub;
 
@@ -138,74 +116,15 @@ describe('DurableAgent abort signal', () => {
   it.each([
     ['durable', createDurableAgent],
     ['evented', createEventedAgent],
-  ] as const)('%s abort emits an abort chunk and does not invoke onFinish', async (_kind, createAgent) => {
-    const baseAgent = new Agent({
-      id: `abort-parity-${_kind}`,
-      name: `Abort Parity ${_kind}`,
-      instructions: 'Test',
-      model: createAbortableModel() as LanguageModelV2,
-    });
-    const agent = createAgent({ agent: baseAgent, pubsub });
-    const onAbort = vi.fn();
-    const onFinish = vi.fn();
-    const result = await agent.stream('Go', { onAbort, onFinish });
-    const chunks: any[] = [];
-    const consumption = (async () => {
-      try {
-        for await (const chunk of result.output.fullStream) chunks.push(chunk);
-      } catch {
-        // The provider stream terminates with AbortError after the public abort chunk.
-      }
-    })();
-
-    await new Promise(r => setTimeout(r, 10));
-    result.abort();
-    await consumption;
-
-    expect(chunks.some(chunk => chunk.type === 'abort')).toBe(true);
-    expect(onAbort).toHaveBeenCalledTimes(1);
-    expect(onFinish).not.toHaveBeenCalled();
-    result.cleanup();
-  });
-
-  it.each([
-    ['durable', createDurableAgent],
-    ['evented', createEventedAgent],
-  ] as const)('%s failure invokes onError and does not invoke onFinish', async (_kind, createAgent) => {
-    const baseAgent = new Agent({
-      id: `error-parity-${_kind}`,
-      name: `Error Parity ${_kind}`,
-      instructions: 'Test',
-      model: createErrorModel() as LanguageModelV2,
-    });
-    const agent = createAgent({ agent: baseAgent, pubsub });
-    const onError = vi.fn();
-    const onFinish = vi.fn();
-    const result = await agent.stream('Go', {
-      modelSettings: { maxRetries: 0 },
-      onError,
-      onFinish,
-    });
-
-    await result.output.consumeStream().catch(() => undefined);
-
-    expect(onError).toHaveBeenCalledTimes(1);
-    expect(onFinish).not.toHaveBeenCalled();
-    result.cleanup();
-  });
-
-  it('onAbort receives the text streamed before the abort', async () => {
+  ] as const)('%s abort does not persist the remaining iteration steps', async (_kind, createAgent) => {
+    // Partial-text persistence and the onAbort/onFinish contract live in the
+    // abort-persistence and abort-callbacks aimock scenarios. This case pins the
+    // durable workflow internals: no post-LLM iteration step runs after an abort.
     const mockModel = new MockLanguageModelV2({
       doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
         stream: new ReadableStream({
           start(controller) {
             controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            });
             controller.enqueue({ type: 'text-start', id: 'text-1' });
             controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
             abortSignal?.addEventListener(
@@ -223,273 +142,39 @@ describe('DurableAgent abort signal', () => {
       }),
     });
     const baseAgent = new Agent({
-      id: 'abort-partial-text-agent',
-      name: 'Abort Partial Text Agent',
+      id: 'abort-persist-agent',
+      name: 'Abort Persist Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
     });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const durableAgent = createAgent({ agent: baseAgent, pubsub });
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { durableAgent }, storage, pubsub, logger: false });
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const persistedSteps = vi.spyOn(workflowsStore, 'updateWorkflowResults');
+    const onAbort = vi.fn();
 
-    let abortPayload: { steps: unknown[]; text?: string } | undefined;
-    const { output, abort, cleanup } = await durableAgent.stream('Go', {
-      onAbort: data => {
-        abortPayload = data;
-      },
-    });
+    const { output, abort, cleanup } = await durableAgent.stream('Go', { onAbort });
 
-    // Abort once the streamed text is observed, so the abort deterministically
-    // lands after the delta reached the collector.
     for await (const chunk of output.fullStream as AsyncIterable<{ type: string }>) {
       if (chunk.type === 'text-delta') abort();
     }
+    await vi.waitFor(() => expect(onAbort).toHaveBeenCalledTimes(1));
 
-    expect(abortPayload?.text).toBe('Hello');
-    expect(await output.text).toBe('Hello');
-
-    cleanup();
-  });
-
-  it.each([
-    ['durable', createDurableAgent],
-    ['evented', createEventedAgent],
-  ] as const)(
-    '%s abort preserves partial text without persisting the remaining iteration steps',
-    async (_kind, createAgent) => {
-      const mockMemory = new MockMemory();
-      const mockModel = new MockLanguageModelV2({
-        doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
-          stream: new ReadableStream({
-            start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              });
-              controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
-              abortSignal?.addEventListener(
-                'abort',
-                () => {
-                  const err = new Error('Aborted');
-                  err.name = 'AbortError';
-                  controller.error(err);
-                },
-                { once: true },
-              );
-            },
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-      const baseAgent = new Agent({
-        id: 'abort-persist-agent',
-        name: 'Abort Persist Agent',
-        instructions: 'Test',
-        model: mockModel as LanguageModelV2,
-        memory: mockMemory,
-      });
-      const durableAgent = createAgent({ agent: baseAgent, pubsub });
-      const storage = new InMemoryStore();
-      new Mastra({ agents: { durableAgent }, storage, pubsub, logger: false });
-      const workflowsStore = (await storage.getStore('workflows'))!;
-      const persistedSteps = vi.spyOn(workflowsStore, 'updateWorkflowResults');
-      const onFinish = vi.fn();
-
-      const threadId = 'thread-abort-persist';
-      const resourceId = 'resource-abort-persist';
-
-      let abortPayload: { steps: unknown[]; text?: string } | undefined;
-      const { output, abort, cleanup } = await durableAgent.stream('Go', {
-        memory: { thread: threadId, resource: resourceId },
-        onFinish,
-        onAbort: data => {
-          abortPayload = data;
-        },
-      });
-
-      // Abort once the streamed text is observed, so the abort deterministically
-      // lands after the delta reached the collector.
-      for await (const chunk of output.fullStream as AsyncIterable<{ type: string }>) {
-        if (chunk.type === 'text-delta') abort();
-      }
-
-      expect(abortPayload?.text).toBe('Hello');
-      const lastStep = abortPayload?.steps.at(-1) as { finishReason?: string } | undefined;
-      expect(lastStep?.finishReason).toBe('abort');
-
-      // Wait for the finalize-run flush to land in memory.
-      await vi.waitFor(async () => {
-        const { messages } = await mockMemory.recall({ threadId, resourceId });
-        const assistantMessage = messages.find(message => message.role === 'assistant');
-        expect(assistantMessage, 'partial assistant message was not persisted to memory after abort').toBeDefined();
-        expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
-        expect(assistantMessage?.content.parts?.some(part => part.type === 'error')).toBe(false);
-      });
-      expect(onFinish).not.toHaveBeenCalled();
-
-      const stepIds = persistedSteps.mock.calls.map(([args]) => args.stepId);
-      if (_kind === 'evented') expect(stepIds).toContain('durable-llm-execution');
-      for (const stepId of [
-        'extract-tool-calls',
-        'collect-tool-results',
-        'durable-llm-mapping',
-        'durable-agentic-execution-bg-task-check',
-        'durable-agentic-execution-signal-drain',
-        'update-iteration-state',
-        'durable-is-task-complete',
-        'durable-goal',
-      ]) {
-        expect(stepIds).not.toContain(stepId);
-      }
-
-      cleanup();
-    },
-  );
-
-  it.each([
-    ['durable', createDurableAgent],
-    ['evented', createEventedAgent],
-  ] as const)('%s preserves completed-step usage when the next LLM call is aborted', async (_kind, createAgent) => {
-    let calls = 0;
-    const model = new MockLanguageModelV2({
-      doStream: async ({ abortSignal }) => {
-        const first = calls++ === 0;
-        return {
-          stream: new ReadableStream({
-            start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              if (first) {
-                controller.enqueue({ type: 'tool-call', toolCallId: 'call-1', toolName: 'step', input: '{}' });
-                controller.enqueue({
-                  type: 'finish',
-                  finishReason: 'tool-calls',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                });
-                controller.close();
-              } else {
-                controller.enqueue({ type: 'text-start', id: 'partial' });
-                controller.enqueue({ type: 'text-delta', id: 'partial', delta: 'Partial second response' });
-                abortSignal?.addEventListener(
-                  'abort',
-                  () => {
-                    const error = new Error('Aborted');
-                    error.name = 'AbortError';
-                    controller.error(error);
-                  },
-                  { once: true },
-                );
-              }
-            },
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        };
-      },
-    });
-    const agent = createAgent({
-      agent: new Agent({
-        id: 'abort-usage-agent',
-        name: 'Abort Usage Agent',
-        instructions: 'Test',
-        model,
-        tools: {
-          step: createTool({
-            id: 'step',
-            description: 'Take a step',
-            inputSchema: z.object({}),
-            execute: async () => 'done',
-          }),
-        },
-      }),
-      pubsub,
-    });
-    new Mastra({ agents: { agent }, storage: new InMemoryStore(), pubsub, logger: false });
-    const onAbort = vi.fn();
-    const onFinish = vi.fn();
-    const { output, abort, cleanup } = await agent.stream('Go', { maxSteps: 3, onAbort, onFinish });
-    for await (const chunk of output.fullStream) {
-      if (chunk.type === 'text-delta') await abort();
+    const stepIds = persistedSteps.mock.calls.map(([args]) => args.stepId);
+    if (_kind === 'evented') expect(stepIds).toContain('durable-llm-execution');
+    for (const stepId of [
+      'extract-tool-calls',
+      'collect-tool-results',
+      'durable-llm-mapping',
+      'durable-agentic-execution-bg-task-check',
+      'durable-agentic-execution-signal-drain',
+      'update-iteration-state',
+      'durable-is-task-complete',
+      'durable-goal',
+    ]) {
+      expect(stepIds).not.toContain(stepId);
     }
-    expect(calls).toBe(2);
-    expect(onAbort).toHaveBeenCalledOnce();
-    expect(onFinish).not.toHaveBeenCalled();
-    const result = onAbort.mock.calls[0]?.[0];
-    expect(result.text).toBe('Partial second response');
-    expect(result.steps).toHaveLength(2);
-    expect(result.steps[0]?.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
-    expect(result.steps.at(-1)?.finishReason).toBe('abort');
-    cleanup();
-  });
-
-  it('persists streamed text when a response processor throws AbortError after streaming (#22593)', async () => {
-    const mockMemory = new MockMemory();
-    const mockModel = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            });
-            controller.enqueue({ type: 'text-start', id: 'text-1' });
-            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
-            controller.enqueue({ type: 'text-end', id: 'text-1' });
-            controller.enqueue({
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            });
-            controller.close();
-          },
-        }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
-    });
-    // A non-TripWire AbortError from processLLMResponse is rethrown into the
-    // outer catch, which must still persist the already-streamed text.
-    const abortingProcessor = {
-      name: 'abort-on-response',
-      processLLMResponse: async () => {
-        const err = new Error('Aborted by processor');
-        err.name = 'AbortError';
-        throw err;
-      },
-    };
-    const baseAgent = new Agent({
-      id: 'processor-abort-agent',
-      name: 'Processor Abort Agent',
-      instructions: 'Test',
-      model: mockModel as LanguageModelV2,
-      memory: mockMemory,
-      inputProcessors: [abortingProcessor as any],
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const threadId = 'thread-processor-abort';
-    const resourceId = 'resource-processor-abort';
-
-    const { output, cleanup } = await durableAgent.stream('Go', {
-      memory: { thread: threadId, resource: resourceId },
-    });
-
-    for await (const _chunk of output.fullStream as AsyncIterable<unknown>) {
-      // drain until the run settles
-    }
-
-    await vi.waitFor(async () => {
-      const recalled = await mockMemory.recall({ threadId, resourceId });
-      const assistantMessage = recalled.messages.find(message => message.role === 'assistant');
-      expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
-    });
-
-    const { messages } = await mockMemory.recall({ threadId, resourceId });
-    const assistantMessage = messages.find(message => message.role === 'assistant');
-    expect(assistantMessage, 'partial assistant message was not persisted after processor abort').toBeDefined();
-    expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
 
     cleanup();
   });
@@ -798,38 +483,6 @@ describe('DurableAgent abort signal', () => {
     await output.consumeStream();
 
     expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
-
-    cleanup();
-  });
-
-  it('pre-aborted external abortSignal short-circuits the run', async () => {
-    const mockModel = createAbortableModel();
-    const baseAgent = new Agent({
-      id: 'abort-preaborted-agent',
-      name: 'Abort Preaborted Agent',
-      instructions: 'Test',
-      model: mockModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const controller = new AbortController();
-    controller.abort();
-
-    let abortPayload: unknown;
-    const { output, cleanup } = await durableAgent.stream('Go', {
-      abortSignal: controller.signal,
-      onAbort: data => {
-        abortPayload = data;
-      },
-    });
-
-    try {
-      await output.consumeStream();
-    } catch {
-      // expected — the run never produced a normal finish
-    }
-
-    expect(abortPayload).toBeDefined();
 
     cleanup();
   });
