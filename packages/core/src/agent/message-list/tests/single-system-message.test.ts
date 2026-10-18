@@ -19,9 +19,17 @@ describe('single leading system message for OpenAI-compatible providers', () => 
     expect(prompt.filter(m => m.role === 'system')).toHaveLength(2);
   });
 
-  it('leaves OpenAI Responses prompts unchanged', async () => {
-    const prompt = await build().get.all.aiV5.llmPrompt({ targetProvider: 'openai.responses' });
-    expect(prompt.filter(m => m.role === 'system')).toHaveLength(2);
+  it.each(['openai', 'openai.responses', 'openai.chat', 'azure.chat'])(
+    'leaves %s prompts unchanged',
+    async targetProvider => {
+      const prompt = await build().get.all.aiV5.llmPrompt({ targetProvider });
+      expect(prompt.filter(m => m.role === 'system')).toHaveLength(2);
+    },
+  );
+
+  it('still normalizes the openai-compatible fallback id', async () => {
+    const prompt = await build().get.all.aiV5.llmPrompt({ targetProvider: 'openai-compatible' });
+    expect(prompt.filter(m => m.role === 'system')).toHaveLength(1);
   });
 
   it('keeps the last providerOptions when merging', () => {
@@ -45,7 +53,7 @@ describe('single leading system message for OpenAI-compatible providers', () => 
         { role: 'user', content: 'u' },
         { role: 'system', content: 'late', providerOptions: { x: { y: 1 } } },
       ],
-      'openai.chat',
+      'vllm.chat',
     );
     expect(out).toEqual([
       { role: 'system', content: 'a' },
@@ -59,7 +67,7 @@ describe('single leading system message for OpenAI-compatible providers', () => 
       { role: 'system' as const, content: 'a' },
       { role: 'user' as const, content: 'u' },
     ];
-    expect(normalizeSystemMessagesForProvider(msgs, 'openai.chat')).toBe(msgs);
+    expect(normalizeSystemMessagesForProvider(msgs, 'vllm.chat')).toBe(msgs);
     expect(normalizeSystemMessagesForProvider([...msgs, msgs[0]!], undefined)).toHaveLength(3);
   });
 });
