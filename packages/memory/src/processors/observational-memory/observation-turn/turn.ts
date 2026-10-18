@@ -49,6 +49,20 @@ export class ObservationTurn {
   /** Generation count at turn start — used to detect if reflection happened during the turn. */
   private _generationCountAtStart = -1;
 
+  /**
+   * Ids of the messages this turn was started with (the user's request). Mid-turn
+   * observation may record them, but they stay in the live prompt until the turn ends.
+   * @internal Set by step 0.
+   */
+  inputMessageIds: string[] = [];
+
+  /**
+   * Non-marker part count of each message when a step last drained it, so a message that only
+   * gained OM marker parts is not mistaken for unread step output.
+   * @internal
+   */
+  drainedPartCounts = new Map<string, number>();
+
   /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
   memory?: MemoryContextProvider;
 

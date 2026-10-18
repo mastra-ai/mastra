@@ -84,6 +84,7 @@ export class ObservationStep {
     // new head (storage resolves the head and carries chunks across the rollover).
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     if (this.stepNumber === 0) {
+      this.turn.inputMessageIds = messageList.get.input.db().map(msg => msg.id);
       const activation = await om.activate({
         threadId,
         resourceId,
@@ -266,8 +267,12 @@ export class ObservationStep {
     // the band). Without a ready chunk, defer to a later step.
     const bandDefersObservation = statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
     const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
-    /** In-flight message ids the step-0 cleanup must never remove from live context. */
-    let step0PreserveIds: string[] | undefined;
+    /**
+     * In-flight message ids cleanup must never remove from live context: the turn's own
+     * request, plus whatever the model has not read yet (the pending messages at step 0, the
+     * previous step's output — e.g. a tool result — at step > 0).
+     */
+    let inFlightIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
       if (this.stepNumber > 0) {
         // Save messages from previous step. Drain the buckets synchronously so nothing that lands
@@ -276,6 +281,18 @@ export class ObservationStep {
         const newInput = messageList.clear.input.db();
         const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
+        // A message drained again only because OM markers were appended to it was already read.
+        const unreadIds = messagesToSave
+          .filter(msg => {
+            const contentParts = (msg.content.parts ?? []).filter(
+              part => !String((part as { type?: string }).type ?? '').startsWith('data-om-'),
+            ).length;
+            const seenParts = this.turn.drainedPartCounts.get(msg.id);
+            this.turn.drainedPartCounts.set(msg.id, contentParts);
+            return seenParts === undefined || contentParts > seenParts;
+          })
+          .map(msg => msg.id);
+        inFlightIds = [...new Set([...this.turn.inputMessageIds, ...unreadIds])];
         if (messagesToSave.length > 0) {
           for (const msg of messagesToSave) {
             messageList.add(msg, 'memory');
@@ -304,7 +321,7 @@ export class ObservationStep {
         // protect it (and everything else pending) from cleanup by identity rather than
         // relying on the token-based retention floor, which resolves to 0 for sync-only,
         // resource-scope, and explicit `bufferActivation: 1` configs.
-        step0PreserveIds = pending.map(msg => msg.id);
+        inFlightIds = pending.map(msg => msg.id);
       }
 
       // Step-0 observation: seed an empty assistant message under the active response id
@@ -336,11 +353,11 @@ export class ObservationStep {
           observed = true;
           didThresholdCleanup = true;
 
-          // Cleanup after observation. At step 0 the just-observed messages include the
-          // fresh prompt the model is about to answer — preserve the in-flight messages
-          // by identity (the token-based retention floor resolves to 0 for sync-only,
+          // Cleanup after observation. The just-observed messages include the request the
+          // model is working on and the output it has not read yet — preserve the in-flight
+          // messages by identity (the token-based retention floor resolves to 0 for sync-only,
           // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
-          // relied on to keep them). Step > 0 semantics are unchanged.
+          // relied on to keep them).
           const observedIds = obsResult.cleanupMessageIds;
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
@@ -353,7 +370,7 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            preserveMessageIds: step0PreserveIds,
+            preserveMessageIds: inFlightIds,
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -400,7 +417,10 @@ export class ObservationStep {
         : undefined;
 
       const pendingMessageIds = new Set(
-        [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
+        [...messageList.get.input.db(), ...messageList.get.response.db()]
+          .map(msg => msg.id)
+          .concat(inFlightIds ?? [], this.turn.inputMessageIds)
+          .filter(Boolean),
       );
 
       filterObservedMessages({
