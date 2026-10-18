@@ -34,11 +34,17 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import type {
+  CapturedRequest,
+  ModelScript,
+  ModelTape,
+  ParityEngine,
+  ParityStreamOptions,
+} from '../../../loop/test-utils/aimock/parity';
+import { expectEngineParity } from '../../../loop/test-utils/aimock/parity';
 import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import type { CapturedRequest, ModelScript, ModelTape, ParityEngine, ParityStreamOptions } from './parity-harness';
-import { expectEngineParity } from './parity-harness';
 import { createGate, createRestartScenario } from './restart-harness';
 import type { Gate } from './restart-harness';
 
