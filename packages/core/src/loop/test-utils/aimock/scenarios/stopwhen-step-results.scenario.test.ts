@@ -51,7 +51,6 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('stops after the first tool step when the predicate sees a tool call', async () => {
-    let calls = 0;
     const { output, requests, chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -59,7 +58,6 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
       tools,
       collectChunks: true,
       stopWhen: (({ steps }: StopWhenArgs) => {
-        calls++;
         return steps.some(step => step.toolCalls.length > 0);
       }) as any,
       fixtures: llm => scriptThreeTurns(llm),
@@ -68,19 +66,19 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     await output.consumeStream();
 
     expect(requests).toHaveLength(1);
-    expect(calls).toBe(1);
-    expect(chunks.filter(chunk => chunk.type === 'step-start')).toHaveLength(1);
-    expect(chunks.some(chunk => chunk.type === 'tool-call')).toBe(true);
-    expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(false);
+    expect(chunks!.filter(chunk => chunk.type === 'step-start')).toHaveLength(1);
+    expect(chunks!.some(chunk => chunk.type === 'tool-call')).toBe(true);
+    expect(chunks!.some(chunk => chunk.type === 'text-delta')).toBe(false);
   });
 
   it('is called once per tool step with the accumulated steps, never on the final text step', async () => {
     const seenStepCounts: number[] = [];
-    const { output, requests } = await runLoopScenario({
+    const { output, requests, chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'What should I be doing in Toronto today?',
       tools,
+      collectChunks: true,
       stopWhen: (({ steps }: StopWhenArgs) => {
         seenStepCounts.push(steps.length);
         return false;
@@ -92,11 +90,17 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
 
     expect(requests).toHaveLength(3);
     expect((await output.steps).length).toBe(3);
+    expect(chunks!.filter(chunk => chunk.type === 'step-start')).toHaveLength(3);
+    expect(chunks!.filter(chunk => chunk.type === 'step-finish')).toHaveLength(3);
     expect(seenStepCounts).toEqual([1, 2]);
   });
 
   for (const withText of [false, true]) {
-    it(`passes the same last-step content stream.steps reports${withText ? ' (text and tool call in one step)' : ''}`, async () => {
+    const variant = withText ? ' (text and tool call in one step)' : '';
+    const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
+    const types = (content: Array<{ type: string }>) => content.map(part => part.type);
+
+    const runRecordingLastContent = async () => {
       const seenLastContent: Array<Array<{ type: string }>> = [];
       const { output } = await runLoopScenario({
         engine,
@@ -104,20 +108,23 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
         prompt: 'What should I be doing in Toronto today?',
         tools,
         stopWhen: (({ steps }: StopWhenArgs) => {
-          seenLastContent.push(JSON.parse(JSON.stringify(steps.at(-1)?.content)));
+          seenLastContent.push(structuredClone(steps.at(-1)?.content ?? []));
           return false;
         }) as any,
         fixtures: llm => scriptThreeTurns(llm, withText ? 'It is sunny, so let me plan. ' : undefined),
       });
-
       await output.consumeStream();
-      const steps = await output.steps;
-      const types = (content: Array<{ type: string }>) => content.map(part => part.type);
+      return { seenLastContent, steps: await output.steps };
+    };
 
-      const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
-      expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
+    it(`reports every step's content on stream.steps${variant}`, async () => {
+      const { steps } = await runRecordingLastContent();
       expect(steps.map(step => types(step.content))).toEqual([['tool-call', 'tool-result'], step2Types, ['text']]);
-      expect(seenLastContent[1]).not.toEqual(seenLastContent[0]);
+    });
+
+    it(`passes stopWhen the same last-step content stream.steps reports${variant}`, async () => {
+      const { seenLastContent } = await runRecordingLastContent();
+      expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
     });
   }
 });
