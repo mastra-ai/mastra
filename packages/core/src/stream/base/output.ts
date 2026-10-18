@@ -720,6 +720,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     messageId,
     initialState,
     initialToolCalls,
+    resumedText,
     finishUsageIsTotal,
   }: {
     model: {
@@ -733,6 +734,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     messageId: string;
     initialState?: any;
     initialToolCalls?: ToolCallChunk[];
+    /**
+     * Text a resumed stream segment inherits from before its suspension: the run's text so far
+     * and the suspended step's part of it. Used when no serialized `initialState` is available.
+     */
+    resumedText?: { priorText: string; stepText: string };
     finishUsageIsTotal?: boolean;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
@@ -996,6 +1002,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#finishCallbackSent = true;
                 await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
               }
+              // A durable stream stays open across the suspension, so it never reaches flush,
+              // where the plain Agent settles these. Settle them here, as at flush (#27504).
+              // Usage is left to the step that reports it (#27440).
+              if (self.#options.resolveFinalPromises) self.#resolveSuspendedPromises({ includeUsage: false });
               break;
             case 'abort':
               self.#status = 'canceled';
@@ -1969,32 +1979,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           // If stream ends in suspended state (e.g., tool-call-approval), resolve promises with partial results
           // This allows consumers to access data that was produced before the suspension
           if (self.#status === 'suspended') {
-            const reasoningText =
-              self.#bufferedReasoning.length > 0
-                ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
-                : undefined;
-
-            self.resolvePromises({
-              toolResults: self.#toolResults,
-              toolCalls: self.#toolCalls,
-              text: self.#bufferedText.join(''),
-              reasoning: Object.values(self.#bufferedReasoningDetails || {}),
-              reasoningText,
-              sources: self.#bufferedSources,
-              files: self.#bufferedFiles,
-              steps: self.#bufferedSteps,
-              usage: self.#getUsageCountWithSuspendedStep(),
-              totalUsage: self.#getTotalUsage(self.#getUsageCountWithSuspendedStep()),
-              warnings: self.#warnings,
-              finishReason: 'suspended',
-              content: self.messageList.get.response.aiV5.stepContent(),
-              object: undefined,
-              request: self.#request,
-              response: {
-                dbMessages: self.messageList.get.response.db(),
-              },
-              providerMetadata: undefined,
-            });
+            self.#resolveSuspendedPromises();
           }
 
           // If stream ends without proper finish/error chunks, reject unresolved promises
@@ -2018,8 +2003,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     if (initialState) {
       this.deserializeState(initialState);
-    } else if (initialToolCalls) {
-      this.#toolCalls = initialToolCalls;
+    } else {
+      if (initialToolCalls) this.#toolCalls = initialToolCalls;
+      if (resumedText) {
+        const { priorText, stepText } = resumedText;
+        this.#bufferedText = [priorText, stepText].filter(Boolean);
+        this.#bufferedTextAtStepStart = priorText ? 1 : 0;
+        this.#bufferedByStep.text = stepText;
+        this.#wasSuspended = true;
+      }
     }
   }
 
@@ -2657,6 +2649,40 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       ...(generationReportedUsage && { generationReportedUsage }),
       object: undefined as OUTPUT,
     };
+  }
+
+  /** Resolves the result promises with what the run produced before it suspended. */
+  #resolveSuspendedPromises({ includeUsage = true }: { includeUsage?: boolean } = {}) {
+    const reasoningText =
+      this.#bufferedReasoning.length > 0
+        ? this.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
+        : undefined;
+
+    this.resolvePromises({
+      toolResults: this.#toolResults,
+      toolCalls: this.#toolCalls,
+      text: this.#bufferedText.join(''),
+      reasoning: Object.values(this.#bufferedReasoningDetails || {}),
+      reasoningText,
+      sources: this.#bufferedSources,
+      files: this.#bufferedFiles,
+      steps: this.#bufferedSteps,
+      ...(includeUsage
+        ? {
+            usage: this.#getUsageCountWithSuspendedStep(),
+            totalUsage: this.#getTotalUsage(this.#getUsageCountWithSuspendedStep()),
+          }
+        : {}),
+      warnings: this.#warnings,
+      finishReason: 'suspended',
+      content: this.messageList.get.response.aiV5.stepContent(),
+      object: undefined,
+      request: this.#request,
+      response: {
+        dbMessages: this.messageList.get.response.db(),
+      },
+      providerMetadata: undefined,
+    });
   }
 
   #emitChunk(chunk: ChunkType<OUTPUT>) {

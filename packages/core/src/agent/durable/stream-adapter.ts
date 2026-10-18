@@ -153,6 +153,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   messageId: string;
   /** Tool calls emitted before a resumed stream segment started. */
   initialToolCalls?: ToolCallChunk[];
+  /** Text the run streamed before the suspension a resumed stream segment continues. */
+  resumedText?: { priorText: string; stepText: string };
   /** Model information for the output */
   model: {
     modelId: string | undefined;
@@ -299,6 +301,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     runId,
     messageId,
     initialToolCalls,
+    resumedText,
     model,
     threadId,
     resourceId,
@@ -877,6 +880,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     messageList,
     messageId,
     initialToolCalls,
+    resumedText,
     finishUsageIsTotal: true,
     options: {
       runId,
