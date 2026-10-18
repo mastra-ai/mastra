@@ -997,8 +997,10 @@ export class SessionThread {
 
   /**
    * Detach this host from the current thread without changing durable run state.
-   * Pending suspension prompts are removed from the host projection and can be
-   * rebuilt when a session binds the thread again.
+   * Pending suspension and approval prompts are removed from the host projection
+   * and can be rebuilt when a session binds the thread again. A parked tool
+   * approval is not declined: its run stays suspended and can still be answered,
+   * for example with `respondToPersistedToolApproval`.
    */
   detachFromCurrent(): void {
     this.#owner.abort({ localOnly: true, keepParked: true });
@@ -1967,6 +1969,13 @@ export interface ApprovalDecision {
 }
 
 /**
+ * How a parked approval gate was released: a user (or abort) decision, or
+ * `detached` when the host let go of the thread without deciding, leaving the
+ * run parked in storage.
+ */
+type ApprovalGateResolution = ApprovalDecision | { decision: 'detached' };
+
+/**
  * Whether a tool approval/suspension response was claimed by a pending target.
  * `accepted: true` only means the command was taken, not that the resumed tool
  * later succeeded.
@@ -1993,8 +2002,14 @@ interface ApprovalGate {
   threadId?: string;
   /** Run that produced the gated call, when the producer knew it. */
   runId?: string;
-  promise: Promise<ApprovalDecision>;
-  resolve: (decision: ApprovalDecision) => void;
+  promise: Promise<ApprovalGateResolution>;
+  resolve: (resolution: ApprovalGateResolution) => void;
+}
+
+/** Set only when a tool-call answer created the run controller itself. */
+interface ArmedRun {
+  /** {@link SessionRun.armCount} right after this answer armed the run. */
+  armCount?: number;
 }
 
 /**
@@ -2049,14 +2064,14 @@ export class SessionApproval {
     toolCallId: string;
     threadId?: string;
     runId?: string;
-  }): Promise<ApprovalDecision> {
+  }): Promise<ApprovalGateResolution> {
     const existing = [...this.#gates].find(
       gate => gate.toolCallId === toolCallId && gate.threadId === threadId && gate.runId === runId,
     );
     if (existing) return existing.promise;
 
-    let resolve!: (decision: ApprovalDecision) => void;
-    const promise = new Promise<ApprovalDecision>(r => {
+    let resolve!: (resolution: ApprovalGateResolution) => void;
+    const promise = new Promise<ApprovalGateResolution>(r => {
       resolve = r;
     });
     this.#gates.add({ toolCallId, toolName, threadId, runId, promise, resolve });
@@ -2137,6 +2152,22 @@ export class SessionApproval {
   }
 
   /**
+   * Release parked gate(s) without a decision, for a host detaching from the
+   * thread. Each waiter resolves as `detached`, so the gated call is neither
+   * run nor declined: the run stays parked in storage and can be answered after
+   * a session binds the thread again. `filter` narrows the release exactly as
+   * for {@link cancel}. Returns the ids that were released.
+   */
+  detach(filter: ApprovalGateFilter = {}): string[] {
+    const gates = this.#matching(filter);
+    for (const gate of gates) {
+      this.#gates.delete(gate);
+      gate.resolve({ decision: 'detached' });
+    }
+    return gates.map(gate => gate.toolCallId);
+  }
+
+  /**
    * Parked gates matching every field `filter` *names*. For the optional gate
    * tags (thread/run) a named field is a constraint even when its value is
    * undefined: `{ threadId: undefined }` matches the gates the producer left
@@ -2185,6 +2216,8 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  /** Incremented every time a caller arms (or re-arms) the current run. */
+  #armCount = 0;
   /** Incremented on every abort request, so waiters can ignore earlier ones. */
   #abortGeneration = 0;
   readonly #teardownWaiters = new Set<() => void>();
@@ -2302,8 +2335,17 @@ export class SessionRun {
    * run. Callers pass its `.signal` into the underlying stream.
    */
   ensureAbortController(): AbortController {
+    this.#armCount += 1;
     this.#abortController ??= new AbortController();
     return this.#abortController;
+  }
+
+  /**
+   * How many times the run has been armed via {@link ensureAbortController}.
+   * Lets a caller tell whether anyone else joined the run it armed.
+   */
+  armCount(): number {
+    return this.#armCount;
   }
 
   /** Signal for the current run's AbortController, or undefined when none is armed. */
@@ -4542,7 +4584,12 @@ export class Session<TState = unknown> {
     // defer the abort for that other thread's gate.
     const abortThreadId = this.thread.getId() ?? undefined;
     const wasGated = this.approval.isArmed({ threadId: abortThreadId });
-    if (wasGated) {
+    // Detaching keeps a parked approval answerable: release this host's gates
+    // without a decision and leave the run parked in storage, like any other
+    // parked suspension below.
+    if (wasGated && options.keepParked) {
+      this.displayState.clearPendingApprovals(this.approval.detach({ threadId: abortThreadId }));
+    } else if (wasGated) {
       const gatedRunId = this.run.getRunId();
       this.run.requestAbort({ deferSignal: true });
       // The engine completes this teardown after its decline await; a rebind can
@@ -5796,16 +5843,53 @@ export class Session<TState = unknown> {
    * agent. `abortSignal` pins the run's own signal, because a successor run
    * replaces the session's abort controller.
    */
-  async approveToolCall(input: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-    runId?: string;
-    threadId?: string;
-    resourceId?: string;
-    agent?: Agent;
-    abortSignal?: AbortSignal;
-  }): Promise<void> {
-    await this.#approveToolCall(input);
+  async approveToolCall(
+    input: {
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    },
+    onDispatch?: () => void,
+  ): Promise<void> {
+    await this.#disarmRunOnFailedStart(armed => this.#approveToolCall(input, onDispatch, armed));
+  }
+
+  /**
+   * Arm the session run for an answer to a parked tool call. Records the
+   * arm count in `armed` only when this call created the controller, so a failed
+   * start can disarm it without touching a run another caller armed.
+   */
+  #armRun(armed?: ArmedRun): AbortSignal {
+    const wasRunning = this.run.isRunning();
+    const signal = this.run.ensureAbortController().signal;
+    if (!wasRunning && armed) {
+      armed.armCount = this.run.armCount();
+    }
+    return signal;
+  }
+
+  /**
+   * Run an answer to a parked tool call, resetting the run it armed when the
+   * answer fails before any run started (mirrors the `sendSignal` startup
+   * failure reset). Otherwise the session reports running with no run id.
+   */
+  async #disarmRunOnFailedStart(answer: (armed: ArmedRun) => Promise<void>): Promise<void> {
+    const armed: ArmedRun = {};
+    try {
+      await answer(armed);
+    } catch (error) {
+      // Anyone else holding the run armed it again: the subscription arms the
+      // run as it starts, and so does a message or signal joining it. Only a
+      // run nobody else armed is reset.
+      if (this.run.armCount() === armed.armCount) {
+        this.run.reset();
+      }
+      throw error;
+    }
   }
 
   /**
@@ -5829,6 +5913,7 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal,
     }: Parameters<Session<TState>['approveToolCall']>[0],
     onDispatch?: () => void,
+    armed?: ArmedRun,
   ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
@@ -5845,7 +5930,7 @@ export class Session<TState = unknown> {
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
+        ? this.#armRun(armed)
         : new AbortController().signal);
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
@@ -5887,17 +5972,20 @@ export class Session<TState = unknown> {
    * run that parked them, so a thread switch mid-run cannot redirect the
    * decline to another thread.
    */
-  async declineToolCall(input: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-    declineContext?: { reason?: string; message?: string };
-    runId?: string;
-    threadId?: string;
-    resourceId?: string;
-    agent?: Agent;
-    abortSignal?: AbortSignal;
-  }): Promise<void> {
-    await this.#declineToolCall(input);
+  async declineToolCall(
+    input: {
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      declineContext?: { reason?: string; message?: string };
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    },
+    onDispatch?: () => void,
+  ): Promise<void> {
+    await this.#disarmRunOnFailedStart(armed => this.#declineToolCall(input, onDispatch, armed));
   }
 
   async #declineToolCall(
@@ -5912,6 +6000,7 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal,
     }: Parameters<Session<TState>['declineToolCall']>[0],
     onDispatch?: () => void,
+    armed?: ArmedRun,
   ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
@@ -5928,7 +6017,7 @@ export class Session<TState = unknown> {
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
+        ? this.#armRun(armed)
         : new AbortController().signal);
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
@@ -6049,7 +6138,7 @@ export class Session<TState = unknown> {
             ownedCalls.add(next.toolCallId);
             runScope?.set(SOURCE_APPROVAL_CALLS_KEY, ownedCalls);
             const policy = this.resolveToolApproval(chunk.payload.toolName, address.threadId);
-            const decision: Promise<ApprovalDecision> =
+            const decision: Promise<ApprovalGateResolution> =
               policy === 'ask'
                 ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
                 : Promise.resolve({ decision: policy === 'allow' ? ('approve' as const) : ('decline' as const) });
@@ -6071,7 +6160,7 @@ export class Session<TState = unknown> {
               let pendingDecision = decision;
               while (!approvalDisposed) {
                 const approval = await pendingDecision;
-                if (approvalDisposed) return;
+                if (approvalDisposed || approval.decision === 'detached') return;
                 let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
                 let accepted = false;
                 let dispatchAttempted = false;
@@ -6203,17 +6292,24 @@ export class Session<TState = unknown> {
    * reject the answer. The caller already handled approval (setForTool policy,
    * yolo mode, or a prior explicit approval gate).
    */
-  async resumeToolCall({
-    resumeData,
-    address,
-    requestContext: requestContextInput,
-    resolveOnToolEnd = false,
-  }: {
+  async resumeToolCall(input: {
     resumeData: any;
     address: SuspensionAddress;
     requestContext?: RequestContext;
     resolveOnToolEnd?: boolean;
   }): Promise<void> {
+    await this.#disarmRunOnFailedStart(armed => this.#resumeToolCall(input, armed));
+  }
+
+  async #resumeToolCall(
+    {
+      resumeData,
+      address,
+      requestContext: requestContextInput,
+      resolveOnToolEnd = false,
+    }: Parameters<Session<TState>['resumeToolCall']>[0],
+    armed: ArmedRun,
+  ): Promise<void> {
     const suspension = this.suspensions.get(address);
     if (!suspension) {
       throw new Error('No active suspension to resume');
@@ -6223,7 +6319,7 @@ export class Session<TState = unknown> {
     const agent = await this.resolveSuspensionAgent(address);
     const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address);
     const sourceIsActive = () => threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
-    const abortSignal = sourceIsActive() ? this.run.ensureAbortController().signal : new AbortController().signal;
+    const abortSignal = sourceIsActive() ? this.#armRun(armed) : new AbortController().signal;
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
       resourceId,

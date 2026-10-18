@@ -479,3 +479,144 @@ describe('AgentController: tool suspension and resumption', () => {
     expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
   });
 });
+
+describe('AgentController: tool resume that fails before its run starts', () => {
+  // MastraLanguageModelV2Mock: these cases need the resumed model call held open
+  // on demand, which the aimock loop harness cannot do.
+  async function suspendedSession(id: string, { gate }: { gate?: Promise<void> } = {}) {
+    const confirmTool = createTool({
+      id: 'confirm-action',
+      description: 'Confirms an action with the user',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) return { result: `Action "${input.action}" confirmed` };
+        await context.agent.suspend({ action: input.action });
+        return { result: `Action "${input.action}" confirmed` };
+      },
+    });
+    let callCount = 0;
+    const agent = new Agent({
+      id,
+      name: id,
+      instructions: 'You confirm actions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => {
+          if (++callCount === 1) return { stream: createToolCallStream() };
+          await gate;
+          return { stream: createTextStream() };
+        },
+      }),
+      tools: { confirmAction: confirmTool },
+    });
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ agents: { [id]: agent }, logger: false, storage });
+    const registeredAgent = mastra.getAgent(id);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: `${id}-controller`,
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+      initialState: { yolo: true } as any,
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const events: any[] = [];
+    session.subscribe(event => events.push(event));
+    await session.thread.create();
+    await session.sendMessage({ content: 'Deploy to production' });
+    expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+    expect(session.run.isRunning()).toBe(false);
+    return { session, events, agent: registeredAgent };
+  }
+
+  function holdModel() {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    return { gate, release };
+  }
+
+  it('leaves the session idle with the tool call still parked, so a retry resumes it', async () => {
+    const { session, events, agent } = await suspendedSession('test-agent-failed-resume');
+    vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('resume dispatch failed'));
+    events.length = 0;
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(events.some((e: any) => e.type === 'error')).toBe(true);
+    expect(events.some((e: any) => e.type === 'agent_end')).toBe(false);
+    expect(session.run.isRunning()).toBe(false);
+    expect(session.run.getRunId()).toBeNull();
+    expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+
+    events.length = 0;
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete');
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+  });
+
+  it('keeps the run the resume started when the answer rejects after it started', async () => {
+    const model = holdModel();
+    const { session, events, agent } = await suspendedSession('test-agent-resume-started', model);
+    const resume = agent.sendStreamResume.bind(agent);
+    let startedRunId: string | null = null;
+    vi.spyOn(agent, 'sendStreamResume').mockImplementationOnce(async (...args) => {
+      await resume(...args);
+      await vi.waitFor(() => expect(session.run.getRunId()).not.toBeNull());
+      startedRunId = session.run.getRunId();
+      throw new Error('resume acknowledgement lost');
+    });
+    events.length = 0;
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(events.some((e: any) => e.type === 'error')).toBe(true);
+    expect(session.run.isRunning()).toBe(true);
+    expect(session.run.getRunId()).toBe(startedRunId);
+
+    model.release();
+    await vi.waitFor(() => expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete'));
+    expect(session.run.isRunning()).toBe(false);
+  });
+
+  it('keeps a run a message armed when a resume fails to start', async () => {
+    const { session, events, agent } = await suspendedSession('test-agent-failed-resume-armed');
+    const sent = session.sendMessage({ content: 'What is the status?' });
+    await vi.waitFor(() => expect(session.run.isRunning()).toBe(true));
+    const messageSignal = session.run.getAbortSignal();
+    vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('resume dispatch failed'));
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(session.run.isRunning()).toBe(true);
+    expect(session.run.getAbortSignal()).toBe(messageSignal);
+
+    await sent;
+    events.length = 0;
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await vi.waitFor(() => expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete'));
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+  });
+
+  it('keeps the run when a message arms it while the resume is failing', async () => {
+    const { session, events, agent } = await suspendedSession('test-agent-failed-resume-joined');
+    let sent: Promise<void> | undefined;
+    vi.spyOn(agent, 'sendStreamResume').mockImplementationOnce(async () => {
+      const armCount = session.run.armCount();
+      sent = session.sendMessage({ content: 'What is the status?' });
+      await vi.waitFor(() => expect(session.run.armCount()).toBeGreaterThan(armCount));
+      throw new Error('resume dispatch failed');
+    });
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(session.run.isRunning()).toBe(true);
+
+    await sent;
+    events.length = 0;
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await vi.waitFor(() => expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete'));
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+  });
+});
