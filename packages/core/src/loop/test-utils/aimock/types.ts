@@ -373,6 +373,8 @@ export interface RunLoopScenarioOptions {
    * or `semanticRecall` (enable/disable semantic recall).
    */
   memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Workspace attached to the agent. Passed into tool execution context so tools
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.
