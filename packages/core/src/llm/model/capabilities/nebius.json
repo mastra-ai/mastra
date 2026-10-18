@@ -23,6 +23,7 @@
     "nvidia/Nemotron-3_5-Lightning",
     "nvidia/nemotron-3-super-120b-a12b",
     "openai/gpt-oss-120b",
+    "reflection/beam",
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
@@ -44,6 +45,7 @@
     "nvidia/Nemotron-3_5-Lightning",
     "nvidia/nemotron-3-super-120b-a12b",
     "openai/gpt-oss-120b",
+    "reflection/beam",
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
@@ -53,6 +55,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "reflection/beam": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "Qwen/Qwen3.8-27B": [
