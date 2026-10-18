@@ -1,7 +1,17 @@
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'oxlint';
+
+const fromLintPackage = createRequire(new URL('./packages/_config/package.json', import.meta.url));
 
 export default defineConfig({
   plugins: ['import', 'unicorn', 'react', 'typescript', 'vitest'],
+  // Absolute specifiers: package configs extend this one, and oxlint rejects relative ones there.
+  jsPlugins: [
+    { name: 'mastra', specifier: fileURLToPath(new URL('./packages/_config/src/oxlint-plugin.js', import.meta.url)) },
+    // ESLint's import/order, unchanged (oxlint's own import plugin has no order rule).
+    { name: 'import-x-js', specifier: fromLintPackage.resolve('eslint-plugin-import-x') },
+  ],
   categories: {
     correctness: 'off',
   },
@@ -53,26 +63,40 @@ export default defineConfig({
     ],
     'unicorn/prefer-node-protocol': 'error',
     'react/jsx-key': 'warn',
+    'import-x-js/order': [
+      'error',
+      {
+        alphabetize: { order: 'asc', caseInsensitive: true },
+        pathGroups: [{ pattern: '#*/**', group: 'internal' }],
+        groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+      },
+    ],
   },
   overrides: [
     {
-      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      // TODO: meant to be on; off since #20173 broke this override's glob (`?(x)` matched no file).
+      // ~1,155 violations to clean up in follow-up PRs, one rule family each.
+      files: ['**/*.{ts,tsx}', '**/*.{js,jsx}'],
       rules: {
         'no-console': [
-          'error',
+          'off',
           {
             allow: ['warn', 'error', 'info', 'table', 'time', 'timeEnd', 'dir'],
           },
         ],
-        'no-debugger': 'error',
+        'no-debugger': 'off',
       },
     },
     {
-      files: ['**/*.js?(x)'],
+      files: ['**/*.{js,jsx}'],
+      // Repeated here: a package config that extends this one doesn't inherit the top-level env.
+      env: { builtin: true, browser: true, node: true },
       rules: {
         'no-undef': 'error',
+        // TODO: meant to be on; off since #20173 broke this override's glob (`?(x)` matched no file).
+        // ~1,155 violations to clean up in follow-up PRs, one rule family each.
         'no-unused-vars': [
-          'error',
+          'off',
           {
             args: 'after-used',
             argsIgnorePattern: '^_',
@@ -85,11 +109,13 @@ export default defineConfig({
       },
     },
     {
-      files: ['**/*.ts?(x)'],
+      // TODO: meant to be on; off since #20173 broke this override's glob (`?(x)` matched no file).
+      // ~1,155 violations to clean up in follow-up PRs, one rule family each.
+      files: ['**/*.{ts,tsx}'],
       rules: {
-        'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
+        'import/consistent-type-specifier-style': ['off', 'prefer-top-level'],
         'eslint/no-unused-vars': [
-          'error',
+          'off',
           {
             args: 'after-used',
             argsIgnorePattern: '^_',
@@ -100,16 +126,16 @@ export default defineConfig({
           },
         ],
         'typescript/consistent-type-imports': [
-          'error',
+          'off',
           {
             prefer: 'type-imports',
             disallowTypeAnnotations: true,
             fixStyle: 'separate-type-imports',
           },
         ],
-        'typescript/no-require-imports': 'error',
+        'typescript/no-require-imports': 'off',
         'typescript/ban-ts-comment': [
-          'error',
+          'off',
           {
             'ts-expect-error': 'allow-with-description',
             'ts-ignore': true,
@@ -121,24 +147,28 @@ export default defineConfig({
       },
       plugins: ['typescript'],
     },
+    // TODO: the ban on importing test files from source (`no-restricted-imports` with test-file patterns) is meant
+    // to be on; off since #20173 broke its override's glob. Don't re-add it here as a root override: oxlint applies an
+    // extended config's overrides after a package's own rules, so it would replace the packages' import bans.
+
+    // Type-aware (oxlint --type-aware, oxlint-tsgolint): enforced by ESLint's typescript-eslint until now.
     {
-      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      files: ['**/*.{ts,tsx}'],
       rules: {
-        'no-restricted-imports': [
-          'error',
-          {
-            patterns: [
-              {
-                group: ['**/tests/**', '**/#tests/**', '**/__tests__/**/*', '**/*.test.*', '**/*.spec.*'],
-                message: 'Do not import test files in source files',
-              },
-            ],
-          },
-        ],
+        'typescript/no-floating-promises': 'error',
+        'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],
       },
     },
     {
-      files: ['**/tests/**', '**/#tests/**', '**/__tests__/**/*', '**/*.test.*', '**/*.spec.*', 'vitest.config.ts'],
+      files: [
+        '**/tests/**',
+        '**/#tests/**',
+        '**/__tests__/**/*',
+        '**/*.test.*',
+        '**/*.spec.*',
+        'vitest.config.ts',
+        '**/oxlint.config.ts',
+      ],
       rules: {
         'typescript/await-thenable': 'off',
         'typescript/consistent-return': 'off',

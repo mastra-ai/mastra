@@ -1,4 +1,4 @@
-// eslint-disable-next-line import/order
+// oxlint-disable-next-line import-x-js/order
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock getPackageManager before any other imports that might use it
