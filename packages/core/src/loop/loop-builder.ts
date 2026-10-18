@@ -26,6 +26,8 @@ import {
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
+import { getTranscriptStepContent } from './shared/transcript-step';
+import type { TranscriptStep } from './shared/transcript-step';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
 import { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
@@ -96,6 +98,8 @@ export type LoopWorkflow = Workflow<any, any, any, any, any, any, any, any>;
  */
 export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   readonly #params?: AgenticLoopBuilderParams<Tools, OUTPUT>;
+  /** Where each step's parts sit in the response, recorded by the execution step. */
+  readonly #transcriptSteps: (TranscriptStep | undefined)[] = [];
 
   /**
    * The main loop resolves everything from per-run params captured at
@@ -181,6 +185,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     return createLLMExecutionStep<Tools, OUTPUT>({
       ...this.params,
       toolCallForeachOptions,
+      transcriptSteps: this.#transcriptSteps,
       eagerCoordinator: eager?.coordinator,
       eagerToolCallStep: eager?.toolCallStep,
     });
@@ -522,7 +527,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       );
 
       // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(state.previousContentLength);
+      // Observational Memory drains the response bucket between steps, which shifts
+      // offsets into the flattened response (#24224). Read this step's parts from where
+      // the execution step recorded them instead.
+      const transcriptStep = this.#transcriptSteps[typedInputData.output.steps.length - 1];
+      const currentContent = transcriptStep
+        ? (getTranscriptStepContent(messageList, transcriptStep) as StepResult<Tools>['content'])
+        : allContent.slice(state.previousContentLength);
       state.previousContentLength = allContent.length;
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
