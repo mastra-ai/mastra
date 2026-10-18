@@ -127,11 +127,7 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
     ).toBe(true);
   });
 
-  // Known gap: on durable/evented engines a processor's step-level sendSignal
-  // stamps the response boundary but the signal's contents are never drained
-  // into the next model request (durable drains only the thread runtime queue).
-  const deliversReminder = isDurableEngineVariant(engine) ? it.fails : it;
-  deliversReminder('shows the reminder to the model on the next turn', async () => {
+  it('shows the reminder to the model on the next turn', async () => {
     const { requests } = await runDeployWithReminder(engine, getMock());
     expect(requests).toHaveLength(2);
     expect(JSON.stringify(requestMessages(requests[1]))).toContain(REMINDER);

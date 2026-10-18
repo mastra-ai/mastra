@@ -213,7 +213,7 @@ import {
   withoutIdentityAgentScopes,
 } from './scopes';
 import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
-import type { CreatedAgentSignal } from './signals';
+import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
@@ -1301,6 +1301,22 @@ export class Agent<
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
     const pubsub = this.getPubSub();
     return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /**
+   * Returns a closure that queues a signal on a durable run through
+   * `sendSignal`, so the run's drain delivers it to the next model request.
+   * @internal
+   */
+  __getEnqueuePendingSignal(): (
+    target: { runId: string; resourceId?: string; threadId?: string },
+    signalInput: AgentSignalInput,
+  ) => Promise<CreatedAgentSignal> {
+    return async (target, signalInput) => {
+      const result = this.sendSignal(signalInput, target);
+      await result.accepted;
+      return result.signal;
+    };
   }
 
   /** @internal */

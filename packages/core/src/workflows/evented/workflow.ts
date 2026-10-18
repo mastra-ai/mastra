@@ -30,7 +30,7 @@ import {
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
 import { initContextStorage } from '../../observability/context-storage';
 import { executeWithContext } from '../../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
+import type { OutputResult, Processor, ProcessorLateSignalSink, ProcessorStreamWriter } from '../../processors';
 import {
   ProcessorRunner,
   ProcessorState,
@@ -846,6 +846,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
         abortSignal?: AbortSignal;
+        lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
         phase,
@@ -885,6 +886,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
+        // Receives sendSignal calls made after the creating durable step returned
+        lateSignalSink,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -1158,6 +1161,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messageList: processorMessageList,
                 writer: processorWriter,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
+                lateSink: lateSignalSink,
               }),
             }
           : {}),

@@ -1040,6 +1040,7 @@ export {
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export { createProcessorSendSignal } from './send-signal';
+export type { ProcessorLateSignalSink } from './send-signal';
 export { createBackgroundWorkSignalProcessor } from './background-work-signals';
 export type {
   BackgroundWorkDisposition,

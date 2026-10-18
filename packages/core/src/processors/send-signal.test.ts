@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import { createSignal } from '../agent/signals';
+import type { AgentSignalInput } from '../agent/signals';
 import { createProcessorSendSignal } from './send-signal';
 
 describe('createProcessorSendSignal visibility', () => {
@@ -50,5 +52,57 @@ describe('createProcessorSendSignal visibility', () => {
     expect(custom).toHaveBeenCalledExactlyOnceWith(signal.toDataPart());
     expect(messageList.get.all.db()).toEqual([expect.objectContaining({ id: signal.id, role: 'signal' })]);
     expect(JSON.stringify(messageList.get.all.aiV5.model())).toContain('Visible signal');
+  });
+});
+
+describe('createProcessorSendSignal late sink (issue #27457)', () => {
+  function createSink() {
+    const sink = {
+      closed: false,
+      sent: [] as AgentSignalInput[],
+      isClosed: () => sink.closed,
+      send: async (signalInput: AgentSignalInput) => {
+        sink.sent.push(signalInput);
+        return createSignal(signalInput);
+      },
+    };
+    return sink;
+  }
+
+  it('writes to the step MessageList while the step is open', async () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    const custom = vi.fn().mockResolvedValue(undefined);
+    const sink = createSink();
+    const sendSignal = createProcessorSendSignal({ messageList, writer: { custom }, lateSink: sink });
+
+    const signal = await sendSignal({ type: 'reactive', contents: 'In-step reminder' });
+
+    expect(sink.sent).toEqual([]);
+    expect(custom).toHaveBeenCalledExactlyOnceWith(signal.toDataPart());
+    expect(messageList.get.all.db()).toEqual([expect.objectContaining({ id: signal.id, role: 'signal' })]);
+  });
+
+  it('routes to the late sink once the step closed, without touching the stale MessageList', async () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    const boundary = vi.spyOn(messageList, 'markResponseMessageBoundary');
+    const custom = vi.fn().mockResolvedValue(undefined);
+    const rotateResponseMessageId = vi.fn(() => 'next-response');
+    const sink = createSink();
+    const sendSignal = createProcessorSendSignal({
+      messageList,
+      writer: { custom },
+      rotateResponseMessageId,
+      lateSink: sink,
+    });
+
+    sink.closed = true;
+    const signal = await sendSignal({ type: 'reactive', contents: 'Late reminder' });
+
+    expect(sink.sent).toEqual([{ type: 'reactive', contents: 'Late reminder' }]);
+    expect(signal.contents).toBe('Late reminder');
+    expect(messageList.get.all.db()).toEqual([]);
+    expect(custom).not.toHaveBeenCalled();
+    expect(boundary).not.toHaveBeenCalled();
+    expect(rotateResponseMessageId).not.toHaveBeenCalled();
   });
 });

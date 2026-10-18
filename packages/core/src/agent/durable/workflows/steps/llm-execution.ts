@@ -39,6 +39,7 @@ import { PrepareStepProcessor } from '../../../../processors/processors/prepare-
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import type { ProcessorState } from '../../../../processors/runner';
 import { ProcessorRunner } from '../../../../processors/runner';
+import type { ProcessorLateSignalSink } from '../../../../processors/send-signal';
 import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
 import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../../stream/aisdk/v5/execute';
@@ -61,7 +62,12 @@ import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
-import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
+import type {
+  DurableAgenticWorkflowInput,
+  DurableLLMStepOutput,
+  DurableToolCallInput,
+  RunRegistryEntry,
+} from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
@@ -212,6 +218,33 @@ export interface DurableLLMExecutionStepOptions {
   // No options needed - tools and model are resolved from Mastra at runtime
 }
 
+type StepLifetime = { closed: boolean };
+
+/**
+ * Processors may keep a step's `sendSignal` and call it after the step
+ * returned. By then the step's MessageList is serialized, so each execution
+ * gets a lifetime flag that is closed on return; the late-signal sink routes
+ * calls made after that to the run's pending-signal queue.
+ */
+const stepLifetimes = new WeakMap<object, StepLifetime>();
+
+function getStepLifetime(params: object): StepLifetime {
+  let lifetime = stepLifetimes.get(params);
+  if (!lifetime) {
+    lifetime = { closed: false };
+    stepLifetimes.set(params, lifetime);
+  }
+  return lifetime;
+}
+
+function createLateSignalSink(
+  stepLifetime: StepLifetime,
+  enqueue: RunRegistryEntry['enqueuePendingSignal'],
+): ProcessorLateSignalSink | undefined {
+  if (!enqueue) return undefined;
+  return { isClosed: () => stepLifetime.closed, send: enqueue };
+}
+
 /**
  * Create a durable LLM execution step.
  *
@@ -227,11 +260,12 @@ export interface DurableLLMExecutionStepOptions {
  * dependencies are resolved at execution time.
  */
 export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStepOptions) {
-  return createStep({
+  const step = createStep({
     id: DurableStepIds.LLM_EXECUTION,
     inputSchema: durableLLMInputSchema,
     outputSchema: durableLLMOutputSchema,
     execute: async params => {
+      const stepLifetime = getStepLifetime(params);
       const { inputData, mastra, tracingContext, requestContext, abortSignal } = params;
 
       // Access pubsub via symbol
@@ -797,6 +831,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
                 processorStates: registryEntry?.processorStates,
+                lateSignalSink: createLateSignalSink(stepLifetime, registryEntry?.enqueuePendingSignal),
               });
               try {
                 const processInputStepResult = await runner.runProcessInputStep({
@@ -1045,6 +1080,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     logger: logger as any,
                     agentName: typedInput.agentName ?? typedInput.agentId,
                     processorStates: registryEntry?.processorStates,
+                    lateSignalSink: createLateSignalSink(stepLifetime, registryEntry?.enqueuePendingSignal),
                   })
                 : undefined;
             const requestStepWriter = pubsub
@@ -1567,6 +1603,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
                 processorStates: registryEntry?.processorStates,
+                lateSignalSink: createLateSignalSink(stepLifetime, registryEntry?.enqueuePendingSignal),
               });
               return toolResultRunner;
             };
@@ -2246,6 +2283,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     logger: logger as any,
                     agentName: typedInput.agentName ?? typedInput.agentId,
                     processorStates: registryEntryInner.processorStates,
+                    lateSignalSink: createLateSignalSink(stepLifetime, registryEntryInner.enqueuePendingSignal),
                   });
                   const { retry } = await runner.runProcessAPIError({
                     error: lastError,
@@ -2464,6 +2502,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
                 processorStates: registryEntry?.processorStates,
+                lateSignalSink: createLateSignalSink(stepLifetime, registryEntry?.enqueuePendingSignal),
               });
 
               const toolCallInfos = toolCalls.map(tc => ({
@@ -2700,6 +2739,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   logger: logger as any,
                   agentName: typedInput.agentName ?? typedInput.agentId,
                   processorStates: registryEntry.processorStates,
+                  lateSignalSink: createLateSignalSink(stepLifetime, registryEntry.enqueuePendingSignal),
                 });
                 const { retry } = await runner.runProcessAPIError({
                   error: lastError,
@@ -2768,4 +2808,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       return emitFatalErrorBail(fatalError, modelList.at(-1)?.config.modelId ?? 'unknown');
     },
   });
+  const executeStep = step.execute;
+  step.execute = async params => {
+    try {
+      return await executeStep(params);
+    } finally {
+      getStepLifetime(params).closed = true;
+    }
+  };
+  return step;
 }
