@@ -1,10 +1,11 @@
 import { join, dirname } from 'node:path';
 import type { IMastraLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
-import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
 import { slash } from '../build/utils';
 import { DepsService } from '../services';
+import { WORKSPACE_PLACEHOLDER_VERSION, withPlaceholderVersions } from '../services/deps';
+import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from './find-workspaces';
 
 export type WorkspacePackageInfo = {
   location: string;
@@ -136,7 +137,7 @@ export const collectTransitiveWorkspaceDependencies = async ({
 
       const tgzPath = depsService.getWorkspaceDependencyPath({
         pkgName: sanitizedName,
-        version: dep.version!,
+        version: dep.version ?? WORKSPACE_PLACEHOLDER_VERSION,
       });
       resolutions[pkgName] = tgzPath;
       usedWorkspacePackages.add(pkgName);
@@ -184,27 +185,33 @@ export const packWorkspaceDependencies = async ({
 
     const batchSize = 5;
     const packages = Array.from(usedWorkspacePackages.values());
+    const packageDirs = packages.flatMap(pkgName => {
+      const location = workspaceMap.get(pkgName)?.location;
+      return location ? [location] : [];
+    });
 
-    for (let i = 0; i < packages.length; i += batchSize) {
-      const batch = packages.slice(i, i + batchSize);
-      logger.info(
-        `Packaging batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(packages.length / batchSize)}: ${batch.join(', ')}`,
-      );
-      await Promise.all(
-        batch.map(async pkgName => {
-          const dep = workspaceMap.get(pkgName);
-          const sanitizedName = slugify(pkgName);
-          if (!dep) return;
+    await withPlaceholderVersions(packageDirs, async () => {
+      for (let i = 0; i < packages.length; i += batchSize) {
+        const batch = packages.slice(i, i + batchSize);
+        logger.info(
+          `Packaging batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(packages.length / batchSize)}: ${batch.join(', ')}`,
+        );
+        await Promise.all(
+          batch.map(async pkgName => {
+            const dep = workspaceMap.get(pkgName);
+            const sanitizedName = slugify(pkgName);
+            if (!dep) return;
 
-          await depsService.pack({
-            dir: dep.location,
-            destination: workspaceDirPath,
-            sanitizedName,
-            version: dep.version!,
-          });
-        }),
-      );
-    }
+            await depsService.pack({
+              dir: dep.location,
+              destination: workspaceDirPath,
+              sanitizedName,
+              version: dep.version ?? WORKSPACE_PLACEHOLDER_VERSION,
+            });
+          }),
+        );
+      }
+    });
 
     logger.info('Successfully packaged workspace dependencies', { count: usedWorkspacePackages.size });
   }

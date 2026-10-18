@@ -516,6 +516,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "from": "AGENT",
               "payload": {
                 "messageId": "id-0",
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
                 "request": {},
                 "startedAt": 1704067200000,
                 "warnings": [],
@@ -947,6 +949,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "from": "AGENT",
               "payload": {
                 "messageId": "id-0",
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
                 "request": {},
                 "startedAt": 1704067200000,
                 "warnings": [],
@@ -5078,7 +5082,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           runId: 'test-run-id',
           from: 'AGENT',
           type: 'step-start',
-          payload: { request: {}, warnings: [], messageId: 'id-0', startedAt: Date.now() },
+          payload: {
+            request: {},
+            warnings: [],
+            messageId: 'id-0',
+            startedAt: Date.now(),
+            modelId: 'mock-model-id',
+            provider: 'mock-provider',
+          },
         },
         {
           type: 'error',
@@ -7520,6 +7531,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "from": "AGENT",
               "payload": {
                 "messageId": "id-0",
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
                 "request": {},
                 "warnings": [],
               },
@@ -8285,6 +8298,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "from": "AGENT",
               "payload": {
                 "messageId": "id-0",
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
                 "request": {},
                 "startedAt": 1704067200000,
                 "warnings": [],
@@ -8612,6 +8627,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "from": "AGENT",
               "payload": {
                 "messageId": "msg-0",
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
                 "request": {},
                 "startedAt": 1704067200000,
                 "warnings": [],
@@ -8883,6 +8900,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "from": "AGENT",
               "payload": {
                 "messageId": "msg-0",
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
                 "request": {},
                 "startedAt": 1704067200000,
                 "warnings": [],

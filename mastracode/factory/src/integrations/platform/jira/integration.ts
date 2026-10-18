@@ -490,6 +490,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     const api = new JiraApiClient({
       baseUrl: `${proxyBaseUrl}/ex/jira/${encodeURIComponent(cloudId)}`,
       accessToken: this.#clientConfig.accessToken,
+      ...(this.#clientConfig.projectId ? { projectId: this.#clientConfig.projectId } : {}),
       ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
     });
     let siteUrl = this.#siteUrlByConnectionId.get(connection.id);

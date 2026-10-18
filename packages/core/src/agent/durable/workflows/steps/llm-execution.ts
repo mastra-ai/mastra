@@ -31,7 +31,7 @@ import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-e
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
 import { createRunScope } from '../../../../mastra/run-scope';
-import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan, Span } from '../../../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
@@ -144,6 +144,8 @@ const durableLLMInputSchema = z.object({
   agentSpanData: z.any().optional(),
   // Model span data (ONE span for entire agent run, created before workflow)
   modelSpanData: z.any().optional(),
+  // First-chunk clock carried from earlier iterations (first write wins)
+  completionStartTime: z.coerce.date().optional(),
   // Step index for continuation (step: 0, 1, 2, ...)
   stepIndex: z.number().optional(),
   signalPreempted: z.boolean().optional(),
@@ -199,6 +201,8 @@ const durableLLMOutputSchema = z.object({
   // Deferred step-finish chunk carried until the loop predicate has resolved
   // the actual continuation decision.
   deferredStepFinishChunk: z.any().optional(),
+  // When this step's inference streamed its first chunk; the loop keeps the first one
+  completionStartTime: z.coerce.date().optional(),
 });
 
 /**
@@ -685,25 +689,47 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // after a resume the registry override points steps at the resumed generation.
             const inputModelSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeModelSpanData ??
               inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
-            const modelSpan = inputModelSpanData
-              ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
-              : undefined;
-
-            // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
-            const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker();
-            endAttemptSpans = () => {
-              modelSpanTracker?.interruptInference?.();
-              const stepSpan = modelSpanTracker?.exportCurrentStep();
-              if (stepSpan) observability?.rebuildSpan(stepSpan)?.end({ attributes: { finishReason: 'interrupted' } });
+            // Rebuilt spans come from the run-start snapshot, so re-apply the carried
+            // first-chunk clock before the tracker sees them; otherwise a later step's
+            // chunk would overwrite it mid-run. The loop state carries the originals'
+            // clock; a resumed segment has fresh spans, so its clock lives on the
+            // registry beside them.
+            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+            const carriedClock = resumeRegistry?.resumeModelSpanData
+              ? resumeRegistry.resumeCompletionStartTime
+              : inputData.completionStartTime;
+            const withCarriedClock = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
+              data: T,
+            ): T =>
+              carriedClock && !data.attributes?.completionStartTime
+                ? { ...data, attributes: { ...data.attributes, completionStartTime: carriedClock } }
+                : data;
+            const recordCompletionStartTime = () => {
+              const clock = modelSpanTracker?.getCompletionStartTime?.();
+              if (resumeRegistry?.resumeModelSpanData && clock) resumeRegistry.resumeCompletionStartTime ??= clock;
+              return clock;
             };
+            const modelSpan = inputModelSpanData
+              ? (observability?.rebuildSpan(withCarriedClock(inputModelSpanData)) as AIModelGenerationSpan | undefined)
+              : undefined;
 
             // On remote engines (Inngest) the step's tracingContext span is not part of the
             // exported trace, so parent client-tool spans on the rebuilt AGENT_RUN span instead.
             const inputAgentSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeAgentSpanData ??
               inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
             const agentRunSpan = inputAgentSpanData
-              ? (observability?.rebuildSpan(inputAgentSpanData) as AnySpan | undefined)
+              ? (observability?.rebuildSpan(withCarriedClock(inputAgentSpanData)) as AnySpan | undefined)
               : undefined;
+
+            // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
+            const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker({
+              agentRunSpan: agentRunSpan as Span<SpanType.AGENT_RUN> | undefined,
+            });
+            endAttemptSpans = () => {
+              modelSpanTracker?.interruptInference?.();
+              const stepSpan = modelSpanTracker?.exportCurrentStep();
+              if (stepSpan) observability?.rebuildSpan(stepSpan)?.end({ attributes: { finishReason: 'interrupted' } });
+            };
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
             // This ensures step numbering continues across agentic loop iterations
@@ -1306,7 +1332,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // undefined when structuringModelConfig routes through a separate
             // structuring step instead of asking the model for json_schema.
             // Skipped when tracing is off or the trace was not sampled (a
-            // no-op span still hands out a tracker).
+            // no-op span still hands out a tracker). The prompt is passed at
+            // creation so MODEL_INFERENCE records what this call sent.
             const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
               ? getToolDefinitionsForTracing({
                   tools: currentTools,
@@ -1324,7 +1351,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
-            modelSpanTracker?.startInference?.();
+            modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentMessageId });
             let inferenceStartedAt: number | undefined;
 
             // Collect chunks for post-stream message building (via
@@ -1612,6 +1639,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
                     startedAt: inferenceStartedAt,
+                    modelId: currentModel.modelId,
+                    provider: currentModel.provider,
                     warnings,
                   });
                 }
@@ -2560,6 +2589,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // Carry step-finish through the iteration so the loop predicate can
               // stamp and emit the actual post-policy continuation decision.
               deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
+              completionStartTime: recordCompletionStartTime(),
             };
 
             // 16. End step span only if there are NO tool calls

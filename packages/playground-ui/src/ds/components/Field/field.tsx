@@ -4,6 +4,7 @@ import { CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { FieldAriaContext, useFieldAriaIds } from './field-control-aria';
+import { InfoTooltip } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +15,8 @@ type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
 
 const orientationClassName = {
   vertical: 'grid gap-2',
-  horizontal: 'flex items-center gap-2 has-[>[data-slot=field-label]:first-child]:justify-between',
+  horizontal:
+    'flex items-center gap-2 has-[>[data-slot=field-label]:first-child,>[data-slot=field-label-row]:first-child]:justify-between',
   responsive: 'flex flex-col gap-2 sm:flex-row sm:items-center',
 } satisfies Record<NonNullable<FieldProps['orientation']>, string>;
 
@@ -83,9 +85,60 @@ type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   className?: string;
   required?: boolean;
   size?: 'smaller' | 'default' | 'bigger';
+  /** What the field is for, shown in a tooltip on a muted info icon after the label. */
+  info?: React.ReactNode;
 };
 
-function FieldLabel({ className, required = false, size = 'default', children, onClick, ...props }: FieldLabelProps) {
+/** The label's plain text (`{name} (JSON)` included), or undefined when it holds elements. */
+function plainText(node: React.ReactNode) {
+  const parts = React.Children.toArray(node);
+  if (!parts.every(part => typeof part === 'string' || typeof part === 'number')) return undefined;
+  return parts.join('');
+}
+
+/** How the info icon is named: "About <label>", from the label's text or, for a label with elements, the label itself. */
+function infoTooltipName({ label, labelId, aboutId }: { label: React.ReactNode; labelId?: string; aboutId: string }) {
+  const labelText = plainText(label);
+  if (labelText) return { 'aria-label': `About ${labelText}` };
+  if (labelId) return { 'aria-labelledby': `${aboutId} ${labelId}` };
+  return { 'aria-label': 'About this field' };
+}
+
+/** The info icon after a label. Outside the `<label>`, so hovering or clicking it never focuses the field. */
+function FieldLabelInfo({
+  children,
+  label,
+  labelId,
+}: {
+  children: React.ReactNode;
+  label: React.ReactNode;
+  labelId?: string;
+}) {
+  const aboutId = React.useId();
+  const name = infoTooltipName({ label, labelId, aboutId });
+  const isNamedByLabel = 'aria-labelledby' in name;
+
+  return (
+    <>
+      <InfoTooltip {...name}>{children}</InfoTooltip>
+      {isNamedByLabel ? (
+        <span id={aboutId} hidden>
+          About
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function FieldLabel({
+  className,
+  required = false,
+  size = 'default',
+  info,
+  children,
+  onClick,
+  ...props
+}: FieldLabelProps) {
   const field = useFieldAriaIds();
 
   const focusManualControl: FieldLabelProps['onClick'] = event => {
@@ -94,12 +147,16 @@ function FieldLabel({ className, required = false, size = 'default', children, o
     event.currentTarget.ownerDocument.getElementById(field.controlId)?.focus();
   };
 
-  return (
+  const label = (
     <FieldPrimitive.Label
       id={field?.labelId}
       data-slot="field-label"
       className={cn(
         'inline-flex shrink-0 items-center text-label text-foreground data-disabled:text-muted-foreground',
+        // Only the text is clickable, not the empty width beside it. A label that wraps its
+        // checkbox, switch or radio is a row target, so it keeps stretching. Zero specificity, so a
+        // width from `className` (`sr-only`, `w-24`) still wins.
+        '[:where(&:not(:has([role=checkbox],[role=switch],[role=radio])))]:w-fit',
         'not-data-disabled:has-[[role=checkbox],[role=switch],[role=radio]]:cursor-pointer',
         'not-data-disabled:[:is([data-slot=field],[data-slot=field-item]):has(>[role=checkbox],>[role=switch],>[role=radio])_&]:cursor-pointer',
         'data-disabled:cursor-not-allowed',
@@ -113,6 +170,16 @@ function FieldLabel({ className, required = false, size = 'default', children, o
       {children}
       {required ? <RequiredMark /> : null}
     </FieldPrimitive.Label>
+  );
+
+  if (!info) return label;
+  return (
+    <span data-slot="field-label-row" className="flex w-fit items-center gap-1">
+      {label}
+      <FieldLabelInfo label={children} labelId={field?.labelId}>
+        {info}
+      </FieldLabelInfo>
+    </span>
   );
 }
 

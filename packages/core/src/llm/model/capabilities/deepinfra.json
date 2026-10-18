@@ -23,6 +23,7 @@
     "anthropic/claude-fable-5",
     "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
     "google/gemma-3-4b-it",
@@ -37,6 +38,7 @@
     "moonshotai/Kimi-K3",
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "stepfun-ai/Step-3.7-Flash",
+    "stepfun-ai/Step-5-Preview",
     "thinkingmachines/Inkling",
     "thinkingmachines/Inkling-Small",
     "zai-org/GLM-5.3-Flash"
@@ -82,6 +84,7 @@
     "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
     "google/gemma-3-4b-it",
@@ -151,6 +154,7 @@
     "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
     "google/gemma-3-4b-it",
@@ -169,6 +173,7 @@
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
+    "stepfun-ai/Step-5-Preview",
     "tencent/Hy3",
     "tencent/Hy4-preview",
     "thinkingmachines/Inkling",
@@ -293,10 +298,22 @@
         "type": "toggle"
       }
     ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "stepfun-ai/Step-5-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "moonshotai/Kimi-K2.6": [

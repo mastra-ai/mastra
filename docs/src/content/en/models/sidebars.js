@@ -281,6 +281,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/boundless',
+          label: 'Boundless',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -328,6 +333,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/cohere',
           label: 'Cohere',
+        },
+        {
+          type: 'doc',
+          id: 'providers/commandcode',
+          label: 'CommandCode',
         },
         {
           type: 'doc',
@@ -868,6 +878,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/qvac',
           label: 'QVAC',
+        },
+        {
+          type: 'doc',
+          id: 'providers/reflection',
+          label: 'Reflection',
         },
         {
           type: 'doc',

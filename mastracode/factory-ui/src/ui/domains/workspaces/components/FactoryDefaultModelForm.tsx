@@ -6,7 +6,7 @@ import type { ProviderInfo } from '../../../../api/types';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { useState } from 'react';
 import { useProviderModels } from '../hooks/useProviderModels';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
@@ -30,9 +30,11 @@ export function FactoryDefaultModelForm({
   onPreviewModel,
   submitLabel = 'Continue',
 }: FactoryDefaultModelFormProps) {
-  const choice = useProviderModels(provider.provider);
+  const choice = useProviderModels(provider.provider, scope);
   const [selectedModelId, setModelId] = useState(initialModelId);
-  const modelId = choice.models.find(model => model.id === selectedModelId)?.id ?? choice.suggestedModelId ?? '';
+  const modelId = selectedModelId
+    ? (choice.models.find(model => model.id === selectedModelId)?.id ?? '')
+    : (choice.suggestedModelId ?? '');
 
   if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
   if (choice.catalogError || choice.models.length === 0) {
@@ -72,6 +74,16 @@ export function FactoryDefaultModelForm({
           placeholder="Select a default model…"
         />
       </Field>
+      {selectedModelId && !modelId && (
+        <Txt variant="caption" role="alert">
+          Your previous model is no longer available. Choose another model.
+        </Txt>
+      )}
+      {scope === 'user' && (
+        <Txt variant="meta" tone="muted">
+          Creating this Factory also updates your personal default model.
+        </Txt>
+      )}
       {scope === 'org' && <SharedCredentialNotice modelId={modelId || undefined} />}
       <Button variant="primary" className="w-full" disabled={!modelId} onClick={() => onContinue(modelId)}>
         {submitLabel}

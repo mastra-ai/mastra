@@ -10,7 +10,7 @@
  * - references/<file> (from the skill's `references` map)
  */
 
-import matter from 'gray-matter';
+import { stringifyFrontmatter } from '@internal/core/frontmatter';
 
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '../workspace/skills/skill-source';
 import type { InlineSkill } from './types';
@@ -42,7 +42,7 @@ export class InlineSkillSource implements SkillSource {
     if (skill['user-invocable'] !== undefined) frontmatter['user-invocable'] = skill['user-invocable'];
     if (skill.metadata) frontmatter.metadata = skill.metadata;
 
-    return matter.stringify(skill.instructions, frontmatter);
+    return stringifyFrontmatter(skill.instructions, frontmatter);
   }
 
   /**

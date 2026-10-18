@@ -45,7 +45,6 @@ import {
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import {
   buildTraceQueryRequest,
-  clampTraceDiscoveryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/traces/trace-query-filters';
@@ -67,6 +66,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
@@ -214,14 +214,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const [discoveryNow] = useState(() => new Date());
   const discoveryTimeRange = useMemo(
     () =>
-      clampTraceDiscoveryTimeRange(
-        buildTraceQueryRequest({
-          dateFrom: url.selectedDateFrom,
-          dateTo: url.selectedDateTo,
-          tokens: [],
-          now: discoveryNow,
-        }).timeRange,
-      ),
+      buildTraceQueryRequest({
+        dateFrom: url.selectedDateFrom,
+        dateTo: url.selectedDateTo,
+        tokens: [],
+        now: discoveryNow,
+      }).timeRange,
     [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
   );
   const { enabled: withDiscovery } = useTraceQueryDiscoveryAvailable();
@@ -588,10 +586,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       />
 
       <TraceAsItemDialog
+        depth={isFullThreadOpen ? 3 : 2}
         rootSpanId={datasetDialogTarget?.rootSpanId}
         traceId={datasetDialogTarget?.traceId}
         isOpen={!!datasetDialogTarget}
         onClose={() => setDatasetDialogTarget(null)}
+        renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
       />
 
       <AddTraceMocksToItemDialog

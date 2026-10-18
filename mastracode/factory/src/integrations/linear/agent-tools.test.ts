@@ -136,14 +136,6 @@ describe('buildLinearAgentTools — exposure gating', () => {
     expect(tools).toEqual({});
   });
 
-  it('falls back to a project-scoped resourceId when factoryProjectId is absent', async () => {
-    await seedProject();
-    await seedConnection();
-    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
-    expect(tools).toHaveProperty('linear_get_issue');
-    expect(tools).toHaveProperty('linear_create_comment');
-  });
-
   it('withholds the write tools when the connection scope is read-only', async () => {
     await seedProject();
     await seedConnection({ scope: 'read' });

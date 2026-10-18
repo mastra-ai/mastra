@@ -1,5 +1,6 @@
-import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
+import { primeTenantCredentialsForTenant, resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
@@ -11,6 +12,7 @@ export interface DefaultModelApplicableSession {
 
 export interface DefaultModelHydrationSession extends DefaultModelApplicableSession {
   readonly identity: { getResourceId(): string };
+  model: DefaultModelApplicableSession['model'] & { get(): string; setDefault(args: { modelId: string }): void };
   state: {
     get(): Record<string, unknown> | undefined;
     set(updates: Record<string, unknown>): Promise<unknown>;
@@ -32,7 +34,7 @@ async function applyDefaultModel(session: DefaultModelApplicableSession, modelId
 export interface DefaultModelHydrationDependencies {
   sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   projects: Pick<FactoryProjectsStorage, 'getById'>;
-  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>;
+  workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
@@ -60,13 +62,23 @@ export async function hydrateSessionDefaultModel(
       await clearFactoryIdentity();
       return;
     }
-    const project = await projects.getById({ id: sourceSession.factoryProjectId });
-    if (!project) {
+    // Historical thread membership keeps completed work items on Factory billing in hybrid scope.
+    const threadId = session.thread.getId();
+    const binding = threadId
+      ? await workItems.findRunBindingByThread({
+          orgId: sourceSession.orgId,
+          threadId,
+          resourceId,
+          sessionId: resourceId,
+          rejectAmbiguous: true,
+        })
+      : null;
+    const project = await projects.getById({ id: binding?.factoryProjectId ?? sourceSession.factoryProjectId });
+    if (!project || project.orgId !== sourceSession.orgId) {
       await clearFactoryIdentity();
       return;
     }
-
-    const modelScope = project.modelScope === 'user' ? 'user' : 'factory';
+    const modelScope = effectiveModelScope(project.modelScope, binding ? 'run' : 'session');
     await session.state.set({
       factoryOrgId: sourceSession.orgId,
       factoryModelScope: modelScope,
@@ -79,27 +91,27 @@ export async function hydrateSessionDefaultModel(
       credentialScope: modelScope,
     });
 
-    const threadId = session.thread.getId();
-    if (
-      threadId &&
-      (await workItems.findActiveRunBindingByThread({
-        orgId: sourceSession.orgId,
-        threadId,
-        resourceId,
-        sessionId: resourceId,
-      }))
-    ) {
-      return;
-    }
+    if (binding) return;
     if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
-    if (modelScope === 'factory') {
-      if (project.defaultModelId) await applyDefaultModel(session, project.defaultModelId);
-      return;
-    }
-
-    const modelDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
-    if (modelDefault) await applyDefaultModel(session, modelDefault.modelId);
+    const scopedModelId =
+      (modelScope === 'factory'
+        ? project.defaultModelId
+        : (await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId }))?.modelId) ??
+      // No chosen default: a connected provider's default, unless the current model is usable.
+      (await resolveTenantProviderDefaultModel(
+        { orgId: sourceSession.orgId, userId: sourceSession.userId, credentialScope: modelScope },
+        session.model.get() || undefined,
+      ).catch(error => {
+        console.warn('[Factory default-model hydration] Unable to resolve a provider default model.', error);
+        return undefined;
+      }));
+    if (!scopedModelId) return;
+    // A thread the session creates later (the UI binding its conventional
+    // thread after a thread-agnostic request opened the session) starts from
+    // the session default, not from the thread hydrated here.
+    session.model.setDefault({ modelId: scopedModelId });
+    await applyDefaultModel(session, scopedModelId);
   } catch (error) {
     if (!identityResolved && !hadFactoryIdentity) {
       try {

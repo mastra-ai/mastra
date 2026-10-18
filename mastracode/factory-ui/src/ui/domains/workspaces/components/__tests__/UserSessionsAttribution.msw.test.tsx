@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
@@ -68,16 +70,18 @@ function stubSessions(
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
 
 async function showAllOwners() {
-  await pickSessionProperty(userEvent.setup(), 'User sessions', 'Owner', 'All owners');
-  expect(sessionPropertiesTrigger('User sessions', 1)).toBeInTheDocument();
+  await pickSessionProperty(userEvent.setup(), 'Owner', 'All owners');
+  expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 }
 
 describe('user session attribution', () => {

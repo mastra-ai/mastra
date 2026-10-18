@@ -229,6 +229,7 @@ The factory also accepts `name` and `description` from `createScorer()`.
 Failures while the scorer runs reject `scorer.run()` with a `ScorerRunError` whose `failedStep` is `analyze`, and the original error is available as its `cause`. This covers:
 
 - Classifier evaluation fails or doesn't return an answer for the selected question.
+- The decision model refuses the selected question. The error names the classifier, the question, and the scorer.
 - A classifier ID is used before the scorer is registered with Mastra, or the ID isn't present in `classifiers`.
 - A registered classifier has an invalid configuration for this scorer.
 
