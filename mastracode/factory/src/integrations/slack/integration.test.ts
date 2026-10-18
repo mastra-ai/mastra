@@ -10,7 +10,7 @@ import { SlackIntegration } from './integration.js';
 function ctxWith(overrides: Record<string, unknown> = {}) {
   return {
     storage: { channelIdentity: {}, projects: {}, memorySettings: {}, ...overrides },
-    runtime: { workItems: {} },
+    runtime: { workItems: { findRunBindingByThread: async () => null } },
   } as any;
 }
 
@@ -135,13 +135,23 @@ describe('SlackIntegration.channels', () => {
       ctxWith({
         modelDefaults,
         memorySettings: { get: vi.fn(async () => null) },
-        projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-5' })) },
+        projects: {
+          getById: vi.fn(async () => ({
+            id: 'fp-1',
+            orgId: 'org-1',
+            modelScope: 'user',
+            defaultModelId: 'anthropic/claude-opus-5',
+          })),
+        },
         sourceControlOwner: {
           sessions: {
-            getBySessionId: vi.fn(async () => ({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' })),
+            getBySessionId: vi.fn(async () => ({
+              orgId: 'org-1',
+              userId: 'user-1',
+              projectRepositoryId: 'pr-1',
+              factoryProjectId: 'fp-1',
+            })),
           },
-          projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
-          connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
         },
       }),
     );

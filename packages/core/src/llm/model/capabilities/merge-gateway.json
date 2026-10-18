@@ -20,6 +20,7 @@
     "anthropic/claude-sonnet-5-5",
     "bytedance/dola-seed-2.0-code",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemini-2.5-computer-use-preview-10-2025",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -38,12 +39,14 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemma-3-12b-it",
     "google/gemma-3-4b-it",
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
+    "meta/muse-spark-open",
     "minimax/minimax-m3",
     "mistral/mistral-large-2512",
     "mistral/mistral-large-latest",
@@ -91,11 +94,13 @@
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-flash",
     "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-9b",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-max",
+    "sakana/fugu-max",
     "sakana/fugu-ultra",
     "sakana/sakana-namazu",
     "xai/grok-4.20-0309-non-reasoning",
@@ -140,6 +145,7 @@
     "deepseek/deepseek-v4-pro-0423",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemini-2.5-computer-use-preview-10-2025",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -170,6 +176,7 @@
     "meta/llama-3.3-70b-instruct",
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
+    "meta/muse-spark-open",
     "minimax/minimax-m2",
     "minimax/minimax-m2.1",
     "minimax/minimax-m2.5",
@@ -227,11 +234,13 @@
     "qwen/qwen3-coder-next",
     "qwen/qwen3-coder-plus",
     "qwen/qwen3-max",
+    "qwen/qwen3-max-preview",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-flash",
     "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
@@ -297,7 +306,6 @@
     "cohere/command-r-plus-08-2024",
     "cohere/command-r7b-12-2024",
     "deepseek/deepseek-r1-0528",
-    "deepseek/deepseek-v3.1",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
@@ -305,6 +313,7 @@
     "deepseek/deepseek-v4-pro-0423",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemini-2.5-computer-use-preview-10-2025",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
@@ -320,6 +329,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "minimax/minimax-m2",
@@ -380,10 +390,12 @@
     "qwen/qwen3-coder-flash",
     "qwen/qwen3-coder-plus",
     "qwen/qwen3-max",
+    "qwen/qwen3-max-preview",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-flash",
     "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
@@ -681,9 +693,24 @@
         "type": "toggle"
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "toggle"
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "google/gemini-flash-latest": [
@@ -808,6 +835,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "sakana/fugu-max": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
       }
     ],
     "sakana/fugu-ultra": [

@@ -2730,24 +2730,10 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
                 {
-                  type: 'tool-call-start',
-                  id: `call-${callCount}`,
+                  type: 'tool-call',
                   toolCallId: `call-${callCount}`,
                   toolName: 'lookup-tool',
-                },
-                {
-                  type: 'tool-call-args-delta',
-                  id: `call-${callCount}`,
-                  toolCallId: `call-${callCount}`,
-                  toolName: 'lookup-tool',
-                  argsDelta: `{"query":"item-${callCount}"}`,
-                },
-                {
-                  type: 'tool-call-end',
-                  id: `call-${callCount}`,
-                  toolCallId: `call-${callCount}`,
-                  toolName: 'lookup-tool',
-                  args: { query: `item-${callCount}` },
+                  input: JSON.stringify({ query: `item-${callCount}` }),
                 },
                 {
                   type: 'finish',
@@ -2836,24 +2822,10 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
               {
-                type: 'tool-call-start',
-                id: `call-${callCount}`,
+                type: 'tool-call',
                 toolCallId: `call-${callCount}`,
                 toolName: 'fetch-tool',
-              },
-              {
-                type: 'tool-call-args-delta',
-                id: `call-${callCount}`,
-                toolCallId: `call-${callCount}`,
-                toolName: 'fetch-tool',
-                argsDelta: `{"id":"${callCount}"}`,
-              },
-              {
-                type: 'tool-call-end',
-                id: `call-${callCount}`,
-                toolCallId: `call-${callCount}`,
-                toolName: 'fetch-tool',
-                args: { id: `${callCount}` },
+                input: JSON.stringify({ id: `${callCount}` }),
               },
               {
                 type: 'finish',

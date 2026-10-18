@@ -667,6 +667,74 @@ describe('OtelBridge', () => {
     });
   });
 
+  describe('flush with global providers', () => {
+    it('flushes the tracer provider registered globally through the API proxy', async () => {
+      // trace.getTracerProvider() returns the API's ProxyTracerProvider, which
+      // has no forceFlush of its own; the bridge must reach the delegate.
+      const forceFlush = vi.spyOn(tracerProvider, 'forceFlush');
+      try {
+        const bridge = new OtelBridge();
+        await bridge.flush();
+
+        expect(forceFlush).toHaveBeenCalledTimes(1);
+        await bridge.shutdown();
+      } finally {
+        forceFlush.mockRestore();
+      }
+    });
+
+    it('flushes a logger provider registered after the bridge was constructed', async () => {
+      otelLogs.disable();
+      const lateLoggerProvider = new LoggerProvider({
+        processors: [new SimpleLogRecordProcessor({ exporter: new InMemoryLogRecordExporter() })],
+      });
+      const forceFlush = vi.spyOn(lateLoggerProvider, 'forceFlush');
+      try {
+        const bridge = new OtelBridge();
+        otelLogs.setGlobalLoggerProvider(lateLoggerProvider);
+
+        await bridge.flush();
+
+        expect(forceFlush).toHaveBeenCalledTimes(1);
+        await bridge.shutdown();
+      } finally {
+        forceFlush.mockRestore();
+        await lateLoggerProvider.shutdown();
+        otelLogs.disable();
+        otelLogs.setGlobalLoggerProvider(loggerProvider);
+      }
+    });
+
+    it('ends leftover spans before flushing on shutdown', async () => {
+      const calls: string[] = [];
+      const customProvider = new tracing.BasicTracerProvider({
+        spanProcessors: [
+          {
+            onStart: () => {},
+            onEnd: () => calls.push('end'),
+            forceFlush: async () => {
+              calls.push('flush');
+            },
+            shutdown: async () => {},
+          },
+        ],
+      });
+      const bridge = new OtelBridge({ tracerProvider: customProvider });
+
+      const result = bridge.createSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'left-open',
+        attributes: { agentId: 'test' },
+      } as CreateSpanOptions<SpanType.AGENT_RUN>);
+      expect(result).toBeDefined();
+
+      await bridge.shutdown();
+
+      expect(calls).toEqual(['end', 'flush']);
+      await customProvider.shutdown();
+    });
+  });
+
   describe('bridge name', () => {
     it('should have name "otel"', () => {
       const bridge = new OtelBridge();

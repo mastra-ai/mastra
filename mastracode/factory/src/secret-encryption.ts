@@ -89,8 +89,18 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
     },
 
     async decrypt<T>(value: unknown): Promise<DecryptedFactorySecret<T>> {
-      if (typeof value !== 'string' || !value.startsWith(ENVELOPE_PREFIX)) {
+      if (typeof value !== 'string') {
         return { value: structuredClone(value) as T, needsReencryption: true };
+      }
+      if (!value.startsWith(ENVELOPE_PREFIX)) {
+        // JSON text written by the plaintext encryptor, or a raw pre-encryption
+        // secret string. Decode it the same way the plaintext encryptor does so
+        // migration encrypts the original value, not its JSON text.
+        try {
+          return { value: JSON.parse(value) as T, needsReencryption: true };
+        } catch {
+          return { value: value as T, needsReencryption: true };
+        }
       }
 
       const envelope = parseEnvelope(value);

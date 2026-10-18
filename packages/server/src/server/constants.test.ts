@@ -1,6 +1,11 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
-import { MASTRA_INHERITED_MEMORY_KEY, isReservedRequestContextKey } from './constants';
+import {
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_SCOPES_KEY,
+  RESERVED_REQUEST_CONTEXT_KEYS,
+  isReservedRequestContextKey,
+} from './constants';
 import { mergeBodyRequestContext } from './handlers/utils';
 
 describe('isReservedRequestContextKey', () => {
@@ -24,6 +29,22 @@ describe('isReservedRequestContextKey', () => {
 
     expect(requestContext.get('mastra__factoryMemorySettings')).toBeUndefined();
     expect(requestContext.get('locale')).toBe('en');
+  });
+
+  it('reserves every key in the shared reserved-key list', () => {
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(12);
+    expect(new Set(RESERVED_REQUEST_CONTEXT_KEYS).size).toBe(RESERVED_REQUEST_CONTEXT_KEYS.length);
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(
+      expect.arrayContaining([
+        MASTRA_SCOPES_KEY,
+        MASTRA_INHERITED_MEMORY_KEY,
+        'mastra__factoryMemorySettings',
+        'organizationId',
+      ]),
+    );
+    for (const key of RESERVED_REQUEST_CONTEXT_KEYS) {
+      expect(isReservedRequestContextKey(key)).toBe(true);
+    }
   });
 
   it('leaves ordinary keys to the caller', () => {

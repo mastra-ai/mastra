@@ -13,7 +13,7 @@ For setup instructions, see the [Metrics overview](/docs/observability/metrics/o
 
 ## When Mastra emits automatic metrics
 
-Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and (for model generation spans) reads token usage data. No manual instrumentation is needed.
+Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and reads token usage data from model generation and classifier evaluation spans. No manual instrumentation is needed.
 
 ### What affects whether a metric is available
 
@@ -38,7 +38,7 @@ Duration metrics record execution time in milliseconds, calculated from the span
 
 ## Token usage metrics
 
-Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage` data. Token metrics require usage data from the provider.
+Token metrics are emitted from `MODEL_GENERATION` and `CLASSIFIER_EVALUATION` spans that include `usage` data. Token metrics require usage data from the provider.
 
 ### Input token metrics
 
@@ -75,7 +75,7 @@ A caller-supplied `costContext` takes precedence over provider-reported costs an
 
 ### Where prices come from
 
-The pricing registry uses model prices from [models.dev](https://models.dev). `@mastra/observability` includes a snapshot of these prices, and each new release of the package includes recent prices. Stored cost estimates aren't recalculated when prices change.
+The pricing registry uses model prices from [models.dev](https://models.dev). `@mastra/observability` includes a snapshot of these prices, and each new release of the package includes recent prices. Stored cost estimates aren't recalculated when prices change. A [custom gateway](/models/gateways/custom-gateways#model-pricing) can return its own `pricing` for models that models.dev doesn't list. These prices only fill in models that models.dev doesn't price.
 
 When you run `mastra dev`, Mastra also refreshes prices from models.dev in the background once a day, and when a model has no price. Cost estimates don't wait for a refresh, so the first call to a newly released model can still have no cost. In other environments, such as production, you can turn on the refresh with `MASTRA_AUTO_REFRESH_PRICING=true`.
 
@@ -145,7 +145,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 ### Token metrics are missing
 
-- **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
+- **Span is a model generation or classifier evaluation**: Token metrics are only emitted from `MODEL_GENERATION` and `CLASSIFIER_EVALUATION` spans.
 - **Provider reports usage**: The model provider must include `usage` data in its response. Usage data is required to emit token metrics.
 
 ## Related

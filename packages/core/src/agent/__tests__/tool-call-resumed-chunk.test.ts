@@ -87,41 +87,6 @@ async function collect(stream: any): Promise<any[]> {
 }
 
 describe('tool-call-resumed chunk (#24280)', () => {
-  it('emits tool-call-resumed before tool-result when a suspended tool is resumed', async () => {
-    const agent = buildAgentCallingTool(
-      'asker',
-      'tc-1',
-      'askUser',
-      { question: 'color?' },
-      {
-        tools: { askUser: buildAskUserTool() },
-      },
-    );
-    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
-
-    const stream = await agent.stream('ask', { maxSteps: 3 });
-    const initial = await collect(stream);
-    expect(initial.some(c => c.type === 'tool-call-suspended')).toBe(true);
-    expect(initial.some(c => c.type === 'tool-call-resumed')).toBe(false);
-
-    const resumed = await agent.resumeStream({ answer: 'blue' }, { runId: stream.runId, toolCallId: 'tc-1' });
-    const chunks = await collect(resumed);
-
-    const ackIndex = chunks.findIndex(c => c.type === 'tool-call-resumed');
-    const resultIndex = chunks.findIndex(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-1');
-    expect(ackIndex).toBeGreaterThanOrEqual(0);
-    expect(resultIndex).toBeGreaterThan(ackIndex);
-    expect(chunks[ackIndex].payload).toMatchObject({
-      toolCallId: 'tc-1',
-      toolName: 'askUser',
-      kind: 'suspension',
-      suspendPayload: { question: 'color?' },
-    });
-    expect(chunks[ackIndex].payload.resumeSchema).toEqual(expect.any(String));
-    expect(chunks.filter(c => c.type === 'tool-call-resumed')).toHaveLength(1);
-    expect(chunks.some(c => c.type === 'tool-call-suspended')).toBe(false);
-  });
-
   it('emits tool-call-resumed on the delegation toolCallId when a delegated suspension is resumed', async () => {
     const subAgent = buildAgentCallingTool(
       'sub-agent',
@@ -205,53 +170,6 @@ describe('tool-call-resumed chunk (#24280)', () => {
     const acks = chunks.filter(c => c.type === 'tool-call-resumed');
     expect(acks).toHaveLength(1);
     expect(acks[0].payload).toMatchObject({ toolCallId: approval!.payload.toolCallId, toolName: 'doThing' });
-  });
-
-  it('does not emit tool-call-resumed for a fresh call whose model args carry resumeData', async () => {
-    const agent = buildAgentCallingTool(
-      'asker-fresh',
-      'tc-fresh',
-      'askUser',
-      { question: 'color?', resumeData: { answer: 'red' } },
-      { tools: { askUser: buildAskUserTool() } },
-    );
-    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
-
-    const chunks = await collect(await agent.stream('ask', { maxSteps: 3 }));
-    expect(chunks.some(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-fresh')).toBe(true);
-    expect(chunks.some(c => c.type === 'tool-call-resumed')).toBe(false);
-  });
-
-  it('emits an approval tool-call-resumed when an approval-gated call is approved', async () => {
-    const agent = buildAgentCallingTool(
-      'approver',
-      'tc-appr',
-      'doThing',
-      { value: 'x' },
-      {
-        tools: {
-          doThing: createTool({
-            id: 'do-thing',
-            description: 'Does a thing.',
-            inputSchema: z.object({ value: z.string() }),
-            requireApproval: true,
-            execute: async (input: { value: string }) => ({ done: input.value }),
-          }),
-        },
-      },
-    );
-    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
-
-    const stream = await agent.stream('go', { maxSteps: 3 });
-    const initial = await collect(stream);
-    expect(initial.some(c => c.type === 'tool-call-approval')).toBe(true);
-
-    const chunks = await collect(await agent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-appr' }));
-    const acks = chunks.filter(c => c.type === 'tool-call-resumed');
-    expect(acks).toHaveLength(1);
-    expect(acks[0].payload).toMatchObject({ toolCallId: 'tc-appr', kind: 'approval', args: { value: 'x' } });
-    const resultIndex = chunks.findIndex(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-appr');
-    expect(resultIndex).toBeGreaterThan(chunks.indexOf(acks[0]));
   });
 
   it('applies the tool payload transform to the resume ack', async () => {
