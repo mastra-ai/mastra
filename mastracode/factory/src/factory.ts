@@ -770,6 +770,7 @@ export class MastraFactory {
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+            sandbox: sandboxConfig,
           })
         : undefined;
     const retireTerminalSessions =
