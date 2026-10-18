@@ -79,11 +79,12 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     const scriptedText = 'Hello, world! Streaming through onChunk.';
     const seen: ChunkType[] = [];
 
-    const { output } = await runLoopScenario({
+    const { output, chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'Say hello.',
       stopWhen: stepCountIs(2),
+      collectChunks: true,
       onChunk: (chunk: ChunkType) => {
         seen.push(chunk);
       },
@@ -92,10 +93,21 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
       },
     });
 
+    if (!chunks) {
+      throw new Error('collectChunks should have populated chunks');
+    }
+
+    const textOf = (list: ChunkType[]) =>
+      list
+        .filter((c): c is Extract<ChunkType, { type: 'text-delta' }> => c.type === 'text-delta')
+        .map(d => d.payload.text);
+    const streamedDeltas = textOf(chunks);
+    const callbackDeltas = textOf(seen);
+
     const finalText = await (output as unknown as { text: Promise<string> }).text;
-    const deltas = seen.filter((c): c is Extract<ChunkType, { type: 'text-delta' }> => c.type === 'text-delta');
-    expect(deltas.length).toBeGreaterThan(0);
-    expect(deltas.map(d => d.payload.text).join('')).toBe(finalText);
+    expect(streamedDeltas.length).toBeGreaterThan(1);
+    expect(callbackDeltas).toEqual(streamedDeltas);
+    expect(callbackDeltas.join('')).toBe(finalText);
     expect(finalText).toBe(scriptedText);
   });
 

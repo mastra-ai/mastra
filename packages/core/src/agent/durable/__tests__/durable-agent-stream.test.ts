@@ -189,7 +189,7 @@ describe('DurableAgent streaming execution', () => {
       await output.consumeStream();
 
       const deltas = chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text);
-      expect(deltas.join('')).toBe('Hello, world!');
+      expect(deltas).toEqual(['Hello', ', ', 'world', '!']);
       expect(await output.text).toBe('Hello, world!');
 
       cleanup();
