@@ -177,6 +177,21 @@ export function useHandoffPrompt(): void {
       }
       await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
       clearPendingHandoff(resourceId);
-    })().catch(error => restore(error instanceof Error ? error.message : 'The message could not be sent.'));
+    })().catch(error => {
+      const reason = error instanceof Error ? error.message : 'The message could not be sent.';
+      // A 4xx means the server refused the message. Anything else (network
+      // failure, 5xx) can come after the server accepted it, so warn before a
+      // retry posts it twice.
+      restore(
+        isRejectedRequest(error)
+          ? reason
+          : `${reason} The message may have been sent. Check the transcript before retrying.`,
+      );
+    });
   });
+}
+
+function isRejectedRequest(error: unknown): boolean {
+  const status = typeof error === 'object' && error !== null ? (error as { status?: unknown }).status : undefined;
+  return typeof status === 'number' && status >= 400 && status < 500;
 }
