@@ -135,6 +135,70 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     }
   }, 30_000);
 
+  /** Observes past the last frame and reports whether the stream closed on its own within 500ms. */
+  async function observeBeyondLastFrame(agent: EventedAgent, runId: string) {
+    const beyond = await agent.observe(runId, { offset: 1_000_000 });
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      beyond.detach();
+    }, 500);
+    try {
+      const chunks = await collectStreamChunks(beyond.fullStream);
+      return { chunks, timedOut };
+    } finally {
+      clearTimeout(timeout);
+      beyond.detach();
+    }
+  }
+
+  it('replays an evented run that ended in error and closes beyond its last frame', async () => {
+    // MockLanguageModelV2 like the rest of this file: only a failed model call is needed to end the run in `error`.
+    const agent = createSetup(
+      new MockLanguageModelV2({
+        doStream: async () => {
+          throw new Error('model unavailable');
+        },
+      }) as unknown as LanguageModelV2,
+    );
+    const { output, runId, cleanup } = await agent.stream('Hi');
+    await collectStreamChunks(output.fullStream);
+    try {
+      const replay = await agent.observe(runId);
+      const replayed = await collectStreamChunks(replay.fullStream);
+      replay.detach();
+      expect(replayed.find(chunk => chunk.type === 'error')?.payload?.error?.message).toContain('model unavailable');
+
+      expect(await observeBeyondLastFrame(agent, runId)).toEqual({ chunks: [], timedOut: false });
+    } finally {
+      cleanup();
+    }
+  }, 30_000);
+
+  it('closes an observation beyond the last frame of a run suspended for approval', async () => {
+    const searchTool = createTool({
+      id: 'searchTool',
+      description: 'Search for information',
+      inputSchema: z.object({ query: z.string() }),
+      requireApproval: true,
+      execute: async () => ({ results: ['result1'] }),
+    });
+    const agent = createSetup(createToolCallModel('searchTool', { query: 'test' }), { searchTool });
+    let suspended = false;
+    const { runId, cleanup } = await agent.stream('Search for test', {
+      requireToolApproval: true,
+      onSuspended: () => {
+        suspended = true;
+      },
+    });
+    try {
+      await vi.waitFor(() => expect(suspended).toBe(true), { timeout: 15_000 });
+      expect(await observeBeyondLastFrame(agent, runId)).toEqual({ chunks: [], timedOut: false });
+    } finally {
+      cleanup();
+    }
+  }, 30_000);
+
   it('replays a completed run in a separate Mastra with shared storage, cache, and transport', async () => {
     const storage = new InMemoryStore();
     const serverCache = new InMemoryServerCache();

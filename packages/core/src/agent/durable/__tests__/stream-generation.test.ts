@@ -29,6 +29,7 @@ import {
   emitErrorEvent,
   emitFinishEvent,
   emitOwnershipClaimedEvent,
+  emitSuspendedEvent,
 } from '../stream-adapter';
 import type { DurableAgentStreamResult } from '../stream-adapter';
 
@@ -338,6 +339,53 @@ describe('__subscribeToRunStream() lifecycle', () => {
       expect(onEvent).not.toHaveBeenCalled();
       expect(getRunRegistryEntry(runId)).toBeUndefined();
       expect(clearTopic).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it.each([
+    {
+      ending: AgentStreamEventTypes.ERROR,
+      emit: (pubsub: EventEmitterPubSub, runId: string) => emitErrorEvent(pubsub, runId, new Error('model failed')),
+    },
+    {
+      ending: AgentStreamEventTypes.SUSPENDED,
+      emit: (pubsub: EventEmitterPubSub, runId: string) =>
+        emitSuspendedEvent(pubsub, runId, { type: 'approval', toolCallId: 'call-1', toolName: 'deploy' }),
+    },
+  ])('replays and completes a finished run whose last event is $ending', async ({ ending, emit }) => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    await emitChunkEvent(pubsub, runId, textChunk('partial'));
+    await emit(pubsub as EventEmitterPubSub, runId);
+    const onComplete = vi.fn();
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, event => {
+      events.push(event);
+    });
+    try {
+      expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK, ending]);
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps observing when the only terminal event belongs to a superseded execution', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'untagged-progress-stale-finish';
+    const { stale, current } = await takeOver(workflows, runId);
+    // The successor is between leases: its claim is the newest one but not live.
+    await workflows.releaseRunOwnership({ runId, generation: current, ownerId: 'successor' });
+    await emitChunkEvent(pubsub, runId, textChunk('still running'));
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 100, onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
     } finally {
       await unsubscribe();
       await transport.close();
