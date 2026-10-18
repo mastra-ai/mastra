@@ -16,6 +16,7 @@ const genericInput: EventInputProvider = {
       sourceId: source.id,
       receivedAt,
       occurredAt: event.occurredAt,
+      supersedesAssessmentId: event.supersedesAssessmentId,
       lead: event.lead,
       destination: {
         providerId: source.destinationProviderId,

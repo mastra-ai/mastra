@@ -82,10 +82,10 @@ Edit `src/mastra/config/lead-ingestion.ts` for admission and source bindings:
 | ------------------------------ | ------------- | ---------------------------------------------------- |
 | `source.id`                    | local-inbound | Trusted provenance and delivery namespace            |
 | `source.inputProviderId`       | generic       | Registered input adapter                             |
-| `source.destinationProviderId` | local         | Explicit future output destination; no writes occur  |
+| `source.destinationProviderId` | local         | Registered output destination; local by default      |
 | `source.crmProviderIds`        | attio         | Accepted reference namespaces, without CRM API calls |
 | `limits.maxBodyBytes`          | 262144        | Streamed input-body ceiling                          |
-| `limits.maxPendingRuns`        | 100           | Accepted/dispatching associations                    |
+| `limits.maxPendingRuns`        | 100           | Active research/review/output associations           |
 | `limits.activeRuns`            | 2             | Concurrent lead dispatches                           |
 | `limits.dispatchIntervalMs`    | 250           | Polling interval in milliseconds                     |
 
@@ -100,3 +100,7 @@ Targeted research skips supported decisions and revisits unresolved workforce in
 Employee observations preserve open bounds: `190+` is `{ min: 190, max: null }`. A known minimum above the ICP maximum proves mismatch; otherwise an open upper bound cannot prove fit. Finite estimates require concrete exact passages, a separate model-generated rationale and independent semantic verification. Approximate source counts remain estimates. Neither a lower-only claim nor the ICP thresholds justify inventing an upper bound. The default `estimates: 'review'` keeps inferred counts advisory: automatic qualification requires a source-declared count or interval. An explicit `accept` opt-in permits a supported estimate to earn points only when its entire range fits. Compatible supported ranges are intersected, preserving every reference. Disjoint ranges conflict. If inference narrows an otherwise uncertain observation, the result remains inferred. Under review policy, an independently decisive source-declared interval remains the scored fact; compatible advisory estimates cannot remove sufficient observed support. Every estimate and reference remains available for the SDR.
 
 Trusted submitted inquiry evidence is available before planning. A recent dated inquiry can satisfy intent; an old one follows the captured age window. Without inquiry evidence, intent remains unknown. The default public plan researches firmographics only; configure a final `buyingIntent` target only for an approved source capable of substantiating actual purchase requests. A company's demo CTA never establishes intent.
+
+## Review expiry
+
+Edit `src/mastra/config/review.ts` to set `expiryDays` (default 7, whole days from 1 to 365). Each new packet captures its absolute expiry time. Restart and later edits preserve existing packet deadlines and qualification snapshot digests. Expiry closes the review with status Expired while retaining Needs review; it never authorizes final output. See [review and output](review-and-output.md) for local operator decisions and provider extension.

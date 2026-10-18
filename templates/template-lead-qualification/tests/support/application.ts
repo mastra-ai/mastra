@@ -11,6 +11,7 @@ import type { IntakeConfig } from '../../src/mastra/config/lead-ingestion';
 import type { QualificationConfig } from '../../src/mastra/config/qualification';
 import type { EvidenceProvider } from '../../src/mastra/providers/evidence';
 import type { PageRetriever } from '../../src/mastra/research/page-retrieval';
+import type { OutputProvider } from '../../src/mastra/providers/output';
 
 const controlledText = 'Controlled intake-only provider material; no company attributes asserted.';
 const emptyEvidence: EvidenceProvider = {
@@ -50,6 +51,7 @@ export async function harness(
     qualification?: QualificationConfig;
     evidence?: EvidenceProvider[];
     pages?: PageRetriever;
+    output?: OutputProvider[];
   } = {},
 ) {
   const directory = options.directory ?? (await mkdtemp(join(tmpdir(), 'lead-intake-')));
@@ -65,6 +67,7 @@ export async function harness(
     qualification: options.qualification,
     evidence: options.evidence ?? [emptyEvidence],
     pages: options.pages,
+    output: options.output,
   });
   const mastra = new Mastra(application.mastraConfig);
   const http = new Hono();

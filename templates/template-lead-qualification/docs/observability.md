@@ -2,7 +2,7 @@
 
 Operational events, run associations and Mastra workflow snapshots live in `data/application.db` through LibSQL. MastraCompositeStore routes the observability domain to native DuckDB at `data/observability.duckdb`; MastraStorageExporter writes traces, safe application logs and native technical metrics there. Both files are local, persistent and ignored by Git. Use one application process per directory.
 
-The `lead-intake` workflow is visible in Studio after submission through the event API. Studio traces and logs support technical inspection. Intake status is available through its bounded read endpoint. No qualification score, conversion report or automatic business KPI dashboard is provided.
+The `lead-intake` workflow is visible in Studio after submission through the event API. Studio traces and logs support technical inspection. Intake status is available through its bounded read endpoint. Qualification scores and review/output state are available from authoritative operational records through the run endpoint. No conversion report or automatic business KPI dashboard is provided.
 
 The output processor removes span inputs, outputs, arbitrary attributes, request context, tags, links, free-form names and error details before metrics/export. Traces retain safe types, timing, generic error information and validated run UUIDs. Framework log forwarding is disabled because external errors may contain private content. Application diagnostics use an explicit code/UUID schema and the native exporter. Contact data and raw accepted events stay in the operational database, which must be protected and backed up accordingly.
 

@@ -6,6 +6,9 @@ import { normalizedEventSchema } from '../contracts';
 import type { NormalizedEvent } from '../contracts';
 import type { QualificationSnapshot } from '../config/qualification';
 import { QualificationStore } from './qualification-store';
+import { ReviewStore } from './review-store';
+import { ownedState } from '../providers/output';
+import { digestValue } from '../review/contracts';
 
 export type RunStatus = 'accepted' | 'dispatching' | 'intake_received' | 'failed';
 export interface RunRecord {
@@ -34,10 +37,12 @@ function project(row: Row): RunRecord {
 export class LeadEventStore {
   readonly client: Client;
   readonly qualifications: QualificationStore;
+  readonly reviews: ReviewStore;
   private admission: Promise<unknown> = Promise.resolve();
   constructor(url: string) {
     this.client = createClient({ url });
     this.qualifications = new QualificationStore(this.client);
+    this.reviews = new ReviewStore(this.client);
   }
 
   async init() {
@@ -67,6 +72,7 @@ export class LeadEventStore {
       );
     `);
     await this.qualifications.init();
+    await this.reviews.init();
   }
 
   accept(event: NormalizedEvent, maxPendingRuns: number, snapshot?: QualificationSnapshot): Promise<RunRecord> {
@@ -95,8 +101,47 @@ export class LeadEventStore {
       args: [event.destination.providerId, event.destination.reference],
     });
     if (active.rows[0]) throw new AdmissionError('Destination already has active work; retry after it completes');
+    const cycles = await this.client.execute({
+      sql: 'SELECT * FROM lead_cycles WHERE destination_provider=? AND destination_reference=? ORDER BY rowid DESC LIMIT 1',
+      args: [event.destination.providerId, event.destination.reference],
+    });
+    const previous = cycles.rows[0];
+    if (previous?.active) throw new AdmissionError('Destination has an active review or unreconciled output');
+    if (event.supersedesAssessmentId) {
+      if (
+        !previous ||
+        previous.assessment_id !== event.supersedesAssessmentId ||
+        !['applied', 'rejected', 'changes_requested', 'expired'].includes(z.string().parse(previous.state))
+      )
+        throw new DeliveryConflictError('Requalification requires the latest terminal assessment for this destination');
+    } else if (previous && previous.assessment_id !== null) {
+      throw new DeliveryConflictError('Provide supersedesAssessmentId for a new qualification cycle');
+    }
+    let expectedLocal: string | null = null;
+    if (event.destination.providerId === 'local' && event.supersedesAssessmentId) {
+      const destination = (
+        await this.client.execute({
+          sql: 'SELECT fields_json FROM lead_local_destinations WHERE reference=?',
+          args: [event.destination.reference],
+        })
+      ).rows[0];
+      const operation = await this.reviews.operation(
+        z.string().parse(previous!.run_id),
+        previous!.state === 'applied' ? 'final' : 'closure',
+      );
+      expectedLocal = destination ? z.string().parse(destination.fields_json) : null;
+      if (
+        !expectedLocal ||
+        !operation ||
+        operation.state !== 'applied' ||
+        digestValue(ownedState(JSON.parse(expectedLocal) as Record<string, unknown>)) !== digestValue(operation.patch)
+      )
+        throw new DeliveryConflictError(
+          'Destination changed since the previous cycle; resolve the conflict before requalification',
+        );
+    }
     const count = await this.client.execute(
-      "SELECT count(*) AS total FROM lead_runs WHERE status IN ('accepted','dispatching')",
+      "SELECT count(*) AS total FROM lead_runs r WHERE status IN ('accepted','dispatching') OR EXISTS(SELECT 1 FROM lead_cycles c WHERE c.run_id=r.run_id AND c.active=1)",
     );
     if (Number(count.rows[0]!.total) >= maxPendingRuns) throw new AdmissionError('Pending work limit reached');
     const runId = randomUUID();
@@ -119,6 +164,17 @@ export class LeadEventStore {
         sql: 'INSERT INTO lead_qualifications(run_id,snapshot_json) VALUES(?,?)',
         args: [runId, JSON.stringify(snapshot)],
       });
+    if (snapshot) {
+      statements.push({
+        sql: 'INSERT INTO lead_cycles(run_id,destination_provider,destination_reference,predecessor_id) VALUES(?,?,?,?)',
+        args: [runId, event.destination.providerId, event.destination.reference, event.supersedesAssessmentId ?? null],
+      });
+      if (event.destination.providerId === 'local')
+        statements.push({
+          sql: "INSERT INTO lead_local_destinations(reference,fields_json) VALUES(?,?) ON CONFLICT(reference) DO UPDATE SET fields_json=json_set(fields_json,'$.stage','Triage') WHERE fields_json=?",
+          args: [event.destination.reference, JSON.stringify({ stage: 'Triage' }), expectedLocal],
+        });
+    }
     statements.push({
       sql: 'INSERT INTO lead_deliveries (source_id,event_id,run_id,payload_json) VALUES (?,?,?,?)',
       args: [event.sourceId, event.eventId, runId, JSON.stringify(event)],
@@ -168,6 +224,8 @@ export class LeadEventStore {
       sql: "UPDATE lead_runs SET status='failed', updated_at=?, failure_code=? WHERE run_id=? AND status IN ('accepted','dispatching')",
       args: [new Date().toISOString(), code, runId],
     });
+    const cycle = await this.reviews.get(runId);
+    if (cycle?.state === 'researching') await this.reviews.state(runId, 'failed', true);
   }
 
   close() {

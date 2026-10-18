@@ -64,6 +64,7 @@ export const leadEventSchema = z.strictObject({
   occurredAt: timestamp.optional(),
   lead: leadSchema,
   destinationReference: reference.optional(),
+  supersedesAssessmentId: z.uuid().optional(),
 });
 
 export const normalizedEventSchema = z
@@ -76,6 +77,7 @@ export const normalizedEventSchema = z
     occurredAt: timestamp.optional(),
     lead: leadSchema,
     destination: z.strictObject({ providerId: reference, reference }),
+    supersedesAssessmentId: z.uuid().optional(),
   })
   .refine(
     value =>

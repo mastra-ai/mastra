@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
 import { event, harness, productionToken } from '../support/application';
+import type { DestinationState, OutputProvider } from '../../src/mastra/providers/output';
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -14,8 +15,17 @@ afterEach(async () => {
 
 describe('durable intake', () => {
   it('accepts_supported_lead_identifiers', async () => {
+    const destinations = new Map<string, DestinationState>();
+    const output: OutputProvider = {
+      id: 'local-review',
+      read: async target => destinations.get(target.reference) ?? { fields: { stage: 'Triage' }, marker: null },
+      apply: async (target, operationId, patch) => {
+        destinations.set(target.reference, { fields: { ...patch }, marker: operationId });
+      },
+    };
     const app = await harness({
       config: { ...intakeConfig, source: { ...intakeConfig.source, destinationProviderId: 'local-review' } },
+      output: [output],
     });
     cleanup.push(() => app.close());
     const modelCalls = vi.spyOn(globalThis, 'fetch');
@@ -70,7 +80,8 @@ describe('durable intake', () => {
     });
     for (const runId of associations) {
       const snapshot = await app.intake.workflow.getWorkflowRunById(runId);
-      expect(snapshot?.status).toBe('success');
+      expect(snapshot?.status).toBe('suspended');
+      expect((await app.reviews.read(runId))?.state).toBe('awaiting_review');
     }
     expect(modelCalls).not.toHaveBeenCalled();
   });

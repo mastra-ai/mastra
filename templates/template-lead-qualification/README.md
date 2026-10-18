@@ -1,8 +1,8 @@
 # Lead Qualification
 
-A contact form, signup flow, or CRM can submit a company domain and a dated buying inquiry. The template researches approved sources, checks supporting text, and returns company attributes, a reproducible ICP score, and reasons for qualification or further review.
+A contact form, signup flow, or CRM can submit a company domain and a dated buying inquiry. The template researches approved sources, checks supporting text, and applies confirmed qualification outcomes to a local lead record. Uncertain assessments wait for a review decision with their score, evidence and reasons preserved.
 
-The default profile is B2B SaaS with 20–500 employees, headquarters in the configured Brazil/US/European markets, and recent buying intent. Missing or conflicting facts stay visible. Assessments are saved locally; this version does not apply CRM updates or collect review decisions.
+The default profile is B2B SaaS with 20–500 employees, headquarters in the configured Brazil/US/European markets, and recent buying intent. Missing or conflicting facts stay visible. Local review works through Studio or the authenticated API without an Attio account; an Attio output adapter is not included.
 
 ## Why we built this
 
@@ -26,7 +26,7 @@ Developers can connect their lead source while keeping provenance and qualificat
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
 4. **Research a company**
    - Send the request below, then GET its returned `statusUrl`. The result contains `qualification.assessment`: sourced facts, score contributions, gaps and a next action.
-   - The **lead-intake** workflow in Studio shows **record-intake** followed by **qualify-company**. Submit through the event API to create its durable association.
+   - The **lead-intake** workflow in Studio shows **record-intake**, **qualify-company** and **apply-or-review**. Submit through the event API to create its durable association. Inspect `business.state` for applied output or a pending review.
 
 ```sh
 curl -s http://127.0.0.1:4111/lead-qualification/events \
@@ -36,15 +36,16 @@ curl -s http://127.0.0.1:4111/lead-qualification/events \
 
 ## Try it out
 
-- Inspect a real company's assessment. If approved material does not substantiate headcount or headquarters, expect an explicit `needs_review` reason rather than an invented value.
+- Inspect a real company's assessment. Missing headcount or headquarters creates a `needs_review` packet with concrete actions. Open **Tools → reviewLead** in Studio and copy its run ID, review ID, revision and digest from the run response. Follow [local review](docs/review-and-output.md) to approve, reject or request changes.
 - Add an authentic `lead.inquiry` with `type`, `occurredAt` and `text` using the [input contract](docs/intake.md). A company's own “Book a demo” page does not establish its intent to buy from you.
 - Replace `domain` with an email or CRM reference and use a new event/lead reference. The result asks for a confirmed company domain and makes no research calls for the unresolved identity.
 - Resend the same event or restart with the same `data/` directory. The association, captured configuration, completed research rounds and consumed allowance are preserved.
+- Requalify a completed lead with a new event ID and `supersedesAssessmentId`. The new cycle uses current evidence and settings while keeping the prior assessment unchanged.
 
 ## Customization
 
 - Ask your coding agent: “Explore the evidence contracts and policy, then propose a plan to qualify [my target market]. Preserve sourced facts, shared budgets and deterministic scoring. Add functional examples before changing the policy.” See [configuration](docs/configuration.md).
-- Add an approved source domain or adapter using [research sources](docs/research-sources.md), or connect a different [input](docs/intake.md). See [operations](docs/operations.md) and [observability](docs/observability.md) for recovery and storage.
+- Add an approved source domain or adapter using [research sources](docs/research-sources.md), or connect a different [input](docs/intake.md) or [output](docs/review-and-output.md). See [operations](docs/operations.md) and [observability](docs/observability.md) for recovery and storage.
 
 ## About Mastra templates
 

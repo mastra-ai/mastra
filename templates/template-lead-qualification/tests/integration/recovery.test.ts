@@ -97,12 +97,34 @@ describe('process recovery', () => {
       );
       expect(snapshots.rows).toHaveLength(1);
       expect(snapshots.rows[0]!.run_id).toBe(runId);
-      expect(JSON.parse(z.string().parse(snapshots.rows[0]!.snapshot)).status).toBe('success');
+      expect(JSON.parse(z.string().parse(snapshots.rows[0]!.snapshot)).status).toBe('suspended');
+      const status = await (await fetch(`${recovered.baseUrl}/lead-qualification/runs/${runId}`)).json();
+      expect(status.business.state).toBe('awaiting_review');
+      const rejected = await fetch(`${recovered.baseUrl}/lead-qualification/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          runId,
+          reviewId: status.business.packet.id,
+          revision: 1,
+          digest: status.business.packet.digest,
+          decision: 'rejected',
+        }),
+      });
+      expect(rejected.status).toBe(200);
+      await vi.waitFor(async () => {
+        const current = await (await fetch(`${recovered!.baseUrl}/lead-qualification/runs/${runId}`)).json();
+        expect(current.business.state).toBe('rejected');
+        expect(current.business.active).toBe(false);
+      });
       // A deliberate later cycle for this domain is not permanently deduplicated.
       const later = await fetch(`${recovered.baseUrl}/lead-qualification/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(event('later-delivery', { domain: 'example.com', reference: 'restart-delivery' })),
+        body: JSON.stringify({
+          ...event('later-delivery', { domain: 'example.com', reference: 'restart-delivery' }),
+          supersedesAssessmentId: status.qualification.assessment.id,
+        }),
       });
       expect(later.status).toBe(202);
       expect((await later.json()).runId).not.toBe(runId);

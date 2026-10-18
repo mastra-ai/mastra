@@ -9,6 +9,9 @@ import { inputProviders } from '../providers/input';
 import type { Telemetry } from '../telemetry';
 import { snapshotConfiguration } from '../config/qualification';
 import type { QualificationConfig } from '../config/qualification';
+import { ReviewConflictError } from '../review/service';
+import type { ReviewService } from '../review/service';
+import { decisionInputSchema } from '../review/contracts';
 
 class BodyTooLargeError extends Error {}
 async function readBody(request: Request, maxBytes: number) {
@@ -40,10 +43,29 @@ export function createLeadRoutes(
   config: IntakeConfig,
   telemetry: Telemetry,
   qualification: QualificationConfig,
+  reviews: ReviewService,
 ) {
   const provider = inputProviders.get(config.source.inputProviderId);
   if (!provider) throw new Error('Configured input provider is unavailable');
   return [
+    registerApiRoute('/lead-qualification/reviews', {
+      method: 'POST',
+      requiresAuth: true,
+      handler: async c => {
+        if (c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
+          return c.json({ error: 'unsupported_content_type' }, 415);
+        try {
+          const input = decisionInputSchema.parse(await readBody(c.req.raw, config.limits.maxBodyBytes));
+          return c.json(await reviews.decide(input));
+        } catch (error) {
+          if (error instanceof BodyTooLargeError) return c.json({ error: 'body_too_large' }, 413);
+          if (error instanceof ZodError || error instanceof SyntaxError)
+            return c.json({ error: 'invalid_decision' }, 400);
+          if (error instanceof ReviewConflictError) return c.json({ error: 'review_conflict' }, 409);
+          return c.json({ error: 'persistence_unavailable' }, 503);
+        }
+      },
+    }),
     registerApiRoute('/lead-qualification/events', {
       method: 'POST',
       requiresAuth: true,
@@ -100,6 +122,7 @@ export function createLeadRoutes(
             updatedAt: run.updatedAt,
             failureCode: run.failureCode,
             telemetryDegraded: telemetry.isDegraded(),
+            business: await reviews.read(run.runId),
             qualification: qualification
               ? {
                   snapshotDigest: qualification.snapshot.digest,

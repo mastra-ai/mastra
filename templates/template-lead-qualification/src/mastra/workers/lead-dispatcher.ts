@@ -11,6 +11,8 @@ export class LeadDispatcher extends MastraWorker {
   private timer?: ReturnType<typeof setInterval>;
   private polling?: Promise<void>;
   private readonly active = new Map<string, Promise<void>>();
+  private reviewFirst = false;
+  private lastReviewRun = '';
 
   constructor(
     private readonly store: LeadEventStore,
@@ -47,12 +49,35 @@ export class LeadDispatcher extends MastraWorker {
 
   private async tick() {
     try {
-      const pending = await this.store.pending(this.config.limits.activeRuns);
-      for (const record of pending) {
-        if (!this.isRunning || this.active.has(record.runId) || this.active.size >= this.config.limits.activeRuns)
+      const pending = new Map(
+        (await this.store.pending(this.config.limits.activeRuns)).map(record => [record.runId, record]),
+      );
+      const reviewRuns = await this.store.reviews.pending(this.config.limits.maxPendingRuns);
+      const nextReview = Math.max(
+        0,
+        reviewRuns.findIndex(runId => runId > this.lastReviewRun),
+      );
+      const reviewQueue = [...reviewRuns.slice(nextReview), ...reviewRuns.slice(0, nextReview)];
+      // Alternate priority so recoverable output retries and new research both progress.
+      const candidates = this.reviewFirst ? [...reviewQueue, ...pending.keys()] : [...pending.keys(), ...reviewQueue];
+      this.reviewFirst = !this.reviewFirst;
+      for (const runId of candidates) {
+        if (this.active.size >= this.config.limits.activeRuns) break;
+        if (!this.isRunning || this.active.has(runId)) continue;
+        const cycle = await this.store.reviews.get(runId);
+        if (
+          !pending.has(runId) &&
+          cycle?.state === 'awaiting_review' &&
+          !cycle.decision &&
+          cycle.packet &&
+          Date.now() < Date.parse(cycle.packet.expiresAt)
+        )
           continue;
-        const job = this.dispatch(record).finally(() => this.active.delete(record.runId));
-        this.active.set(record.runId, job);
+        const record = pending.get(runId) ?? (await this.store.get(runId));
+        if (!record) continue;
+        const job = this.dispatch(record).finally(() => this.active.delete(runId));
+        this.active.set(runId, job);
+        if (reviewRuns.includes(runId)) this.lastReviewRun = runId;
       }
     } catch {
       await this.telemetry.diagnostic({ code: 'intake.retry' });
@@ -74,11 +99,19 @@ export class LeadDispatcher extends MastraWorker {
       const requestContext = this.intake.authorizeDispatchContext(new RequestContext());
       const tracingOptions = { metadata: { runId: record.runId } };
       const run = await this.intake.workflow.createRun({ runId: record.runId, resourceId: 'lead-qualification' });
+      const decision = (await this.store.reviews.get(record.runId))?.decision;
       const result =
-        snapshot?.status === 'running'
-          ? await run.restart({ requestContext, tracingOptions })
-          : await run.start({ inputData: { runId: record.runId }, requestContext, tracingOptions });
-      if (result.status === 'success') {
+        snapshot?.status === 'suspended'
+          ? await run.resume({
+              step: 'apply-or-review',
+              resumeData: decision ? { decisionId: decision.id } : {},
+              requestContext,
+              tracingOptions,
+            })
+          : snapshot?.status === 'running'
+            ? await run.restart({ requestContext, tracingOptions })
+            : await run.start({ inputData: { runId: record.runId }, requestContext, tracingOptions });
+      if (result.status === 'suspended' || result.status === 'success') {
         await this.store.complete(record.runId);
         await this.telemetry.diagnostic({ code: 'intake.dispatched', runId: record.runId });
       } else if (result.status === 'failed') {
