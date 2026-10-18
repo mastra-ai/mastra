@@ -186,6 +186,35 @@ const twoUsageCallsReportedAtShutdown = [
   }),
 ];
 
+// ts-source-lib ships raw TypeScript from outside the workspace globs, so the app only boots when
+// bundler.transpilePackages is honored (#19380). The route also imports a subpath of the package,
+// which has no exports map.
+const transpiledRouteSource = `import { registerApiRoute } from '@mastra/core/server';
+import { greet } from 'ts-source-lib';
+import { shout } from 'ts-source-lib/src/shout.ts';
+
+export const transpiledRoute = registerApiRoute('/transpiled', {
+  method: 'GET',
+  handler: async c => c.json({ value: shout(greet({ name: 'transpilePackages' })) }),
+});
+`;
+
+function withTranspiledRoute(mastraConfig: string): string {
+  const updated = mastraConfig
+    .replace(
+      "import { testRoute } from '@/api/route/test';",
+      "import { testRoute } from '@/api/route/test';\nimport { transpiledRoute } from '@/api/route/transpiled';",
+    )
+    .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, transpiledRoute,')
+    .replace(/bundler: \{/, "bundler: {\n    transpilePackages: ['ts-source-lib'],");
+  if (!updated.includes("transpilePackages: ['ts-source-lib']") || !updated.includes('transpiledRoute,')) {
+    throw new Error('Failed to add the transpilePackages route to the Mastra config');
+  }
+  return updated;
+}
+
+const transpiledRouteValue = 'HELLO TRANSPILEPACKAGES FROM NODE_MODULES';
+
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
 
 async function cleanupAllProcesses() {
@@ -417,7 +446,8 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
             'apiRoutes: [testRoute, environmentRoute, versionlessRoute, rawTsRoute,',
           );
         await Promise.all([
-          writeFile(mastraIndexPath, mastraIndex),
+          writeFile(mastraIndexPath, withTranspiledRoute(mastraIndex)),
+          writeFile(join(inputFile, 'src', 'mastra', 'api', 'route', 'transpiled.ts'), transpiledRouteSource),
           writeFile(
             join(inputFile, 'src', 'mastra', 'api', 'route', 'versionless.ts'),
             `import { registerApiRoute } from '@mastra/core/server';
@@ -528,6 +558,12 @@ export const environmentRoute = registerApiRoute('/environment', {
       const res = await fetch(`http://localhost:${port}/versionless`);
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'versionless-workspace-package' });
+    });
+
+    it('should transpile a node_modules TypeScript package listed in transpilePackages (#19380)', async () => {
+      const res = await fetch(`http://localhost:${port}/transpiled`);
+      expect(res.status, 'mastra dev ignored bundler.transpilePackages (#19380)').toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: transpiledRouteValue });
     });
 
     it('should load an api route that imports a raw TypeScript workspace package (#26540)', async () => {
@@ -754,8 +790,12 @@ export const versionlessRoute = registerApiRoute('/versionless', {
 `,
         );
         await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'transpiled.ts'),
+          transpiledRouteSource,
+        );
+        await writeFile(
           mastraConfigPath,
-          originalMastraConfig
+          withTranspiledRoute(originalMastraConfig)
             .replace(
               "externals: ['bcrypt', '@inner/subpath-only']",
               "externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic']",
@@ -826,6 +866,12 @@ export const versionlessRoute = registerApiRoute('/versionless', {
         });
       });
     }, timeout);
+
+    it('should transpile a node_modules TypeScript package listed in transpilePackages (#19380)', async () => {
+      const res = await fetch(`http://localhost:${port}/transpiled`);
+      expect(res.status, 'mastra build ignored bundler.transpilePackages (#19380)').toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: transpiledRouteValue });
+    });
 
     it('should resolve tsconfig paths', async () => {
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');

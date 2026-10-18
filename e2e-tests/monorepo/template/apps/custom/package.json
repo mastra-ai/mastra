@@ -35,7 +35,8 @@
     "ws": "^8.21.3",
     "nodemailer": "^10.1.1",
     "unicorn-magic": "0.4.0",
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "ts-source-lib": "file:../../vendor/ts-source-lib"
   },
   "devDependencies": {
     "mastra": "monorepo-test"
