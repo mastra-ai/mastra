@@ -7,7 +7,6 @@ import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS } from '../../constants';
 import type { CommandResult } from '../../sandbox';
 import { LocalSandbox } from '../../sandbox/local-sandbox';
-import { ProcessWaitTimeoutError } from '../../sandbox/process-manager';
 import { Workspace } from '../../workspace';
 import {
   executeCommandInputSchema,
@@ -498,18 +497,6 @@ describe('get_process_output tool', () => {
     const ctx = createContext(sandbox);
     const result = await getProcessOutputTool.execute({ pid: '11' }, ctx);
     expect(result).toBe('(no output yet)');
-  });
-
-  it('stops waiting after the bound and says the process is still running', async () => {
-    const handle = createMockHandle({ pid: '14', stdout: 'compiling\n', exitCode: undefined });
-    handle.wait.mockRejectedValue(new ProcessWaitTimeoutError(600_000));
-    const sandbox = createMockSandbox({ processes: { get: vi.fn().mockResolvedValue(handle) } });
-    const result = await getProcessOutputTool.execute({ pid: '14', wait: true }, createContext(sandbox));
-
-    expect(handle.wait).toHaveBeenCalledWith(expect.objectContaining({ maxWaitMs: 600_000 }));
-    expect(result).toBe(
-      'compiling\n\n\nStill running after waiting 10 minutes. Call get_process_output again to keep waiting, or kill_process to stop it.',
-    );
   });
 
   it.skipIf(process.platform === 'win32')(

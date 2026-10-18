@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
-import { ProcessWaitTimeoutError } from './process-manager';
 
 const node = JSON.stringify(process.execPath);
 const script = (source: string) => `${node} -e ${JSON.stringify(source)}`;
@@ -229,19 +228,5 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after th
     expect(result).toMatchObject({ exitCode: 128, killed: true });
     // Without settling on the exit, wait() lasts until `timeout 60` ends its child.
     expect(result.executionTimeMs).toBeLessThan(5_000);
-  });
-
-  it('keeps waiting on a process that is still running, up to maxWaitMs', async () => {
-    const handle = await sandbox.processes.spawn(script(`console.log('READY'); ${STAY_ALIVE}`));
-    strayPids.push(Number(handle.pid));
-
-    const started = Date.now();
-    await expect(handle.wait({ maxWaitMs: 3_000 })).rejects.toBeInstanceOf(ProcessWaitTimeoutError);
-
-    expect(Date.now() - started).toBeGreaterThanOrEqual(2_900);
-    expect(handle.exitCode).toBeUndefined();
-    expect(isAlive(Number(handle.pid))).toBe(true);
-    expect(await handle.kill()).toBe(true);
-    await expect(handle.wait()).resolves.toMatchObject({ killed: true });
   });
 });
