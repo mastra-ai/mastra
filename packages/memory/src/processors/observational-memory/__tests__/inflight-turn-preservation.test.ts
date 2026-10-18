@@ -15,7 +15,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
 import { InMemoryDB, InMemoryMemory, InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
@@ -258,5 +258,81 @@ describe('tool result merged in place into an already-drained message', () => {
       JSON.stringify(messageList.get.all.db()),
       'the merged tool result was removed before the model read it',
     ).toContain(`${RESULT_MARKER}-merged`);
+  });
+});
+
+describe('drained output whose save failed', () => {
+  it('still treats the output as unread when the next step retries the save', async () => {
+    const threadId = 'thread-failed-save';
+    const resourceId = 'resource-failed-save';
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const observerCalls = { count: 0 };
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observerModel(observerCalls) as any, messageTokens: 1000, bufferTokens: false },
+      reflection: { model: observerModel({ count: 0 }) as any, observationTokens: 100_000 },
+    });
+
+    const t0 = Date.now() - 60_000;
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: USER_REQUEST }] },
+        createdAt: new Date(t0),
+        threadId,
+        resourceId,
+      } as MastraDBMessage,
+      'input',
+    );
+
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+    await turn.step(0).prepare();
+
+    // Step 0 output: a finished tool call the model has not read yet.
+    messageList.add(
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-failed-save',
+                toolName: 'lookup',
+                args: {},
+                result: { status: `${RESULT_MARKER}-failed-save`, log: filler },
+              },
+            },
+          ],
+        },
+        createdAt: new Date(t0 + 1000),
+        threadId,
+        resourceId,
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const saveSpy = vi.spyOn(storage, 'saveMessages').mockRejectedValueOnce(new Error('storage unavailable'));
+    await expect(turn.step(1).prepare()).rejects.toThrow('storage unavailable');
+    saveSpy.mockRestore();
+
+    // The retry saves and observes; the result is still unread, so it must stay in the prompt.
+    await turn.step(2).prepare();
+
+    expect(observerCalls.count).toBeGreaterThan(0);
+    expect(
+      JSON.stringify(messageList.get.all.db()),
+      'the tool result was removed after a failed save marked it as read',
+    ).toContain(`${RESULT_MARKER}-failed-save`);
   });
 });

@@ -282,11 +282,12 @@ export class ObservationStep {
         const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
         // A message drained again only because OM markers were appended to it was already read.
+        const drainedKeys = new Map<string, Set<string>>();
         const unreadIds = messagesToSave
           .filter(msg => {
             const keys = getPartKeys(msg);
             const seen = this.turn.drainedPartKeys.get(msg.id);
-            this.turn.drainedPartKeys.set(msg.id, new Set([...(seen ?? []), ...keys]));
+            drainedKeys.set(msg.id, new Set([...(seen ?? []), ...keys]));
             return !seen || keys.some(key => !seen.has(key));
           })
           .map(msg => msg.id);
@@ -302,6 +303,11 @@ export class ObservationStep {
             restoreDrainedMessages(messageList, newOutput, 'response');
             throw error;
           }
+        }
+        // Record parts as seen only once the save succeeded: a failed save returns the messages
+        // to their buckets, and a retry must still treat them as unread.
+        for (const [id, keys] of drainedKeys) {
+          this.turn.drainedPartKeys.set(id, keys);
         }
       } else {
         // Step 0: persist pending input WITHOUT draining the buckets. The input bucket is
