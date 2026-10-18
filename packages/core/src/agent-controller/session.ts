@@ -4107,6 +4107,7 @@ export class Session<TState = unknown> {
   readonly #bus = new SessionBus();
   /** Process-local hooks that must finish before the session exposes a terminal agent event. */
   readonly #beforeAgentEndListeners = new Set<SessionBeforeAgentEndListener>();
+  #endingRunId: string | null | undefined;
   /** Tool categories granted "allow", bucketed by thread id (or the session-wide bucket). */
   readonly #grantedCategories = new Map<string, Set<string>>();
   /** Individual tool names granted "allow", bucketed by thread id (or the session-wide bucket). */
@@ -4201,7 +4202,7 @@ export class Session<TState = unknown> {
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
       getThreadId: () => this.thread.getId(),
       clearFollowUps: () => this.cleanupFollowUpBinding(),
-      getRunId: () => this.run.getRunId(),
+      getRunId: () => (this.#endingRunId === undefined ? this.run.getRunId() : this.#endingRunId),
     });
     this.#bus.setDisplayState(this.displayState);
     const sessionState = new SessionState(
@@ -4331,7 +4332,14 @@ export class Session<TState = unknown> {
       }
     }
     if (reason !== 'suspended' && runId) this.#threadOwnerIdsByRunId.delete(runId);
-    this.emit(event);
+    // The display state clears the ending run's prompts; a listener above may
+    // already have moved the tracked run on, so hand it the run that ended.
+    this.#endingRunId = runId;
+    try {
+      this.emit(event);
+    } finally {
+      this.#endingRunId = undefined;
+    }
   }
 
   /** Await the terminal event for a specific accepted agent run. */

@@ -690,6 +690,27 @@ describe('tool lifecycle', () => {
       expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
     });
 
+    it('clears the prompts of the run that ended even when the tracked run moves on before agent_end', async () => {
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+      session.onBeforeAgentEnd(() => session.run.setRunId({ runId: 'run-other' }));
+
+      await session.finishAgentRun('error');
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
     it('keeps duplicate tool-call ids from separate runs independently addressable', () => {
       for (const runId of ['run-a', 'run-b']) {
         emit(session, {
