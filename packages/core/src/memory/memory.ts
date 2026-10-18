@@ -133,6 +133,8 @@ export abstract class MastraMemory extends MastraBase {
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
+  /** Configured embedder output dimension; when set, the dimension probe is skipped. */
+  protected readonly embeddingDimension?: number;
   protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   private readonly hasExplicitLastMessages: boolean;
   #mastra?: Mastra;
@@ -143,6 +145,19 @@ export abstract class MastraMemory extends MastraBase {
     this.hasExplicitLastMessages = config.options?.lastMessages !== undefined;
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
+
+    if (
+      config.embeddingDimension !== undefined &&
+      !(Number.isInteger(config.embeddingDimension) && config.embeddingDimension > 0)
+    ) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_INVALID_EMBEDDING_DIMENSION',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: 'USER',
+        text: `embeddingDimension must be a positive integer, received ${String(config.embeddingDimension)}.`,
+      });
+    }
+    this.embeddingDimension = config.embeddingDimension;
 
     // DEPRECATION: Block old processors config
     if (config.processors) {
@@ -303,11 +318,12 @@ https://mastra.ai/en/docs/memory/overview`,
   private _embeddingDimensionPromise?: Promise<number | undefined>;
 
   /**
-   * Probe the embedder to determine its actual output dimension.
-   * The result is cached so subsequent calls are free.
+   * Determine the embedder's output dimension: the configured `embeddingDimension` when set,
+   * otherwise probe the embedder. The probe result is cached so subsequent calls are free.
    */
   protected async getEmbeddingDimension(): Promise<number | undefined> {
     if (!this.embedder) return undefined;
+    if (this.embeddingDimension !== undefined) return this.embeddingDimension;
     if (!this._embeddingDimensionPromise) {
       this._embeddingDimensionPromise = (async () => {
         try {
