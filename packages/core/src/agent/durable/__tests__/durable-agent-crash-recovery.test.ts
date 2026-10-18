@@ -12,11 +12,15 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import type { ToolHooks } from '../../../tools/types';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
+
+/** `defaultOptions.hooks` given to the agent of every process started after it is set. */
+let processDefaultHooks: ToolHooks | undefined;
 
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
 type Checkpoint = {
@@ -210,6 +214,7 @@ async function startProcess(kind: AgentKind, usages?: TestUsage[], observability
         execute: async () => ({ ok: true }),
       },
     },
+    ...(processDefaultHooks ? { defaultOptions: { hooks: processDefaultHooks } } : {}),
   });
   const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const storage = new InMemoryStore();
@@ -398,6 +403,37 @@ describe('DurableAgent crash recovery', () => {
     expect(failures).toEqual([]);
     expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
   }, 120_000);
+
+  it('runs defaultOptions.hooks.beforeToolCall on a tool call executed after recovery', async () => {
+    const hookCalls: number[] = [];
+    processDefaultHooks = {
+      beforeToolCall: ({ input }) => {
+        hookCalls.push((input as { index: number }).index);
+      },
+    };
+    try {
+      const { checkpoints, runId } = await captureCheckpoints('durable');
+      expect(hookCalls).toEqual([0, 1]);
+
+      // Recover from the last checkpoint taken before the second tool call ran,
+      // so that call executes in the recovering process.
+      const beforeSecondTool = checkpoints.filter(
+        c =>
+          !knownUnrecoverable(c) &&
+          c.inner?.status === 'running' &&
+          activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL) &&
+          JSON.stringify(c.inner).includes('call-1') &&
+          !JSON.stringify(c.inner).includes('"toolCallId":"call-1","result"'),
+      );
+      expect(beforeSecondTool.length).toBeGreaterThan(0);
+
+      hookCalls.length = 0;
+      expect(await recoverFrom(beforeSecondTool.at(-1)!, runId, 'durable')).toBe('ok');
+      expect(hookCalls).toContain(1);
+    } finally {
+      processDefaultHooks = undefined;
+    }
+  }, 60_000);
 
   it('preserves unknown usage from before recovery', async () => {
     const unknownUsage: TestUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
