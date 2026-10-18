@@ -12,6 +12,8 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
+// MockLanguageModelV2: AIMock speaks the OpenAI wire format, whose provider emits a single
+// response-metadata chunk, so it cannot express split metadata.
 function createSplitMetadataModel() {
   return new MockLanguageModelV2({
     doStream: async () => ({
