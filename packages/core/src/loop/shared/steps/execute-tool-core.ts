@@ -79,7 +79,11 @@ export async function executeToolCall(deps: {
       release?.();
     }
     deps.assertNotBailedOut?.();
-    const result = ensureSerializable(rawResult);
+    // Both engines' mapping steps read `result === undefined` as "not executed /
+    // awaiting a client result", so a tool that ran and returned nothing must be
+    // recorded as `null` or the loop stops and drops the call from history.
+    const serialized = ensureSerializable(rawResult);
+    const result = serialized === undefined ? null : serialized;
 
     if ('onOutput' in tool && typeof tool.onOutput === 'function') {
       try {
