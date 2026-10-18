@@ -266,7 +266,14 @@ async function attemptWithTimeout<T>(
   abortSignal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
-  const onAbort = () => controller.abort(abortSignal?.reason);
+  let rejectOnAbort!: (reason: unknown) => void;
+  const callerAborted = new Promise<never>((_, reject) => {
+    rejectOnAbort = reject;
+  });
+  const onAbort = () => {
+    controller.abort(abortSignal?.reason);
+    rejectOnAbort(abortSignal?.reason ?? new Error('The operation was aborted.'));
+  };
   abortSignal?.addEventListener('abort', onAbort, { once: true });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -277,7 +284,7 @@ async function attemptWithTimeout<T>(
     }, timeoutMs);
   });
   try {
-    return await Promise.race([fn(controller.signal), timeout]);
+    return await Promise.race([fn(controller.signal), timeout, callerAborted]);
   } finally {
     clearTimeout(timer);
     abortSignal?.removeEventListener('abort', onAbort);

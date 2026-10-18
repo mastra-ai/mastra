@@ -300,6 +300,22 @@ describe('withRetry timeoutMs', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects with the caller abort right away when the call ignores its signal', async () => {
+    const controller = new AbortController();
+    const fn = vi.fn(() => new Promise<never>(() => {}));
+    const promise = withRetry(fn, { label: 'observer', timeoutMs: 60_000, abortSignal: controller.signal });
+    controller.abort(new Error('cancelled'));
+    const outcome = await Promise.race([
+      promise.then(
+        () => 'resolved',
+        (error: Error) => error.message,
+      ),
+      new Promise(resolve => setTimeout(() => resolve('still pending'), 100)),
+    ]);
+    expect(outcome).toBe('cancelled');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('applies no timeout unless asked', async () => {
     const fn = vi.fn(async () => {
       await new Promise(resolve => setTimeout(resolve, 30));
