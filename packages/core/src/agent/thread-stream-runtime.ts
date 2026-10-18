@@ -5555,11 +5555,18 @@ export class AgentThreadStreamRuntime {
 
     if (target.resourceId && target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
-      const activeRunId = state.activeThreadRunIds.get(key);
+      let activeRunId = state.activeThreadRunIds.get(key);
       activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
       if (activeRecord && !this.#isThreadBlockingRun(state, activeRecord)) {
         state.activeThreadRunIds.delete(key);
         activeRecord = undefined;
+      }
+      if (activeRunId && !activeRecord && this.#isSweptLeaseOwner(state, activeRunId)) {
+        // A run the TTL sweep evicted never completes here to drain the idle queue;
+        // let sendSignal decide from the lease instead.
+        state.activeThreadRunIds.delete(key);
+        state.activeThreadStreamIds.delete(key);
+        activeRunId = undefined;
       }
       runId ??= activeRunId;
     }
