@@ -56,6 +56,8 @@ function describeTitle(node) {
 // `pathGroups` (single `*` / `**` globs) and `alphabetize`. Imports are classified from their specifier
 // alone: import-x resolved modules on disk, which only changed the result for a package importing itself by
 // name while built (then "internal"), so lint no longer depends on whether `dist/` exists.
+// TODO: likely temporary. Kept so moving off ESLint changes no import order. A follow-up could sort imports with
+// oxfmt's `sortImports` instead (one-time reorder of ~240 files), then delete this rule.
 
 const importTypes = ['builtin', 'external', 'internal', 'unknown', 'parent', 'sibling', 'index', 'object', 'type'];
 
