@@ -65,7 +65,7 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { withToolTitle } from '../../../tools/tool-title';
 import { getNeedsApprovalFn, getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
-import { createMastraProxy, makeCoreTool } from '../../../utils';
+import { createMastraProxy, makeProcessorCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { RunScopeContext } from '../../run-scope-access';
@@ -1797,7 +1797,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               const convertedTools: Record<string, unknown> = {};
               for (const [name, tool] of Object.entries(currentStep.tools)) {
                 if (isMastraTool(tool)) {
-                  convertedTools[name] = makeCoreTool(
+                  convertedTools[name] = makeProcessorCoreTool(
                     tool as unknown as ToolToConvert,
                     {
                       name,

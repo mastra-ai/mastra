@@ -27,7 +27,7 @@ import type {
 import { ChunkFrom } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
-import { deepMerge } from '../../utils';
+import { deepMerge, rebindProcessorTools } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -3393,7 +3393,8 @@ export class DurableAgent<
     // A warm resume reuses the tools built for the first request, which close
     // over its request context and delegation hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
-    // tools a processor added or replaced are kept. Cold resumes already
+    // tools a processor added or replaced are kept. Processor-added tools are
+    // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
     if (!coldSnapshot && (options?.requestContext || options?.delegation)) {
       try {
@@ -3423,8 +3424,9 @@ export class DurableAgent<
         };
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
-          reg.tools = refresh(reg.tools ?? {}, reg.requestTools);
-          if (reg.baseTools) reg.baseTools = refresh(reg.baseTools, reg.requestTools);
+          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
+          if (reg.baseTools)
+            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
           reg.requestTools = requestTools;
         }
       } catch (error) {
