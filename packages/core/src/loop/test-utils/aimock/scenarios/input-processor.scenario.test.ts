@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod';
 import type { Processor } from '../../../../processors';
@@ -77,9 +77,11 @@ describeForAllEngines('AIMock loop scenario: input processor', engine => {
       inputSchema: z.object({ key: z.string() }),
       execute: async () => ({ value: 42 }),
     });
-    const chatModel = createOpenAI({ apiKey: 'test', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` }).chat(
-      SCENARIO_MODEL_ID,
-    );
+    const chatModel = createOpenAICompatible({
+      name: 'vllm',
+      apiKey: 'test',
+      baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+    }).chatModel(SCENARIO_MODEL_ID);
 
     const { requests, output } = await runLoopScenario({
       engine,
