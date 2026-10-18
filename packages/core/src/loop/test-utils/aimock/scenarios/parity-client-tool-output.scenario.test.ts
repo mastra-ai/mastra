@@ -1,5 +1,5 @@
 /**
- * T74 client-tool-output (plain, durable, evented).
+ * T74 client-tool-output (parity mode: plain vs durable / evented).
  *
  * Ported from validation harness case T74 (client-tool-output).
  *
@@ -16,21 +16,21 @@
  * envelopes (deliberately skipped there).
  */
 
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
 import {
-  PARITY_ENGINES,
   chunksOfType,
-  expectEngineParity,
+  describeParity,
+  expectParity,
   textOnlyTape,
   toolCallTape,
   type ParityEngine,
-} from './parity-harness';
+  type ParityTarget,
+} from '../parity';
 
-const ENGINES = PARITY_ENGINES;
 const THREAD = 'thread-t74';
 const RESOURCE = 'resource-t74';
 const TURN_OPTIONS = { maxSteps: 2, memory: { thread: THREAD, resource: RESOURCE } };
@@ -62,10 +62,10 @@ function askClientTool(onOutput: (output: unknown) => void) {
   });
 }
 
-async function runT74() {
+async function runT74(target: ParityTarget) {
   const outputs = new Map<ParityEngine, unknown[]>();
 
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model: { respond },
     buildAgent: ({ engine, model }) => {
       outputs.set(engine, []);
@@ -111,11 +111,11 @@ async function runT74() {
   return { results, outputs };
 }
 
-describe('T74 client-tool-output (plain, durable, evented)', () => {
+describeParity('client-tool-output parity', target => {
   it('the client answer reaches onOutput unwrapped', async () => {
-    const { results, outputs } = await runT74();
+    const { results, outputs } = await runT74(target);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const turns = results[engine]!.turns;
 
       // The call was issued and persisted on the asking turn.

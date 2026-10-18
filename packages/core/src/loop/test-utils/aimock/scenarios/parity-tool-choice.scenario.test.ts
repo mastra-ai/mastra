@@ -9,14 +9,12 @@
  * on the recorded requests, not inferred from the output, and the tool-run
  * count is asserted on both sides of the loop (requests and committed tools).
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { CapturedRequest, ModelScript, ParityEngine, ParitySnapshot } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
-
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
+import { Agent } from '../../../../agent';
+import { createTool } from '../../../../tools';
+import type { CapturedRequest, ModelScript, ParityEngine, ParitySnapshot, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
 type Variant = 'required' | 'none' | 'named';
 
@@ -52,7 +50,7 @@ function toolResultCount(request: CapturedRequest): number {
 }
 
 /** Runs one T24 variant; returns each engine's results and its committed step tools. */
-async function runT24(variant: Variant) {
+async function runT24(target: ParityTarget, variant: Variant) {
   const commits = new Map<ParityEngine, number>();
 
   const model: ModelScript = {
@@ -64,7 +62,7 @@ async function runT24(variant: Variant) {
     },
   };
 
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model,
     buildAgent: ({ engine, model: agentModel }) => {
       let committed = 0;
@@ -105,11 +103,11 @@ function expectSettledWithOneFinish(turn: ParitySnapshot | undefined) {
   expect(turn!.finishReason).toBe('stop');
 }
 
-describe('T24 tool choice (plain, durable, evented)', () => {
+describeParity('tool choice parity', target => {
   it.each<Variant>(['required', 'none', 'named'])('%s: forwards toolChoice and drives the loop', async variant => {
-    const { results, commits } = await runT24(variant);
+    const { results, commits } = await runT24(target, variant);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const turn = results[engine]!.turns.at(-1);
       const requests = results[engine]!.requests;
 

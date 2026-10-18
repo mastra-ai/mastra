@@ -26,15 +26,15 @@
  *     an observation and never asserts it).
  *   - the `display` target (Studio; covered by the harness S-cases).
  *
- * `expectEngineParity` provides the harness's engine comparison; the harness's
+ * `expectParity` (parity mode) provides the harness's engine comparison; the harness's
  * own "run settled" check (two model calls, one finish, no error) is asserted
  * per engine.
  */
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
 import {
   type CapturedRequest,
   type EngineDifference,
@@ -43,12 +43,12 @@ import {
   type ModelTape,
   type ParityEngine,
   type ParitySnapshot,
+  type ParityTarget,
   chunksOfType,
-  expectEngineParity,
+  describeParity,
+  expectParity,
   textOnlyTape,
-} from './parity-harness';
-
-const ENGINES: readonly ParityEngine[] = ['plain', 'durable', 'evented'];
+} from '../parity';
 const THREAD = 'thread-t34';
 const RESOURCE = 'resource-t34';
 const TURN_OPTIONS = {
@@ -192,21 +192,18 @@ function echoTool(spec: VariantSpec) {
   });
 }
 
-/** The observation for one engine, which `expectEngineParity` always records. */
+/** The observation for one engine, which `expectParity` always records. */
 function observationOf(results: EngineParityResults, engine: ParityEngine): EngineRunResult {
   const observation = results[engine];
   if (!observation) throw new Error(`no observation recorded for engine '${engine}'`);
   return observation;
 }
 
-function runT34(variant: Variant) {
+function runT34(target: ParityTarget, variant: Variant) {
   const spec = SPECS[variant];
-  return expectEngineParity({
-    engines: ENGINES,
+  return expectParity(target, {
     // The declared difference only exists for the variants that put metadata on the result.
-    ...(spec.resultMetadata
-      ? { differences: { durable: RESULT_METADATA_DIFFERENCE, evented: RESULT_METADATA_DIFFERENCE } }
-      : {}),
+    ...(spec.resultMetadata ? { differences: { [target]: RESULT_METADATA_DIFFERENCE } } : {}),
     model: {
       respond: request => (toolResultCount(request) === 0 ? toolCallTape(spec) : textOnlyTape('done')),
     },
@@ -230,13 +227,13 @@ function runT34(variant: Variant) {
   });
 }
 
-describe('T34 tool metadata (plain, durable, evented)', () => {
+describeParity('tool-metadata parity', target => {
   for (const variant of VARIANTS) {
     it(`${variant}: ${VARIANT_TITLES[variant]}`, async () => {
-      const results = await runT34(variant);
+      const results = await runT34(target, variant);
       const spec = SPECS[variant];
 
-      for (const engine of ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const observation = observationOf(results, engine);
         const turn = observation.turns[0]!;
         // The harness's check: two model calls.

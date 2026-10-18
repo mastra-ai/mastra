@@ -14,7 +14,7 @@
  * harness `evaluate()` check per engine and reproduces the harness's
  * `done(contract)` cross-engine deep-equality on top of it.
  *
- * The case runs through `expectEngineParity` on a host with
+ * The case runs in parity mode (`expectParity`) on a host with
  * `host: { backgroundTasks: { enabled: true } }`, which is what makes the helper
  * bind a `BackgroundTaskManager` and call `startWorkers()`. Without that a
  * deferred dispatch degrades silently to a foreground call and every check here
@@ -23,15 +23,19 @@
  * Timing note: the harness's artificial 1500 ms tool delay is reduced to 400 ms.
  * T30 excludes exact timing from its claims and no check depends on the duration.
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { EngineDifference, ModelScript, ParityEngine, ParitySnapshot } from './parity-harness';
-import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
+import { describeForAllEngines } from '../aimock-scenario';
+import type { EngineDifference, ModelScript, ParityEngine, ParitySnapshot } from '../parity';
+import { expectParity, textOnlyTape, toolCallTape } from '../parity';
 
-/** The harness excludes evented (`background workers; T4e`). */
+/**
+ * The harness excludes evented (`background workers; T4e`), so this file runs
+ * parity mode on the durable variant only (evented is registered as skipped).
+ */
 const ENGINES = ['plain', 'durable'] as const;
 
 const VARIANTS = ['unbounded', 'max-steps'] as const;
@@ -151,56 +155,60 @@ function contractOf(where: string, turn: ParitySnapshot, log: ToolLogEntry[], mo
   return contract;
 }
 
-describe('T30 untilIdle wake-up ceiling', () => {
-  for (const variant of VARIANTS) {
-    it(`${variant}: the wake-up loop settles and records how many segments it allowed`, async () => {
-      const logs = new Map<ParityEngine, ToolLogEntry[]>();
+describeForAllEngines(
+  'until-idle-cap parity',
+  () => {
+    for (const variant of VARIANTS) {
+      it(`${variant}: the wake-up loop settles and records how many segments it allowed`, async () => {
+        const logs = new Map<ParityEngine, ToolLogEntry[]>();
 
-      const results = await expectEngineParity({
-        engines: ENGINES,
-        model: T30_SCRIPT,
-        host: { backgroundTasks: { enabled: true } },
-        differences: { durable: COR_1390_BACKGROUND },
-        buildAgent: ({ engine, model }) => {
-          const log: ToolLogEntry[] = [];
-          logs.set(engine, log);
-          return new Agent({
-            id: 't30-agent',
-            name: 't30',
-            instructions: 'Go.',
-            model,
-            memory: new MockMemory(),
-            tools: { fetchRecord: createFetchRecordTool(log) },
-          });
-        },
-        run: async handle => {
-          await handle.turn('Go.', {
-            memory: MEMORY,
-            runId: `t30-run-${handle.engine}`,
-            untilIdle: { maxIdleMs: IDLE_MS },
-            maxSteps: variant === 'max-steps' ? 3 : 20,
-          });
-        },
+        const results = await expectParity('durable', {
+          model: T30_SCRIPT,
+          host: { backgroundTasks: { enabled: true } },
+          differences: { durable: COR_1390_BACKGROUND },
+          buildAgent: ({ engine, model }) => {
+            const log: ToolLogEntry[] = [];
+            logs.set(engine, log);
+            return new Agent({
+              id: 't30-agent',
+              name: 't30',
+              instructions: 'Go.',
+              model,
+              memory: new MockMemory(),
+              tools: { fetchRecord: createFetchRecordTool(log) },
+            });
+          },
+          run: async handle => {
+            await handle.turn('Go.', {
+              memory: MEMORY,
+              runId: `t30-run-${handle.engine}`,
+              untilIdle: { maxIdleMs: IDLE_MS },
+              maxSteps: variant === 'max-steps' ? 3 : 20,
+            });
+          },
+        });
+
+        const observed = new Map<ParityEngine, T30Contract>();
+        for (const engine of ENGINES) {
+          const result = results[engine];
+          observed.set(
+            engine,
+            contractOf(`${engine}/${variant}`, result!.turns[0]!, logs.get(engine)!, result!.requests.length),
+          );
+        }
+
+        // The script's own cap is what ended the run: the loop kept re-dispatching until the harness
+        // stopped answering, rather than settling on its own.
+        for (const engine of ENGINES) {
+          expect(observed.get(engine)!.cappedBy, `${engine}/${variant}: the script's cap ended the run`).toBe(
+            'harness',
+          );
+        }
+
+        // The harness compares the contract, not the chunk payloads.
+        expect(observed.get('durable'), `${variant}: durable contract`).toEqual(observed.get('plain'));
       });
-
-      const observed = new Map<ParityEngine, T30Contract>();
-      for (const engine of ENGINES) {
-        const result = results[engine];
-        expect(result, `${engine} ran`).toBeDefined();
-        observed.set(
-          engine,
-          contractOf(`${engine}/${variant}`, result!.turns[0]!, logs.get(engine)!, result!.requests.length),
-        );
-      }
-
-      // The script's own cap is what ended the run: the loop kept re-dispatching until the harness
-      // stopped answering, rather than settling on its own.
-      for (const engine of ENGINES) {
-        expect(observed.get(engine)!.cappedBy, `${engine}/${variant}: the script's cap ended the run`).toBe('harness');
-      }
-
-      // The harness compares the contract, not the chunk payloads.
-      expect(observed.get('durable'), `${variant}: durable contract`).toEqual(observed.get('plain'));
-    });
-  }
-});
+    }
+  },
+  { skip: ['normal', 'fs', 'inngest', 'evented'] },
+);

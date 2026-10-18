@@ -9,7 +9,7 @@
  * abort lands at an exact point and no timer is involved.
  *
  * The harness case is model-free and driven by a script (`stepScript`); the
- * script is rebuilt here on the parity helper's `ModelScript`. The harness's
+ * script is rebuilt here on parity mode's `ModelScript`. The harness's
  * `toolSawAbort` stays a detail there (whether the parked tool sees the abort or
  * falls back is a race, not a fact about the engine), so it is not asserted
  * here either.
@@ -29,15 +29,14 @@
  *     that check is not expressed here.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { globalRunRegistry } from '../run-registry';
-import type { Deferred } from './abort-parity-support';
-import { aborted, deferred, toolResultCount } from './abort-parity-support';
+import { Agent } from '../../../../agent';
+import { globalRunRegistry } from '../../../../agent/durable/run-registry';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
 import type {
+  Deferred,
   EngineHandle,
   EngineParityResults,
   EngineParityScenario,
@@ -45,10 +44,18 @@ import type {
   ModelScript,
   ParityEngine,
   ParitySnapshot,
-} from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
-
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
+  ParityTarget,
+} from '../parity';
+import {
+  aborted,
+  chunksOfType,
+  deferred,
+  describeParity,
+  expectParity,
+  textOnlyTape,
+  toolCallTape,
+  toolResultCount,
+} from '../parity';
 const AGENT_ID = 't14-agent';
 const STEP_TOOL = 'step';
 const STEP_COUNT = 3;
@@ -74,8 +81,8 @@ function stepScript(count: number): ModelScript {
 
 /**
  * The harness aborts through `runner.abortRunStream(runId)`, where `runner` is
- * the agent the engine actually runs. On plain that agent is the one the parity
- * helper hands the scenario. A durable/evented run's abort controller is not on
+ * the agent the engine actually runs. On plain that agent is the one parity mode
+ * hands the scenario. A durable/evented run's abort controller is not on
  * that agent — it is created per run on the durable run registry, and
  * `DurableAgent.abortRunStream` flips exactly that controller (its second step,
  * a cross-process abort request, is a no-op in-process).
@@ -99,7 +106,10 @@ interface EngineCaseState {
   snapshot?: ParitySnapshot;
 }
 
-async function runT14(variant: Variant): Promise<{
+async function runT14(
+  target: ParityTarget,
+  variant: Variant,
+): Promise<{
   results: EngineParityResults;
   states: Map<ParityEngine, EngineCaseState>;
 }> {
@@ -173,23 +183,23 @@ async function runT14(variant: Variant): Promise<{
     },
   };
 
-  const results = await expectEngineParity(scenario);
+  const results = await expectParity(target, scenario);
   return { results, states };
 }
 
-describe('T14 abort parity', () => {
+describeParity('abort parity', target => {
   afterEach(() => {
     globalRunRegistry.clear();
   });
 
   for (const variant of VARIANTS) {
     it(`aborts a parked run and surfaces the abort surface (${variant})`, async () => {
-      const { results, states } = await runT14(variant);
+      const { results, states } = await runT14(target, variant);
 
-      for (const engine of ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const state = states.get(engine)!;
+        // The turn settled after the abort: `snapshot` is only set once it did.
         const snapshot = state.snapshot;
-        expect(snapshot, `${engine}: turn settled after the abort`).toBeDefined();
         expect(state.accepted, `${engine}: abort accepted`).toBe(true);
         expect(chunksOfType(snapshot!, 'abort'), `${engine}: abort chunk`).toBe(1);
         expect(chunksOfType(snapshot!, 'error'), `${engine}: no error chunk`).toBe(0);
@@ -212,7 +222,7 @@ describe('T14 abort parity', () => {
 });
 
 /**
- * Literal contract for the plain engine. The helper treats plain as the
+ * Literal contract for the plain engine. Parity mode treats plain as the
  * reference, so pinning its values stops a plain-side change from silently
  * moving that reference and keeping the engines "in parity".
  *

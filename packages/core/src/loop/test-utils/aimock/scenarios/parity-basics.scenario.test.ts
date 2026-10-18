@@ -6,7 +6,7 @@
  * around the same Agent config), then assert that the observable stream
  * output and the model requests match.
  *
- * See `parity-harness.ts` for the comparison shape and what we deliberately
+ * See parity mode (`../parity.ts`) for the comparison shape and what we deliberately
  * exclude from the check (runId, timestamps, span ids, response.id, etc.).
  *
  * This file is the **gating test** for the bridge-durable-agent workstream:
@@ -16,14 +16,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { expectEngineParity, PARITY_ENGINES, textOnlyTape, toolCallTape } from './parity-harness';
+import { Agent } from '../../../../agent';
+import { createTool } from '../../../../tools';
+import { describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
-describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
+describeParity('basics parity', target => {
   describe('basic text streaming', () => {
     it('produces identical text, usage, and finishReason', async () => {
-      await expectEngineParity({
+      await expectParity(target, {
         model: { tapes: [textOnlyTape('Hello from the parity harness.')] },
         buildAgent: ({ model }) =>
           new Agent({
@@ -44,7 +44,7 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
         execute: async ({ value }) => `echo:${value}`,
       });
 
-      const results = await expectEngineParity({
+      const results = await expectParity(target, {
         model: { tapes: [toolCallTape('echo', { value: 'hi' }), textOnlyTape('Echoed: hi')] },
         buildAgent: ({ model }) =>
           new Agent({ id: 'parity-tool-text', name: 'Tool Text', instructions: 'Use echo', model, tools: { echo } }),
@@ -52,7 +52,7 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
         options: { maxSteps: 2 },
       });
 
-      for (const engine of PARITY_ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const turn = results[engine]!.turns.at(-1)!;
         expect(turn.stepCount).toBe(2);
         expect(turn.finishReason).toBe('stop');
@@ -85,7 +85,7 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
         execute: async () => 'hidden',
       });
 
-      const results = await expectEngineParity({
+      const results = await expectParity(target, {
         model: { tapes: [textOnlyTape('Done')] },
         buildAgent: ({ model }) =>
           new Agent({
@@ -118,7 +118,7 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
     ];
 
     it('restores the original system messages after a one-step override', async () => {
-      const results = await expectEngineParity({
+      const results = await expectParity(target, {
         model: { tapes },
         buildAgent: ({ model }) =>
           new Agent({
@@ -138,7 +138,7 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
         },
       });
 
-      for (const engine of PARITY_ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const requests = results[engine]!.requests;
         expect(requests).toHaveLength(3);
         expect(requests[0]!.prompt).toContainEqual({ role: 'system', content: 'original system message' });
@@ -149,7 +149,7 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
     });
 
     it('applies an override returned on every step', async () => {
-      const results = await expectEngineParity({
+      const results = await expectParity(target, {
         model: { tapes },
         buildAgent: ({ model }) =>
           new Agent({
@@ -168,7 +168,7 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
         },
       });
 
-      for (const engine of PARITY_ENGINES) {
+      for (const engine of ['plain', target] as const) {
         expect(results[engine]!.requests).toHaveLength(3);
         for (const request of results[engine]!.requests) {
           expect(request.prompt).toContainEqual({ role: 'system', content: 'every-step override' });

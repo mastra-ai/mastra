@@ -3,20 +3,21 @@
  *
  * A throwing input processor is a failed guardrail and must stop every engine
  * before the model is called.
+ *
+ * The engines are built directly rather than through `expectParity`: the
+ * wrapped engines' rejection carries an error `id` and `cause` that parity
+ * mode's normalized `{ name, message }` error snapshot does not keep.
  */
-import { describe, expect, it } from 'vitest';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import type { InputProcessor } from '../../../processors';
-import { InMemoryStore } from '../../../storage';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import type { DurableAgent } from '../durable-agent';
-import type { ParityEngine } from './parity-harness';
-import { createRecordingModel, snapshotFromOutput, textOnlyTape } from './parity-harness';
-
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
+import { expect, it } from 'vitest';
+import { Agent } from '../../../../agent';
+import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
+import type { DurableAgent } from '../../../../agent/durable/durable-agent';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import type { InputProcessor } from '../../../../processors';
+import { InMemoryStore } from '../../../../storage';
+import { createRecordingModel, describeParity, snapshotFromOutput, textOnlyTape } from '../parity';
 const ERROR_MESSAGE = '[Agent:script] - Input processor error';
 
 const throwingProcessor: InputProcessor = {
@@ -27,9 +28,9 @@ const throwingProcessor: InputProcessor = {
   },
 };
 
-describe('T44 input processors (plain, durable, evented)', () => {
+describeParity('input-processor-error parity', target => {
   it('fails closed when processInput throws', async () => {
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const { model, requests } = createRecordingModel({ tapes: [textOnlyTape('model reached')] });
       const agent = new Agent({
         id: `t44-throws-${engine}`,
@@ -96,7 +97,7 @@ describe('T44 input processors (plain, durable, evented)', () => {
   });
 
   it('fails closed when input processor resolution throws', async () => {
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const { model, requests } = createRecordingModel({ tapes: [textOnlyTape('model reached')] });
       const agent = new Agent({
         id: `t44-resolver-throws-${engine}`,

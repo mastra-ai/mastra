@@ -7,11 +7,11 @@
  * way. The scripted model records the prompt, so the case compares the part
  * types of the first request and of the persisted user message. Model-free.
  */
-import { describe, expect, it } from 'vitest';
-import { MockMemory } from '../../../memory/mock';
-import { Agent } from '../../agent';
-import type { CapturedRequest, EngineParityResults, EngineParityScenario, ParityEngine } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape } from './parity-harness';
+import { expect, it } from 'vitest';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import type { CapturedRequest, EngineParityResults, EngineParityScenario, ParityEngine, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape } from '../parity';
 
 const PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -19,7 +19,6 @@ const FILE_BODY = Buffer.from('T39 file body').toString('base64');
 const CONTEXT_TEXT = 'CONTEXT-T39 says hello';
 const VARIANTS = ['image', 'file', 'multipart', 'context'] as const;
 type Variant = (typeof VARIANTS)[number];
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 
 /** Content the user message carries in each variant. */
 function userContent(variant: Variant) {
@@ -114,12 +113,13 @@ const CONTRACT: Record<
 };
 
 async function runT39(
+  target: ParityTarget,
   variant: Variant,
 ): Promise<{ results: EngineParityResults; states: Map<ParityEngine, T39State> }> {
   const memories = new Map<ParityEngine, MockMemory>();
   const thread = `t39-thread-${variant}`;
   const resource = `t39-resource-${variant}`;
-  const scenario: EngineParityScenario = {
+  const scenario: Omit<EngineParityScenario, 'engines'> = {
     model: { tapes: [textOnlyTape('seen')] },
     buildAgent: ({ engine, model }) => {
       const memory = new MockMemory();
@@ -135,9 +135,9 @@ async function runT39(
     },
   };
 
-  const results = await expectEngineParity(scenario);
+  const results = await expectParity(target, scenario);
   const states = new Map<ParityEngine, T39State>();
-  for (const engine of ENGINES) {
+  for (const engine of ['plain', target] as const) {
     const { messages } = await memories.get(engine)!.recall({ threadId: thread, resourceId: resource });
     const prompt = results[engine]!.requests[0]!.prompt;
     const users = prompt.filter(message => message.role === 'user');
@@ -157,12 +157,12 @@ async function runT39(
   return { results, states };
 }
 
-describe('T39 message content (plain, durable, evented)', () => {
+describeParity('message-content parity', target => {
   for (const variant of VARIANTS) {
     it(`carries non-text content to the model and memory (${variant})`, async () => {
-      const { results, states } = await runT39(variant);
+      const { results, states } = await runT39(target, variant);
 
-      for (const engine of ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const turn = results[engine]!.turns[0]!;
         const state = states.get(engine)!;
         const prompt = results[engine]!.requests[0]!.prompt;

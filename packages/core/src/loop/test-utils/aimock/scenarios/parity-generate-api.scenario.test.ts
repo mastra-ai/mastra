@@ -6,8 +6,8 @@
  * `resumeGenerate()` finishes, and `structuredOutput` parses the model's JSON
  * reply — with the same contract on plain, durable and evented.
  *
- * The `object` and `steps` variants drive all three engines through
- * `expectEngineParity` and `EngineHandle.generate()`, which runs plain's
+ * The `object` and `steps` variants drive plain and the target engine through
+ * `expectParity` (parity mode) and `EngineHandle.generate()`, which runs plain's
  * `doGenerate` and the wrapped engines' workflow path off the same recorded tape
  * — the leaf-by-leaf comparison the helper performs is strictly stronger than
  * the harness's `done(contract)` deep equality, so nothing the harness checks is
@@ -31,17 +31,17 @@
  */
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import type { DurableAgent } from '../durable-agent';
+import { Agent } from '../../../../agent';
+import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
+import type { DurableAgent } from '../../../../agent/durable/durable-agent';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
+import { InMemoryStore } from '../../../../storage';
+import { createTool } from '../../../../tools';
 import type {
   EngineDifference,
   EngineObservation,
@@ -49,12 +49,12 @@ import type {
   ModelScript,
   ParityEngine,
   ParityStreamOptions,
-} from './parity-harness';
-import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+  ParityTarget,
+} from '../parity';
+import { describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
 const AGENT_ID = 't16-agent';
 const MAX_STEPS = 5;
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const T16_USAGE = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const MEMORY = { thread: 't16-thread', resource: 't16-resource' };
 const OBJECT_SCHEMA = z.object({ amount: z.number(), currency: z.string() });
@@ -189,15 +189,13 @@ function streamParts(step: ScriptStep, offset: number): LanguageModelV2StreamPar
   }
   return [
     { type: 'stream-start' as const, warnings: [] },
-    ...step.tools.map(
-      (tool, index): LanguageModelV2StreamPart => ({
-        type: 'tool-call',
-        toolCallId: `call-${offset + index + 1}`,
-        toolName: tool.name,
-        input: JSON.stringify(tool.args ?? {}),
-        providerExecuted: false,
-      }),
-    ),
+    ...step.tools.map((tool, index): LanguageModelV2StreamPart => ({
+      type: 'tool-call',
+      toolCallId: `call-${offset + index + 1}`,
+      toolName: tool.name,
+      input: JSON.stringify(tool.args ?? {}),
+      providerExecuted: false,
+    })),
     { type: 'finish' as const, finishReason: 'tool-calls' as const, usage: T16_USAGE },
   ];
 }
@@ -310,7 +308,7 @@ type EngineRun = {
   calls: Array<'generate' | 'stream'>;
 };
 
-async function runOnEngine(engine: ParityEngine): Promise<EngineRun> {
+async function runSuspendOnEngine(engine: ParityEngine): Promise<EngineRun> {
   const toolLog: ToolLog = [];
   const { model, calls } = createScriptModel(SUSPEND_SCRIPT);
   const agent = t16Agent(model, { confirm: createConfirmTool(toolLog) });
@@ -370,13 +368,13 @@ function contractOf(run: EngineRun) {
   };
 }
 
-async function runOnEveryEngine(): Promise<Map<ParityEngine, EngineRun>> {
+async function runOnEveryEngine(target: ParityTarget): Promise<Map<ParityEngine, EngineRun>> {
   const runs = new Map<ParityEngine, EngineRun>();
-  for (const engine of ENGINES) runs.set(engine, await runOnEngine(engine));
+  for (const engine of ['plain', target] as const) runs.set(engine, await runSuspendOnEngine(engine));
   return runs;
 }
 
-describe('T16 generate API: generate() / resumeGenerate() / structured output (plain, durable, evented)', () => {
+describeParity('generate-api parity', target => {
   it('object: every engine parses the same structured output', async () => {
     // `ParityStreamOptions` deliberately omits `structuredOutput` (it types
     // differently on plain and on the wrapped agents), so the option is widened
@@ -394,9 +392,9 @@ describe('T16 generate API: generate() / resumeGenerate() / structured output (p
       },
     };
 
-    const results = await expectEngineParity(scenario);
+    const results = await expectParity(target, scenario);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const turn = results[engine]!.turns[0]!;
       expect(turn.generate, `${engine} drove the turn through generate()`).toBe(true);
       expect(turn.chunks, `${engine} streamed chunks`).toHaveLength(0);
@@ -426,9 +424,9 @@ describe('T16 generate API: generate() / resumeGenerate() / structured output (p
       differences: { durable: COR_1428, evented: COR_1428 },
     };
 
-    const results = await expectEngineParity(scenario);
+    const results = await expectParity(target, scenario);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const turn = results[engine]!.turns[0]!;
       expect(turn.generate, `${engine} drove the turn through generate()`).toBe(true);
       expect(turn.chunks, `${engine} streamed chunks`).toHaveLength(0);
@@ -441,7 +439,7 @@ describe('T16 generate API: generate() / resumeGenerate() / structured output (p
       expect(results[engine]!.requests, `${engine} model calls`).toHaveLength(3);
     }
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       expect(
         toolLog.filter(entry => entry.engine === engine && entry.tool === 'step' && entry.event === 'commit'),
         `${engine} step commits`,
@@ -450,11 +448,10 @@ describe('T16 generate API: generate() / resumeGenerate() / structured output (p
   });
 
   it('suspend: a suspended generate() resumes with the same contract on every engine', async () => {
-    const runs = await runOnEveryEngine();
+    const runs = await runOnEveryEngine(target);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const run = runs.get(engine)!;
-      expect(run.first, `${engine} returned no output`).toBeDefined();
       expect(run.first?.error, `${engine} generate() returned an error`).toBeUndefined();
       expect(run.first?.suspended, `${engine} reported the suspension`).toBe(true);
       expect(run.resumed?.error, `${engine} resumeGenerate() returned an error`).toBeUndefined();
@@ -471,8 +468,6 @@ describe('T16 generate API: generate() / resumeGenerate() / structured output (p
     expect(runs.get('plain')!.calls[0], 'plain generate() used the doGenerate path').toBe('generate');
 
     const plain = contractOf(runs.get('plain')!);
-    for (const engine of ['durable', 'evented'] as const) {
-      expect(contractOf(runs.get(engine)!), `${engine} contract vs plain`).toEqual(plain);
-    }
+    expect(contractOf(runs.get(target)!), `${target} contract vs plain`).toEqual(plain);
   });
 });

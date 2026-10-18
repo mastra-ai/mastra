@@ -11,7 +11,7 @@
  * harness `evaluate()` check per engine and reproduces the harness's
  * `done(contract)` cross-engine deep-equality on top of it.
  *
- * The case runs through `expectEngineParity` on a host with
+ * The case runs in parity mode (`expectParity`) on a host with
  * `host: { backgroundTasks: { enabled: true } }`, which is what makes the helper
  * bind a `BackgroundTaskManager` and call `startWorkers()`. Without that a
  * deferred dispatch degrades silently to a foreground call and every check here
@@ -21,15 +21,13 @@
  * Timing note: the harness's artificial 1500 ms tool delay is reduced to 400 ms.
  * T19 excludes exact timing from its claims and no check depends on the duration.
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { EngineDifference, ModelScript, ParityEngine, ParitySnapshot } from './parity-harness';
-import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
-
-const ENGINES = ['plain', 'durable', 'evented'] as const;
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
+import type { EngineDifference, ModelScript, ParityEngine, ParitySnapshot } from '../parity';
+import { describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
 const VARIANT = ['caller-runid', 'no-runid'] as const;
 
@@ -40,7 +38,7 @@ const FETCH_DELAY_MS = 400;
 const USAGE = { inputTokens: 1, outputTokens: 1, totalTokens: 2 } as const;
 
 /**
- * One thread for all three engines: the prompt carries the thread id in its
+ * One thread for every engine: the prompt carries the thread id in its
  * headers, and the harness compares contracts rather than request metadata.
  */
 const MEMORY = { thread: 't19-thread', resource: 't19-resource' };
@@ -140,16 +138,17 @@ function contractOf(where: string, turn: ParitySnapshot, log: ToolLogEntry[]): T
   return { calls, waiting, final };
 }
 
-describe('T19 untilIdle continuation does not replay earlier chunks', () => {
+describeParity('until-idle-replay parity', target => {
+  const ENGINES = ['plain', target] as const;
+
   for (const variant of VARIANT) {
     it(`${variant}: background wake-up streams each segment once on every engine`, async () => {
       const logs = new Map<ParityEngine, ToolLogEntry[]>();
 
-      const results = await expectEngineParity({
-        engines: ENGINES,
+      const results = await expectParity(target, {
         model: T19_SCRIPT,
         host: { backgroundTasks: { enabled: true } },
-        differences: { durable: COR_1390_BACKGROUND, evented: COR_1390_BACKGROUND },
+        differences: { [target]: COR_1390_BACKGROUND },
         buildAgent: ({ engine, model }) => {
           const log: ToolLogEntry[] = [];
           logs.set(engine, log);
@@ -175,13 +174,11 @@ describe('T19 untilIdle continuation does not replay earlier chunks', () => {
       const observed = new Map<ParityEngine, T19Contract>();
       for (const engine of ENGINES) {
         const result = results[engine];
-        expect(result, `${engine} ran`).toBeDefined();
         observed.set(engine, contractOf(`${engine}/${variant}`, result!.turns[0]!, logs.get(engine)!));
       }
 
       // The harness compares the contract, not the chunk payloads.
-      expect(observed.get('durable'), `${variant}: durable contract`).toEqual(observed.get('plain'));
-      expect(observed.get('evented'), `${variant}: evented contract`).toEqual(observed.get('plain'));
+      expect(observed.get(target), `${variant}: ${target} contract`).toEqual(observed.get('plain'));
     });
   }
 });

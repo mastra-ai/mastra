@@ -1,10 +1,17 @@
 /**
- * Parity Harness
+ * AIMock parity mode
  *
- * Runs one scripted scenario on a plain `Agent`, a `createDurableAgent`
- * wrapper and a `createEventedAgent` wrapper, then asserts that what a caller
- * can observe matches across engines. Plain is the reference; durable and
- * evented are each compared to it.
+ * Runs one scripted scenario on a plain `Agent` and on a `createDurableAgent`
+ * or `createEventedAgent` wrapper, then asserts that what a caller can observe
+ * matches. Plain is the reference; durable and evented are each compared to it.
+ * Opt in from a scenario file with `describeParity` (which registers through
+ * `describeForAllEngines`) and `expectParity(engine, scenario)`.
+ *
+ * The model is an in-process recording model rather than the AIMock HTTP
+ * server: parity cases need exact control over stream parts (provider usage
+ * objects, thrown errors, mid-stream `error` parts, aborts) that an HTTP
+ * fixture cannot express, and the recorded `LanguageModelV2CallOptions` are a
+ * stricter request comparison than the provider's serialised body.
  *
  * What we compare, per turn (and why):
  * - `text`           → user-visible final text
@@ -41,9 +48,9 @@
  * `normalizePayload` removes volatile keys recursively (see
  * `VOLATILE_PAYLOAD_KEYS`) and drops values a transport cannot carry.
  *
- * Single turn:
+ * Single turn, inside `describeParity(name, target => { it(..., async () => { ... }) })`:
  *
- *     await expectEngineParity({
+ *     await expectParity(target, {
  *       model: { tapes: [textOnlyTape('Hi')] },
  *       buildAgent: ({ model }) => new Agent({ id: 'x', name: 'X', instructions: '...', model }),
  *       input: 'Say hi',
@@ -52,7 +59,7 @@
  *
  * Multi turn, with per-engine assertions on the returned results:
  *
- *     const results = await expectEngineParity({
+ *     const results = await expectParity(target, {
  *       model: { respond: request => textOnlyTape(`answer to: ${lastUserText(request)}`) },
  *       buildAgent: ({ model }) => new Agent({ ..., model, memory: new MockMemory() }),
  *       run: async h => {
@@ -60,7 +67,7 @@
  *         await h.turn('Second question', options);
  *       },
  *     });
- *     for (const r of Object.values(results)) expect(r.requests).toHaveLength(2);
+ *     for (const engine of ['plain', target] as const) expect(results[engine]!.requests).toHaveLength(2);
  *
  * A `generate()` turn is driven through the handle too. It produces no chunks,
  * so it is compared through the output the caller receives, and the request the
@@ -78,7 +85,7 @@
  * resumed output are compared as one unit. A suspension always needs a
  * continuation — a turn left suspended never finishes.
  *
- *     await expectEngineParity({
+ *     await expectParity(target, {
  *       model: { tapes: [toolCallTape('ask', {}), textOnlyTape('Done.')] },
  *       buildAgent: ({ model }) => new Agent({ ..., model, memory: new MockMemory(), tools: { ask } }),
  *       input: 'Start',
@@ -103,18 +110,19 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { Agent } from '../../../agent/agent';
+import type { AgentExecutionOptions } from '../../../agent/agent.types';
+import { createDurableAgent } from '../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../agent/durable/create-evented-agent';
+import type { DurableAgent, DurableAgentStreamOptions } from '../../../agent/durable/durable-agent';
+import type { MessageListInput } from '../../../agent/message-list/types';
 import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraCompositeStore } from '../../../storage/base';
 import type { MastraModelOutput } from '../../../stream/base/output';
-import type { Agent } from '../../agent';
-import type { AgentExecutionOptions } from '../../agent.types';
-import type { MessageListInput } from '../../message-list/types';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import type { DurableAgent, DurableAgentStreamOptions } from '../durable-agent';
+import { describeForAllEngines } from './aimock-scenario';
 
 // ---------------------------------------------------------------------------
 // Snapshot shape — what we compare for parity
@@ -866,10 +874,40 @@ function isParityMisuse(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { [MISUSE]?: true })[MISUSE] === true;
 }
 
+/** The engines parity mode compares against plain. */
+export type ParityTarget = Exclude<ParityEngine, 'plain'>;
+
+/**
+ * Parity mode for AIMock scenarios. Registers the suite through
+ * `describeForAllEngines` on the durable and evented variants only: `normal`
+ * is the plain baseline every case runs against, and `fs` and external hosts
+ * (Inngest) are not parity engines, so they are registered as skipped.
+ *
+ *     describeParity('tool choice', engine => {
+ *       it('matches plain', () => expectParity(engine, { model, buildAgent, input }));
+ *     });
+ */
+export function describeParity(name: string, factory: (engine: ParityTarget) => void): void {
+  describeForAllEngines(name, engine => factory(engine as ParityTarget), { skip: ['normal', 'fs', 'inngest'] });
+}
+
+/**
+ * Runs the scenario on plain and on `engine`, and asserts `engine` matches
+ * plain apart from declared differences. Returns both observations.
+ */
+export async function expectParity(
+  engine: ParityTarget,
+  scenario: Omit<EngineParityScenario, 'engines'>,
+): Promise<EngineParityResults & { plain: EngineRunResult }> {
+  return (await expectEngineParity({ ...scenario, engines: ['plain', engine] })) as EngineParityResults & {
+    plain: EngineRunResult;
+  };
+}
+
 /**
  * Runs the scenario on every engine and asserts durable and evented match
- * plain, apart from declared differences. Returns each engine's observation
- * for scenario-specific assertions.
+ * plain, apart from declared differences. Prefer `describeParity` +
+ * `expectParity`, which report each engine as its own test.
  */
 export async function expectEngineParity(scenario: EngineParityScenario): Promise<EngineParityResults> {
   const requested = scenario.engines ?? PARITY_ENGINES;
@@ -900,7 +938,12 @@ export async function expectEngineParity(scenario: EngineParityScenario): Promis
   return results;
 }
 
-async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario): Promise<EngineRunResult> {
+/**
+ * Runs the scenario on one engine and returns what it observed, without
+ * comparing it to anything. For scenarios whose assertion is per engine (e.g.
+ * "every engine sends the merged settings") rather than engine-vs-plain.
+ */
+export async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario): Promise<EngineRunResult> {
   const { model, requests } = createRecordingModel(scenario.model);
   const agent = scenario.buildAgent({ engine, model });
 
@@ -1507,3 +1550,71 @@ function compareObservations(
   }
   return mismatches;
 }
+
+// ---------------------------------------------------------------------------
+// Abort fixtures shared by the abort and callback-order parity cases
+// ---------------------------------------------------------------------------
+
+export interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+export function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(resolver => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
+export function aborted(signal?: AbortSignal): Promise<void> {
+  return new Promise<void>(resolve => {
+    if (!signal) return;
+    if (signal.aborted) return resolve();
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+}
+
+/** Number of tool results the model has already been handed. */
+export function toolResultCount(request: CapturedRequest): number {
+  let count = 0;
+  for (const message of request.prompt) {
+    if (message.role !== 'tool') continue;
+    for (const part of message.content) {
+      if (part.type === 'tool-result') count += 1;
+    }
+  }
+  return count;
+}
+
+/**
+ * COR-1415 — plain's abort surface. Plain delivers the aborted step's `tool-result` a second time,
+ * immediately before the `abort` chunk, and reports `reason: 'tripwire'` on the finish chunk while
+ * durable and evented abort directly. The `expect` maps plain's observation onto the wrapped
+ * engines' shape, so the comparison outside these fields stays exact. When plain stops finalising
+ * the aborted step the difference no longer reproduces and the helper fails the test, which is the
+ * signal to delete this declaration.
+ */
+export const ABORT_ARTIFACT: EngineDifference = {
+  reason:
+    "COR-1415: plain emits the aborted step's tool-result a second time and finishes the abort as 'tripwire'; durable and evented abort without it.",
+  expect: plain => ({
+    ...plain,
+    turns: plain.turns.map(turn => {
+      // Plain's spurious chunk sits directly before the abort chunk it also emits; both wrapped
+      // engines go straight from the parked step to `abort`.
+      const spurious = turn.chunkTypes.indexOf('abort') - 1;
+      const withoutSpurious = <T>(list: T[]): T[] => list.filter((_, index) => index !== spurious);
+      return {
+        ...turn,
+        chunks: withoutSpurious(turn.chunks),
+        chunkTypes: withoutSpurious(turn.chunkTypes),
+        chunkPayloads: withoutSpurious(turn.chunkPayloads),
+        finishChunk: { ...turn.finishChunk, reason: 'abort' },
+        // The duplicate result sorts next to the result it duplicates.
+        toolResults: turn.toolResults.slice(0, -1),
+      };
+    }),
+  }),
+};

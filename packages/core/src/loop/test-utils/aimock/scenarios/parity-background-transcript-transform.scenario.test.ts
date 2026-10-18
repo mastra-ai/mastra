@@ -13,26 +13,25 @@
  * Excluded, as in the harness: the agent-level transform policy (T34),
  * recovery mid background task (T4), and the `display` target (Studio).
  *
- * `expectEngineParity` is not used here for two reasons: its internal Mastra
- * host neither enables `backgroundTasks` nor starts workers, and the claim is
- * about persisted memory state, which the parity snapshot does not record. The
- * three engines are therefore built here exactly as the helper builds them and
- * their contracts are compared directly.
+ * `expectParity` is not used here because the claim is about persisted memory
+ * state read both at the end of the stream and after the run's resources are
+ * released, which the parity snapshot does not record. Plain and the parity
+ * target are therefore built here exactly as parity mode builds them and their
+ * contracts are compared directly.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import { MockStore } from '../../../storage/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import { PARITY_ENGINES, createRecordingModel, textOnlyTape, toolCallTape, type ParityEngine } from './parity-harness';
+import { Agent } from '../../../../agent';
+import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
+import { MockStore } from '../../../../storage/mock';
+import { createTool } from '../../../../tools';
+import { createRecordingModel, describeParity, textOnlyTape, toolCallTape, type ParityEngine } from '../parity';
 
-const ENGINES = PARITY_ENGINES;
 const RAW_SECRET = 'raw-secret';
 const REDACTED_SECRET = 'transcript-redacted';
 const MAX_IDLE_MS = 20_000;
@@ -198,7 +197,8 @@ async function drive(engine: ParityEngine): Promise<Contract> {
   }
 }
 
-describe('T64 background tool transcript transform (plain, durable, evented)', () => {
+describeParity('background-transcript-transform parity', target => {
+  const ENGINES = ['plain', target] as const;
   const contracts = new Map<ParityEngine, Contract>();
 
   beforeEach(() => contracts.clear());
