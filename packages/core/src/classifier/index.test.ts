@@ -384,6 +384,7 @@ describe('Classifier', () => {
   it.each([
     [{ unsafe: { type: 'choice', choice: 'yes' } }, 'does not match'],
     [{ unsafe: { type: 'bogus' } }, 'does not match'],
+    [{ unsafe: { type: 'refusal', probability: 0 } }, 'must not include answer fields'],
     [{}, 'exactly one answer'],
     [{ unsafe: { type: 'boolean', probability: 2 } }, 'between 0 and 1'],
   ])('rejects malformed boolean output %#', async (answers, message) => {

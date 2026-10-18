@@ -567,7 +567,12 @@ function validateProviderResult(
     if (!isPlainObject(answer)) {
       throw new TypeError(`Answer '${questionId}' does not match its question type.`);
     }
-    if (answer.type === 'refusal') continue;
+    if (answer.type === 'refusal') {
+      if (['choice', 'score', 'probability', 'probabilities'].some(field => field in answer)) {
+        throw new TypeError(`Refusal answer '${questionId}' must not include answer fields.`);
+      }
+      continue;
+    }
     if (answer.type !== question.type) {
       throw new TypeError(`Answer '${questionId}' does not match its question type.`);
     }
