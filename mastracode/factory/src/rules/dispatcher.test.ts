@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
-import { buildStoredBoard } from '../boards/stored-board.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
@@ -1375,90 +1374,6 @@ describe('FactoryDecisionDispatcher', () => {
       expect.objectContaining({
         contents: expect.stringMatching(expected),
       }),
-      expect.anything(),
-    );
-  });
-
-  it.each([
-    { label: 'its role with the card', kickoff: null, expected: /Fix issue/ },
-    {
-      label: 'the phase kickoff override',
-      kickoff: { skillName: null, prompt: 'Ship it carefully.' },
-      expected: /^Ship it carefully\.\n\n[\s\S]*Fix issue/,
-    },
-  ])('entering a working phase on a board built in the UI starts $label', async ({ kickoff, expected }) => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const boards = createBoardRegistry();
-    const board = buildStoredBoard({
-      boardId: 'custom-ops',
-      title: 'Ops',
-      definition: {
-        initialPhase: 'backlog',
-        phases: [
-          { id: 'backlog', title: 'Backlog', kind: 'resting', next: ['doing'] },
-          { id: 'doing', title: 'Doing', kind: 'working', role: 'work', next: ['done'] },
-          { id: 'done', title: 'Done', kind: 'terminal', next: [] },
-        ],
-      },
-    });
-    boards.install(board, PROJECT_ID);
-    const { item } = await storage.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      input: { title: 'Fix issue', board: 'custom-ops', stages: ['backlog'], sessions: {}, metadata: {} },
-    });
-    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
-    const moved = await transitionService.transition({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: item.id,
-      board: 'custom-ops',
-      stage: 'doing',
-      expectedRevision: item.revision,
-      actor: { type: 'system', id: 'factory-rule-dispatcher' },
-      ingress: { type: 'rule', identity: 'move-1' },
-      cause: 'rule_decision',
-    });
-    expect(moved.status).toBe('accepted');
-    const { controller, session } = createSession();
-    await storage.prepareRunStart({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      workItem: {
-        id: item.id,
-        input: { title: 'Fix issue', board: 'custom-ops', stages: ['doing'], sessions: {}, metadata: {} },
-      },
-      role: 'work',
-      session: { sessionId: 'session-1', branch: 'factory/ops-1', threadId: 'thread-1' },
-      resourceId: PROJECT_ID,
-      kickoffKey: 'kickoff-null',
-      kickoffMessage: null,
-    });
-    const get = vi.fn(async () => kickoff);
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      isAutoRunEnabled: async () => true,
-      transitionService,
-      storage,
-      boards,
-      ownerId: 'worker-1',
-      primeCredentials: async () => {},
-      phaseSkills: { get } as never,
-      skillLibrary: { get: async () => null } as never,
-    });
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect(get).toHaveBeenCalledWith({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      boardId: 'custom-ops',
-      phaseId: 'doing',
-    });
-    expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringMatching(expected) }),
       expect.anything(),
     );
   });

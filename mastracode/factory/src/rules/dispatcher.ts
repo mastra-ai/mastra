@@ -21,6 +21,7 @@ import {
 } from '../session/run-audit.js';
 import {
   formatLibrarySkillMessage,
+  formatLibrarySkillResumeMessage,
   resolvePromptInvocation,
   resolveSkillInvocation,
   resolveSkillResumeInvocation,
@@ -972,7 +973,9 @@ export class FactoryDecisionDispatcher {
                   resourceId: binding.resourceId,
                   prompt:
                     'skill' in override
-                      ? formatLibrarySkillMessage({ ...override.skill, arguments: builtInContext })
+                      ? decision.resume === true
+                        ? formatLibrarySkillResumeMessage({ name: override.skill.name, arguments: builtInContext })
+                        : formatLibrarySkillMessage({ ...override.skill, arguments: builtInContext })
                       : `${override.prompt}${builtInContext ? `\n\n${builtInContext}` : ''}`,
                 })
               : decision.skillName !== undefined
