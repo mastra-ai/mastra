@@ -1,127 +1,154 @@
-import { MessageList } from '@mastra/core/agent';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import { InMemoryStore } from '@mastra/core/storage';
+import { describe, expect, it } from 'vitest';
 
-import { filterObservedMessages } from '../message-utils';
-import { ObservationalMemory } from '../observational-memory';
+import { Memory } from '../../../index';
 
 const threadId = 't-tie';
 const resourceId = 'r-tie';
+const earlier = new Date('2026-01-01T00:00:00.000Z');
+const tie = new Date('2026-01-01T00:00:01.000Z');
 
-function msg(id: string, createdAt: Date, role: 'user' | 'assistant' = 'assistant'): MastraDBMessage {
+const fact = `## January 1, 2026
+- 🔴 User mentioned the tied fact`;
+
+// Resource scope asks for one <thread id> block per thread, using the obscured id it put in the prompt.
+function observerReply(prompt: string) {
+  const threadIdInPrompt = [...prompt.matchAll(/<thread id=\\"([^\\"]+)\\">/g)]
+    .map(m => m[1])
+    .findLast(id => id !== '...');
+  const body = threadIdInPrompt ? `<thread id="${threadIdInPrompt}">\n${fact}\n</thread>` : fact;
+  return `<observations>\n${body}\n</observations>`;
+}
+
+// Mock observer model: aimock is not wired into @mastra/memory, and these tests only need the prompt it received.
+function observerModel() {
+  const prompts: string[] = [];
+  const model = new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      const serialized = JSON.stringify(prompt);
+      prompts.push(serialized);
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'text-start' as const, id: 't1' },
+          { type: 'text-delta' as const, id: 't1', delta: observerReply(serialized) },
+          { type: 'text-end' as const, id: 't1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+  return { model, prompts };
+}
+
+function msg(id: string, createdAt: Date, threadIdOverride = threadId): MastraDBMessage {
   return {
     id,
-    role,
-    threadId,
+    role: 'user',
+    threadId: threadIdOverride,
     resourceId,
     createdAt,
-    content: { format: 2, parts: [{ type: 'text', text: id }] },
+    content: { format: 2, parts: [{ type: 'text', text: `text of ${id}` }] },
   } as MastraDBMessage;
 }
 
-function run(messages: MastraDBMessage[], record: any) {
-  const list = new MessageList({ threadId, resourceId });
-  list.add(messages, 'memory');
-  filterObservedMessages({ messageList: list, record });
-  return list.get.all.db().map(m => m.id);
+/**
+ * Stores a record whose cursor sits on `tie`, as left by an observation that covered `before` and `observed`
+ * but not `unobserved` (all three of the latter two share the cursor millisecond).
+ */
+async function setup(scope: 'thread' | 'resource', observedMessageIds: string[] | undefined) {
+  const store = new InMemoryStore();
+  const { model, prompts } = observerModel();
+  const memory = new Memory({
+    storage: store,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        scope,
+        observation: { model: model as any, messageTokens: 100_000, bufferTokens: false },
+        reflection: { model: model as any, observationTokens: 100_000 },
+      },
+    },
+  });
+  await memory.createThread({
+    threadId,
+    resourceId,
+    metadata: { mastra: { om: { lastObservedAt: tie.toISOString() } } },
+  });
+  await memory.saveMessages({ messages: [msg('before', earlier), msg('observed', tie), msg('unobserved', tie)] });
+
+  const om = (await memory.omEngine)!;
+  const record = await om.getOrCreateRecord(threadId, resourceId);
+  const memoryStore = (await store.getStore('memory'))!;
+  await memoryStore.updateActiveObservations({
+    id: record.id,
+    observations: '- base',
+    tokenCount: 2,
+    lastObservedAt: tie,
+    ...(observedMessageIds ? { observedMessageIds } : {}),
+  });
+  const readRecord = async () =>
+    (await memoryStore.getObservationalMemory(scope === 'resource' ? null : threadId, resourceId))!;
+  return { memory, om, prompts, readRecord };
 }
 
-describe('lastObservedAt millisecond ties (#27261)', () => {
-  const tie = new Date('2026-01-01T00:00:01.000Z');
-  const earlier = new Date('2026-01-01T00:00:00.000Z');
+describe('observation cursor millisecond ties (#27261)', () => {
+  describe.each(['thread', 'resource'] as const)('%s scope', scope => {
+    it('keeps an unobserved message that shares the cursor millisecond in context', async () => {
+      const { memory } = await setup(scope, ['before', 'observed']);
 
-  it('keeps an unobserved message that shares the cursor millisecond', () => {
-    const kept = run([msg('old', earlier, 'user'), msg('a', tie), msg('b', tie)], {
-      lastObservedAt: tie,
-      observedMessageIds: ['old', 'a'],
+      const context = await memory.getContext({ threadId, resourceId });
+
+      expect(context.messages.map(m => m.id)).toEqual(['unobserved']);
     });
-    expect(kept).toEqual(['b']);
+
+    it('records without observed ids keep the exclusive cursor, as before', async () => {
+      const { memory } = await setup(scope, undefined);
+
+      const context = await memory.getContext({ threadId, resourceId });
+
+      expect(context.messages.map(m => m.id)).toEqual([]);
+    });
+
+    it('observes the tied unobserved message once and never replays observed ones', async () => {
+      const { om, prompts, readRecord } = await setup(scope, ['before', 'observed']);
+
+      await om.observe({ threadId, resourceId, force: true });
+
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]).toContain('text of unobserved');
+      expect(prompts[0]).not.toContain('text of observed');
+      expect(prompts[0]).not.toContain('text of before');
+      const record = await readRecord();
+      expect(record.observedMessageIds).toEqual(expect.arrayContaining(['before', 'observed', 'unobserved']));
+      expect(record.activeObservations).toContain('User mentioned the tied fact');
+    });
   });
 
-  it('treats the cursor as inclusive when no observed ids are persisted', () => {
-    const kept = run([msg('old', earlier, 'user'), msg('b', tie)], { lastObservedAt: tie });
-    expect(kept).toEqual([]);
-  });
+  it('resource scope: observes a tied unobserved message on another thread of the resource', async () => {
+    const { memory, om, prompts, readRecord } = await setup('resource', ['before', 'observed', 'sibling-observed']);
+    await memory.createThread({
+      threadId: 't-sibling',
+      resourceId,
+      metadata: { mastra: { om: { lastObservedAt: tie.toISOString() } } },
+    });
+    await memory.saveMessages({
+      messages: [msg('sibling-observed', tie, 't-sibling'), msg('sibling-unobserved', tie, 't-sibling')],
+    });
 
-  it('sends a tied unobserved message to the Observer', () => {
-    const om = new ObservationalMemory({
-      storage: new InMemoryMemory({ db: new InMemoryDB() }),
-      scope: 'thread',
-      model: 'openai/gpt-4o-mini',
-      observation: { messageTokens: 1, bufferTokens: false },
-      reflection: { observationTokens: 1 },
-    });
-    const all = [msg('old', earlier, 'user'), msg('a', tie), msg('b', tie)];
-    const withIds = om.getUnobservedMessages(all, { lastObservedAt: tie, observedMessageIds: ['old', 'a'] } as any);
-    expect(withIds.map(m => m.id)).toEqual(['b']);
-    const withoutIds = om.getUnobservedMessages(all, { lastObservedAt: tie } as any);
-    expect(withoutIds.map(m => m.id)).toEqual([]);
-  });
+    // As in an agent turn: the current thread passes its live messages, so other threads load from their own cursors.
+    await om.observe({ threadId, resourceId, force: true, messages: [msg('unobserved', tie)] });
 
-  it('loads a tied unobserved message from storage and sends only it to the Observer', async () => {
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    await storage.saveThread({
-      thread: { id: threadId, resourceId, title: 'tie', createdAt: earlier, updatedAt: earlier },
-    });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1, bufferTokens: false },
-      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 100_000 },
-    });
-    const record = await om.getOrCreateRecord(threadId, resourceId);
-    await storage.updateActiveObservations({
-      id: record.id,
-      observations: '- base',
-      tokenCount: 2,
-      lastObservedAt: tie,
-      observedMessageIds: ['old', 'a'],
-    });
-    await storage.saveMessages({
-      messages: [msg('old', earlier, 'user'), msg('a', tie), msg('b', tie, 'user')],
-    });
-    const call = vi
-      .spyOn(om.observer, 'call')
-      .mockResolvedValue({ observations: '- tied fact' } as Awaited<ReturnType<typeof om.observer.call>>);
-
-    await om.observe({ threadId, resourceId });
-
-    expect(call).toHaveBeenCalledTimes(1);
-    const sent = (call.mock.calls[0]![1] as MastraDBMessage[]).map(m => m.id);
-    expect(sent).toEqual(['b']);
-  });
-
-  it('resource scope: loads a tied unobserved message from storage and observes only it', async () => {
-    const storage = new InMemoryMemory({ db: new InMemoryDB() });
-    await storage.saveThread({
-      thread: { id: threadId, resourceId, title: 'tie', createdAt: earlier, updatedAt: earlier },
-    });
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'resource',
-      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1, bufferTokens: false },
-      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 100_000 },
-    });
-    const record = await om.getOrCreateRecord(threadId, resourceId);
-    await storage.updateActiveObservations({
-      id: record.id,
-      observations: '- base',
-      tokenCount: 2,
-      lastObservedAt: tie,
-      observedMessageIds: ['old', 'a'],
-    });
-    await storage.saveMessages({
-      messages: [msg('old', earlier, 'user'), msg('a', tie), msg('b', tie, 'user')],
-    });
-    const call = vi.spyOn(om.observer, 'callMultiThread').mockResolvedValue({
-      results: new Map([[threadId, { observations: '- tied fact' }]]),
-    } as Awaited<ReturnType<typeof om.observer.callMultiThread>>);
-
-    await om.observe({ threadId, resourceId });
-
-    expect(call).toHaveBeenCalledTimes(1);
-    const byThread = call.mock.calls[0]![1] as Map<string, MastraDBMessage[]>;
-    expect([...byThread.values()].flat().map(m => m.id)).toEqual(['b']);
+    expect(prompts[0]).toContain('text of sibling-unobserved');
+    expect(prompts[0]).not.toContain('text of sibling-observed');
+    expect((await readRecord()).observedMessageIds).toContain('sibling-unobserved');
   });
 });

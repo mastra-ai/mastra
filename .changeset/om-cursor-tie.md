@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed observational memory dropping an unobserved message created in the same millisecond as the last observed message. Messages at the observation cursor are now kept in context and sent to the Observer when they are not in the observed message ids, and storage loads include the cursor millisecond.
+Fixed observational memory dropping a message created in the same millisecond as the last observed message. When a memory record tracks observed message ids, messages at the observation cursor that are not in those ids now stay in context and are sent to the Observer, while already-observed messages are still excluded. Records without observed message ids behave as before.
