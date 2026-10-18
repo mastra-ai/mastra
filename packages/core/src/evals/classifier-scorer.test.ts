@@ -117,6 +117,24 @@ describe('createClassifierScorer', () => {
     await expect(booleanScorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.37 });
   });
 
+  it('fails with a question-specific error when the classifier refuses the question', async () => {
+    const classifier = createClassifier();
+    vi.spyOn(classifier, 'decide').mockResolvedValue(mockResult({ type: 'refusal' }) as any);
+    const scorer = createClassifierScorer({
+      id: 'quality-score',
+      classifier,
+      question: 'quality',
+      state: ({ run }) => run.output,
+    });
+
+    const error = await scorer.run({ output: 'answer' }).catch(err => err);
+    expect(error).toBeInstanceOf(ScorerRunError);
+    expect(error).toMatchObject({ failedStep: 'analyze' });
+    await expect(scorer.run({ output: 'answer' })).rejects.toThrow(
+      /Classifier '.*' refused question 'quality' for scorer 'quality-score'/,
+    );
+  });
+
   it('forwards the selected state and classifier options', async () => {
     const classifier = createClassifier();
     const evaluate = vi

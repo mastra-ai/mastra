@@ -44,6 +44,7 @@
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-fast",
     "deepseek/deepseek-v4.1-flash-fast",
     "elorian/glimpse",
     "fireworks/ember-1",
@@ -277,6 +278,8 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-fast",
     "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -492,6 +495,8 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-fast",
     "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
@@ -917,6 +922,12 @@
       }
     ],
     "deepseek/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]

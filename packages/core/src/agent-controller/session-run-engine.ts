@@ -1478,16 +1478,8 @@ export class SessionRunEngine {
             operationType,
             error,
           });
-
-          if (
-            !Object.hasOwn(payload, 'failurePolicy') ||
-            !Object.hasOwn(payload, 'failureKind') ||
-            payload.failurePolicy !== 'continue' ||
-            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
-          ) {
-            this.abortForOmFailure({ operationType, stage: 'buffering', error });
-            return { message: state.currentMessage };
-          }
+          // Buffering is background work: memory keeps the failed input pending and the
+          // synchronous threshold observation enforces failurePolicy, so the turn continues.
         }
         break;
       }
@@ -1876,7 +1868,6 @@ export class SessionRunEngine {
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
     let bailed = false;
-    let abortedRunId: string | undefined;
 
     const consume = async (): Promise<void> => {
       for await (const chunk of subscription.stream) {
@@ -1889,8 +1880,9 @@ export class SessionRunEngine {
         if (chunk.type === 'thread-history') continue;
 
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
+        const abortedRunId = this.#session.stream.abortedRunId({ subscription });
         if (runId && runId === abortedRunId) continue;
-        if (runId && abortedRunId) abortedRunId = undefined;
+        if (runId && abortedRunId) this.#session.stream.clearAbortedRun();
 
         if (!currentRun) {
           currentRun = this.createStreamState(threadId, resourceId);
@@ -1957,7 +1949,7 @@ export class SessionRunEngine {
               // The thread subscription remains live across runs. Ignore any
               // trailing chunks from the aborted run while continuing to drain
               // later signals on this same subscription.
-              abortedRunId = runId ?? undefined;
+              this.#session.stream.markAbortedRun({ subscription, runId: runId ?? null });
             }
           }
         } catch (error) {
@@ -1993,7 +1985,10 @@ export class SessionRunEngine {
       // A closed or hung subscription cannot observe later runs. Detach it so
       // the next message creates a fresh consumer. A persistent subscription
       // stays attached after an abort and continues draining later signals.
-      if ((bailed || abortedRunId) && this.#session.stream.isCurrent({ subscription })) {
+      if (
+        (bailed || this.#session.stream.abortedRunId({ subscription })) &&
+        this.#session.stream.isCurrent({ subscription })
+      ) {
         this.#session.stream.detach();
       }
     } catch (error) {

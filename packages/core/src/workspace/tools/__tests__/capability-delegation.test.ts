@@ -274,7 +274,9 @@ describe('filesystem capability delegation', () => {
       expect(result).toContain('index.ts');
       // Expected downgrade: logged at info, not warn
       expect(logger.info).toHaveBeenCalledTimes(1);
-      expect(logger.info.mock.calls[0]![0]).toMatch(/does not support pattern .*falling back to host-side search/);
+      expect(logger.info.mock.calls[0]![0]).toMatch(
+        /could not run pattern .* \(Unsupported grep pattern: .*\); falling back to host-side search/,
+      );
       expect(logger.warn).not.toHaveBeenCalled();
     });
 

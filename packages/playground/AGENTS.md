@@ -14,7 +14,7 @@ Vitest + MSW + typed @mastra/client-js fixtures is the primary test strategy
 
 Test-first (TDD): RED failing MSW test → GREEN minimum code → REFACTOR.
 
-BDD-style, lint-enforced in `eslint.config.js`; MSW runs with
+BDD-style, lint-enforced in `oxlint.config.ts`; MSW runs with
 `onUnhandledRequest: 'error'`. Outer `describe` = the unit; inner
 `describe('when …')` = ONE precondition via a real MSW fixture; each `it` =
 ONE outcome. Same shape for MSW tests (`src/**`) and Playwright E2E specs
