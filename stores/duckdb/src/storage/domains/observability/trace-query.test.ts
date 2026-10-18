@@ -393,7 +393,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(compiled.sql).toContain('endedAt < CAST(? AS TIMESTAMP)');
     expect(compiled.sql).toContain('traceId > ?');
-    expect(compiled.sql).toContain('ORDER BY endedAt DESC, traceId ASC');
+    expect(compiled.sql).toContain('ORDER BY endedAt DESC NULLS LAST, traceId ASC');
     expect(compiled.values.at(-1)).toBe(3);
   });
 
@@ -415,7 +415,7 @@ describe('DuckDB advanced trace query', () => {
     );
 
     expect(compiled.sql).toContain('page_rows AS');
-    expect(compiled.sql).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(compiled.sql).toContain('ORDER BY endedAt ASC NULLS LAST, traceId ASC');
     expect(compiled.sql).toContain('LIMIT ? OFFSET ?');
     expect(compiled.sql).toContain('SELECT COUNT(*) AS total\n    FROM candidates');
     expect(compiled.sql).toContain('LEFT JOIN page_rows ON TRUE');
