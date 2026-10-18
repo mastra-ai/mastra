@@ -75,7 +75,7 @@ If `recover()` throws a transient infrastructure error before returning, `recove
 
 A transient skip does not change the per-attempt observer behavior: a setup failure after claiming ownership can still publish a terminal error event before the next recovery attempt. Retrying restores run execution, not continuity for an observer whose stream already ended. A direct `recover()` still throws; a direct `recoverActiveRuns()` returns retry advice but does not schedule a timer.
 
-This retry advice applies only to errors propagated by `recover()` for an identified run. Failures during initial run discovery are logged by `recoverAllDurableAgents()` without scheduling a retry. Existing fallbacks inside `recover()`, such as using the current agent definition when pinned-version resolution fails, are unchanged.
+This retry advice applies only to errors propagated by `recover()` for an identified run before the 30-second recovery wait expires. If the wait expires first, the result is `skipped` with reason `recovery-timeout` and no `retryAt`. The attempt continues in the background; even a later transient failure does not schedule a retry. Shutdown and abandoned-execution skips also carry no retry advice, even when their cause is transient. Failures during initial run discovery are logged by `recoverAllDurableAgents()` without scheduling a retry. Existing fallbacks inside `recover()`, such as using the current agent definition when pinned-version resolution fails, are unchanged.
 
 ## Timing
 

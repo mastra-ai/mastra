@@ -31,6 +31,8 @@
     "claude-sonnet-5-5@eu",
     "claude-sonnet-5@eu",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
+    "deepseek-v4.1-flash-1017@eu",
     "deepseek-v4.1-flash@eu",
     "fugu-ultra",
     "gemini-2.5-flash-lite@eu",
@@ -285,6 +287,8 @@
     "deepseek-v4-pro-0813@eu",
     "deepseek-v4-pro@eu",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
+    "deepseek-v4.1-flash-1017@eu",
     "deepseek-v4.1-flash@eu",
     "devstral-latest",
     "devstral-latest@eu",
@@ -629,6 +633,12 @@
       }
     ],
     "gemini-3.5-flash-lite@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1325,6 +1335,12 @@
       }
     ],
     "qwen3.7-plus": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]

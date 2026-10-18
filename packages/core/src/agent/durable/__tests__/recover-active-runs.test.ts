@@ -69,6 +69,7 @@ function makeMockModel(): LanguageModelV2 {
 function createDurableWithStore(agentId: string): {
   agent: DurableAgent;
   store: InMemoryStore;
+  mastra: Mastra;
 } {
   const baseAgent = new Agent({
     id: agentId,
@@ -78,11 +79,11 @@ function createDurableWithStore(agentId: string): {
   });
   const store = new InMemoryStore();
   const agent = createDurableAgent({ agent: baseAgent });
-  void new Mastra({
+  const mastra = new Mastra({
     agents: { [agentId]: agent as any },
     storage: store,
   });
-  return { agent, store };
+  return { agent, store, mastra };
 }
 
 async function seed(store: InMemoryStore, snapshot: WorkflowRunState, resourceId?: string) {
@@ -102,7 +103,7 @@ async function seed(store: InMemoryStore, snapshot: WorkflowRunState, resourceId
  */
 function stubWorkflow(
   agent: DurableAgent,
-  behavior: { failFor?: Set<string>; status?: WorkflowRunStatus } = {},
+  behavior: { failFor?: Set<string>; status?: WorkflowRunStatus; restartGate?: Promise<void> } = {},
 ): { restartedRunIds: string[] } {
   const restartedRunIds: string[] = [];
   const failFor = behavior.failFor ?? new Set<string>();
@@ -110,6 +111,7 @@ function stubWorkflow(
     createRun: vi.fn(async ({ runId }: { runId: string }) => ({
       restart: vi.fn(async () => {
         restartedRunIds.push(runId);
+        if (runId === 'stalled') await behavior.restartGate;
         if (failFor.has(runId)) {
           throw new Error(`boom-${runId}`);
         }
@@ -124,9 +126,289 @@ function stubWorkflow(
 describe('DurableAgent.recoverActiveRuns', () => {
   let agent: DurableAgent;
   let store: InMemoryStore;
+  let mastra: Mastra;
 
   beforeEach(() => {
-    ({ agent, store } = createDurableWithStore('agent-A'));
+    ({ agent, store, mastra } = createDurableWithStore('agent-A'));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it.each(['resolve', 'reject', 'transient-reject'] as const)(
+    'bounds setup and preserves the returned result after late %s',
+    async late => {
+      vi.useFakeTimers();
+      await seed(store, makeSnapshot('stalled', 'running', { agentId: agent.id }));
+      await seed(store, makeSnapshot('later', 'running', { agentId: agent.id }));
+      const gate = Promise.withResolvers<void>();
+      const recover = vi.spyOn(agent, 'recover').mockImplementation(async runId => {
+        if (runId === 'stalled') await gate.promise;
+        return { cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>;
+      });
+      let settled = false;
+      const recovery = agent.recoverActiveRuns().then(result => {
+        settled = true;
+        return result;
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(recover).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
+        expect(recover).toHaveBeenCalledTimes(2);
+        const result = await recovery;
+        const snapshot = structuredClone(result);
+        expect(result).toEqual({
+          recovered: [
+            { runId: 'stalled', status: 'skipped', reason: 'recovery-timeout' },
+            { runId: 'later', status: 'success' },
+          ],
+          succeeded: 1,
+          failed: 0,
+        });
+        if (late === 'resolve') gate.resolve();
+        else gate.reject(new Error(late === 'transient-reject' ? 'LOADING Redis is loading' : 'late setup failure'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(result).toEqual(snapshot);
+      } finally {
+        gate.resolve();
+        await recovery;
+        await mastra.shutdown({ drainTimeout: 0 });
+      }
+    },
+  );
+
+  it('bounds workflow settlement without releasing ownership, then fences it on shutdown', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('stalled', 'running', { agentId: agent.id }));
+    await seed(store, makeSnapshot('later', 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const { restartedRunIds } = stubWorkflow(agent, { restartGate: gate.promise });
+    const workflows = (await store.getStore('workflows'))!;
+    const deleteSnapshots = vi.spyOn(agent, 'deleteRunSnapshots');
+    let settled = false;
+    const recovery = agent.recoverActiveRuns().then(result => {
+      settled = true;
+      return result;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(settled).toBe(true);
+      expect(restartedRunIds).toEqual(['stalled', 'later']);
+      expect(await recovery).toMatchObject({ succeeded: 1, failed: 0 });
+      expect((await workflows.getRunOwnership({ runId: 'stalled' }))?.ownerId).toBeTruthy();
+      const shutdown = mastra.shutdown({ drainTimeout: 100 });
+      await vi.advanceTimersByTimeAsync(100);
+      await shutdown;
+      expect((await workflows.getRunOwnership({ runId: 'stalled' }))?.leaseExpiresAt).toBeNull();
+      gate.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(deleteSnapshots).not.toHaveBeenCalledWith('stalled');
+      expect(
+        await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId: 'stalled' }),
+      ).toMatchObject({ status: 'running' });
+    } finally {
+      gate.resolve();
+      await recovery;
+      await mastra.shutdown({ drainTimeout: 0 });
+    }
+  });
+
+  it.each(['DURABLE_AGENT_RECOVER_SHUTDOWN', 'DURABLE_AGENT_EXECUTION_ABANDONED'])(
+    'does not retry %s even when its cause is transient',
+    async id => {
+      await seed(store, makeSnapshot('shutdown-transient', 'running', { agentId: agent.id }));
+      vi.spyOn(agent, 'recover').mockRejectedValueOnce(
+        Object.assign(new Error('recovery interrupted', { cause: new Error('LOADING Redis is loading') }), { id }),
+      );
+
+      expect(await agent.recoverActiveRuns()).toEqual({
+        recovered: [{ runId: 'shutdown-transient', status: 'skipped' }],
+        succeeded: 0,
+        failed: 0,
+      });
+    },
+  );
+
+  it('does not dispatch after shutdown during discovery or at entry', async () => {
+    const gate = Promise.withResolvers<void>();
+    const list = vi.spyOn(agent, 'listActiveRuns').mockImplementation(async () => {
+      await gate.promise;
+      return { runs: [{ runId: 'late-discovery' }] as any, total: 1 };
+    });
+    const recover = vi.spyOn(agent, 'recover');
+    const recovery = agent.recoverActiveRuns();
+    await mastra.shutdown({ drainTimeout: 0 });
+    gate.resolve();
+    expect(await recovery).toEqual({ recovered: [], succeeded: 0, failed: 0 });
+    expect(recover).not.toHaveBeenCalled();
+    await agent.recoverActiveRuns();
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start another run after shutdown during setup', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('stalled', 'running', { agentId: agent.id }));
+    await seed(store, makeSnapshot('later', 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const recover = vi.spyOn(agent, 'recover').mockImplementation(async () => {
+      await gate.promise;
+      return { cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>;
+    });
+    const recovery = agent.recoverActiveRuns();
+    await vi.advanceTimersByTimeAsync(0);
+    const shutdown = mastra.shutdown({ drainTimeout: 0 });
+    await vi.advanceTimersByTimeAsync(0);
+    await shutdown;
+    gate.resolve();
+    await recovery;
+    expect(recover).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a late ownership claim without restarting or deleting its snapshot after shutdown', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('stalled', 'running', { agentId: agent.id }));
+    const workflows = (await store.getStore('workflows'))!;
+    const gate = Promise.withResolvers<void>();
+    const claim = workflows.claimRunOwnership.bind(workflows);
+    const claimSpy = vi.spyOn(workflows, 'claimRunOwnership').mockImplementation(async input => {
+      await gate.promise;
+      return claim(input);
+    });
+    const { restartedRunIds } = stubWorkflow(agent);
+    const emitError = vi.spyOn(agent, 'emitError');
+    const recovery = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(claimSpy).toHaveBeenCalledTimes(1);
+      const shutdown = mastra.shutdown({ drainTimeout: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      await shutdown;
+      gate.resolve();
+      const result = await recovery;
+      expect(result).toMatchObject({ succeeded: 0, failed: 0 });
+      expect(restartedRunIds).toEqual([]);
+      expect((await workflows.getRunOwnership({ runId: 'stalled' }))?.leaseExpiresAt).toBeNull();
+      expect(emitError).not.toHaveBeenCalled();
+      expect(
+        await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId: 'stalled' }),
+      ).toMatchObject({ status: 'running' });
+    } finally {
+      gate.resolve();
+      await recovery;
+    }
+  });
+
+  it('does not register a stream when ownership publication finishes after shutdown', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('late-publication', 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const pubsub = agent.getPubSub();
+    const publish = vi.spyOn(pubsub, 'publish').mockImplementationOnce(async () => gate.promise);
+    const subscribe = vi.spyOn(pubsub, 'subscribe');
+    const emitError = vi.spyOn(agent, 'emitError');
+    const { restartedRunIds } = stubWorkflow(agent);
+    const recovery = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publish).toHaveBeenCalledTimes(1);
+      const shutdown = mastra.shutdown({ drainTimeout: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      await shutdown;
+      gate.resolve();
+      expect(await recovery).toMatchObject({ succeeded: 0, failed: 0 });
+      expect(subscribe).not.toHaveBeenCalled();
+      expect(restartedRunIds).toEqual([]);
+      expect(emitError).not.toHaveBeenCalled();
+      const workflows = (await store.getStore('workflows'))!;
+      expect((await workflows.getRunOwnership({ runId: 'late-publication' }))?.leaseExpiresAt).toBeNull();
+      expect(
+        await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId: 'late-publication' }),
+      ).toMatchObject({ status: 'running' });
+    } finally {
+      gate.resolve();
+      await recovery;
+    }
+  });
+
+  it('does not restart or count a failure when shutdown interrupts workflow creation', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('late-workflow', 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const restart = vi.fn();
+    const createRun = vi.fn(async () => {
+      await gate.promise;
+      return { restart };
+    });
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({ createRun } as any);
+    const emitError = vi.spyOn(agent, 'emitError');
+    const recovery = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(createRun).toHaveBeenCalledTimes(1);
+      const shutdown = mastra.shutdown({ drainTimeout: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      await shutdown;
+      gate.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await recovery).toMatchObject({ succeeded: 0, failed: 0 });
+      expect(restart).not.toHaveBeenCalled();
+      expect(emitError).not.toHaveBeenCalled();
+    } finally {
+      gate.resolve();
+      await recovery;
+    }
+  });
+
+  it('preserves an observed terminal error when abandonment follows it', async () => {
+    await seed(store, makeSnapshot('failed-before-abandon', 'running', { agentId: agent.id }));
+    const failure = new Error('terminal workflow failure');
+    vi.spyOn(agent, 'recover').mockImplementationOnce(async (_runId, options) => {
+      await options?.onError?.({ error: failure });
+      throw Object.assign(new Error('execution abandoned'), { id: 'DURABLE_AGENT_EXECUTION_ABANDONED' });
+    });
+    expect(await agent.recoverActiveRuns()).toEqual({
+      recovered: [{ runId: 'failed-before-abandon', status: 'failed', error: failure }],
+      succeeded: 0,
+      failed: 1,
+    });
+  });
+
+  it('preserves a genuine setup failure that settles after shutdown', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('failed-claim', 'running', { agentId: agent.id }));
+    const workflows = (await store.getStore('workflows'))!;
+    const gate = Promise.withResolvers<void>();
+    const failure = new Error('storage connection failed');
+    const claim = vi.spyOn(workflows, 'claimRunOwnership').mockImplementationOnce(async () => {
+      await gate.promise;
+      throw failure;
+    });
+    const emitError = vi.spyOn(agent, 'emitError');
+    const recovery = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(claim).toHaveBeenCalledTimes(1);
+      const shutdown = mastra.shutdown({ drainTimeout: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      await shutdown;
+      gate.resolve();
+      expect(await recovery).toMatchObject({
+        recovered: [{ runId: 'failed-claim', status: 'failed', error: failure }],
+        succeeded: 0,
+        failed: 1,
+      });
+      expect(emitError).not.toHaveBeenCalled();
+      expect(
+        await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId: 'failed-claim' }),
+      ).toMatchObject({ status: 'running' });
+    } finally {
+      gate.resolve();
+      await recovery;
+    }
   });
 
   afterEach(() => {

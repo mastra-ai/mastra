@@ -23,7 +23,7 @@ import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 
-import { chatModule, getChatModule } from './chat-lazy';
+import { getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
@@ -268,10 +268,11 @@ export class AgentChannels {
     chatThread: Thread;
     message: Message;
     defaultResourceId: string;
+    requestContext: RequestContext;
   }): string | (() => string | Promise<string>) {
-    const { platform, chatThread, message, defaultResourceId } = args;
+    const { platform, chatThread, message, defaultResourceId, requestContext } = args;
     return this.resolveResourceId
-      ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
+      ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId, requestContext })
       : defaultResourceId;
   }
 
@@ -1380,12 +1381,19 @@ export class AgentChannels {
       platform,
       // Lazily resolved: the hook only runs when we're actually creating a new
       // thread, never when reusing an existing one (which keeps its stored owner).
-      resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId }),
+      resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId, requestContext }),
       // Same laziness for the thread id hook; it runs after the resourceId
       // resolves so hosts can align the two (e.g. thread id = session id).
       threadId: this.resolveThreadId
         ? (resourceId: string, defaultThreadId: string) =>
-            this.resolveThreadId!({ platform, thread: chatThread, message, resourceId, defaultThreadId })
+            this.resolveThreadId!({
+              platform,
+              thread: chatThread,
+              message,
+              resourceId,
+              defaultThreadId,
+              requestContext,
+            })
         : undefined,
       mastra,
     });
@@ -1565,8 +1573,7 @@ export class AgentChannels {
   private isContentlessMessage(message: Message): boolean {
     if (message.attachments?.length) return false;
     if (message.text?.trim()) return false;
-    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : '';
-    return !richText;
+    return !messageText(message)?.trim();
   }
 
   /**
