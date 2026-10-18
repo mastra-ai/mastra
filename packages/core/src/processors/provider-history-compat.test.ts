@@ -9,6 +9,7 @@ import {
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
+  chatCompletionsSingleSystemMessage,
   ensureUserFirstTurn,
   isMaybeAnthropic,
   isMaybeAnthropicWithoutAssistantPrefill,
@@ -451,6 +452,65 @@ describe('isMaybeRequiringUserFirstTurn', () => {
     expect(isMaybeRequiringUserFirstTurn({ provider: 'groq.chat', modelId: 'openai/gpt-oss-20b' })).toBe(false);
     expect(isMaybeRequiringUserFirstTurn({ provider: 'mistral.chat', modelId: 'mistral-small-latest' })).toBe(false);
     expect(isMaybeRequiringUserFirstTurn(undefined)).toBe(false);
+  });
+});
+
+describe('chatCompletionsSingleSystemMessage', () => {
+  const user = { role: 'user', content: [{ type: 'text', text: 'hi' }] } as const;
+  const prompt: LanguageModelV2Prompt = [
+    { role: 'system', content: 'AGENT_RULE' },
+    { role: 'system', content: '' },
+    { role: 'system', content: 'PROCESSOR_RULE', providerOptions: { openaiCompatible: { cache: true } } },
+    user,
+    { role: 'system', content: 'MID_CONVERSATION' },
+  ];
+
+  it("merges the leading system messages, keeping the last one's providerOptions", () => {
+    expect(chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt, model: { provider: 'vllm.chat' } })).toEqual([
+      {
+        role: 'system',
+        content: 'AGENT_RULE\n\nPROCESSOR_RULE',
+        providerOptions: { openaiCompatible: { cache: true } },
+      },
+      user,
+      { role: 'system', content: 'MID_CONVERSATION' },
+    ]);
+  });
+
+  it('keys on the resolved API provider id over the model provider', () => {
+    // A router model reports its gateway provider (`groq`); the resolved id is `groq.chat`.
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({
+        prompt,
+        model: { provider: 'groq' },
+        apiProviderId: 'groq.chat',
+      }),
+    ).toHaveLength(3);
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({
+        prompt,
+        model: { provider: 'openai' },
+        apiProviderId: 'openai.responses',
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each(['openai.responses', 'anthropic.messages', 'google.generative-ai', 'amazon-bedrock'])(
+    'leaves %s prompts unchanged',
+    provider => {
+      expect(chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt, model: { provider } })).toBeUndefined();
+    },
+  );
+
+  it('leaves the prompt unchanged when an earlier system message has its own providerOptions', () => {
+    const cached: LanguageModelV2Prompt = [
+      { role: 'system', content: 'A', providerOptions: { openaiCompatible: { cache: true } } },
+      { role: 'system', content: 'B' },
+      user,
+    ];
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt: cached, model: { provider: 'vllm.chat' } }),
+    ).toBeUndefined();
   });
 });
 

@@ -1,6 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import { it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
@@ -170,5 +170,47 @@ describeForAllEngines('AIMock loop scenario: input processor', engine => {
       'AGENT_RULE: be helpful.',
       'SECOND_RULE: be brief.',
     ]);
+  });
+
+  describe('router models', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // The router's `provider` is the bare gateway id, so the merge has to see the model it resolves to.
+    async function sentSystemMessages(api?: 'responses') {
+      const llm = getMock();
+      const realFetch = globalThis.fetch;
+      const sentBodies: Array<{ messages?: Array<{ role: string }>; input?: Array<{ role: string }> }> = [];
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+        if (typeof init?.body === 'string') sentBodies.push(JSON.parse(init.body));
+        return realFetch(url, init);
+      });
+
+      await runLoopScenario({
+        engine,
+        llm,
+        model: { id: `vllm/${SCENARIO_MODEL_ID}`, url: `${llm.url.replace(/\/+$/, '')}/v1`, apiKey: 'test', api },
+        prompt: 'hi',
+        instructions: ['AGENT_RULE: be helpful.', 'SECOND_RULE: be brief.'],
+        fixtures: llm => {
+          llm.on({}, { content: 'ok' });
+        },
+      });
+
+      expect(sentBodies).toHaveLength(1);
+      const messages = sentBodies[0]!.messages ?? sentBodies[0]!.input ?? [];
+      return messages.filter(m => m.role === 'system' || m.role === 'developer');
+    }
+
+    it('sends one leading system message when the router resolves a Chat Completions model', async () => {
+      expect(await sentSystemMessages()).toEqual([
+        { role: 'system', content: 'AGENT_RULE: be helpful.\n\nSECOND_RULE: be brief.' },
+      ]);
+    });
+
+    it('leaves system messages separate when the router resolves a Responses model', async () => {
+      expect(await sentSystemMessages('responses')).toHaveLength(2);
+    });
   });
 });

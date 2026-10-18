@@ -6,6 +6,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 import { serializeError } from '../../../../events/codec/error';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
+import { resolveApiProviderId } from '../../../../llm/model/router';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
 import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
@@ -1070,6 +1071,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 const requestStepResult = await requestStepRunner.runProcessLLMRequest({
                   prompt: inputMessages,
                   model: currentModel,
+                  apiProviderId: await resolveApiProviderId(currentModel),
                   messageList,
                   workspace: registryEntry?.workspace,
                   stepNumber: inputData.stepIndex ?? 0,
