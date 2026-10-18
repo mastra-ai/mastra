@@ -1,4 +1,6 @@
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
@@ -8,19 +10,27 @@ import { convertArrayToReadableStream, MockLanguageModelV3 } from 'ai/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMastraCodeAgentController } from '../../index.js';
 import { TOOL_NAME_OVERRIDES } from '../../tool-names.js';
+import { setCustomProvidersSource } from '../custom-provider-source.js';
 import { executeSubagent } from './execute.js';
 import { exploreSubagent } from './explore.js';
 import { planSubagent } from './plan.js';
 
 const directories: string[] = [];
 afterEach(async () => {
+  setCustomProvidersSource(undefined);
   await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true })));
 });
 
 describe('native subagents', () => {
-  it.each(['explore', 'execute'])(
-    'runs native %s against a real workspace',
-    async agentType => {
+  // The model router picks a registered gateway by id prefix or by
+  // `handlesModel`; subagent ids routed either way must reach that gateway.
+  it.each([
+    ['explore', 'prefix'],
+    ['execute', 'prefix'],
+    ['explore', 'handlesModel'],
+  ] as const)(
+    'runs native %s against a real workspace through a gateway matched by %s',
+    async (agentType, route) => {
       const directory = await mkdtemp(join(tmpdir(), 'native-runtime-'));
       directories.push(directory);
       await writeFile(join(directory, 'input.txt'), 'native fixture');
@@ -89,6 +99,7 @@ describe('native subagents', () => {
       controller.getMastra()!.addGateway({
         id: 'native-test',
         name: 'Native test',
+        ...(route === 'handlesModel' ? { handlesModel: (id: string) => id === 'fixture/model' } : {}),
         fetchProviders: async () => ({
           fixture: { name: 'Fixture', models: ['model'], apiKeyEnvVar: '', gateway: 'native-test' },
         }),
@@ -99,7 +110,11 @@ describe('native subagents', () => {
       const session = await controller.createSession({ id: 'runtime', ownerId: 'test' });
       const toolsets = await controller['buildToolsets'](session, new RequestContext());
       const result = await toolsets.controllerBuiltIn!.subagent!.execute!(
-        { agentType, task: 'Process the fixture', modelId: 'native-test/fixture/model' },
+        {
+          agentType,
+          task: 'Process the fixture',
+          modelId: route === 'prefix' ? 'native-test/fixture/model' : 'fixture/model',
+        },
         { workspace, agent: { toolCallId: 'native' } },
       );
       expect(result, JSON.stringify(result)).toMatchObject({ isError: false });
@@ -109,6 +124,124 @@ describe('native subagents', () => {
     },
     30_000,
   );
+
+  // Issue 25395: a tenant's custom provider is only visible through the calling
+  // run's request context, so the subagent must resolve its model with it.
+  it("resolves a subagent model through the calling run's request-scoped custom provider", async () => {
+    const requests: Array<{ model: string; authorization?: string }> = [];
+    const server = createServer((req, res) => {
+      let body = '';
+      req.on('data', chunk => (body += chunk));
+      req.on('end', () => {
+        requests.push({ model: JSON.parse(body).model, authorization: req.headers.authorization });
+        const chunk = (delta: object, finish: string | null = null) =>
+          `data: ${JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 0, model: 'tenant-model', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(
+          chunk({ role: 'assistant', content: 'Tenant provider answered.' }) + chunk({}, 'stop') + 'data: [DONE]\n\n',
+        );
+      });
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    setCustomProvidersSource(tenant =>
+      tenant?.orgId === 'org-1'
+        ? [{ name: 'Tenant LLM', url: `http://127.0.0.1:${port}/v1`, apiKey: 'sk-tenant', models: ['tenant-model'] }]
+        : [],
+    );
+
+    try {
+      const directory = await mkdtemp(join(tmpdir(), 'native-subagents-'));
+      directories.push(directory);
+      const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: directory }) });
+      const { controller } = await createMastraCodeAgentController({
+        cwd: directory,
+        homeDir: directory,
+        settingsPath: join(directory, 'settings.json'),
+        storage: new InMemoryStore(),
+        storageBackend: 'libsql',
+        workspace,
+        intervalHandlers: [],
+        disableMcp: true,
+        disableHooks: true,
+        disablePlugins: true,
+        disableGithubSignals: true,
+      });
+      await controller.init();
+      // A disabled gateway is skipped by the router, so its claim must not win.
+      controller.getMastra()!.addGateway({
+        id: 'disabled-claimer',
+        name: 'Disabled claimer',
+        shouldEnable: () => false,
+        handlesModel: () => true,
+        fetchProviders: async () => ({}),
+        buildUrl: () => undefined,
+        getApiKey: async () => 'unused',
+        resolveLanguageModel: () => {
+          throw new Error('disabled gateway resolved a model');
+        },
+      });
+      const session = await controller.createSession({ id: 'tenant', ownerId: 'test' });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      const toolsets = await controller['buildToolsets'](session, requestContext);
+
+      const result = await toolsets.controllerBuiltIn!.subagent!.execute!(
+        { agentType: 'explore', task: 'Answer', modelId: 'tenant-llm/tenant-model' },
+        { workspace, requestContext, agent: { toolCallId: 'tenant' } } as any,
+      );
+
+      expect(result, JSON.stringify(result)).toMatchObject({ isError: false });
+      expect(result).toHaveProperty('content', expect.stringContaining('Tenant provider answered.'));
+      expect(requests).toEqual([{ model: 'tenant-model', authorization: 'Bearer sk-tenant' }]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  }, 30_000);
+
+  it('reports a gateway lookup failure instead of resolving the model elsewhere', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'native-subagents-'));
+    directories.push(directory);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: directory }) });
+    const { controller } = await createMastraCodeAgentController({
+      cwd: directory,
+      homeDir: directory,
+      settingsPath: join(directory, 'settings.json'),
+      storage: new InMemoryStore(),
+      storageBackend: 'libsql',
+      workspace,
+      intervalHandlers: [],
+      disableMcp: true,
+      disableHooks: true,
+      disablePlugins: true,
+      disableGithubSignals: true,
+    });
+    await controller.init();
+    controller.getMastra()!.addGateway({
+      id: 'broken-claimer',
+      name: 'Broken claimer',
+      handlesModel: () => {
+        throw new Error('gateway lookup exploded');
+      },
+      fetchProviders: async () => ({}),
+      buildUrl: () => undefined,
+      getApiKey: async () => 'unused',
+      resolveLanguageModel: () => {
+        throw new Error('unreachable');
+      },
+    });
+    const session = await controller.createSession({ id: 'broken', ownerId: 'test' });
+    const requestContext = new RequestContext();
+    const toolsets = await controller['buildToolsets'](session, requestContext);
+
+    const result = await toolsets.controllerBuiltIn!.subagent!.execute!(
+      { agentType: 'explore', task: 'Answer', modelId: 'unclaimed/model' },
+      { workspace, requestContext, agent: { toolCallId: 'broken' } } as any,
+    );
+
+    expect(result).toMatchObject({ isError: true });
+    expect(result).toHaveProperty('content', expect.stringContaining('gateway lookup exploded'));
+  }, 30_000);
 
   it('keeps isolated definitions free of parent task tools and nested delegation', () => {
     for (const definition of [exploreSubagent, planSubagent, executeSubagent]) {

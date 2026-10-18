@@ -43,6 +43,20 @@ export const experimentTraceSpans: GetTraceResponse = {
   traceId: TRACE_ID,
   spans: [experimentTraceRootSpan, experimentTraceChildSpan],
 };
+/** Same trace, with a term that only lives in the tool span's `metadata`. */
+export const experimentTraceSpansWithMetadata: GetTraceResponse = {
+  traceId: TRACE_ID,
+  spans: [
+    experimentTraceRootSpan,
+    { ...experimentTraceChildSpan, metadata: { ticket: 'zanzibar-payload-term' } },
+    {
+      ...experimentTraceChildSpan,
+      spanId: 'span-sibling',
+      name: 'Experiment model call',
+      spanType: SpanType.MODEL_GENERATION,
+    },
+  ],
+};
 export const experimentSpanDetailById: Record<string, GetSpanResponse> = {
   [experimentTraceRootSpan.spanId]: {
     span: { ...experimentTraceRootSpan, input: { q: 'first question' }, output: { a: 'first answer' } },

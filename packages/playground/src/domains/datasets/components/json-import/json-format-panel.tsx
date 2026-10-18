@@ -4,6 +4,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { ExternalLinkIcon, Check, Copy } from 'lucide-react';
 
 const DOCS_URL = 'https://mastra.ai/docs/evals/datasets';
@@ -27,22 +28,26 @@ export function JSONFormatPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="flex h-8 items-center text-column text-foreground">Each item looks like this</p>
+      <Txt variant="column" tone="ink" className="flex h-8 items-center">
+        Each item looks like this
+      </Txt>
 
       <dl className="divide-y divide-border rounded-lg border border-border">
         {FIELDS.map(field => (
           <div key={field.name} className="grid grid-cols-[7rem_1fr] gap-3 px-3 py-2.5">
-            <dt className="text-meta text-foreground">
+            <dt className={textStyle({ tone: 'ink', variant: 'meta' })}>
               <InlineCode>{field.name}</InlineCode>
             </dt>
-            <dd className="flex flex-col items-start gap-1.5 text-meta text-muted-foreground">
-              <span>{field.description}</span>
+            <dd className="flex flex-col items-start gap-1.5 text-muted-foreground">
+              <Txt as="span" variant="meta">
+                {field.description}
+              </Txt>
               {field.required ? (
-                <Badge variant="green" size="xs">
+                <Badge variant="success" size="xs">
                   required
                 </Badge>
               ) : (
-                <Badge variant="neutral" emphasis="muted" size="xs">
+                <Badge variant="neutral" emphasis="subtle" size="xs">
                   optional
                 </Badge>
               )}

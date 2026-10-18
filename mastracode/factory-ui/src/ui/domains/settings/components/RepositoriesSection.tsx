@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -10,11 +10,12 @@ import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { manageGithubConnection } from '../../workspaces/services/github';
-import { FactorySetupSection } from './FactorySetupSection';
+import { settingsSectionPath } from '../settingsSections';
 import { GithubPatBlock } from './GithubPatBlock';
 import { ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function RepositoriesSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -73,9 +74,9 @@ export function RepositoriesSection() {
                 </>
               ))}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
-              <span className="text-meta text-muted-foreground">
+              <Txt as="span" variant="meta" tone="muted">
                 GitLab managed by deployment environment variables
-              </span>
+              </Txt>
             )}
           </div>
         }
@@ -85,7 +86,13 @@ export function RepositoriesSection() {
         </SettingsContainer>
       </SettingsSubsection>
 
-      <FactorySetupSection factory={activeFactory} />
+      <Txt as="p" variant="meta" tone="muted">
+        Sandbox resources, repository order and setup commands live in{' '}
+        <Link to={settingsSectionPath(activeFactory.id, 'environment')} className="underline">
+          Environment
+        </Link>
+        .
+      </Txt>
 
       {showGithubSettings && (
         <>

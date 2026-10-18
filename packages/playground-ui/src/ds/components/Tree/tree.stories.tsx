@@ -22,28 +22,28 @@ export const Default: Story = {
       <Tree>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
-            <Tree.Icon className="text-accent6">
+            <Tree.Icon className="text-muted-foreground">
               <Folder />
             </Tree.Icon>
             <Tree.Label>src</Tree.Label>
           </Tree.FolderTrigger>
           <Tree.FolderContent>
             <Tree.File id="src/index.ts">
-              <Tree.Icon className="text-accent3">
+              <Tree.Icon className="text-foreground">
                 <FileCode />
               </Tree.Icon>
               <Tree.Label>index.ts</Tree.Label>
             </Tree.File>
             <Tree.Folder defaultOpen>
               <Tree.FolderTrigger>
-                <Tree.Icon className="text-accent6">
+                <Tree.Icon className="text-muted-foreground">
                   <Folder />
                 </Tree.Icon>
                 <Tree.Label>components</Tree.Label>
               </Tree.FolderTrigger>
               <Tree.FolderContent>
                 <Tree.File id="src/components/App.tsx">
-                  <Tree.Icon className="text-accent3">
+                  <Tree.Icon className="text-foreground">
                     <FileCode />
                   </Tree.Icon>
                   <Tree.Label>App.tsx</Tree.Label>
@@ -51,7 +51,7 @@ export const Default: Story = {
               </Tree.FolderContent>
             </Tree.Folder>
             <Tree.File id="src/utils.ts">
-              <Tree.Icon className="text-accent3">
+              <Tree.Icon className="text-foreground">
                 <FileCode />
               </Tree.Icon>
               <Tree.Label>utils.ts</Tree.Label>
@@ -59,13 +59,13 @@ export const Default: Story = {
           </Tree.FolderContent>
         </Tree.Folder>
         <Tree.File id="package.json">
-          <Tree.Icon className="text-accent6">
+          <Tree.Icon className="text-muted-foreground">
             <FileJson />
           </Tree.Icon>
           <Tree.Label>package.json</Tree.Label>
         </Tree.File>
         <Tree.File id="README.md">
-          <Tree.Icon className="text-accent5">
+          <Tree.Icon className="text-foreground">
             <FileText />
           </Tree.Icon>
           <Tree.Label>README.md</Tree.Label>
@@ -89,20 +89,20 @@ function WithSelectionExample() {
       <Tree selectedId={selected} onSelect={setSelected}>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
-            <Tree.Icon className="text-accent6">
+            <Tree.Icon className="text-muted-foreground">
               <Folder />
             </Tree.Icon>
             <Tree.Label>src</Tree.Label>
           </Tree.FolderTrigger>
           <Tree.FolderContent>
             <Tree.File id="src/index.ts">
-              <Tree.Icon className="text-accent3">
+              <Tree.Icon className="text-foreground">
                 <FileCode />
               </Tree.Icon>
               <Tree.Label>index.ts</Tree.Label>
             </Tree.File>
             <Tree.File id="src/utils.ts">
-              <Tree.Icon className="text-accent3">
+              <Tree.Icon className="text-foreground">
                 <FileCode />
               </Tree.Icon>
               <Tree.Label>utils.ts</Tree.Label>
@@ -110,7 +110,7 @@ function WithSelectionExample() {
           </Tree.FolderContent>
         </Tree.Folder>
         <Tree.File id="package.json">
-          <Tree.Icon className="text-accent6">
+          <Tree.Icon className="text-muted-foreground">
             <FileJson />
           </Tree.Icon>
           <Tree.Label>package.json</Tree.Label>
@@ -139,14 +139,14 @@ export const WithActions: Story = {
                 </span>
               }
             >
-              <Tree.Icon className="text-accent6">
+              <Tree.Icon className="text-muted-foreground">
                 <Folder />
               </Tree.Icon>
               <Tree.Label>src</Tree.Label>
             </Tree.FolderTrigger>
             <Tree.FolderContent>
               <Tree.File id="src/index.ts">
-                <Tree.Icon className="text-accent3">
+                <Tree.Icon className="text-foreground">
                   <FileCode />
                 </Tree.Icon>
                 <Tree.Label>index.ts</Tree.Label>
@@ -166,14 +166,14 @@ export const WithActions: Story = {
                     </span>
                   }
                 >
-                  <Tree.Icon className="text-accent6">
+                  <Tree.Icon className="text-muted-foreground">
                     <Folder />
                   </Tree.Icon>
                   <Tree.Label>components</Tree.Label>
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
                   <Tree.File id="src/components/App.tsx">
-                    <Tree.Icon className="text-accent3">
+                    <Tree.Icon className="text-foreground">
                       <FileCode />
                     </Tree.Icon>
                     <Tree.Label>App.tsx</Tree.Label>
@@ -195,7 +195,7 @@ export const CustomContent: Story = {
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
             <Tree.Icon>
-              <FolderGit2 className="text-accent6" />
+              <FolderGit2 className="text-muted-foreground" />
             </Tree.Icon>
             <Tree.Label>packages</Tree.Label>
             <span className="ml-auto text-meta text-muted-foreground">12 items</span>
@@ -265,7 +265,7 @@ function WithInlineCreationExample() {
                 </span>
               }
             >
-              <Tree.Icon className="text-accent6">
+              <Tree.Icon className="text-muted-foreground">
                 <Folder />
               </Tree.Icon>
               <Tree.Label>src</Tree.Label>
@@ -283,7 +283,7 @@ function WithInlineCreationExample() {
                 file.type === 'folder' ? (
                   <Tree.Folder key={file.id}>
                     <Tree.FolderTrigger>
-                      <Tree.Icon className="text-accent6">
+                      <Tree.Icon className="text-muted-foreground">
                         <Folder />
                       </Tree.Icon>
                       <Tree.Label>{file.name}</Tree.Label>
@@ -292,7 +292,7 @@ function WithInlineCreationExample() {
                   </Tree.Folder>
                 ) : (
                   <Tree.File key={file.id} id={file.id}>
-                    <Tree.Icon className="text-accent3">
+                    <Tree.Icon className="text-foreground">
                       <FileCode />
                     </Tree.Icon>
                     <Tree.Label>{file.name}</Tree.Label>

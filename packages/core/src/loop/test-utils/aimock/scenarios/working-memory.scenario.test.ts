@@ -62,9 +62,18 @@ describeForAllEngines('AIMock loop scenario: working memory', engine => {
       },
     });
 
-    // The working memory must be persisted to the thread.
+    // The working memory must be persisted to the thread without exposing the
+    // internal updateWorkingMemory invocation in message history.
     const savedWorkingMemory = await memory.getWorkingMemory({ threadId, resourceId });
     expect(savedWorkingMemory).toContain('WM_DARK_MODE');
+
+    const { messages } = await memory.recall({ threadId, resourceId });
+    expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+    expect(
+      messages
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation' && part.toolInvocation.toolName === 'updateWorkingMemory'),
+    ).toHaveLength(0);
 
     getMock().clearRequests();
     getMock().clearFixtures();

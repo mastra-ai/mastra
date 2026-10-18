@@ -1,13 +1,15 @@
 import { useMastraClient } from '@mastra/react';
-import { DatabaseIcon, Save, X } from 'lucide-react';
+import { DatabaseIcon } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useDatasetSaveContext } from '../context/dataset-save-context';
-import type { DatasetSaveContextValue } from '../context/dataset-save-context';
+import { useDatasetSaveContext } from '../context/dataset-save-context-value';
+import type { DatasetSaveContextValue } from '../context/dataset-save-context-value';
 import { useDatasetMutations, useDatasets } from '@/domains/datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
   Dialog,
+  DialogAction,
+  DialogCancel,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -15,9 +17,10 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import { Label } from '@/ds/components/Label';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
@@ -41,7 +44,6 @@ function DatasetSaveDialog({
   const [groundTruth, setGroundTruth] = useState(initialGroundTruth);
   const [selectedDatasetId, setSelectedDatasetId] = useState('');
 
-  // Sync ground truth when dialog opens with new initial value
   useEffect(() => {
     if (open) {
       setGroundTruth(initialGroundTruth);
@@ -96,26 +98,28 @@ function DatasetSaveDialog({
   }, [input, groundTruth, selectedDatasetId, requestContext, addItem, datasets, onOpenChange, onInputChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={addItem.isPending}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Save to Dataset</DialogTitle>
           <DialogDescription>Save as a dataset item for evaluation.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-4 py-1">
-          <div className="grid gap-2">
-            <Label htmlFor="ds-target">Dataset</Label>
+        <DialogBody>
+          <Field>
+            <FieldLabel>Dataset</FieldLabel>
             <Select
               value={selectedDatasetId}
               onValueChange={setSelectedDatasetId}
               disabled={addItem.isPending || isDatasetsLoading}
             >
-              <SelectTrigger id="ds-target">
+              <SelectTrigger>
                 <SelectValue placeholder={isDatasetsLoading ? 'Loading...' : 'Select a dataset'} />
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -125,36 +129,28 @@ function DatasetSaveDialog({
                 )}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Input (JSON)</Label>
+          <Field>
+            <FieldLabel>Input (JSON)</FieldLabel>
             <CodeEditor value={input} onChange={onInputChange} showCopyButton={false} className="max-h-60 min-h-30" />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Ground Truth (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
             <CodeEditor
               value={groundTruth}
               onChange={setGroundTruth}
               showCopyButton={false}
               className="max-h-40 min-h-20"
             />
-          </div>
+          </Field>
         </DialogBody>
-        <DialogFooter className="px-4">
-          <Button icon={<X />} variant="default" size="sm" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSubmit}
-            disabled={addItem.isPending || !selectedDatasetId || datasets.length === 0}
-            icon={<Save />}
-          >
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={handleSubmit} disabled={!selectedDatasetId || datasets.length === 0}>
             {addItem.isPending ? 'Saving...' : 'Save Item'}
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -233,8 +229,6 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
       });
       const messages = result?.messages ?? [];
 
-      // Split: everything up to (and including) the last user message is input,
-      // the final assistant response becomes the ground truth seed
       const lastAssistantIdx = messages.length - 1;
       const lastMessage = messages[lastAssistantIdx];
       if (lastMessage && lastMessage.role === 'assistant') {
@@ -242,7 +236,6 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         setInput(JSON.stringify(inputMessages, null, 2));
         setGroundTruth(JSON.stringify(lastMessage, null, 2));
       } else {
-        // No trailing assistant message — use all messages as input
         setInput(JSON.stringify(messages, null, 2));
         setGroundTruth('');
       }
@@ -264,11 +257,13 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         className={cn(
           quietTextHover,
           controlStateColorTransition,
-          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 text-meta disabled:opacity-50',
+          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50',
         )}
       >
         {isFetching ? <Spinner className="size-3.5" /> : <DatabaseIcon className="size-3.5" />}
-        Save full conversation to dataset
+        <Txt as="span" variant="meta" className="block">
+          Save full conversation to dataset
+        </Txt>
       </button>
       <DatasetSaveDialog
         open={dialogOpen}

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const createMessageInputSchema = z
   .object({
@@ -95,15 +96,7 @@ export function createMessageTool(proxy: PlatformProxy) {
     outputSchema: createMessageOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createMessageOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in connection metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       const requestBody: Record<string, unknown> = {};
       if (input.content !== undefined) {

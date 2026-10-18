@@ -1,7 +1,7 @@
+import type { ProcessorInfo } from '@mastra/react/hooks/processors';
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ProcessorInfo } from '../../../hooks/use-processors';
 import { ProcessorsList } from '../processors-list';
 import type { ProcessorsListProps } from '../processors-list';
 import { interactiveRows } from '@/test/keyboard';

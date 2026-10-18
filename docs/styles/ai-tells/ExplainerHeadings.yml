@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI explainer heading: '%s'. Name what you're explaining instead."
+message: "AI explainer heading: '%s'. State the topic instead."
 level: error
 ignorecase: true
 scope: heading

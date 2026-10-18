@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI figurative noun: '%s'. Name the structure, format, size, or pattern it stands for. Disable this rule for geometry, graphics, or array-dimension prose."
+message: "AI figurative noun: '%s'. Say which structure, format, size, or pattern it stands for. Disable this rule for geometry, graphics, or array-dimension prose."
 level: error
 nonword: true
 ignorecase: true

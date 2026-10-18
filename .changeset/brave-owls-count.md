@@ -1,11 +1,19 @@
 ---
-'mastracode': patch
+'@mastra/core': minor
+'@mastra/client-js': minor
+'@mastra/clickhouse': minor
+'@mastra/duckdb': minor
+'@mastra/pg': minor
+'@mastra/spanner': minor
 ---
 
-Fixed shell command cards showing the wrong status and time:
+Added batch experiment ID filtering to observability metric queries, so you can get token usage and cost for many experiments in one request.
 
-- Commands that exit with a nonzero code, or that fail because the sandbox itself errored, now show as failed. Previously they showed a checkmark unless their output happened to contain an error-like word.
-- Successful commands whose output mentions `error:` (for example grep results) no longer show as failed.
-- Tool calls rejected by input validation now show as failed while streaming, matching how they appear when the thread is reloaded.
-- Run times now survive reloading a thread instead of resetting to `0ms`, and times over a minute read as `2m4s`.
-- Shell box headers now show directories relative to the project root commands run in, so they stay correct when Mastra Code is launched from a subdirectory.
+```ts
+const result = await client.getMetricBreakdown({
+  name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+  aggregation: 'sum',
+  groupBy: ['experimentId', 'name'],
+  filters: { experimentIds: ['experiment-1', 'experiment-2'] },
+});
+```

@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { coreAuthMiddleware } from '@mastra/server/auth';
+import { coreAuthMiddleware, isCustomRoutePublic } from '@mastra/server/auth';
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 
 export interface FastifyAuthMiddlewareOptions {
@@ -49,7 +49,10 @@ export function createAuthMiddleware({
     const path = String(request.url.split('?')[0] || '/');
     const method = String(request.method || 'GET');
     const customRouteAuthConfig = new Map<string, boolean>(request.customRouteAuthConfig ?? []);
-    customRouteAuthConfig.set(`${method}:${path}`, true);
+    // Don't reclassify a custom route the app declared public (requiresAuth: false).
+    if (!isCustomRoutePublic(path, method, customRouteAuthConfig)) {
+      customRouteAuthConfig.set(`${method}:${path}`, true);
+    }
 
     const authHeader = request.headers.authorization;
     let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;

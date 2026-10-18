@@ -7,15 +7,21 @@
 // tracking declared beside it in the CSS. Components pick a role; they never assemble one,
 // and nothing mirrors those values here — the foundations story reads them off the element.
 export const TextRoles = [
+  'hero',
+  'lead',
   'display',
   'title',
   'heading',
   'subheading',
   'body',
   'label',
+  'card-title',
+  'card-title-tight',
+  'card-title-strong',
   'body-sm',
   'column',
   'caption',
+  'eyebrow',
   'meta',
 ] as const;
 

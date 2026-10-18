@@ -2,11 +2,12 @@ import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentCMSRefBlock } from '../agent-cms-blocks/agent-cms-ref-block';
+import type { AgentCMSRefBlockProps } from '../agent-cms-blocks/agent-cms-ref-block';
 import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { emptyStoredAgents, promptBlock } from './fixtures/prompt-blocks';
 import { server } from '@/test/msw-server';
@@ -21,7 +22,10 @@ const refBlock = (promptBlockId: string): RefInstructionBlock => ({
 
 // The ref block renders through `ContentBlock`'s `<Draggable>`, which requires a
 // surrounding droppable/drag-drop context to mount.
-const renderRefBlock = (block: RefInstructionBlock) => {
+const renderRefBlock = (
+  block: RefInstructionBlock,
+  props: Pick<AgentCMSRefBlockProps, 'onBlockChange' | 'schema' | 'readOnly'> = {},
+) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
@@ -31,7 +35,7 @@ const renderRefBlock = (block: RefInstructionBlock) => {
             <Droppable droppableId="ref-block-test">
               {provided => (
                 <div ref={provided.innerRef} {...provided.droppableProps}>
-                  <AgentCMSRefBlock index={0} block={block} />
+                  <AgentCMSRefBlock index={0} block={block} {...props} />
                   {provided.placeholder}
                 </div>
               )}
@@ -114,6 +118,44 @@ describe('AgentCMSRefBlock', () => {
         screen.getByText('Runtime uses the last published version until these edits are published.'),
       ).not.toBeNull();
       expect(screen.queryByText('Draft')).toBeNull();
+    });
+  });
+
+  describe('when the agent has request context variables', () => {
+    const schema = { type: 'object', properties: { userPrompt: { type: 'string' } } };
+    const stubLiveBlock = () => {
+      stubUsedByAgents();
+      server.use(
+        http.get(`${BASE_URL}/api/stored/prompt-blocks/shared-default`, () =>
+          HttpResponse.json(
+            promptBlock({ id: 'shared-default', name: 'Shared Default', status: 'published', activeVersionId: 'v1' }),
+          ),
+        ),
+      );
+    };
+
+    it('adds display conditions to this reference only', async () => {
+      stubLiveBlock();
+      const onBlockChange = vi.fn<NonNullable<AgentCMSRefBlockProps['onBlockChange']>>();
+
+      renderRefBlock(refBlock('shared-default'), { onBlockChange, schema });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Display Conditions' }));
+      fireEvent.click(await screen.findByRole('button', { name: /Add conditional rule/ }));
+
+      expect(onBlockChange).toHaveBeenCalledWith({
+        ...refBlock('shared-default'),
+        rules: { operator: 'AND', conditions: [expect.objectContaining({ operator: 'equals' })] },
+      });
+    });
+
+    it('hides display conditions when read-only', async () => {
+      stubLiveBlock();
+
+      renderRefBlock(refBlock('shared-default'), { onBlockChange: vi.fn(), schema, readOnly: true });
+
+      expect(await screen.findByText('Shared Default')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Display Conditions' })).toBeNull();
     });
   });
 

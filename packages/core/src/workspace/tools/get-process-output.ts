@@ -3,8 +3,11 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { coerceNumericString, emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
-import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
+
+const ABORTED_PROCESS_NOTE =
+  'Process aborted: the run that started or was waiting on this process was cancelled (by the user or system), so it was killed before it finished.';
 
 export const getProcessOutputTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT,
@@ -101,10 +104,18 @@ Use this after starting a background command with execute_command (background: t
       const running = handle.exitCode === undefined;
 
       const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.maxOutputTokens;
-      const stdout = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
-      const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
+      const stdout = noteDroppedOutput(
+        await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich'),
+        handle.stdoutDroppedBytes,
+        'stdout',
+      );
+      const stderr = noteDroppedOutput(
+        await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich'),
+        handle.stderrDroppedBytes,
+        'stderr',
+      );
 
-      if (!stdout && !stderr) {
+      if (running && !stdout && !stderr) {
         span.end({ success: true }, { exitCode: handle.exitCode });
         return '(no output yet)';
       }
@@ -116,12 +127,17 @@ Use this after starting a background command with execute_command (background: t
         parts.push('stdout:', stdout, '', 'stderr:', stderr);
       } else if (stdout) {
         parts.push(stdout);
-      } else {
+      } else if (stderr) {
         parts.push('stderr:', stderr);
       }
 
       if (!running) {
-        parts.push('', `Exit code: ${handle.exitCode}`);
+        // The exit code of an aborted process is a provider-specific kill code, so say why it stopped.
+        const terminalLines = [
+          ...(handle.killedByAbort ? [ABORTED_PROCESS_NOTE] : []),
+          `Exit code: ${handle.exitCode}`,
+        ];
+        parts.push(...(parts.length > 0 ? [''] : []), ...terminalLines);
       }
 
       span.end({ success: true }, { exitCode: handle.exitCode });

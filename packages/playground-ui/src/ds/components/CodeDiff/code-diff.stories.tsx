@@ -36,6 +36,43 @@ export const Default: Story = {
   args: {
     codeA: sampleA,
     codeB: sampleB,
+    filename: 'dataset-item.json',
+  },
+};
+
+export const GitPatch: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/agent.ts b/src/agent.ts',
+      'index 2d4a3b1..b8c31d2 100644',
+      '--- a/src/agent.ts',
+      '+++ b/src/agent.ts',
+      '@@ -1,3 +1,4 @@',
+      ' export function createAgent() {',
+      '-  return { name: "helper" };',
+      '+  return { name: "researcher", tools: ["search"] };',
+      ' }',
+    ].join('\n'),
+  },
+};
+
+export const ObservationHistory: Story = {
+  args: {
+    codeA: 'The user prefers short answers.\nThe project uses TypeScript.\n',
+    codeB: 'The user prefers concise answers with examples.\nThe project uses TypeScript.\n',
+    filename: 'observations.md',
+    layout: 'unified',
+  },
+};
+
+export const RenameOnly: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/old-agent.ts b/src/new-agent.ts',
+      'similarity index 100%',
+      'rename from src/old-agent.ts',
+      'rename to src/new-agent.ts',
+    ].join('\n'),
   },
 };
 

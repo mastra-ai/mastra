@@ -15,7 +15,6 @@ import type { Props } from '@theme/DocItem/Layout'
 
 import styles from './styles.module.css'
 import SubscribeForm from '@site/src/components/subscribe-form'
-import { FeedbackTrigger } from '@site/src/components/feedback-trigger'
 
 /**
  * Decide if the toc should be rendered, on mobile or desktop viewports
@@ -63,10 +62,9 @@ export default function DocItemLayout({ children }: Props): ReactNode {
         </div>
       ) : !docTOC.hidden ? (
         <div id="toc-column" data-size="mobile" className={clsx('col col--3')}>
-          {/* TODO: Do not hide on mobile, properly add feedback and newsletter form */}
+          {/* TODO: Do not hide on mobile, properly add the newsletter form */}
           <div className="hidden flex-col gap-4 px-1.5 xl:flex">
             <SubscribeForm />
-            <FeedbackTrigger />
           </div>
         </div>
       ) : null}

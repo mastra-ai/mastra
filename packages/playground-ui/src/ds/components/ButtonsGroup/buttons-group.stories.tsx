@@ -5,6 +5,7 @@ import { Button } from '../Button';
 import { Combobox } from '../Combobox';
 import { DropdownMenu } from '../DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
 
@@ -70,31 +71,6 @@ export const Sizes: Story = {
 };
 
 /**
- * A segmented view toggle: the selected segment is `default` (filled), the rest are `ghost`.
- * The group draws one continuous ring whether or not a segment is filled, and the seam between
- * two segments is a single pixel — never two stacked borders.
- */
-export const AsSegmentedControl: Story = {
-  render: function Render() {
-    const [view, setView] = useState('list');
-    return (
-      <ButtonsGroup aria-label="View">
-        {['list', 'board', 'calendar'].map(value => (
-          <Button
-            key={value}
-            variant={view === value ? 'default' : 'ghost'}
-            aria-pressed={view === value}
-            onClick={() => setView(value)}
-          >
-            {value}
-          </Button>
-        ))}
-      </ButtonsGroup>
-    );
-  },
-};
-
-/**
  * A split button: a primary action joined to a chevron that opens a real menu of related
  * actions. The chevron is a `DropdownMenu.Trigger asChild`, so it stays a real `Button` and
  * the group fuses the two into one pill with a single divider — no width or corner classes on
@@ -117,6 +93,23 @@ export const AsSplitButton: Story = {
           <DropdownMenu.Item>Save a copy</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
+    </ButtonsGroup>
+  ),
+};
+
+export const PopoverFirstSegmentOpen: Story = {
+  render: () => (
+    <ButtonsGroup size="sm">
+      <Popover defaultOpen>
+        <PopoverTrigger variant="ghost" size="sm">
+          Claude Opus 5.5
+          <ChevronDownIcon />
+        </PopoverTrigger>
+        <PopoverContent align="start">Model menu</PopoverContent>
+      </Popover>
+      <Button variant="ghost" size="sm">
+        Thinking
+      </Button>
     </ButtonsGroup>
   ),
 };

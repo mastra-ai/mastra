@@ -1,5 +1,6 @@
 import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 type EmptyStateTone = 'default' | 'error';
@@ -11,18 +12,18 @@ const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
 
 const iconColorByTone: Record<EmptyStateTone, string> = {
   default: 'text-muted-foreground',
-  error: 'text-error',
+  error: 'text-destructive-foreground',
 };
 
 export type EmptyStateProps = {
-  /** Defaults to the tone's icon, always rendered at 20px. Pass `null` to render no icon. */
+  /** Defaults to the tone's icon. A bare icon renders at 20px; pass `<EmptyStateIllustration />` for artwork. Pass `null` to render no icon. */
   iconSlot?: React.ReactNode;
   titleSlot: React.ReactNode;
   descriptionSlot?: React.ReactNode;
   actionSlot?: React.ReactNode;
   className?: string;
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
-  /** Colors the icon; an icon with its own text color keeps it. */
+  /** Colors the icon or illustration; an icon with its own text color keeps it. */
   tone?: EmptyStateTone;
   /**
    * `inline` (default) renders the block in place.
@@ -43,16 +44,21 @@ export function EmptyState({
 }: EmptyStateProps) {
   const content = (
     <div
+      data-tone={tone}
       className={cn(
-        'flex flex-col items-center justify-center px-4 py-6 text-center',
+        'group/empty-state flex max-w-full flex-col items-center justify-center px-4 py-6 text-center',
         'transition-opacity duration-normal ease-out-custom',
         className,
       )}
     >
-      {iconSlot && <div className={cn('mb-3 [&_svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
+      {iconSlot && <div className={cn('mb-3 max-w-full [&>svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
-      {descriptionSlot && <p className="mt-1.5 max-w-md text-caption text-muted-foreground">{descriptionSlot}</p>}
-      {actionSlot && <div className="mt-4">{actionSlot}</div>}
+      {descriptionSlot && (
+        <Txt variant="caption" tone="muted" className="mt-1.5 max-w-md wrap-anywhere">
+          {descriptionSlot}
+        </Txt>
+      )}
+      {actionSlot && <div className="mt-4 max-w-full">{actionSlot}</div>}
     </div>
   );
 

@@ -2,7 +2,8 @@ import { Mastra } from '@mastra/core/mastra';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { createStep, createWorkflow, createEventedWorkflow } from '@mastra/core/workflows';
+import type { WorkflowOptions } from '@mastra/core/workflows';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -26,7 +27,7 @@ import { TestExporter } from './exporters';
 
 const empty = z.object({});
 
-const makeWorkflow = () => {
+const makeWorkflow = (engine: 'default' | 'evented' = 'default', options?: WorkflowOptions) => {
   const approvalStep = createStep({
     id: 'approval',
     inputSchema: empty,
@@ -42,11 +43,12 @@ const makeWorkflow = () => {
     },
   });
 
-  return createWorkflow({
+  return (engine === 'evented' ? createEventedWorkflow : createWorkflow)({
     id: 'resume-tracing-workflow',
     inputSchema: empty,
     outputSchema: z.object({ approved: z.boolean() }),
     steps: [approvalStep],
+    options,
   })
     .then(approvalStep)
     .commit();
@@ -97,6 +99,43 @@ describe('workflow resume span linkage', () => {
       .map(span => `${span.type} ${span.name} -> ${span.parentSpanId}`);
     expect(orphans, 'exported spans whose parentSpanId was never exported').toEqual([]);
   };
+
+  it.each(['default', 'evented'] as const)(
+    '%s saves an explicit resume target without reparenting live execution',
+    async engine => {
+      const resumeTracingContext = {
+        traceId: '11111111111111111111111111111111',
+        spanId: '2222222222222222',
+      };
+      const storage = new MockStore();
+      const workflow = makeWorkflow(engine);
+      workflow.__setResumeTracingContext(resumeTracingContext);
+      const host = new Mastra({
+        logger: false,
+        storage,
+        workflows: { 'resume-tracing-workflow': workflow },
+        observability: new Observability({
+          configs: { default: { serviceName: 'explicit-resume-target', exporters: [exporter] } },
+        }),
+      });
+      try {
+        if (engine === 'evented') await host.startWorkers();
+        const run = await workflow.createRun();
+        expect((await run.start({ inputData: {} })).status).toBe('suspended');
+        expect(await readTracingContext(storage, run.runId)).toEqual(resumeTracingContext);
+        // The default engine creates a workflow span; evented execution relies on
+        // caller-provided live context. Saving a target must not reparent this span.
+        if (engine === 'default') {
+          const original = exporter.getSpansByType(SpanType.WORKFLOW_RUN);
+          expect(original).toHaveLength(1);
+          expect(original[0]!.parentSpanId).toBeUndefined();
+          expect(original[0]!.traceId).not.toBe(resumeTracingContext.traceId);
+        }
+      } finally {
+        await host.shutdown();
+      }
+    },
+  );
 
   it('omits the persisted resume spanId when the suspended run span is never exported', async () => {
     const { storage, workflow } = buildMastra(exporter, [SpanType.WORKFLOW_RUN]);

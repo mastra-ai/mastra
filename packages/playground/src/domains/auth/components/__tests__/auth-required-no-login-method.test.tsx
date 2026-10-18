@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '../../types';
 import { AuthRequired } from '../auth-required';
 import { RoutePermissionsGate } from '../route-permissions-gate';
 import {
@@ -81,7 +81,10 @@ const Harness = () => {
 };
 
 const renderAuthRequiredAt = async (pathname: string) => {
-  server.use(http.get(`${BASE_URL}/`, () => HttpResponse.json({ status: 'ok' })));
+  // The instance status probe hits the capabilities route before the client renders; keep it out of handler counts.
+  server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(noLoginMethodCapabilities), { once: true }),
+  );
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(

@@ -122,7 +122,7 @@
      hover and open together, and a grouped trigger reads like the same trigger standing
      alone. The inset also clips to the padding box, so the wash cannot composite through
      the translucent border and lighten it — which is the whole point. */
-  [data-slot='buttons-group'] > .shadow-raised {
+  [data-slot='buttons-group'] > :is(.shadow-raised, .shadow-input) {
     box-shadow: inset 0 0 0 9999px var(--surface-tint);
     border-width: 1px;
   }
@@ -130,9 +130,12 @@
   /* One border per seam, and no overlap. A border is a translucent alpha of the
      foreground, so two 1px edges collapsed onto the same pixel (the `-ml-px` trick) stack
      to double the alpha and out-read the ring around the group. The left segment owns the
-     seam with its right border; the segment after it drops its left edge entirely. */
+     seam with its right border; the segment after it drops its left edge entirely.
+     `~` rather than `:not(:first-child)`: an open Popover puts a focus guard BEFORE its
+     trigger, which would otherwise strip the first segment's leading corner. */
   [data-slot='buttons-group'][data-orientation='horizontal']
-    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) {
     border-left-width: 0;
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
@@ -156,7 +159,8 @@
   /* Vertical mirrors it: the top segment owns the seam. The children are capsules, so the
      outer ends are re-rounded to the container radius. */
   [data-slot='buttons-group'][data-orientation='vertical']
-    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) {
     border-top-width: 0;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
@@ -168,12 +172,18 @@
     border-bottom-right-radius: 0;
   }
 
-  [data-slot='buttons-group'][data-orientation='vertical'] > :first-child {
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) ~ *
+    ) {
     border-top-left-radius: var(--radius-xl);
     border-top-right-radius: var(--radius-xl);
   }
 
-  [data-slot='buttons-group'][data-orientation='vertical'] > :last-child {
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]))
+    ) {
     border-bottom-left-radius: var(--radius-xl);
     border-bottom-right-radius: var(--radius-xl);
   }
@@ -186,29 +196,19 @@
   }
 
   /* The ring colour above ties a segment's own `focus-visible:` border on specificity and
-     wins on source order, so the group repaints the focus edge itself — at the weight the
-     segment focuses at alone: a raised surface moves its rim to `--surface-rim-focus`,
-     not the `--border-focus` a bare border needs. */
-  [data-slot='buttons-group'] {
-    --segment-focus-edge: var(--border-focus);
-  }
-
-  [data-slot='buttons-group']:has(> .shadow-raised:focus-visible, > .shadow-raised :focus-visible) {
-    --segment-focus-edge: var(--surface-rim-focus);
-  }
-
+     wins on source order, so the group repaints the focus edge itself. */
   [data-slot='buttons-group'] > :is(:focus-visible, :has(:focus-visible)) {
-    border-color: var(--segment-focus-edge);
+    border-color: var(--border-focus);
   }
 
   /* A segment's leading edge is its neighbour's border, so a state that recolours the
      segment's own border (focus) lights three sides only.
      The neighbour that owns the seam takes the state colour for it. */
   [data-slot='buttons-group'][data-orientation='horizontal'] > :has(+ :focus-visible, + * :focus-visible) {
-    border-right-color: var(--segment-focus-edge);
+    border-right-color: var(--border-focus);
   }
 
   [data-slot='buttons-group'][data-orientation='vertical'] > :has(+ :focus-visible, + * :focus-visible) {
-    border-bottom-color: var(--segment-focus-edge);
+    border-bottom-color: var(--border-focus);
   }
 }

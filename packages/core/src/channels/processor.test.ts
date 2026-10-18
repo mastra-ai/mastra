@@ -92,4 +92,31 @@ describe('ChatChannelProcessor', () => {
     expect(channelMessages).toHaveLength(1);
     expect(channelMessages[0]!.content).toContain('communicating via slack');
   });
+
+  describe('bot identity', () => {
+    function identityLine(channel: Partial<ChannelContext>): string | undefined {
+      const args = createArgs({ channel: { platform: 'slack', isDM: false, ...channel } as ChannelContext });
+      new ChatChannelProcessor().processInputStep(args);
+      const content = String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+      return content.split('\n').find(line => line.startsWith('Your identity'));
+    }
+
+    it('lists the original username, current display name, and mention', () => {
+      expect(identityLine({ botUserName: 'acme-bot', botDisplayName: 'helper', botMention: '<@UBOT>' })).toBe(
+        'Your identity on this platform is "acme-bot" / "helper" / <@UBOT>. Messages containing these references are directed at you.',
+      );
+    });
+
+    it('keeps the existing line when no display name is set', () => {
+      expect(identityLine({ botUserName: 'acme-bot', botMention: '<@UBOT>' })).toBe(
+        'Your identity on this platform is "acme-bot" / <@UBOT>. Messages containing these references are directed at you.',
+      );
+    });
+
+    it('uses the display name when no username is set', () => {
+      expect(identityLine({ botDisplayName: 'helper', botMention: '<@UBOT>' })).toBe(
+        'Your identity on this platform is "helper" / <@UBOT>. Messages containing these references are directed at you.',
+      );
+    });
+  });
 });

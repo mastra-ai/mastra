@@ -1,9 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
-import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
 
 interface SchemaImportProps {
   schemaType: 'input' | 'output';
@@ -80,9 +81,10 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
 
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
-  const { data: workflowSchema, isLoading: schemaLoading } = useWorkflowSchema(
-    sourceType === 'workflow' ? selectedWorkflow : null,
-  );
+  const { data: workflowSchema, isLoading: schemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
 
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
@@ -161,7 +163,11 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
         Import
       </Button>
 
-      {showNoSchemaWarning && <span className="text-caption text-muted-foreground">No {schemaType} schema</span>}
+      {showNoSchemaWarning && (
+        <Txt as="span" variant="caption" tone="muted">
+          No {schemaType} schema
+        </Txt>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { calculatePagination, normalizePerPage, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
-import type { StorageListThreadsInput, StorageListThreadsOutput } from '@mastra/core/storage';
+import type { RunFence, StorageListThreadsInput, StorageListThreadsOutput } from '@mastra/core/storage';
 
 import { asBindParameters, executeOptions, jsonBind, rows } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
@@ -10,6 +10,7 @@ import type { OracleTxClient } from '../../db';
 import { toDate } from '../../domain-utils';
 import { MESSAGE_RESOURCE_ID, THREAD_CREATED_AT, THREAD_RESOURCE_ID, THREAD_UPDATED_AT } from './schema';
 import {
+  assertMemoryFence,
   deleteSemanticRecallVectors,
   optionalStringBind,
   paginationClause,
@@ -60,12 +61,16 @@ export async function getThreadById(
 
 export async function saveThread(
   ctx: MemoryContext,
-  { thread }: { thread: StorageThreadType },
+  { thread, fence }: { thread: StorageThreadType; fence?: RunFence },
 ): Promise<StorageThreadType> {
   try {
-    await mergeThreadRow(ctx, ctx.db, thread);
+    await ctx.db.tx(async client => {
+      await assertMemoryFence(ctx, client, fence, 'saveThread');
+      await mergeThreadRow(ctx, client, thread);
+    });
     return thread;
   } catch (error) {
+    if (error instanceof MastraError) throw error;
     throw storageError('SAVE_THREAD', 'FAILED', { threadId: thread.id }, error);
   }
 }
@@ -175,10 +180,12 @@ export async function updateThread(
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   },
 ): Promise<StorageThreadType> {
   const existingThread = await ctx.getThreadById({ threadId: id });
@@ -196,20 +203,23 @@ export async function updateThread(
   const updatedAt = new Date();
 
   try {
-    await ctx.db.none(
-      `
-          UPDATE ${table(ctx, TABLE_THREADS)}
-          SET title = COALESCE(:title, title),
-              metadata = :metadata,
-              ${THREAD_UPDATED_AT} = :updatedAt
-          WHERE id = :id`,
-      {
-        id,
-        title: optionalStringBind(title),
-        metadata: jsonBind(mergedMetadata),
-        updatedAt,
-      },
-    );
+    await ctx.db.tx(async client => {
+      await assertMemoryFence(ctx, client, fence, 'updateThread');
+      await client.none(
+        `
+            UPDATE ${table(ctx, TABLE_THREADS)}
+            SET title = COALESCE(:title, title),
+                metadata = :metadata,
+                ${THREAD_UPDATED_AT} = :updatedAt
+            WHERE id = :id`,
+        {
+          id,
+          title: optionalStringBind(title),
+          metadata: jsonBind(mergedMetadata),
+          updatedAt,
+        },
+      );
+    });
 
     const updatedThread = await ctx.getThreadById({ threadId: id });
     if (!updatedThread) {

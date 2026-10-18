@@ -39,6 +39,10 @@ export interface BundlerOptions {
   dynamicPackages?: string[];
 }
 
+export interface InternalBundlerOptions extends BundlerOptions {
+  alias?: Record<string, string>;
+}
+
 /**
  * Version information for an external dependency
  */

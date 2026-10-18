@@ -2,6 +2,7 @@ import type { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CardDescription, CardTitle } from '@mastra/playground-ui/components/Card';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { useId } from 'react';
 
@@ -56,7 +57,9 @@ export function AgentToolsDetails({ agentName, tools }: AgentToolsDetailsProps) 
           >
             {toolEntries.map(([toolKey, tool]) => (
               <li key={toolKey} className="grid gap-1">
-                <span className="overflow-wrap-anywhere text-column text-foreground">{tool.id || toolKey}</span>
+                <Txt as="span" variant="column" tone="ink" className="overflow-wrap-anywhere">
+                  {tool.id || toolKey}
+                </Txt>
                 {tool.description ? (
                   <CardDescription className="overflow-wrap-anywhere">{tool.description}</CardDescription>
                 ) : null}

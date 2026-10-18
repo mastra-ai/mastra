@@ -1,5 +1,24 @@
 {
   "attachment": ["moonshotai/kimi-k2.7-code"],
   "temperature": ["deepseek-ai/deepseek-v4-flash-0731", "moonshotai/kimi-k2.7-code", "openai/gpt-oss-120b"],
-  "structuredOutput": ["deepseek-ai/deepseek-v4-flash-0731", "moonshotai/kimi-k2.7-code", "openai/gpt-oss-120b"]
+  "structuredOutput": ["deepseek-ai/deepseek-v4-flash-0731", "moonshotai/kimi-k2.7-code", "openai/gpt-oss-120b"],
+  "reasoning": {
+    "deepseek-ai/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.7-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
 }

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed evented workflow runs, including scheduled workflows, staying `running` forever after a process restart. Set `options: { autoRestartActiveRuns: true }` on an evented workflow to have `mastra.restartAllActiveWorkflowRuns()` recover its in-flight runs on boot. The step that was running is executed again; completed steps are not. Only opt in for single-instance deployments: there is no lease/lock yet, so in a multi-instance deploy every booting replica re-drives runs another replica may still be executing. Evented workflows that don't opt in are unchanged. Fixes [#24984](https://github.com/mastra-ai/mastra/issues/24984).
+Fixed evented workflow runs, including scheduled workflows, being lost when `mastra.restartAllActiveWorkflowRuns()` ran before `startWorkers()`. These restarts now wait until the workers are running. The sweep also no longer waits for evented runs to finish before restarting other runs, skips evented snapshots with no recorded position instead of failing, and won't restart the same run twice when sweeps overlap. Fixes [#24984](https://github.com/mastra-ai/mastra/issues/24984).

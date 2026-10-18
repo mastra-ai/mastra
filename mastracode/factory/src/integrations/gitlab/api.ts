@@ -161,6 +161,16 @@ export interface GitLabMember {
   access_level?: number;
 }
 
+export type GitLabCommitStatusState = 'pending' | 'running' | 'success' | 'failed' | 'canceled' | 'skipped';
+
+export interface GitLabCommitStatus {
+  id: number;
+  sha: string;
+  name: string;
+  status: GitLabCommitStatusState;
+  target_url: string | null;
+}
+
 export interface GitLabApiClientConfig {
   baseUrl: string;
   accessToken: string;
@@ -489,6 +499,26 @@ export class GitLabApiClient {
     );
   }
 
+  async setCommitStatus(
+    projectId: string,
+    sha: string,
+    status: { state: GitLabCommitStatusState; name: string; ref?: string; description?: string; targetUrl?: string },
+  ): Promise<GitLabCommitStatus> {
+    return this.#request<GitLabCommitStatus>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/statuses/${encodeURIComponent(sha)}`,
+      {
+        body: {
+          state: status.state,
+          name: status.name,
+          ref: status.ref,
+          description: status.description,
+          target_url: status.targetUrl,
+        },
+      },
+    );
+  }
+
   async createMergeRequestDiscussion(
     projectId: string,
     mergeRequestIid: number,
@@ -578,17 +608,13 @@ export class GitLabApiClient {
     projectId: string,
     options: { query?: string; page?: number } = {},
   ): Promise<GitLabMember[]> {
-    return this.#request<GitLabMember[]>(
-      'GET',
-      `/api/v4/projects/${encodeURIComponent(projectId)}/members/all`,
-      {
-        query: {
-          query: options.query,
-          page: options.page ?? 1,
-          per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
-        },
+    return this.#request<GitLabMember[]>('GET', `/api/v4/projects/${encodeURIComponent(projectId)}/members/all`, {
+      query: {
+        query: options.query,
+        page: options.page ?? 1,
+        per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
       },
-    );
+    });
   }
 
   async #request<T>(

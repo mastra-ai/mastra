@@ -1,10 +1,10 @@
 /**
  * Regression for https://github.com/mastra-ai/mastra/issues/24984.
  *
- * Evented workflows (including scheduled ones) that opt in via
- * `options.autoRestartActiveRuns: true` are recovered by the boot-time sweep
- * `Mastra.restartAllActiveWorkflowRuns()` after a process restart. Evented
- * workflows that don't opt in are left untouched.
+ * Evented workflows (including scheduled ones) are recovered by the boot-time
+ * sweep `Mastra.restartAllActiveWorkflowRuns()` after a process restart, even
+ * when the sweep runs before `startWorkers()`. Evented workflows that opt out
+ * via `options.autoRestartActiveRuns: false` are left untouched.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -107,8 +107,8 @@ describe('Mastra.restartAllActiveWorkflowRuns with evented workflows (issue #249
 
   it('assumes a single instance: re-drives a step another live host is still executing', async () => {
     // Host A stays alive with step2 in flight. Without a lease/lock the sweep on host B
-    // cannot tell that apart from an orphaned run, so it runs step2 again. This is why
-    // autoRestartActiveRuns is documented as single-instance only.
+    // cannot tell that apart from an orphaned run, so it runs step2 again. Evented runs
+    // take no ownership lease, so this is documented for multi-instance deployments.
     const storage = new MockStore();
     const id = 'evented-live-original-host';
     const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: true });
@@ -348,13 +348,13 @@ describe('Mastra.restartAllActiveWorkflowRuns with evented workflows (issue #249
     }
   });
 
-  it('leaves evented runs untouched when the workflow does not opt in', async () => {
+  it('leaves evented runs untouched when the workflow opts out', async () => {
     const storage = new MockStore();
-    const id = 'evented-no-opt-in';
-    const { mastra: hostA, runId } = await orphanRun(id, storage);
+    const id = 'evented-opt-out';
+    const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: false });
 
     const step2B = vi.fn(async () => ({}));
-    const workflowB = makeWorkflow(id, async () => ({}), step2B);
+    const workflowB = makeWorkflow(id, async () => ({}), step2B, { autoRestartActiveRuns: false });
     const hostB = newHost(workflowB, storage);
     await hostB.startWorkers();
     try {

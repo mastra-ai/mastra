@@ -115,8 +115,12 @@ function createAgent(model: MockLanguageModelV2) {
       }),
     },
     // Error lane for OpenAI refusals (thrown), output lane for Anthropic stops (finished steps).
+    // Opt out of the shared stability defaults so this measures CyberRefusalHandler's own
+    // behavior: the default StreamErrorRetryProcessor also retries the retryable refusal, which
+    // would add calls on top of the handler's single nudge.
     outputProcessors: [new CyberRefusalHandler()],
     errorProcessors: [new CyberRefusalHandler()],
+    errorProcessorDefaults: false,
     maxProcessorRetries: 3,
   });
 }
