@@ -40,6 +40,9 @@
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
+  "dependencies": {
+    "@internal/ai-sdk-v5": "workspace:*"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
