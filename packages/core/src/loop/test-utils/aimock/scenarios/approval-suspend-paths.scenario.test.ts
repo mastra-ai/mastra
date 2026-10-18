@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { ChatCompletionRequest, LLMock } from '@copilotkit/aimock';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
@@ -90,7 +90,8 @@ describeForAllEngines('AIMock loop scenario: approval and suspension through wor
     const runs: Array<Record<string, unknown>> = [];
     const shared = await createSharedAgent(getMock(), {
       workflows: { findUserWorkflow: makeWorkflow('plain', runs) },
-      defaultOptions: { requireToolApproval: true },
+      // The harness types defaultOptions narrowly; requireToolApproval is a valid agent default option.
+      defaultOptions: { requireToolApproval: true } as Record<string, unknown>,
       engine,
     });
 
@@ -209,7 +210,7 @@ describeForAllEngines('AIMock loop scenario: approval and suspension through wor
       },
     });
 
-    expect(JSON.stringify(second.requests[0]?.body.messages)).toContain('suspended tools');
+    expect(JSON.stringify(second.requests[0]?.body?.messages)).toContain('suspended tools');
     expect(runs).toEqual([{ ...USER, age: 25 }]);
     expect(await second.output.text).toBe('Dero is 25.');
   });
@@ -394,12 +395,12 @@ describeForAllEngines('AIMock loop scenario: approval and suspension through wor
     await drain(resumed);
 
     expect(lookups).toEqual([USER.name]);
-    expect(await resumed.text).toBe('Let me look that up. Found Dero Israel.');
     expect(await resumed.steps).toHaveLength(2);
+    expect(await resumed.text).toBe('Let me look that up. Found Dero Israel.');
   });
 });
 
-describe('AIMock loop scenario: generate() suspension and resumeGenerate()', () => {
+describeForAllEngines('AIMock loop scenario: generate() suspension and resumeGenerate()', engine => {
   const getMock = useLoopScenarioAimock();
 
   function makeSuspendingTool(resumed: string[]) {
@@ -430,6 +431,7 @@ describe('AIMock loop scenario: generate() suspension and resumeGenerate()', () 
     const { agent } = await createSharedAgent(llm, {
       tools: { findUserTool: makeSuspendingTool(resumed) },
       memory: new MockMemory(),
+      engine,
     });
 
     const output = await agent.generate('Find a user');
@@ -455,6 +457,7 @@ describe('AIMock loop scenario: generate() suspension and resumeGenerate()', () 
     const { agent } = await createSharedAgent(llm, {
       workflows: { findUserWorkflow: makeWorkflow('suspend-name', runs) },
       memory: new MockMemory(),
+      engine,
     });
 
     const output = await agent.generate('Find a user');
@@ -480,6 +483,7 @@ describe('AIMock loop scenario: generate() suspension and resumeGenerate()', () 
       tools: { findUserTool: makeSuspendingTool(resumed) },
       memory,
       defaultOptions: { autoResumeSuspendedTools: true },
+      engine,
     });
     const opts = { memory: { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() } };
 
@@ -504,8 +508,57 @@ describe('AIMock loop scenario: generate() suspension and resumeGenerate()', () 
     llm.on({ endpoint: 'chat', toolCallId: 'call-find-2', hasToolResult: true }, { content: 'Found Dero Israel.' });
 
     const second = await agent.generate('The user is Dero Israel', opts);
-    expect(JSON.stringify(llm.getRequests()[0]?.body.messages)).toContain('suspended tools');
+    expect(JSON.stringify(llm.getRequests()[0]?.body?.messages)).toContain('suspended tools');
     expect(resumed).toEqual([USER.name]);
     expect(second.text).toBe('Found Dero Israel.');
+  });
+
+  it('auto-resumes a workflow step suspended by generate() from the next generate() on the same thread', async () => {
+    const llm = getMock();
+    const runs: Array<Record<string, unknown>> = [];
+    const { agent } = await createSharedAgent(llm, {
+      workflows: { findUserWorkflow: makeWorkflow('suspend-age', runs) },
+      memory: new MockMemory(),
+      defaultOptions: { autoResumeSuspendedTools: true },
+      engine,
+    });
+    const opts = { memory: { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() } };
+
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      {
+        toolCalls: [
+          { id: 'call-wf-1', name: 'workflow-findUserWorkflow', arguments: { inputData: { name: USER.name } } },
+        ],
+      },
+    );
+    const first = await agent.generate('Find the user Dero Israel', opts);
+    expect(first.finishReason).toBe('suspended');
+    expect(first.suspendPayload).toMatchObject({
+      toolName: 'workflow-findUserWorkflow',
+      suspendPayload: { message: 'Please provide the age of the user' },
+    });
+    expect(runs).toHaveLength(0);
+
+    llm.clearFixtures();
+    llm.clearRequests();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      {
+        toolCalls: [
+          {
+            id: 'call-wf-2',
+            name: 'workflow-findUserWorkflow',
+            arguments: { inputData: { name: USER.name }, suspendedToolCallId: 'call-wf-1', resumeData: { age: 25 } },
+          },
+        ],
+      },
+    );
+    llm.on({ endpoint: 'chat', toolCallId: 'call-wf-2', hasToolResult: true }, { content: 'Dero is 25.' });
+
+    const second = await agent.generate('He is 25 years old', opts);
+    expect(JSON.stringify(llm.getRequests()[0]?.body?.messages)).toContain('suspended tools');
+    expect(runs).toEqual([{ ...USER, age: 25 }]);
+    expect(second.text).toBe('Dero is 25.');
   });
 });
