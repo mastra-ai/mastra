@@ -6,19 +6,17 @@
  * the timeout the caller asked for. `valid` is the control: a sane timeout
  * changes nothing, the run completes normally with a single model call.
  *
- * Both variants drive `expectEngineParity`. The invalid variant rejects before
+ * Both variants run in parity mode (`expectParity`). The invalid variant rejects before
  * streaming, which the helper records as a failed run (`snapshot.error`) rather
  * than as `turn()` throwing, so it is compared like any other turn. Every engine
  * must preserve the validation `TypeError` and reject with the same message.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { describe, expect, it } from 'vitest';
-import { MockMemory } from '../../../memory/mock';
-import { Agent } from '../../agent';
-import type { EngineParityScenario, ParityEngine } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape } from './parity-harness';
-
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
+import { expect, it } from 'vitest';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import type { EngineParityScenario } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape } from '../parity';
 
 /** The harness's rejected body: a negative per-step budget. */
 const INVALID_TIMEOUT = { stepMs: -1 };
@@ -40,9 +38,9 @@ function t17Agent({ model }: { model: LanguageModelV2 }) {
 
 const MEMORY = { thread: 't17-thread', resource: 't17-resource' };
 
-describe('T17 modelSettings.timeout validation (plain, durable, evented)', () => {
+describeParity('model-settings-validation parity', target => {
   it('rejects an invalid timeout before calling the model on every engine', async () => {
-    const scenario: EngineParityScenario = {
+    const scenario: Omit<EngineParityScenario, 'engines'> = {
       model: { respond: () => textOnlyTape('ok') },
       buildAgent: t17Agent,
       run: async handle => {
@@ -50,9 +48,9 @@ describe('T17 modelSettings.timeout validation (plain, durable, evented)', () =>
       },
     };
 
-    const results = await expectEngineParity(scenario);
+    const results = await expectParity(target, scenario);
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const turn = results[engine]!.turns[0]!;
 
       // 'invalid timeout rejected (throw or error chunk)': the run produced no
@@ -69,7 +67,7 @@ describe('T17 modelSettings.timeout validation (plain, durable, evented)', () =>
   });
 
   it('valid timeout: the run completes normally on every engine', async () => {
-    const results = await expectEngineParity({
+    const results = await expectParity(target, {
       model: { respond: () => textOnlyTape('ok') },
       buildAgent: t17Agent,
       run: async handle => {
@@ -77,7 +75,7 @@ describe('T17 modelSettings.timeout validation (plain, durable, evented)', () =>
       },
     });
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const turn = results[engine]!.turns.at(-1);
       expect(chunksOfType(turn!, 'finish')).toBe(1);
       expect(chunksOfType(turn!, 'error')).toBe(0);
@@ -86,7 +84,7 @@ describe('T17 modelSettings.timeout validation (plain, durable, evented)', () =>
     }
 
     // The harness's contract includes the chunk-type sequence (`types: list.map(c => c.type)`),
-    // so pin it literally: cross-engine equality alone would pass even if all three engines
+    // so pin it literally: cross-engine equality alone would pass even if all engines
     // drifted together.
     expect(results.plain!.turns.at(-1)!.chunkTypes).toEqual([
       'start',

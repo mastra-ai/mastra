@@ -8,13 +8,11 @@
  * so this file reads `requests` and checks the call, and header *values* are
  * deliberately not asserted (the harness never records them, only their keys).
  */
-import { describe, expect, it } from 'vitest';
-import { MockMemory } from '../../../memory/mock';
-import { Agent } from '../../agent';
-import type { CapturedRequest, ParityEngine, ParitySnapshot } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape } from './parity-harness';
-
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
+import { expect, it } from 'vitest';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import type { CapturedRequest, ParitySnapshot, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape } from '../parity';
 
 /** The harness's `settings` variant body, field for field. */
 const MODEL_SETTINGS = {
@@ -29,8 +27,12 @@ const MODEL_SETTINGS = {
  * Runs the T28 scenario with the given per-variant additions. `headers` swaps
  * the agent's model for a single-entry fallback array carrying a header key.
  */
-async function runT28(variant: 'settings' | 'provider-options' | 'headers', options: Record<string, unknown> = {}) {
-  return expectEngineParity({
+async function runT28(
+  target: ParityTarget,
+  variant: 'settings' | 'provider-options' | 'headers',
+  options: Record<string, unknown> = {},
+) {
+  return expectParity(target, {
     model: { respond: () => textOnlyTape('ok') },
     buildAgent: ({ model }) =>
       new Agent({
@@ -61,11 +63,11 @@ function firstCall(requests: CapturedRequest[]): CapturedRequest {
   return requests[0]!;
 }
 
-describe('T28 model settings body (plain, durable, evented)', () => {
+describeParity('model-settings-body parity', target => {
   it('modelSettings reach the model call', async () => {
-    const results = await runT28('settings', { modelSettings: MODEL_SETTINGS });
+    const results = await runT28(target, 'settings', { modelSettings: MODEL_SETTINGS });
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       expectSettled(results[engine]!.turns.at(-1));
       const call = firstCall(results[engine]!.requests);
       expect(call.temperature).toBe(0.2);
@@ -77,9 +79,9 @@ describe('T28 model settings body (plain, durable, evented)', () => {
   });
 
   it('providerOptions reach the model call', async () => {
-    const results = await runT28('provider-options', { providerOptions: { cor1252: { flag: 'x' } } });
+    const results = await runT28(target, 'provider-options', { providerOptions: { cor1252: { flag: 'x' } } });
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       expectSettled(results[engine]!.turns.at(-1));
       const call = firstCall(results[engine]!.requests);
       expect((call.providerOptions as { cor1252?: { flag?: string } } | undefined)?.cor1252?.flag).toBe('x');
@@ -87,9 +89,9 @@ describe('T28 model settings body (plain, durable, evented)', () => {
   });
 
   it('per-model header keys reach the model call', async () => {
-    const results = await runT28('headers');
+    const results = await runT28(target, 'headers');
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       expectSettled(results[engine]!.turns.at(-1));
       const call = firstCall(results[engine]!.requests);
       expect(call.headers?.['x-t28'], `${engine}: the configured header reaches the model call`).toBe('1');

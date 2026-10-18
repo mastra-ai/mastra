@@ -12,27 +12,28 @@
  *
  * Harness exclusions: error message wording, and retry timing (T27).
  *
- * `stream-cut` runs through `expectEngineParity`. COR-1417 made a failed run
+ * `stream-cut` runs in parity mode (`expectParity`). COR-1417 made a failed run
  * recordable: the chunks that arrived before the failure are kept and compared,
  * and the failure itself is compared as `{ name, message }` (never `stack`, which
  * embeds a checkout-specific path), so the variant needs no declared difference.
  *
- * `model-4xx` now runs through `expectEngineParity`: COR-1429 makes the stale
+ * `model-4xx` now runs in parity mode (`expectParity`): COR-1429 makes the stale
  * check scenario-aware, so its matching `finish.stepResult` does not make the
  * unrelated COR-1390 finish declaration fail before comparison.
  */
 
-import { describe, it, expect } from 'vitest';
-import { MockMemory } from '../../../memory/mock';
-import { Agent } from '../../agent';
+import { it, expect } from 'vitest';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
 import {
   type EngineParityScenario,
   type EngineParityResults,
   type ModelScript,
+  type ParityTarget,
   FAILED_STEP_WARNINGS_DIFFERENCE,
-  PARITY_ENGINES,
-  expectEngineParity,
-} from './parity-harness';
+  describeParity,
+  expectParity,
+} from '../parity';
 
 const THREAD = 'thread-t37';
 const RESOURCE = 'resource-t37';
@@ -55,8 +56,8 @@ const STREAM_CUT: ModelScript = {
   ],
 };
 
-/** One turn of `input` on every engine. */
-function scenario(model: ModelScript): EngineParityScenario {
+/** One turn of `input` on plain and `target`. */
+function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParityScenario, 'engines'> {
   return {
     model,
     buildAgent: ({ model: recordingModel }) =>
@@ -73,29 +74,22 @@ function scenario(model: ModelScript): EngineParityScenario {
     options: { memory: { thread: THREAD, resource: RESOURCE } },
     ...(model === MODEL_4XX
       ? {
-          differences: {
-            durable: FAILED_STEP_WARNINGS_DIFFERENCE,
-            evented: FAILED_STEP_WARNINGS_DIFFERENCE,
-          },
+          differences: { [target]: FAILED_STEP_WARNINGS_DIFFERENCE },
         }
       : {}),
   };
 }
 
-/** Every engine's snapshot for the scenario's single turn. */
-function turnsByEngine(results: EngineParityResults) {
-  return PARITY_ENGINES.map(engine => {
-    const turn = results[engine]?.turns[0];
-    expect(turn, `${engine} produced a turn`).toBeDefined();
-    return { engine, turn: turn! };
-  });
+/** Plain's and `target`'s snapshot for the scenario's single turn. */
+function turnsByEngine(target: ParityTarget, results: EngineParityResults) {
+  return (['plain', target] as const).map(engine => ({ engine, turn: results[engine]!.turns[0]! }));
 }
 
-describe('T37 error surfaces (plain, durable, evented)', () => {
+describeParity('error-surfaces parity', target => {
   it('model-4xx: an up-front model failure surfaces the same way on every engine', async () => {
-    const results = await expectEngineParity(scenario(MODEL_4XX));
+    const results = await expectParity(target, scenario(target, MODEL_4XX));
 
-    for (const { engine, turn } of turnsByEngine(results)) {
+    for (const { engine, turn } of turnsByEngine(target, results)) {
       expect(turn.chunks, `${engine} chunks`).toEqual([
         'AGENT:start',
         'AGENT:step-start',
@@ -111,9 +105,9 @@ describe('T37 error surfaces (plain, durable, evented)', () => {
   });
 
   it('stream-cut: the partial text survives and the failure surfaces the same way on every engine', async () => {
-    const results = await expectEngineParity(scenario(STREAM_CUT));
+    const results = await expectParity(target, scenario(target, STREAM_CUT));
 
-    for (const { engine, turn } of turnsByEngine(results)) {
+    for (const { engine, turn } of turnsByEngine(target, results)) {
       // The delta that arrived before the failure is kept, and the failure is
       // recorded rather than raised.
       expect(turn.chunks, `${engine} chunks`).toEqual([

@@ -16,16 +16,15 @@
  * across engines. The pins go stale when COR-1390 lands.
  */
 
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import type { InputProcessor, OutputProcessor } from '../../../processors';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { CapturedRequest, EngineTurnOptions, ModelScript } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import type { InputProcessor, OutputProcessor } from '../../../../processors';
+import { createTool } from '../../../../tools';
+import type { CapturedRequest, EngineTurnOptions, ModelScript, ParityEngine, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
-const ENGINES = ['plain', 'durable', 'evented'] as const;
 const DECLARED = ['a', 'b', 'c'] as const;
 const THREAD = 't46-thread';
 const RESOURCE = 't46-resource';
@@ -147,7 +146,7 @@ const SHARED_HOOKS = [
  * it visible. It is not a `ParitySnapshot` field, so it cannot be declared through `differences`;
  * each engine is pinned at its current tail instead, and these pins go stale when COR-1390 lands.
  */
-const FINAL_HOOKS: Record<(typeof ENGINES)[number], string[]> = {
+const FINAL_HOOKS: Record<ParityEngine, string[]> = {
   plain: [
     'out-a:processOutputStream:finish',
     'out-b:processOutputStream:finish',
@@ -183,10 +182,10 @@ const FINAL_HOOKS: Record<(typeof ENGINES)[number], string[]> = {
   ],
 };
 
-async function runT46() {
+async function runT46(target: ParityTarget) {
   const logs = new Map<string, Entry[]>();
 
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model: script,
     buildAgent: ({ engine, model }) => {
       const log: Entry[] = [];
@@ -222,19 +221,16 @@ async function runT46() {
   return { results, logs };
 }
 
-describe('T46 processor order parity', () => {
+describeParity('processor-order parity', target => {
   it('honours the declared processor order per hook, per step and per chunk on every engine', async () => {
-    const { results, logs } = await runT46();
+    const { results, logs } = await runT46(target);
 
     const contracts = new Map<string, Record<string, unknown>>();
 
-    for (const engine of ENGINES) {
-      const log = logs.get(engine);
-      expect(log, `${engine}: processor probe recorded no hooks`).toBeDefined();
-      const entries = log!;
+    for (const engine of ['plain', target] as const) {
+      const entries = logs.get(engine)!;
       const observation = results[engine]!;
       const snapshot = observation.turns[0];
-      expect(snapshot, `${engine}: no turn recorded`).toBeDefined();
 
       const by = (hook: Hook) => entries.filter(entry => entry.hook === hook);
       const order = (hook: Hook) => by(hook).map(entry => entry.processor);
@@ -303,8 +299,6 @@ describe('T46 processor order parity', () => {
       streamOrderHonoured: true,
     });
 
-    for (const engine of ['durable', 'evented'] as const) {
-      expect(contracts.get(engine), `${engine}: contract`).toEqual(contracts.get('plain'));
-    }
+    expect(contracts.get(target), `${target}: contract`).toEqual(contracts.get('plain'));
   });
 });

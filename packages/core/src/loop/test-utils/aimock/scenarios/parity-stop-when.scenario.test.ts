@@ -10,15 +10,13 @@
  *   array          two tool turns (first predicate never fires)
  *   throws         one tool turn, then the predicate rejects the stream
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { ModelScript, ParityEngine, ParitySnapshot, ParityStreamOptions } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
-
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
+import type { ModelScript, ParityEngine, ParitySnapshot, ParityStreamOptions, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape, toolCallTape, toolResultCount } from '../parity';
 
 /** `maxSteps` well above the script, so only `stopWhen` can end these runs. */
 const MAX_STEPS = 10;
@@ -60,16 +58,6 @@ const script: ModelScript = {
       : textOnlyTape(`finished ${done} steps`);
   },
 };
-
-/** Counts the tool results a request's prompt already carries, like the harness script. */
-function toolResultCount(request: { prompt: Array<{ role: string; content: unknown }> }): number {
-  let count = 0;
-  for (const message of request.prompt) {
-    if (message.role !== 'tool' || !Array.isArray(message.content)) continue;
-    count += message.content.filter((part: { type?: string }) => part?.type === 'tool-result').length;
-  }
-  return count;
-}
 
 /**
  * Builds the variant's `stopWhen` plus a recorder for every predicate call, so the test can prove
@@ -116,12 +104,12 @@ function createStepTool(onCommit: () => void) {
   });
 }
 
-/** Runs one T23 variant across the three engines, recording commits and predicate calls per engine. */
-async function runT23(variant: Variant) {
+/** Runs one T23 variant on plain and the parity target, recording commits and predicate calls per engine. */
+async function runT23(target: ParityTarget, variant: Variant) {
   const commits = new Map<ParityEngine, number>();
   const calls = new Map<ParityEngine, Array<{ name: string; steps: number }>>();
 
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model: script,
     buildAgent: ({ engine, model }) => {
       commits.set(engine, 0);
@@ -150,11 +138,13 @@ async function runT23(variant: Variant) {
   return { results, commits, calls };
 }
 
-describe('T23 stopWhen (plain, durable, evented)', () => {
+describeParity('stop-when parity', target => {
+  const ENGINES = ['plain', target] as const;
+
   it.each<Variant>(['predicate', 'has-tool-call', 'array'])(
     '%s ends the run on the same step on every engine',
     async variant => {
-      const { results, commits, calls } = await runT23(variant);
+      const { results, commits, calls } = await runT23(target, variant);
       const expected = EXPECTED_TURNS[variant]!;
 
       for (const engine of ENGINES) {
@@ -185,7 +175,7 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
   );
 
   it('a throwing stopWhen rejects the stream identically on every engine', async () => {
-    const { results, commits, calls } = await runT23('throws');
+    const { results, commits, calls } = await runT23(target, 'throws');
 
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
@@ -203,8 +193,11 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
     }
 
     expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
-    expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
-    // COR-1466: evented retries a throwing loop condition up to its delivery-attempt limit.
-    expect(calls.get('evented')!.length, 'evented: the predicate was consulted three times').toBe(3);
+    if (target === 'durable') {
+      expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
+    } else {
+      // COR-1466: evented retries a throwing loop condition up to its delivery-attempt limit.
+      expect(calls.get('evented')!.length, 'evented: the predicate was consulted three times').toBe(3);
+    }
   });
 });

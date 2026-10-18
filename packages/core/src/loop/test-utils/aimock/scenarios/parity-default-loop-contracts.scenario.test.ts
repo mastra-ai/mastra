@@ -7,12 +7,12 @@
  * `toModelOutput` throws must still leave the run settled.
  *
  * Only the cross-engine part of the harness case is ported. The harness's plain
- * cell also compares the reference build against the candidate build; here the
- * helper runs the same scenario against plain, durable and evented, so the
- * variants below assert the contract across those three engines.
+ * cell also compares the reference build against the candidate build; here parity
+ * mode runs the same scenario against plain and the target engine (durable or
+ * evented), so the variants below assert the contract across those engines.
  *
  * `iter-stop` and `iter-feedback` are ordinary runs, so they go through
- * `expectEngineParity`, which compares the whole snapshot on every engine.
+ * `expectParity` (parity mode), which compares the whole snapshot on every engine.
  * `iter-throws` and `mapper-throws` promise no outcome beyond "the run settles
  * one way or another"; because a thrown hook rejects the run on plain — which
  * the helper reports as a scenario failure with no per-engine results — those
@@ -29,21 +29,22 @@
  * the observation the helper returns. The two throwing legs are the only ones
  * driven directly: a rejected run leaves the helper nothing to record.
  */
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { IterationCompleteContext, IterationCompleteResult } from '../../agent.types';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
+import { Agent } from '../../../../agent';
+import type { IterationCompleteContext, IterationCompleteResult } from '../../../../agent/agent.types';
+import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
+import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
+import { InMemoryStore } from '../../../../storage';
+import { createTool } from '../../../../tools';
 import {
   chunksOfType,
   createRecordingModel,
-  expectEngineParity,
+  describeParity,
+  expectParity,
   textOnlyTape,
   toolCallTape,
   type CapturedRequest,
@@ -51,9 +52,9 @@ import {
   type ParityEngine,
   type ParitySnapshot,
   type ParityStreamOptions,
-} from './parity-harness';
+  type ParityTarget,
+} from '../parity';
 
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const FEEDBACK = 'Now say MORE.';
 const MAX_STEPS = 5;
 
@@ -154,16 +155,15 @@ function stepFinishStepResults(turn: ParitySnapshot): Array<{ isContinued?: unkn
     .map(payload => (payload?.stepResult ?? {}) as { isContinued?: unknown; reason?: unknown });
 }
 
-async function runOrdinaryVariant(variant: OrdinaryVariant) {
+async function runOrdinaryVariant(target: ParityTarget, variant: OrdinaryVariant) {
   const commits = new Map<ParityEngine, number>();
   const hookCalls = new Map<ParityEngine, HookCall[]>();
-  for (const engine of ENGINES) {
+  for (const engine of ['plain', target] as const) {
     commits.set(engine, 0);
     hookCalls.set(engine, []);
   }
 
-  const results = await expectEngineParity({
-    engines: ENGINES,
+  const results = await expectParity(target, {
     model: variant === 'iter-feedback' ? feedbackScript() : stepScript(3),
     buildAgent: ({ engine, model }) => {
       const onCommit = () => commits.set(engine, commits.get(engine)! + 1);
@@ -278,10 +278,10 @@ function expectTurnSettled(turn: ParitySnapshot) {
   expect(chunksOfType(turn, 'error')).toBe(0);
 }
 
-describe('T18 default loop contracts (plain, durable, evented)', () => {
+describeParity('default-loop-contracts parity', target => {
   it('iter-stop: continue:false stops after iteration 1 on every engine', async () => {
-    const { results, commits, hookCalls } = await runOrdinaryVariant('iter-stop');
-    for (const engine of ENGINES) {
+    const { results, commits, hookCalls } = await runOrdinaryVariant(target, 'iter-stop');
+    for (const engine of ['plain', target] as const) {
       const turn = results[engine]!.turns.at(-1)!;
       expectTurnSettled(turn);
       // Harness check: 'continue:false stops after iteration 1' (`commits === 1 && modelCalls === 1`).
@@ -305,8 +305,8 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
   });
 
   it('iter-feedback: feedback triggers one more iteration that sees it on every engine', async () => {
-    const { results, hookCalls } = await runOrdinaryVariant('iter-feedback');
-    for (const engine of ENGINES) {
+    const { results, hookCalls } = await runOrdinaryVariant(target, 'iter-feedback');
+    for (const engine of ['plain', target] as const) {
       const turn = results[engine]!.turns.at(-1)!;
       expectTurnSettled(turn);
       expect(results[engine]!.requests).toHaveLength(2);
@@ -350,20 +350,16 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
   it('iter-throws: a throwing onIterationComplete settles the run one way or another on every engine', async () => {
     const plain = await runThrowingVariantOnEngine('iter-throws', 'plain');
     expect(plain.finish === 1 || plain.errors.length > 0 || plain.threw !== null).toBe(true);
-    for (const engine of [...ENGINES].filter(e => e !== 'plain')) {
-      const other = await runThrowingVariantOnEngine('iter-throws', engine);
-      expect(other.finish === 1 || other.errors.length > 0 || other.threw !== null).toBe(true);
-      expect(other).toEqual(plain);
-    }
+    const other = await runThrowingVariantOnEngine('iter-throws', target);
+    expect(other.finish === 1 || other.errors.length > 0 || other.threw !== null).toBe(true);
+    expect(other).toEqual(plain);
   });
 
   it('mapper-throws: a throwing toModelOutput settles the run one way or another on every engine', async () => {
     const plain = await runThrowingVariantOnEngine('mapper-throws', 'plain');
     expect(plain.finish === 1 || plain.errors.length > 0 || plain.threw !== null).toBe(true);
-    for (const engine of [...ENGINES].filter(e => e !== 'plain')) {
-      const other = await runThrowingVariantOnEngine('mapper-throws', engine);
-      expect(other.finish === 1 || other.errors.length > 0 || other.threw !== null).toBe(true);
-      expect(other).toEqual(plain);
-    }
+    const other = await runThrowingVariantOnEngine('mapper-throws', target);
+    expect(other.finish === 1 || other.errors.length > 0 || other.threw !== null).toBe(true);
+    expect(other).toEqual(plain);
   });
 });

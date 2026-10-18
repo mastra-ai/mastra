@@ -3,7 +3,7 @@
  *
  * Model-free: the script model answers a fixed string and the case records what the structured
  * output pipeline did with it. All five variants are ported: `warn`, `fallback`, `json-schema` and
- * `nested` run through the parity helper; `strict` is checked per engine (see below).
+ * `nested` run through parity mode; `strict` is checked per engine (see below).
  *
  * Ported variants:
  *
@@ -22,7 +22,7 @@
  * error alone", COR-1390) stops reproducing for this scenario: the failure here is a structured-output
  * validation failure, so no engine carries a `type` key on the error payload and every engine forwards
  * the serialised error. `checkEngine` runs the stale check before any scenario declaration
- * (`parity-harness.ts:1322`, `staleKnownDifferences` returning early), so no per-scenario `differences`
+ * (`parity.ts`, `staleKnownDifferences` returning early), so no per-scenario `differences`
  * can rescue it — COR-1429 covers letting a scenario run past a built-in difference that does not
  * apply. The helper stays frozen on this branch; the case is checked per engine instead, and the gap is
  * reported.
@@ -41,15 +41,14 @@
  */
 
 import type { JSONSchema7 } from 'json-schema';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { Agent } from '../../agent';
-import type { PublicStructuredOutputOptions } from '../../types';
-import type { EngineDifference, EngineTurnOptions, ParityEngine, ParitySnapshot } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape } from './parity-harness';
+import { Agent } from '../../../../agent';
+import type { PublicStructuredOutputOptions } from '../../../../agent/types';
+import { MockMemory } from '../../../../memory/mock';
+import type { EngineDifference, EngineTurnOptions, ParityEngine, ParitySnapshot, ParityTarget } from '../parity';
+import { chunksOfType, describeParity, expectParity, textOnlyTape } from '../parity';
 
-const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const THREAD = 't47-thread';
 const RESOURCE = 't47-resource';
 const MAX_STEPS = 2;
@@ -166,7 +165,7 @@ function requestFormat(responseFormat: unknown): { rfType: string | null; schema
   };
 }
 
-async function runT47(variant: Variant) {
+async function runT47(target: ParityTarget, variant: Variant) {
   const memories = new Map<ParityEngine, MockMemory>();
 
   const options: EngineTurnOptions & { structuredOutput?: PublicStructuredOutputOptions<any> } = {
@@ -176,7 +175,7 @@ async function runT47(variant: Variant) {
     structuredOutput: STRUCTURED[variant],
   };
 
-  const results = await expectEngineParity({
+  const results = await expectParity(target, {
     model: { tapes: [textOnlyTape(ANSWER[variant])] },
     buildAgent: ({ engine, model }) => {
       const memory = new MockMemory();
@@ -288,8 +287,8 @@ const STRICT_ORDER: EngineDifference = {
   expect: plain => ({ ...plain, turns: plain.turns.map(moveErrorLast) }),
 };
 
-async function runStrict() {
-  return expectEngineParity({
+async function runStrict(target: ParityTarget) {
+  return expectParity(target, {
     model: { tapes: [textOnlyTape(BAD)] },
     buildAgent: ({ model }) =>
       new Agent({
@@ -310,13 +309,13 @@ async function runStrict() {
   });
 }
 
-describe('T47 structured output errors (plain, durable, evented)', () => {
+describeParity('structured-output parity', target => {
   for (const variant of VARIANTS) {
     it(`${variant} handles the answer on every engine`, async () => {
-      const { results, memories } = await runT47(variant);
+      const { results, memories } = await runT47(target, variant);
       const contracts = new Map<ParityEngine, Record<string, unknown>>();
 
-      for (const engine of ENGINES) {
+      for (const engine of ['plain', target] as const) {
         const observation = results[engine]!;
         const turn = observation.turns[0];
         if (!turn) throw new Error(`T47 ${variant}: ${engine} produced no turn`);
@@ -359,19 +358,17 @@ describe('T47 structured output errors (plain, durable, evented)', () => {
       }
 
       expect(contracts.get('plain'), 'plain contract').toEqual(PLAIN_CONTRACTS[variant]);
-      for (const engine of ENGINES.slice(1)) {
-        expect(contracts.get(engine), `${engine} contract`).toEqual(contracts.get('plain'));
-      }
+      expect(contracts.get(target), `${target} contract`).toEqual(contracts.get('plain'));
     });
   }
 
   it('strict surfaces the validation failure on every engine without throwing', async () => {
-    const results = await runStrict();
+    const results = await runStrict(target);
     const plain = results.plain!.turns[0]!;
     const plainErrorIndex = plain.chunkTypes.indexOf('error');
     const plainError = plain.chunkPayloads[plainErrorIndex];
 
-    for (const engine of ENGINES) {
+    for (const engine of ['plain', target] as const) {
       const observation = results[engine]!;
       const turn = observation.turns[0]!;
       const errorIndex = turn.chunkTypes.indexOf('error');
