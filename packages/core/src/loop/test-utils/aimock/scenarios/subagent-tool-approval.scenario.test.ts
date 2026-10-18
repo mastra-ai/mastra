@@ -109,6 +109,7 @@ describeForAllEngines(
         return Object.values(pending.content.metadata.pendingToolApprovals)[0] as {
           runId: string;
           toolCallId: string;
+          delegatedRunId?: string;
         };
       });
 
@@ -141,8 +142,11 @@ describeForAllEngines(
       const { chunks, types, text } = await drain(resumed.fullStream);
       const label = `resumed chunks: ${types.join(', ')}`;
 
+      expect(entry.delegatedRunId, 'pending approval belongs to the subagent run').toBeDefined();
       expect(executions.count).toBe(0);
       expect(types, label).not.toContain('error');
+      expect(types, label).not.toContain('tool-error');
+      expect(types, label).not.toContain('tool-call-approval');
       // Not denied locally on the supervisor's delegation call.
       expect(
         chunks.filter(c => c.type === 'tool-output-denied' && (c.payload as any).toolName === 'agent-subAgent'),
@@ -189,8 +193,11 @@ describeForAllEngines(
       } as any)) as unknown as RunHandle;
       const { chunks, types } = await drain(resumed.fullStream);
 
+      const label = `resumed chunks: ${types.join(', ')}`;
+      expect(entry.delegatedRunId).toBeUndefined();
       const denied = chunks.find(c => c.type === 'tool-output-denied');
-      expect((denied?.payload as any)?.toolName, `resumed chunks: ${types.join(', ')}`).toBe('agent-subAgent');
+      expect((denied?.payload as any)?.toolName, label).toBe('agent-subAgent');
+      expect((denied?.payload as any)?.approval, label).toMatchObject({ approved: false, reason: DECLINE_REASON });
       expect(subagentRequests(mock)).toHaveLength(0);
       expect(executions.count).toBe(0);
     });
