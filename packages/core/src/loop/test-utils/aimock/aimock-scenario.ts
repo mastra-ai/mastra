@@ -108,6 +108,7 @@ export async function createSharedAgent(
     | 'backgroundTasks'
     | 'model'
     | 'errorProcessors'
+    | 'hooks'
     | 'defaultOptions'
     | 'pubsub'
     | 'engine'
@@ -142,6 +143,7 @@ async function buildScenarioAgent({
   startWorkers,
   model,
   errorProcessors,
+  hooks,
   defaultOptions,
   pubsub,
   engine,
@@ -165,6 +167,7 @@ async function buildScenarioAgent({
   | 'startWorkers'
   | 'model'
   | 'errorProcessors'
+  | 'hooks'
   | 'defaultOptions'
   | 'pubsub'
   | 'engine'
@@ -214,6 +217,7 @@ async function buildScenarioAgent({
         ...(agentBackgroundTasks ? { backgroundTasks: agentBackgroundTasks } : {}),
         ...(goal ? { goal } : {}),
         ...(errorProcessors ? { errorProcessors } : {}),
+        ...(hooks ? { hooks } : {}),
         ...(defaultOptions ? { defaultOptions } : {}),
         ...(maxRetries === undefined ? {} : { maxRetries }),
         ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
@@ -236,6 +240,7 @@ async function buildScenarioAgent({
       ...(agentBackgroundTasks ? { backgroundTasks: agentBackgroundTasks } : {}),
       ...(goal ? { goal } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
+      ...(hooks ? { hooks } : {}),
       ...(defaultOptions ? { defaultOptions } : {}),
       ...(maxRetries === undefined ? {} : { maxRetries }),
       // For durable engines, inputProcessors must be on the agent constructor
@@ -349,6 +354,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     onFinish,
     savePerStep,
     actor,
+    hooks,
+    toolHooks,
     defaultOptions,
     sharedAgent,
     pubsub,
@@ -404,6 +411,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       startWorkers,
       model,
       errorProcessors,
+      hooks,
       defaultOptions,
       pubsub,
       engine,
@@ -468,6 +476,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(toolsets ? { toolsets } : {}),
     ...(clientTools ? { clientTools } : {}),
     ...(toolChoice ? { toolChoice } : {}),
+    ...(toolHooks ? { hooks: toolHooks } : {}),
     ...memoryOption,
   };
 

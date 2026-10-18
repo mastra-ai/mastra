@@ -1672,6 +1672,79 @@ describe('requireApproval property preservation', () => {
     expect(output).toEqual({ value: 'blocked' });
     expect(execute).not.toHaveBeenCalled();
   });
+
+  describe('getToolsForExecution hooks', () => {
+    const mockModel = () =>
+      new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      });
+
+    it('lets per-execution hooks override agent hooks', async () => {
+      const execute = vi.fn(async () => ({ value: 'executed' }));
+      const agentHook = vi.fn();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test agent for hooks',
+        model: mockModel(),
+        tools: {
+          testTool: createTool({
+            id: 'test-tool',
+            description: 'Test tool',
+            inputSchema: z.object({ value: z.string() }),
+            execute,
+          }),
+        },
+        hooks: { beforeToolCall: agentHook },
+      });
+
+      const tools = await agent.getToolsForExecution({
+        hooks: {
+          beforeToolCall: () => ({ proceed: false, output: { value: 'blocked' } }),
+        },
+      });
+      const output = await tools.testTool!.execute?.({ value: 'ok' }, {} as any);
+
+      expect(output).toEqual({ value: 'blocked' });
+      expect(agentHook).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('applies defaultOptions.hooks', async () => {
+      const execute = vi.fn(async () => ({ value: 'executed' }));
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test agent for hooks',
+        model: mockModel(),
+        tools: {
+          testTool: createTool({
+            id: 'test-tool',
+            description: 'Test tool',
+            inputSchema: z.object({ value: z.string() }),
+            execute,
+          }),
+        },
+        defaultOptions: {
+          hooks: {
+            beforeToolCall: () => ({ proceed: false, output: { value: 'default-blocked' } }),
+          },
+        },
+      });
+
+      const tools = await agent.getToolsForExecution({});
+      const output = await tools.testTool!.execute?.({ value: 'ok' }, {} as any);
+
+      expect(output).toEqual({ value: 'default-blocked' });
+      expect(execute).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('sub-agent prompt input normalization (GitHub #14154)', () => {

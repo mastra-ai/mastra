@@ -113,4 +113,51 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     const text = await output.text;
     expect(text).toContain('finished');
   });
+  it('lets per-execution beforeToolCall override the agent hook and short-circuit execute', async () => {
+    const events: string[] = [];
+
+    const guardedTool = createTool({
+      id: 'guarded_tool',
+      description: 'A tool guarded by beforeToolCall hooks.',
+      inputSchema: z.object({ query: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+      execute: async () => {
+        events.push('execute');
+        return { answer: 'real' };
+      },
+    });
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Call the guarded tool.',
+      tools: { guarded_tool: guardedTool },
+      hooks: {
+        beforeToolCall: () => {
+          events.push('agent-hook');
+        },
+      },
+      toolHooks: {
+        beforeToolCall: () => {
+          events.push('run-hook');
+          return { proceed: false, output: { answer: 'mocked' } };
+        },
+      },
+      stopWhen: stepCountIs(5),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { query: 'hi' } }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_guarded', hasToolResult: true }, { content: 'Got mocked.' });
+      },
+    });
+
+    expect(await output.text).toContain('mocked');
+    expect(requests).toHaveLength(2);
+    // The run-level hook replaces the agent-level hook and skips execute.
+    expect(events).toEqual(['run-hook']);
+    // The short-circuited output is what the model sees as the tool result.
+    expect(JSON.stringify(requests[1])).toContain('mocked');
+  });
 });
