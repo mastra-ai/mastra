@@ -145,12 +145,7 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
     expect(errorParts(messages)).toEqual([]);
   });
 
-  // In-process loop (normal/fs) only materializes streamed text on text-end, and the
-  // terminal-error branch does not flush pending deltas, so a reply cut mid-stream loses
-  // its partial text. Durable/evented materialize first. Deterministic; tracked in #27427.
-  const itFailsOnInProcessLoop = engine === 'normal' || engine === 'fs' ? it.fails : it;
-
-  itFailsOnInProcessLoop('a reply dropped mid-stream keeps the partial text next to the error', async () => {
+  it('a reply dropped mid-stream keeps the partial text next to the error', async () => {
     const memory = new MockMemory();
     const threadId = `dropped-mid-reply-${engine}`;
     const resourceId = 'customer-dropped';

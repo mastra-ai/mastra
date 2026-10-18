@@ -997,8 +997,10 @@ export class SessionThread {
 
   /**
    * Detach this host from the current thread without changing durable run state.
-   * Pending suspension prompts are removed from the host projection and can be
-   * rebuilt when a session binds the thread again.
+   * Pending suspension and approval prompts are removed from the host projection
+   * and can be rebuilt when a session binds the thread again. A parked tool
+   * approval is not declined: its run stays suspended and can still be answered,
+   * for example with `respondToPersistedToolApproval`.
    */
   detachFromCurrent(): void {
     this.#owner.abort({ localOnly: true, keepParked: true });
@@ -1967,6 +1969,13 @@ export interface ApprovalDecision {
 }
 
 /**
+ * How a parked approval gate was released: a user (or abort) decision, or
+ * `detached` when the host let go of the thread without deciding, leaving the
+ * run parked in storage.
+ */
+type ApprovalGateResolution = ApprovalDecision | { decision: 'detached' };
+
+/**
  * Whether a tool approval/suspension response was claimed by a pending target.
  * `accepted: true` only means the command was taken, not that the resumed tool
  * later succeeded.
@@ -1993,8 +2002,8 @@ interface ApprovalGate {
   threadId?: string;
   /** Run that produced the gated call, when the producer knew it. */
   runId?: string;
-  promise: Promise<ApprovalDecision>;
-  resolve: (decision: ApprovalDecision) => void;
+  promise: Promise<ApprovalGateResolution>;
+  resolve: (resolution: ApprovalGateResolution) => void;
 }
 
 /**
@@ -2049,14 +2058,14 @@ export class SessionApproval {
     toolCallId: string;
     threadId?: string;
     runId?: string;
-  }): Promise<ApprovalDecision> {
+  }): Promise<ApprovalGateResolution> {
     const existing = [...this.#gates].find(
       gate => gate.toolCallId === toolCallId && gate.threadId === threadId && gate.runId === runId,
     );
     if (existing) return existing.promise;
 
-    let resolve!: (decision: ApprovalDecision) => void;
-    const promise = new Promise<ApprovalDecision>(r => {
+    let resolve!: (resolution: ApprovalGateResolution) => void;
+    const promise = new Promise<ApprovalGateResolution>(r => {
       resolve = r;
     });
     this.#gates.add({ toolCallId, toolName, threadId, runId, promise, resolve });
@@ -2132,6 +2141,22 @@ export class SessionApproval {
     for (const gate of gates) {
       this.#gates.delete(gate);
       gate.resolve({ decision: 'decline', declineContext: options.declineContext });
+    }
+    return gates.map(gate => gate.toolCallId);
+  }
+
+  /**
+   * Release parked gate(s) without a decision, for a host detaching from the
+   * thread. Each waiter resolves as `detached`, so the gated call is neither
+   * run nor declined: the run stays parked in storage and can be answered after
+   * a session binds the thread again. `filter` narrows the release exactly as
+   * for {@link cancel}. Returns the ids that were released.
+   */
+  detach(filter: ApprovalGateFilter = {}): string[] {
+    const gates = this.#matching(filter);
+    for (const gate of gates) {
+      this.#gates.delete(gate);
+      gate.resolve({ decision: 'detached' });
     }
     return gates.map(gate => gate.toolCallId);
   }
@@ -4542,7 +4567,12 @@ export class Session<TState = unknown> {
     // defer the abort for that other thread's gate.
     const abortThreadId = this.thread.getId() ?? undefined;
     const wasGated = this.approval.isArmed({ threadId: abortThreadId });
-    if (wasGated) {
+    // Detaching keeps a parked approval answerable: release this host's gates
+    // without a decision and leave the run parked in storage, like any other
+    // parked suspension below.
+    if (wasGated && options.keepParked) {
+      this.displayState.clearPendingApprovals(this.approval.detach({ threadId: abortThreadId }));
+    } else if (wasGated) {
       const gatedRunId = this.run.getRunId();
       this.run.requestAbort({ deferSignal: true });
       // The engine completes this teardown after its decline await; a rebind can
@@ -5796,16 +5826,19 @@ export class Session<TState = unknown> {
    * agent. `abortSignal` pins the run's own signal, because a successor run
    * replaces the session's abort controller.
    */
-  async approveToolCall(input: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-    runId?: string;
-    threadId?: string;
-    resourceId?: string;
-    agent?: Agent;
-    abortSignal?: AbortSignal;
-  }): Promise<void> {
-    await this.#approveToolCall(input);
+  async approveToolCall(
+    input: {
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    },
+    onDispatch?: () => void,
+  ): Promise<void> {
+    await this.#approveToolCall(input, onDispatch);
   }
 
   /**
@@ -5887,17 +5920,20 @@ export class Session<TState = unknown> {
    * run that parked them, so a thread switch mid-run cannot redirect the
    * decline to another thread.
    */
-  async declineToolCall(input: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-    declineContext?: { reason?: string; message?: string };
-    runId?: string;
-    threadId?: string;
-    resourceId?: string;
-    agent?: Agent;
-    abortSignal?: AbortSignal;
-  }): Promise<void> {
-    await this.#declineToolCall(input);
+  async declineToolCall(
+    input: {
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      declineContext?: { reason?: string; message?: string };
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    },
+    onDispatch?: () => void,
+  ): Promise<void> {
+    await this.#declineToolCall(input, onDispatch);
   }
 
   async #declineToolCall(
@@ -6049,7 +6085,7 @@ export class Session<TState = unknown> {
             ownedCalls.add(next.toolCallId);
             runScope?.set(SOURCE_APPROVAL_CALLS_KEY, ownedCalls);
             const policy = this.resolveToolApproval(chunk.payload.toolName, address.threadId);
-            const decision: Promise<ApprovalDecision> =
+            const decision: Promise<ApprovalGateResolution> =
               policy === 'ask'
                 ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
                 : Promise.resolve({ decision: policy === 'allow' ? ('approve' as const) : ('decline' as const) });
@@ -6071,7 +6107,7 @@ export class Session<TState = unknown> {
               let pendingDecision = decision;
               while (!approvalDisposed) {
                 const approval = await pendingDecision;
-                if (approvalDisposed) return;
+                if (approvalDisposed || approval.decision === 'detached') return;
                 let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
                 let accepted = false;
                 let dispatchAttempted = false;

@@ -189,13 +189,15 @@ function streamParts(step: ScriptStep, offset: number): LanguageModelV2StreamPar
   }
   return [
     { type: 'stream-start' as const, warnings: [] },
-    ...step.tools.map((tool, index): LanguageModelV2StreamPart => ({
-      type: 'tool-call',
-      toolCallId: `call-${offset + index + 1}`,
-      toolName: tool.name,
-      input: JSON.stringify(tool.args ?? {}),
-      providerExecuted: false,
-    })),
+    ...step.tools.map(
+      (tool, index): LanguageModelV2StreamPart => ({
+        type: 'tool-call',
+        toolCallId: `call-${offset + index + 1}`,
+        toolName: tool.name,
+        input: JSON.stringify(tool.args ?? {}),
+        providerExecuted: false,
+      }),
+    ),
     { type: 'finish' as const, finishReason: 'tool-calls' as const, usage: T16_USAGE },
   ];
 }
