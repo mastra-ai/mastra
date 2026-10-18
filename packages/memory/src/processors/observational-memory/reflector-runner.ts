@@ -268,7 +268,7 @@ export class ReflectorRunner {
    */
   private readonly syncReflectionSuppression = new Map<string, number>();
 
-  private readonly trackBackgroundWork?: (work: Promise<unknown>) => void;
+  private readonly trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
@@ -296,7 +296,7 @@ export class ReflectorRunner {
     onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
     hooks?: ObserveTransformHooks;
     /** Registers background work so `settled()` can join it. */
-    trackBackgroundWork?: (work: Promise<unknown>) => void;
+    trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -796,7 +796,7 @@ export class ReflectorRunner {
     })();
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
-    this.trackBackgroundWork?.(asyncOp);
+    this.trackBackgroundWork?.(asyncOp, lockKey);
   }
 
   /**

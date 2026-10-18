@@ -507,39 +507,53 @@ export class ObservationalMemory {
    * Tracked so callers can join them via `settled()` before closing a storage
    * connection they own — otherwise a background cycle's tail statements race the close.
    */
-  private pendingBackgroundWork = new Set<Promise<unknown>>();
+  private pendingBackgroundWork = new Map<Promise<unknown>, string>();
 
   /**
    * Register fire-and-forget background work so `settled()` can join it.
+   * `scope` is the conversation the work belongs to (thread/resource ids, or a lock key from
+   * `buffering.getLockKey`),
+   * so a scoped `settled()` can wait for one conversation without waiting for every other.
    * Returns the original promise so callers keep their own rejection handling.
    */
-  trackBackgroundWork<T>(work: Promise<T>): Promise<T> {
+  trackBackgroundWork<T>(
+    work: Promise<T>,
+    scope: string | { threadId?: string | null; resourceId?: string | null },
+  ): Promise<T> {
+    const lockKey = typeof scope === 'string' ? scope : this.buffering.getLockKey(scope.threadId, scope.resourceId);
     const tracked: Promise<unknown> = work
       .catch(() => {})
       .finally(() => {
         this.pendingBackgroundWork.delete(tracked);
       });
-    this.pendingBackgroundWork.add(tracked);
+    this.pendingBackgroundWork.set(tracked, lockKey);
     return work;
   }
 
   /**
-   * Resolve once all background observational-memory work started so far has finished.
+   * Resolve once background observational-memory work started so far has finished.
+   *
+   * Pass `threadId`/`resourceId` to wait only for that conversation's work. An engine shared by
+   * many busy threads may never be fully idle, so an unscoped wait can last indefinitely there.
    *
    * Background cycles enqueue further background work (a buffered observation can
    * trigger a reflection, which runs nested agent streams), so this drains repeatedly
    * until nothing is left rather than joining a single snapshot.
    */
-  async settled(): Promise<void> {
+  async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
+    const lockKey = scope ? this.buffering.getLockKey(scope.threadId, scope.resourceId) : undefined;
+    const pending = () =>
+      [...this.pendingBackgroundWork].filter(([, key]) => lockKey === undefined || key === lockKey).map(([w]) => w);
     // Bounded so a pathologically self-retriggering cycle degrades to a warning
     // instead of hanging the caller's teardown.
     const maxDrainRounds = 100;
     for (let round = 0; round < maxDrainRounds; round++) {
-      if (this.pendingBackgroundWork.size === 0) return;
-      await Promise.allSettled([...this.pendingBackgroundWork]);
+      const work = pending();
+      if (work.length === 0) return;
+      await Promise.allSettled(work);
     }
     // Work that finished on the final round has drained; only warn if any is genuinely left.
-    if (this.pendingBackgroundWork.size === 0) return;
+    if (pending().length === 0) return;
     omError(`[OM:settled] background work still pending after ${maxDrainRounds} drain rounds; giving up waiting`);
   }
 
@@ -857,7 +871,7 @@ export class ObservationalMemory {
       memory: this.memory,
       onReflectionCommitted: config.onReflectionCommitted,
       hooks: this.hooks,
-      trackBackgroundWork: work => this.trackBackgroundWork(work),
+      trackBackgroundWork: (work, lockKey) => this.trackBackgroundWork(work, lockKey),
     });
 
     // Validate buffer configuration
@@ -1021,8 +1035,7 @@ export class ObservationalMemory {
     const resolved = {
       ...tiered,
       model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
-        | ResolvedInvocationModel
-        | 'auto',
+        ResolvedInvocationModel | 'auto',
     };
     if (resolved.model !== 'auto') {
       return resolved as InvocationModelResolution<ResolvedInvocationModel>;
@@ -2122,8 +2135,7 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      | { thread?: { id: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id: string }; resourceId?: string } | undefined;
 
     if (memoryContext?.thread?.id) {
       return {
@@ -2714,6 +2726,7 @@ ${formattedMessages}
           opts.requestContext,
           opts.observabilityContext,
         ),
+        lockKey,
       );
     }
 

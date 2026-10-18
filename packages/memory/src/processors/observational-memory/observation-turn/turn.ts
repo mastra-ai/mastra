@@ -258,6 +258,7 @@ export class ObservationTurn {
             .catch((err: Error) => {
               omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
             }),
+          { threadId: this.threadId, resourceId: this.resourceId },
         );
       }
     }
