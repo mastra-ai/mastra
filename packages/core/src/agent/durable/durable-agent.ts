@@ -116,7 +116,33 @@ const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
 /** Stores already reported as unable to fence run writes, so each is warned about once per process. */
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
 
-/** Why `recover()` refused a run that is not orphaned, or `undefined` for a real failure. */
+const TRANSIENT_RECOVERY_RETRY_DELAY_MS = 30_000;
+const TRANSIENT_RECOVERY_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ESOCKETTIMEDOUT',
+  'LOADING',
+]);
+
+function isTransientRecoveryError(error: unknown): boolean {
+  const seen = new Set<object>();
+  let transient = false;
+  while (typeof error === 'object' && error !== null && !seen.has(error)) {
+    seen.add(error);
+    if ('name' in error && error.name === 'AbortError') return false;
+    if ('code' in error && typeof error.code === 'string' && TRANSIENT_RECOVERY_ERROR_CODES.has(error.code)) {
+      transient = true;
+    }
+    if ('message' in error && typeof error.message === 'string' && /^LOADING(?:\s|$)/.test(error.message)) {
+      transient = true;
+    }
+    error = 'cause' in error ? error.cause : undefined;
+  }
+  return transient;
+}
+
+/** Why `recover()` should be deferred, or `undefined` for a permanent failure. */
 function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' | 'retryAt'> | undefined {
   const { id, details } = (error ?? {}) as { id?: unknown; details?: { retryAt?: unknown } };
   switch (id) {
@@ -129,7 +155,9 @@ function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' |
     case RECOVER_ALREADY_IN_PROGRESS_ERROR_ID:
       return { reason: 'already-in-progress' };
     default:
-      return undefined;
+      return isTransientRecoveryError(error)
+        ? { reason: 'transient-error', retryAt: Date.now() + TRANSIENT_RECOVERY_RETRY_DELAY_MS }
+        : undefined;
   }
 }
 
@@ -629,7 +657,7 @@ export interface DurableAgentListActiveRunsResult {
  * {@link DurableAgent.recoverActiveRuns}. `success` means `run.restart()`
  * returned; `failed` means it threw and the error was captured so recovery
  * of remaining runs could proceed; `skipped` means the run was not orphaned,
- * its recovery wait timed out, or recovery was interrupted by shutdown.
+ * recovery hit a transient error, its recovery wait timed out, or recovery was interrupted by shutdown.
  */
 export interface DurableAgentRecoveredRun {
   runId: string;
@@ -642,10 +670,11 @@ export interface DurableAgentRecoveredRun {
    *   Check again at `retryAt`.
    * - `run-active-locally`: this process is executing the run.
    * - `already-in-progress`: this process is already recovering the run.
+   * - `transient-error`: recovery hit a transient infrastructure error. Check again at `retryAt`.
    * - `recovery-timeout`: the 30-second wait expired; the attempt continues without an automatic retry.
    */
-  reason?: 'run-active' | 'run-active-locally' | 'already-in-progress' | 'recovery-timeout';
-  /** Epoch ms after which the live execution's claim lapses unless it is renewed. Set for `run-active`. */
+  reason?: 'run-active' | 'run-active-locally' | 'already-in-progress' | 'transient-error' | 'recovery-timeout';
+  /** Epoch ms to check again: claim expiry for `run-active`, or a retry delay for `transient-error`. */
   retryAt?: number;
 }
 
@@ -4782,7 +4811,17 @@ export class DurableAgent<
             // The run finished or suspended between discovery and its recovery.
             if (errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID || errorId === RECOVER_RUN_SUSPENDED_ERROR_ID) return;
             const skipped = recoverySkip(error);
-            if (skipped) return { runId: targetRunId, status: 'skipped', ...skipped };
+            if (skipped) {
+              if (skipped.reason === 'transient-error') {
+                this.#mastra
+                  ?.getLogger()
+                  ?.warn(`[DurableAgent] Deferring recovery of run ${targetRunId} after a transient error`, {
+                    error,
+                    retryAt: skipped.retryAt,
+                  });
+              }
+              return { runId: targetRunId, status: 'skipped', ...skipped };
+            }
           }
           const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
           this.#mastra
