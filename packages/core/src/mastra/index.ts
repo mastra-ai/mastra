@@ -5593,6 +5593,8 @@ export class Mastra<
       tools[tool.id] = schemas;
     }
     const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
+    const refusedAnswerDescription =
+      "When the model refuses the question, the answer is { type: 'refusal' } with no choice, score, probability, or probabilities.";
     for (const [key, classifier] of Object.entries(this.listClassifiers() ?? {})) {
       const questions = classifier.questions
         ? Object.fromEntries(
@@ -5606,6 +5608,8 @@ export class Mastra<
             ]),
           )
         : undefined;
+      // A decision model may refuse any question. A refused answer is `{ type: 'refusal' }`
+      // with no payload fields, so only `type` is required.
       const answerProperties = questions
         ? Object.fromEntries(
             Object.entries(questions).map(([questionId, question]) => [
@@ -5614,7 +5618,7 @@ export class Mastra<
                 ? {
                     type: 'object',
                     properties: {
-                      type: { type: 'string', enum: ['choice'] },
+                      type: { type: 'string', enum: ['choice', 'refusal'] },
                       choice: { type: 'string', enum: question.choices },
                       probabilities: {
                         type: 'object',
@@ -5622,13 +5626,14 @@ export class Mastra<
                         additionalProperties: false,
                       },
                     },
-                    required: ['type', 'choice'],
+                    required: ['type'],
+                    description: refusedAnswerDescription,
                   }
                 : question.type === 'score'
                   ? {
                       type: 'object',
                       properties: {
-                        type: { type: 'string', enum: ['score'] },
+                        type: { type: 'string', enum: ['score', 'refusal'] },
                         score: { type: 'number', minimum: question.min, maximum: question.max },
                         probabilities: {
                           type: 'object',
@@ -5641,15 +5646,17 @@ export class Mastra<
                           additionalProperties: false,
                         },
                       },
-                      required: ['type', 'score'],
+                      required: ['type'],
+                      description: refusedAnswerDescription,
                     }
                   : {
                       type: 'object',
                       properties: {
-                        type: { type: 'string', enum: ['boolean'] },
+                        type: { type: 'string', enum: ['boolean', 'refusal'] },
                         probability: { type: 'number', minimum: 0, maximum: 1 },
                       },
-                      required: ['type', 'probability'],
+                      required: ['type'],
+                      description: refusedAnswerDescription,
                     },
             ]),
           )

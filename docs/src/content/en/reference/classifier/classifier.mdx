@@ -232,7 +232,7 @@ These rules keep a question answerable from the state:
 - Ask for one judgment. A question that moves when either of two fields changes can't be routed on.
 - Keep criteria exclusive. `strong: 'A good fit'` and `partial: 'Maybe a fit'` leak probability between them.
 - Give a score enough levels to represent intermediate values.
-- Add an escape level when the list isn't closed. Three teams and no `other` forces every input into a team.
+- Add an escape level when the list isn't closed. Without an `other` level, the classifier must assign every input to one of the listed teams.
 - Put fields in `state`, not in `instructions`. One changed field then moves one answer.
 
 To check a question, change one field of the state and confirm one answer moves.
