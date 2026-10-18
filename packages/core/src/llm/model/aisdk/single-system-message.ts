@@ -14,13 +14,15 @@ function usesChatCompletions(provider: string): boolean {
 }
 
 /**
- * Sends Chat Completions requests with exactly one leading system message.
+ * Merges the leading system messages of a Chat Completions request into one.
  *
  * Whether a server accepts several system messages depends on the host's chat template, not the
  * model or provider: the same Qwen3.5 weights are accepted by some hosts and rejected with
  * `System message must be at the beginning` by others. One leading system message is valid
- * everywhere, so leading system messages are merged in order and any system message after
- * conversation content becomes a user message wrapped in `<system-reminder>`.
+ * everywhere.
+ *
+ * Prompts are left unchanged when any merged message other than the last carries
+ * `providerOptions` (e.g. a cache breakpoint), since merging would drop it.
  *
  * @see https://github.com/mastra-ai/mastra/issues/25435
  */
@@ -29,33 +31,16 @@ export function toSingleSystemMessage<T extends PromptMessage>(provider: string,
 
   let leading = 0;
   while (leading < prompt.length && prompt[leading]!.role === 'system') leading++;
-  const needsMerge = leading > 1;
-  const hasLateSystem = prompt.slice(leading).some(m => m.role === 'system');
-  if (!needsMerge && !hasLateSystem) return prompt;
+  if (leading < 2) return prompt;
 
-  const result: T[] = [];
-  if (needsMerge) {
-    const leadingMessages = prompt.slice(0, leading);
-    const content = leadingMessages
-      .map(m => m.content as string)
-      .filter(text => text.length > 0)
-      .join('\n\n');
-    // Keep the last cache breakpoint so it still covers the whole merged prefix.
-    const providerOptions = leadingMessages.findLast(m => m.providerOptions)?.providerOptions;
-    result.push({ role: 'system', content, ...(providerOptions ? { providerOptions } : {}) } as T);
-  } else if (leading === 1) {
-    result.push(prompt[0]!);
-  }
-  for (const message of prompt.slice(leading)) {
-    if (message.role !== 'system') {
-      result.push(message);
-      continue;
-    }
-    result.push({
-      role: 'user',
-      content: [{ type: 'text', text: `<system-reminder>${message.content as string}</system-reminder>` }],
-      ...(message.providerOptions ? { providerOptions: message.providerOptions } : {}),
-    } as T);
-  }
-  return result;
+  const leadingMessages = prompt.slice(0, leading);
+  if (leadingMessages.slice(0, -1).some(m => m.providerOptions)) return prompt;
+
+  const content = leadingMessages
+    .map(m => m.content as string)
+    .filter(text => text.length > 0)
+    .join('\n\n');
+  const { providerOptions } = leadingMessages[leading - 1]!;
+  const merged = { role: 'system', content, ...(providerOptions ? { providerOptions } : {}) } as T;
+  return [merged, ...prompt.slice(leading)];
 }

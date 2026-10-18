@@ -1,3 +1,4 @@
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod';
@@ -110,5 +111,64 @@ describeForAllEngines('AIMock loop scenario: input processor', engine => {
       expect(system).toContain('AGENT_RULE');
       expect(system).toContain('PROCESSOR_RULE');
     }
+  });
+
+  it('keeps separate system messages when an earlier one has its own providerOptions', async () => {
+    const llm = getMock();
+    const cacheBreakpoint = { openaiCompatible: { cacheControl: { type: 'ephemeral' } } };
+    const chatModel = createOpenAICompatible({
+      name: 'vllm',
+      apiKey: 'test',
+      baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+    }).chatModel(SCENARIO_MODEL_ID);
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm,
+      model: chatModel,
+      prompt: 'hi',
+      instructions: [
+        { role: 'system', content: 'AGENT_RULE: be helpful.', providerOptions: cacheBreakpoint },
+        { role: 'system', content: 'SECOND_RULE: be brief.' },
+      ],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      },
+    });
+
+    expect(requests).toHaveLength(1);
+    const messages = (requests[0]!.body?.messages ?? []) as Array<{ role: string }>;
+    expect(messages.filter(m => m.role === 'system')).toHaveLength(2);
+  });
+
+  it('leaves Anthropic system blocks separate', async () => {
+    const llm = getMock();
+    // aimock normalizes Anthropic requests to chat format, so capture the raw wire body.
+    const sentBodies: Array<{ system?: Array<{ text: string }> }> = [];
+    const anthropicModel = createAnthropic({
+      apiKey: 'test',
+      baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+      fetch: async (url, init) => {
+        sentBodies.push(JSON.parse(init!.body as string));
+        return fetch(url, init);
+      },
+    })(SCENARIO_MODEL_ID);
+
+    await runLoopScenario({
+      engine,
+      llm,
+      model: anthropicModel,
+      prompt: 'hi',
+      instructions: ['AGENT_RULE: be helpful.', 'SECOND_RULE: be brief.'],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      },
+    });
+
+    expect(sentBodies).toHaveLength(1);
+    expect(sentBodies[0]!.system?.map(block => block.text)).toEqual([
+      'AGENT_RULE: be helpful.',
+      'SECOND_RULE: be brief.',
+    ]);
   });
 });
