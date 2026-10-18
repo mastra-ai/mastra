@@ -76,6 +76,16 @@ describeForAllEngines('AIMock loop scenario: delegation onDelegationStart modifi
     expect(callContext.primitiveId).toBe('writer');
     expect(callContext.primitiveType).toBe('agent');
     expect(callContext.prompt).toBe('Draft a tagline.');
+    expect(callContext.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: 'text', text: 'Ask the writer to draft a tagline.' }),
+          ]),
+        }),
+      ]),
+    );
 
     // The final output incorporates the subagent's response.
     const text = await output.text;
@@ -88,6 +98,58 @@ describeForAllEngines('AIMock loop scenario: delegation onDelegationStart modifi
     // The original (unmodified) prompt was NOT forwarded to the subagent.
     const subagentMessages = JSON.stringify(subagentRequest?.body?.messages ?? []);
     expect(subagentMessages).not.toContain('Draft a tagline.');
+  });
+
+  it('applies onDelegationStart requestContext mutations to the delegated run', async () => {
+    const mock = getMock();
+
+    const openai = createOpenAI({
+      apiKey: 'aimock-test-key',
+      baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
+    });
+
+    const writer = new Agent({
+      id: 'writer',
+      name: 'Writer',
+      description: 'Drafts written content',
+      instructions: ({ requestContext }) => `You are a writer specialising in ${requestContext.get('specialty')}.`,
+      model: openai(SCENARIO_MODEL_ID),
+    });
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: mock,
+      prompt: 'Ask the writer to draft a tagline.',
+      agents: { writer },
+      stopWhen: stepCountIs(5),
+      delegation: {
+        onDelegationStart: (context: DelegationStartContext) => {
+          context.requestContext.set('specialty', `${context.primitiveId}-copywriting`);
+        },
+      },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a tagline.' } }],
+          },
+        );
+        llm.onMessage(/Draft a tagline\./, { content: 'Sip the extraordinary.' });
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true },
+          { content: 'The writer suggested: Sip the extraordinary.' },
+        );
+      },
+    });
+
+    const text = await output.text;
+    expect(text).toContain('Sip the extraordinary.');
+
+    // The subagent's system prompt was resolved with the requestContext value
+    // the hook set, so the mutation reached the delegated run.
+    const subagentRequest = requests.find(r => JSON.stringify(r.body?.messages).includes('You are a writer'));
+    expect(subagentRequest).toBeDefined();
+    expect(JSON.stringify(subagentRequest?.body?.messages)).toContain('specialising in writer-copywriting');
   });
 
   it('onDelegationStart rejects the delegation and reports the denial back to the model', async () => {

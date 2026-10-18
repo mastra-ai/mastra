@@ -145,4 +145,148 @@ describeForAllEngines('AIMock loop scenario: delegation messageFilter', engine =
     );
     expect(subagentRequest).toBeDefined();
   });
+
+  it('forwards transient request-processor messages to the subagent', async () => {
+    const mock = getMock();
+    const filterSpy = vi.fn();
+
+    const openai = createOpenAI({
+      apiKey: 'aimock-test-key',
+      baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
+    });
+
+    const writer = new Agent({
+      id: 'writer',
+      name: 'Writer',
+      description: 'Drafts content',
+      instructions: 'You are a writer.',
+      model: openai(SCENARIO_MODEL_ID),
+    });
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: mock,
+      prompt: 'Original user message',
+      agents: { writer },
+      stopWhen: stepCountIs(5),
+      inputProcessors: [
+        {
+          id: 'transient-context',
+          processLLMRequest: ({ prompt }: { prompt: any[] }) => ({
+            prompt: [...prompt, { role: 'user', content: [{ type: 'text', text: 'Transient parent context' }] }],
+          }),
+        },
+      ],
+      delegation: {
+        messageFilter: (context: MessageFilterContext) => {
+          filterSpy(context);
+          return context.messages;
+        },
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', systemMessage: 'You are a writer.' }, { content: 'Here it is.' });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Writer completed the task.' });
+      },
+    });
+
+    expect(await output.text).toContain('Writer completed');
+
+    // The filter sees the processor-injected parent context alongside the real user message.
+    expect(filterSpy).toHaveBeenCalledTimes(1);
+    const filtered = JSON.stringify(filterSpy.mock.calls[0]![0].messages);
+    expect(filtered).toContain('Transient parent context');
+    expect(filtered).toContain('Original user message');
+
+    // ...and the subagent's model request carries both.
+    const subagentRequest = requests.find(r => JSON.stringify(r.body?.messages).includes('You are a writer.'));
+    expect(subagentRequest).toBeDefined();
+    const subagentMessages = JSON.stringify(subagentRequest?.body?.messages);
+    expect(subagentMessages).toContain('Transient parent context');
+    expect(subagentMessages).toContain('Original user message');
+    expect(subagentMessages).toContain('Write something.');
+  });
+
+  it('excludes observational-memory continuation hints from the delegated context', async () => {
+    const mock = getMock();
+    const filterSpy = vi.fn();
+
+    const openai = createOpenAI({
+      apiKey: 'aimock-test-key',
+      baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
+    });
+
+    const writer = new Agent({
+      id: 'writer',
+      name: 'Writer',
+      description: 'Drafts content',
+      instructions: 'You are a writer.',
+      model: openai(SCENARIO_MODEL_ID),
+    });
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: mock,
+      prompt: 'Real user request',
+      agents: { writer },
+      stopWhen: stepCountIs(5),
+      inputProcessors: [
+        {
+          id: 'observational-memory',
+          processInput: ({ messages, systemMessages }: { messages: any[]; systemMessages: any[] }) => ({
+            messages: [
+              ...messages,
+              {
+                id: 'om-continuation',
+                role: 'user',
+                content: { format: 2, parts: [{ type: 'text', text: 'Synthetic continuation hint' }] },
+                createdAt: new Date(),
+              },
+            ],
+            systemMessages: [...systemMessages, { role: 'system', content: 'Observed parent history' }],
+          }),
+        },
+      ],
+      delegation: {
+        messageFilter: (context: MessageFilterContext) => {
+          filterSpy(context);
+          return context.messages;
+        },
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', systemMessage: 'You are a writer.' }, { content: 'Here it is.' });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Writer completed the task.' });
+      },
+    });
+
+    expect(await output.text).toContain('Writer completed');
+
+    // The supervisor itself still sees the continuation hint...
+    expect(JSON.stringify(requests[0]?.body?.messages)).toContain('Synthetic continuation hint');
+
+    // ...but the delegated context keeps observations and the real request while dropping the hint.
+    expect(filterSpy).toHaveBeenCalledTimes(1);
+    const filtered = JSON.stringify(filterSpy.mock.calls[0]![0].messages);
+    expect(filtered).toContain('Observed parent history');
+    expect(filtered).toContain('Real user request');
+    expect(filtered).not.toContain('Synthetic continuation hint');
+
+    const subagentRequest = requests.find(r => JSON.stringify(r.body?.messages).includes('You are a writer.'));
+    expect(subagentRequest).toBeDefined();
+    const subagentMessages = JSON.stringify(subagentRequest?.body?.messages);
+    expect(subagentMessages).toContain('Observed parent history');
+    expect(subagentMessages).toContain('Real user request');
+    expect(subagentMessages).not.toContain('Synthetic continuation hint');
+  });
 });

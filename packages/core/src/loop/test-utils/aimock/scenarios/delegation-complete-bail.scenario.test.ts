@@ -51,17 +51,14 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
         },
       },
       fixtures: llm => {
+        // Subagent turn: receives the delegation and responds.
+        llm.on({ endpoint: 'chat', systemMessage: 'You are a writer.' }, { content: 'Here is what you requested.' });
         // Supervisor turn 1: delegate to writer.
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
             toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
           },
-        );
-        // Subagent turn: receives the delegation and responds.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 },
-          { content: 'Here is what you requested.' },
         );
         // Supervisor turn 2: wraps up.
         llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Writer completed the task.' });
@@ -74,7 +71,7 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
     expect(completeContext.primitiveId).toBe('writer');
     expect(completeContext.primitiveType).toBe('agent');
     expect(completeContext.success).toBe(true);
-    expect(completeContext.result).toBeDefined();
+    expect(completeContext.result).toEqual(expect.objectContaining({ text: 'Here is what you requested.' }));
 
     // The loop completed successfully
     const text = await output.text;
