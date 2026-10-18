@@ -257,7 +257,7 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
  */
 export function opencodeClaudeMaxProvider(
-  modelId: string = 'claude-sonnet-4-20250514',
+  modelId: string = 'claude-sonnet-4-6',
   options?: {
     headers?: Record<string, string>;
     authStorage?: CredentialStore;
