@@ -130,3 +130,84 @@ describeForAllEngines('AIMock scenario: server tool returns undefined', engine =
     );
   });
 });
+
+/**
+ * Same contract for an awaited background tool (#27468): the awaited branch waits for the
+ * background task and returns its result directly, so a void result must also become `null`.
+ */
+describeForAllEngines(
+  'AIMock scenario: awaited background tool returns undefined',
+  engine => {
+    const getMock = useLoopScenarioAimock();
+
+    it('continues the loop, sends a null result to the model, and stores a completed invocation', async () => {
+      let executions = 0;
+      const notify = createTool({
+        id: 'notify',
+        description: 'Send a notification to the team',
+        inputSchema: z.object({ message: z.string() }),
+        background: { enabled: true, timeoutMs: 5000 },
+        execute: async () => {
+          executions++;
+        },
+      });
+
+      const memory = new MockMemory();
+      const threadId = `void-bg-tool-${engine}`;
+      const resourceId = 'user-void-bg-tool';
+
+      const { output, requests, chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Notify the team that the deploy finished',
+        tools: { notify },
+        agentBackgroundTasks: { tools: { notify: true } },
+        backgroundTasks: { enabled: true },
+        memory,
+        threadId,
+        resourceId,
+        stopWhen: stepCountIs(5),
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [
+                {
+                  id: 'call-notify',
+                  name: 'notify',
+                  arguments: { ...NOTIFY_ARGS, _background: { disposition: 'awaited' } },
+                },
+              ],
+            },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Sent.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      expect(executions).toBe(1);
+      expect(await output.text).toBe('Sent.');
+      expect(await output.finishReason).toBe('stop');
+
+      const toolMessages = getToolMessages(requests[1]!.body as any);
+      expect(toolMessages).toHaveLength(1);
+      expect(toolMessages[0].tool_call_id).toBe('call-notify');
+      expect(JSON.parse(toolMessages[0].content)).toBeNull();
+
+      const toolResults = (chunks ?? []).filter(
+        (c: any) => c.type === 'tool-result' && c.payload?.toolCallId === 'call-notify',
+      ) as any[];
+      expect(toolResults).toHaveLength(1);
+      expect(toolResults[0].payload.result).toBeNull();
+
+      const { messages } = await memory.recall({ threadId, resourceId });
+      const invocations = getToolInvocations(messages).filter((inv: any) => inv.toolCallId === 'call-notify');
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].state).toBe('result');
+      expect(invocations[0].result).toBeNull();
+    });
+  },
+  // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
+  { skip: ['inngest'] },
+);

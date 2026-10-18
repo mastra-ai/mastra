@@ -27,8 +27,8 @@
     "build:watch": "pnpm build:lib --watch",
     "vitest": "vitest",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "author": "",
   "license": "Apache-2.0",
@@ -57,7 +57,6 @@
     "ai": "^4.3.19",
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.0",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

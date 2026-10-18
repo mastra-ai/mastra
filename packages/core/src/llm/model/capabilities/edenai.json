@@ -43,6 +43,7 @@
     "deepinfra/Qwen/Qwen3-VL-235B-A22B-Instruct",
     "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "deepinfra/google/gemma-3-12b-it",
     "deepinfra/google/gemma-3-27b-it",
     "deepinfra/google/gemma-3-4b-it",
@@ -160,6 +161,7 @@
     "scaleway/gemma-3-27b-it",
     "tencent/deepseek-v4.1-flash",
     "tensorx/deepseek/deepseek-v4.1-flash",
+    "tensorx/deepseek/deepseek-v4.1-flash-1017",
     "tensorx/moonshotai/kimi-k2.5",
     "together_ai/deepseek-ai/DeepSeek-V4.1-Flash",
     "together_ai/meta-models/Muse-Glimmer-30B",
@@ -277,6 +279,7 @@
     "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "deepinfra/google/gemma-3-12b-it",
     "deepinfra/google/gemma-3-27b-it",
     "deepinfra/google/gemma-3-4b-it",
@@ -427,6 +430,7 @@
     "tensorx/deepseek/deepseek-v4-flash-0731",
     "tensorx/deepseek/deepseek-v4-pro-0813",
     "tensorx/deepseek/deepseek-v4.1-flash",
+    "tensorx/deepseek/deepseek-v4.1-flash-1017",
     "together_ai/deepseek-ai/DeepSeek-V4-Flash-0731",
     "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
     "together_ai/deepseek-ai/DeepSeek-V4.1-Flash",
@@ -540,6 +544,7 @@
     "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "deepinfra/google/gemma-3-12b-it",
     "deepinfra/google/gemma-3-27b-it",
     "deepinfra/google/gemma-3-4b-it",
@@ -813,6 +818,12 @@
       }
     ],
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -1647,6 +1658,12 @@
       }
     ],
     "tensorx/deepseek/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "tensorx/deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

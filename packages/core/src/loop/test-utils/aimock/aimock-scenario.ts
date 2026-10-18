@@ -316,6 +316,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     requireToolApproval,
     inputProcessors,
     prepareStep,
+    transform,
     memory,
     threadId,
     resourceId,
@@ -453,6 +454,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     // after it, which would add retries these scenarios do not expect.
     ...(errorProcessors ? { errorProcessors } : {}),
     ...(prepareStep ? { prepareStep } : {}),
+    ...(transform ? { transform } : {}),
     ...(requestContext ? { requestContext } : {}),
     ...(delegation ? { delegation } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),

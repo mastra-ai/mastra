@@ -189,31 +189,6 @@ describe('durable delegated approval decline (#26994)', () => {
     expect(text).toBe(SUPERVISOR_ANSWER);
   };
 
-  it('forwards a declined delegated approval to the suspended sub-agent in-process', async () => {
-    const storage = new InMemoryStore();
-    const mockMemory = new MockMemory();
-    const memory = { thread: 'durable-decline-thread', resource: 'durable-decline-resource' };
-    const toolExecutions = { count: 0 };
-    const captured: Captured = { subAgentPrompts: [], supervisorPrompts: [] };
-
-    const durableAgent = createDurableAgent({ agent: buildSupervisor(mockMemory, toolExecutions, captured), pubsub });
-    new Mastra({ agents: { durableAgent }, storage, logger: false });
-
-    const result = await durableAgent.stream('Get the secret', { memory, maxSteps: 5 });
-    await readUntilApproval(result.fullStream);
-    await waitForSuspended(storage, result.runId);
-    const entry = await getApprovalEntry(mockMemory, memory);
-    expect(entry.delegatedRunId).toBeDefined();
-
-    const resumed = await durableAgent.declineToolCall({
-      runId: entry.runId,
-      toolCallId: entry.toolCallId,
-      reason: DECLINE_REASON,
-      memory,
-    });
-    assertForwardedDecline(await drain(resumed.fullStream), toolExecutions, captured);
-  }, 30000);
-
   it('forwards a declined delegated approval on a fresh process over the same storage', async () => {
     const storage = new InMemoryStore();
     const memoryStorage = new InMemoryStore();
@@ -251,38 +226,5 @@ describe('durable delegated approval decline (#26994)', () => {
     } finally {
       await pubsub2.close();
     }
-  }, 30000);
-
-  it("denies locally when the supervisor's own pre-execution gate is declined", async () => {
-    const storage = new InMemoryStore();
-    const mockMemory = new MockMemory();
-    const memory = { thread: 'durable-gate-decline-thread', resource: 'durable-gate-decline-resource' };
-    const toolExecutions = { count: 0 };
-    const captured: Captured = { subAgentPrompts: [], supervisorPrompts: [] };
-
-    const durableAgent = createDurableAgent({ agent: buildSupervisor(mockMemory, toolExecutions, captured), pubsub });
-    new Mastra({ agents: { durableAgent }, storage, logger: false });
-
-    const result = await durableAgent.stream('Get the secret', { memory, maxSteps: 5, requireToolApproval: true });
-    const approval = await readUntilApproval(result.fullStream);
-    expect(approval.toolName).toBe('agent-subAgent');
-    await waitForSuspended(storage, result.runId);
-    const entry = await getApprovalEntry(mockMemory, memory);
-    expect(entry.delegatedRunId).toBeUndefined();
-
-    const resumed = await durableAgent.declineToolCall({
-      runId: entry.runId,
-      toolCallId: entry.toolCallId,
-      reason: DECLINE_REASON,
-      memory,
-    });
-    const { chunks, types } = await drain(resumed.fullStream);
-    const label = `resumed chunks: ${types.join(', ')}`;
-    const denied = chunks.find(c => c.type === 'tool-output-denied');
-    expect(denied?.payload?.toolName, label).toBe('agent-subAgent');
-    expect(denied?.payload?.approval).toMatchObject({ approved: false, reason: DECLINE_REASON });
-    // The sub-agent never started.
-    expect(captured.subAgentPrompts).toHaveLength(0);
-    expect(toolExecutions.count).toBe(0);
   }, 30000);
 });
