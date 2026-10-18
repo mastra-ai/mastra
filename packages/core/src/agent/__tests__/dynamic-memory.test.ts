@@ -1036,7 +1036,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       );
 
       expect(jsonSystemMessage).toBeDefined();
-      expect(jsonSystemMessage?.content).toContain('You are a helpful assistant that responds in JSON format');
+      expect(jsonSystemMessage?.content).toBe('You are a helpful assistant that responds in JSON format');
     });
 
     it('should support SystemModelMessage object in stream method', async () => {
