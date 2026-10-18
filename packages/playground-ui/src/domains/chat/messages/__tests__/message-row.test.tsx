@@ -110,6 +110,22 @@ describe('MessageRow', () => {
     expect(screen.getByText('world')).toBeTruthy();
   });
 
+  it('shows a persisted terminal error after the partial reply', () => {
+    const { container } = renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'partial answer' },
+            { type: 'error', error: { name: 'APICallError', message: 'The model request failed.' } },
+          ],
+        },
+      }),
+    );
+    expect(container.textContent).toMatch(/partial answer[\s\S]*APICallError[\s\S]*The model request failed\./);
+  });
+
   // The reveal only paces if the factory keeps the text part mounted as the
   // reply grows; a remount would show every chunk whole again.
   describe('when a streaming reply grows', () => {
