@@ -2,6 +2,11 @@ import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import { normalizePagination } from '../pagination';
 
+/** LTRIM failed after LPUSH succeeded: the records were written, so they are not put back in the buffer. */
+class UpstashTrimError extends Error {
+  name = 'UpstashTrimError';
+}
+
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;
   upstashToken: string;
@@ -120,7 +125,7 @@ export class UpstashTransport extends LoggerTransport {
     this.lastFlush = now;
     const trimError = Array.isArray(results) ? results[1]?.error : undefined;
     if (trimError) {
-      throw new Error(`Failed to trim Upstash log list: ${trimError}`);
+      throw new UpstashTrimError(`Failed to trim Upstash log list: ${trimError}`);
     }
   }
 
@@ -190,11 +195,21 @@ export class UpstashTransport extends LoggerTransport {
 
   // Wait out any in-flight request, ignoring its failure since its records are back in the buffer,
   // then keep sending until the buffer is empty. A failed request ends the drain instead of retrying forever.
+  // A trim failure leaves nothing to resend, so draining continues and the first one is reported at the end.
   private async drainBuffer(): Promise<void> {
-    await this.flushPromise?.catch(() => {});
+    let trimError: UpstashTrimError | undefined;
+    await this.flushPromise?.catch(error => {
+      if (error instanceof UpstashTrimError) trimError ??= error;
+    });
     while (this.logBuffer.length > 0 || this.flushPromise) {
-      await (this.flushPromise ?? this._flush());
+      try {
+        await (this.flushPromise ?? this._flush());
+      } catch (error) {
+        if (!(error instanceof UpstashTrimError)) throw error;
+        trimError ??= error;
+      }
     }
+    if (trimError) throw trimError;
   }
 
   private parseLogs(logs: unknown): BaseLogMessage[] {

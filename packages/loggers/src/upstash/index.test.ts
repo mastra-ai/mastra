@@ -338,6 +338,32 @@ describe('UpstashTransport', () => {
       expect(transport.logBuffer).toEqual([{ msg: 'hello', time: 1 }]);
     });
 
+    it('should keep draining on destroy after a rejected LTRIM and report the trim error', async () => {
+      const noPerm = "NOPERM this user has no permissions to run the 'ltrim' command";
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ result: 2 }, { error: noPerm }]));
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+      batchTransport.logBuffer.push(
+        { msg: 'message1' } as any,
+        { msg: 'message2' } as any,
+        { msg: 'message3' } as any,
+        { msg: 'message4' } as any,
+      );
+
+      const error = await new Promise<Error | null | undefined>(resolve => {
+        batchTransport._destroy(null as any, (err?: Error | null) => resolve(err));
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const pushed = fetchMock.mock.calls.flatMap(([, init]) =>
+        JSON.parse(init.body)[0]
+          .slice(2)
+          .map((log: string) => JSON.parse(log).msg),
+      );
+      expect(pushed).toEqual(['message1', 'message2', 'message3', 'message4']);
+      expect(batchTransport.logBuffer).toEqual([]);
+      expect(error?.message).toBe(`Failed to trim Upstash log list: ${noPerm}`);
+    });
+
     it('should resolve when every pipeline command succeeds', async () => {
       fetchMock.mockImplementationOnce(() => pipelineResponse([{ result: 1 }, { result: 'OK' }]));
       transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
