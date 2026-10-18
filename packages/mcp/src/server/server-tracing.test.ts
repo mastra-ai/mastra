@@ -115,6 +115,180 @@ describe('MCPServer tracing', () => {
     return rest;
   };
 
+  describe('caller trace context', () => {
+    const CALLER_TRACE = '0af7651916cd43dd8448eb211c80319c';
+    const CALLER_SPAN = 'b7ad6b7169203331';
+    const traceparent = (flags = '01') => `00-${CALLER_TRACE}-${CALLER_SPAN}-${flags}`;
+    const callEcho = (target: Client = client, meta?: Record<string, unknown>) =>
+      target.callTool({ name: 'echoTool', arguments: { message: 'hi' }, ...(meta ? { _meta: meta } : {}) });
+
+    it('keeps its own trace and links to the span named by `_meta.traceparent`', async () => {
+      await callEcho(client, { traceparent: traceparent() });
+
+      const span = requestSpans()[0];
+      expect(span.links).toEqual([{ traceId: CALLER_TRACE, spanId: CALLER_SPAN }]);
+      expect(span.traceId).toMatch(/^[0-9a-f]{32}$/);
+      expect(span.traceId).not.toBe(CALLER_TRACE);
+      expect(span.isRootSpan).toBe(true);
+      expect(span.parentSpanId).toBeUndefined();
+      expect(span.externalParentSpanId).toBeUndefined();
+    });
+
+    it('returns the request span in the reply `_meta` to a caller that sent trace context', async () => {
+      const result = await callEcho(client, { traceparent: traceparent() });
+
+      const span = requestSpans()[0];
+      expect((result._meta as any)?.mastra?.traceparent).toBe(`00-${span.traceId}-${span.id}-01`);
+      // The span records the handler's own result, not the added key.
+      expect(span.output._meta?.mastra).toBeUndefined();
+    });
+
+    it('records the caller context from `_meta` as attributes, without baggage', async () => {
+      await callEcho(client, { traceparent: traceparent(), tracestate: 'vendor=1,other=2', baggage: 'userId=alice' });
+
+      const attributes = requestSpans()[0].attributes;
+      expect(attributes.callerTraceparent).toBe(traceparent());
+      expect(attributes.callerTracestate).toBe('vendor=1,other=2');
+      expect(JSON.stringify(attributes)).not.toContain('alice');
+    });
+
+    it('records the caller context from the HTTP headers when `_meta` has none', async () => {
+      const headerClient = await connectClient(
+        served.url,
+        {},
+        { traceparent: traceparent(), tracestate: 'vendor=header' },
+      );
+      try {
+        endedSpans.length = 0;
+        await callEcho(headerClient);
+      } finally {
+        await headerClient.close();
+      }
+
+      const span = requestSpans()[0];
+      expect(span.attributes.callerTraceparent).toBe(traceparent());
+      expect(span.attributes.callerTracestate).toBe('vendor=header');
+      expect(span.links).toEqual([{ traceId: CALLER_TRACE, spanId: CALLER_SPAN }]);
+    });
+
+    it('records no caller context when the `traceparent` is invalid, even with a `tracestate`', async () => {
+      await callEcho(client, { traceparent: 'garbage', tracestate: 'vendor=1' });
+
+      const attributes = requestSpans()[0].attributes;
+      expect(attributes.callerTraceparent).toBeUndefined();
+      expect(attributes.callerTracestate).toBeUndefined();
+    });
+
+    it('caps a long `tracestate` at 512 characters by dropping whole entries', async () => {
+      const longEntry = `long=${'x'.repeat(200)}`;
+      const entries = Array.from({ length: 40 }, (_, index) => `v${index}=${'y'.repeat(20)}`);
+      await callEcho(client, { traceparent: traceparent(), tracestate: [longEntry, ...entries].join(',') });
+
+      const tracestate: string = requestSpans()[0].attributes.callerTracestate;
+      expect(tracestate.length).toBeLessThanOrEqual(512);
+      expect(tracestate).not.toContain('long=');
+      expect(tracestate.startsWith('v0=')).toBe(true);
+      expect(tracestate.split(',').every(entry => /^v\d+=y{20}$/.test(entry))).toBe(true);
+    });
+
+    it('names the request span in the reply only for `tools/call`', async () => {
+      const result = await client.listTools({ _meta: { traceparent: traceparent() } });
+
+      expect((result._meta as any)?.mastra).toBeUndefined();
+      expect(requestSpans()[0].links).toEqual([{ traceId: CALLER_TRACE, spanId: CALLER_SPAN }]);
+    });
+
+    it('returns no span in the reply to a caller without trace context', async () => {
+      const result = await callEcho(client);
+
+      expect((result._meta as any)?.mastra).toBeUndefined();
+    });
+
+    it('records the request input without the trace fields', async () => {
+      await callEcho(client, {
+        traceparent: traceparent(),
+        tracestate: 'vendor=1',
+        baggage: 'tenant=one',
+        custom: true,
+      });
+      await callEcho(client, { traceparent: traceparent() });
+
+      expect(requestSpans()[0].input).toEqual({
+        name: 'echoTool',
+        arguments: { message: 'hi' },
+        _meta: { custom: true },
+      });
+      expect(requestSpans()[1].input).toEqual({ name: 'echoTool', arguments: { message: 'hi' } });
+    });
+
+    it.each([
+      ['`tracestate` and `baggage` without `traceparent`', { tracestate: 'vendor=1', baggage: 'userId=alice' }],
+      ['a non-string `traceparent`', { traceparent: 5, baggage: 'userId=alice' }],
+      ['a malformed `traceparent`', { traceparent: 'garbage', baggage: 'userId=alice' }],
+    ])('records the request input without the trace fields for %s', async (_label, traceFields) => {
+      await callEcho(client, { ...traceFields, custom: true });
+
+      const span = requestSpans()[0];
+      expect(span.input).toEqual({ name: 'echoTool', arguments: { message: 'hi' }, _meta: { custom: true } });
+      expect(span.links).toBeUndefined();
+    });
+
+    it('links to the span named by the HTTP `traceparent` header', async () => {
+      const headerClient = await connectClient(served.url, {}, { traceparent: traceparent() });
+      try {
+        endedSpans.length = 0;
+        await callEcho(headerClient);
+      } finally {
+        await headerClient.close();
+      }
+
+      const span = requestSpans()[0];
+      expect(span.links).toEqual([{ traceId: CALLER_TRACE, spanId: CALLER_SPAN }]);
+      expect(span.traceId).not.toBe(CALLER_TRACE);
+    });
+
+    it('prefers `_meta.traceparent` over the HTTP header', async () => {
+      const headerClient = await connectClient(
+        served.url,
+        {},
+        { traceparent: '00-11111111111111111111111111111111-2222222222222222-01' },
+      );
+      try {
+        endedSpans.length = 0;
+        await callEcho(headerClient, { traceparent: traceparent() });
+      } finally {
+        await headerClient.close();
+      }
+
+      expect(requestSpans()[0].links).toEqual([{ traceId: CALLER_TRACE, spanId: CALLER_SPAN }]);
+    });
+
+    it('traces the request when the caller does not sample its own trace', async () => {
+      await callEcho(client, { traceparent: traceparent('00') });
+
+      expect(requestSpans()[0].links).toEqual([{ traceId: CALLER_TRACE, spanId: CALLER_SPAN }]);
+    });
+
+    it.each([
+      ['not a traceparent', 'garbage'],
+      ['an all-zero trace id', `00-${'0'.repeat(32)}-${CALLER_SPAN}-01`],
+      ['an all-zero span id', `00-${CALLER_TRACE}-${'0'.repeat(16)}-01`],
+      ['an invalid version', `ff-${CALLER_TRACE}-${CALLER_SPAN}-01`],
+      ['uppercase hex', `00-${CALLER_TRACE.toUpperCase()}-${CALLER_SPAN}-01`],
+      ['a non-string value', 42],
+    ])('records no link when `traceparent` is %s', async (_label, value) => {
+      await callEcho(client, { traceparent: value });
+
+      expect(requestSpans()[0].links).toBeUndefined();
+    });
+
+    it('records no link for a request without trace context', async () => {
+      await callEcho(client);
+
+      expect(requestSpans()[0].links).toBeUndefined();
+    });
+  });
+
   it('records one root request span for a served tool call, and no separate tool span', async () => {
     const result = await client.callTool({ name: 'echoTool', arguments: { message: 'hi' } });
 

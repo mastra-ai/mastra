@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
@@ -15,6 +17,7 @@ import {
   MastraSandbox,
   ProcessHandle,
   UnsupportedStdinCloseError,
+  SandboxError,
   SandboxNotReadyError,
   SandboxProcessManager,
 } from '@mastra/core/workspace';
@@ -63,6 +66,15 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   id?: string;
   environmentId?: string;
   sandboxId?: string;
+  /**
+   * What `start()` does when `sandboxId` is set but the platform reports that
+   * sandbox is gone (404, 410, or a destroyed record).
+   *
+   * - `'best-effort'` (default): provision a replacement sandbox.
+   * - `'required'`: throw a `SandboxError` with code `SANDBOX_REATTACH_FAILED`
+   *   instead of provisioning, so the caller can surface the lost VM.
+   */
+  reattach?: 'best-effort' | 'required';
   /** Boot-only fallback checkpoint for a fresh sandbox whose primary recovery key has no state. */
   seedCheckpointName?: string;
   /**
@@ -428,6 +440,7 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
   private _sandboxId?: string;
+  private readonly _reattach: 'best-effort' | 'required';
   private readonly _seedCheckpointName?: string;
   private _templateDefinition?: SerializedSandboxTemplate;
   private _templateBuildEnvs?: Record<string, string>;
@@ -516,6 +529,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
+    this._reattach = options.reattach ?? 'best-effort';
     this._seedCheckpointName = options.seedCheckpointName;
     this._usesProviderRoutes = options.template !== undefined;
     this._template = options.template;
@@ -532,6 +546,21 @@ export class PlatformSandbox extends MastraSandbox {
 
   private generateId(): string {
     return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private _failIfReattachRequired(reason: string, cause?: unknown): void {
+    if (this._reattach !== 'required') return;
+    throw new SandboxError(
+      `Platform sandbox ${this._sandboxId} could not be reattached (${reason}); refusing to provision a replacement because reattach is 'required'. Clear the persisted sandboxId to start a fresh sandbox.`,
+      'SANDBOX_REATTACH_FAILED',
+      {
+        provider: 'platform',
+        sandboxId: this._sandboxId,
+        logicalId: this.id,
+        reason,
+        ...(cause !== undefined && { cause }),
+      },
+    );
   }
 
   private _request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
@@ -575,6 +604,7 @@ export class PlatformSandbox extends MastraSandbox {
       fetch: this._client.fetch,
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+      reattach: this._reattach,
       ...(seedCheckpointName !== undefined && { seedCheckpointName }),
       ...(this._template !== undefined && { template: this._template }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
@@ -628,12 +658,14 @@ export class PlatformSandbox extends MastraSandbox {
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return { outcome: 'connected' };
         }
+        this._failIfReattachRequired('destroyed');
         this._sandboxId = undefined;
       } catch (error) {
         // 404: the proxy never issued this id. 410: it did, and has since
         // marked the record destroyed (idle GC, manual delete). Neither is
         // reattachable; both fall through to a fresh provision.
         if (!(error instanceof PlatformApiError) || (error.status !== 404 && error.status !== 410)) throw error;
+        this._failIfReattachRequired(String(error.status), error);
         this._sandboxId = undefined;
       }
     }
@@ -736,6 +768,18 @@ export class PlatformSandbox extends MastraSandbox {
       mode,
       totalMs: Date.now() - startedAt,
       requestMs,
+      // Only a provision ran the template; on reattach the stored definition
+      // is whatever this instance provisioned earlier, not what is running.
+      ...(mode === 'provision' && this._templateDefinition
+        ? {
+            templateHash: templateHash(this._templateDefinition),
+            // `exact` means the proxy booted the requested build. `pending`
+            // means it booted a prior family build or the base image while
+            // that build runs; the proxy does not say which of the two.
+            templateBoot: this.templatePending ? 'pending' : 'exact',
+            ...(this.templatePending ? { pendingTemplateId: this.templatePending.templateId } : {}),
+          }
+        : {}),
     });
   }
 
@@ -1571,4 +1615,16 @@ export class PlatformSandbox extends MastraSandbox {
     if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
     return defaultInstructions;
   }
+}
+
+/**
+ * Diagnostic fingerprint of the serialized template a sandbox was provisioned
+ * with: the same definition (repositories, pinned heads, setup commands,
+ * resources) hashes the same on warm and cold boots. `family` is excluded, as
+ * in the server's exact-content identity. Not the server's cache digest, which
+ * also normalizes resources.
+ */
+function templateHash(definition: SerializedSandboxTemplate): string {
+  const { family: _family, ...content } = definition;
+  return createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
 }

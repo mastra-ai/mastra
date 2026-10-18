@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import { MastraError } from '../../error';
 import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
 import type { Event, EventCallback } from '../../events/types';
@@ -6,7 +7,7 @@ import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
-import { safeClose, safeEnqueue } from '../../stream/base';
+import { safeClose, safeEnqueue, safeError } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
 import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
@@ -24,7 +25,8 @@ import type {
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, shouldRejectStream } from './constants';
+import { currentRunFenceScope } from './run-fence-scope';
 import type {
   AgentStreamEvent,
   AgentChunkEventData,
@@ -37,10 +39,87 @@ import type {
   AgentIterationCompleteEventData,
 } from './types';
 
+const STREAM_ENDING_EVENT_TYPES = new Set<string>([
+  AgentStreamEventTypes.FINISH,
+  AgentStreamEventTypes.ERROR,
+  AgentStreamEventTypes.SUSPENDED,
+  AgentStreamEventTypes.ABORT,
+]);
+
+/**
+ * Decides which run-stream events a reader keeps once another execution may
+ * have taken the run over. Events tagged with a generation older than the
+ * newest one seen come from an execution that lost the run and are dropped;
+ * untagged events, from runs fenced by a pubsub lease, are always kept.
+ *
+ * `minGeneration` and `rereadMinGeneration` work as on
+ * {@link DurableAgentStreamOptions}. The result is a boolean, so event order is
+ * kept, except while a failed claim read must be retried before a stream-ending
+ * event, which is the only time it is a promise.
+ */
+export function createRunGenerationFilter({
+  minGeneration,
+  rereadMinGeneration,
+}: Pick<DurableAgentStreamOptions, 'minGeneration' | 'rereadMinGeneration'>): (
+  event: AgentStreamEvent,
+) => boolean | Promise<boolean> {
+  let newestGeneration = minGeneration;
+  let pendingRead = rereadMinGeneration;
+
+  const accept = (generation: number) => {
+    if (newestGeneration !== undefined && generation < newestGeneration) return false;
+    newestGeneration = generation;
+    return true;
+  };
+
+  return event => {
+    const generation = event.generation;
+    if (generation === undefined) return true;
+    if (!pendingRead || !STREAM_ENDING_EVENT_TYPES.has(event.type)) return accept(generation);
+
+    return pendingRead()
+      .catch(() => undefined)
+      .then(claimed => {
+        if (claimed !== undefined) {
+          pendingRead = undefined;
+          newestGeneration = Math.max(newestGeneration ?? claimed, claimed);
+        }
+        return accept(generation);
+      });
+  };
+}
+
 /**
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
  */
+/**
+ * The run's serialized steps are the authoritative step list (a resumed segment's output only buffered
+ * its own suffix), but only the buffered steps carry each step's `response` and `content` (#26780).
+ * Overlay those onto the run steps, aligned from the last finished step.
+ */
+async function withBufferedStepResponses(
+  runSteps: unknown[] | undefined,
+  output: { steps: Promise<unknown[]> },
+): Promise<unknown[]> {
+  const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
+  if (!runSteps?.length) return buffered;
+  // An aborted run ends with a step that never finished, so it was never buffered.
+  const trailingAborted =
+    (runSteps.at(-1) as { finishReason?: string } | undefined)?.finishReason === 'abort' &&
+    buffered.at(-1)?.finishReason !== 'abort';
+  const offset = runSteps.length - (trailingAborted ? 1 : 0) - buffered.length;
+  return runSteps.map((step, i) => {
+    const match = i >= offset ? buffered[i - offset] : undefined;
+    if (!match) return step;
+    return {
+      ...(step as Record<string, unknown>),
+      ...(match.response !== undefined ? { response: match.response } : {}),
+      ...(match.content !== undefined ? { content: match.content } : {}),
+    };
+  });
+}
+
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
   const inputTokens = (raw?.inputTokens as number | undefined) ?? (raw?.promptTokens as number | undefined);
   const outputTokens = (raw?.outputTokens as number | undefined) ?? (raw?.completionTokens as number | undefined);
@@ -93,6 +172,19 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
    */
   offset?: number | 'latest';
+  /**
+   * Claim generation of the execution this stream follows. Events tagged with
+   * an older generation come from an execution that has since lost the run and
+   * are dropped. Newer generations seen on the topic raise the bar further.
+   */
+  minGeneration?: number;
+  /**
+   * Reads the run's current claim generation. Pass it when `minGeneration`
+   * couldn't be read: until a read succeeds, the stream reads the claim again
+   * before an event from a claimed execution can end it, so the terminal event
+   * of a superseded execution doesn't close the stream.
+   */
+  rereadMinGeneration?: () => Promise<number | undefined>;
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -180,6 +272,12 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * unsubscribe. Idempotent. Does not affect the run itself.
    */
   detach: () => void;
+  /**
+   * End only this reader's stream with `error` (rejecting or as an error
+   * chunk, like a published ERROR event) and unsubscribe. Nothing is published,
+   * so other readers of the run are unaffected.
+   */
+  fail: (error: Error) => Promise<void>;
   /** Wait for pubsub events already delivered to this adapter to finish processing. */
   waitForEventDelivery: () => Promise<void>;
   /** Promise that resolves when subscription is established */
@@ -205,6 +303,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     threadId,
     resourceId,
     offset,
+    minGeneration,
+    rereadMinGeneration,
     idleTimeoutMs,
     isAlive,
     onChunk,
@@ -344,9 +444,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       runDead = true;
     }
     // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
-    // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
-    // controller.error which MastraModelOutput swallows). Fire onError with
-    // `runDead` — observe() schedules registry + pubsub-topic cleanup only when
+    // mirroring the ordinary ERROR-event path (enqueue error chunk + safeClose).
+    // Fire onError with `runDead` — observe() schedules registry + pubsub-topic cleanup only when
     // isAlive confirmed the run is dead; a bare timeout just means this observer
     // stopped hearing from the run — then unsubscribe in finally.
     const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
@@ -379,17 +478,53 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }, idleTimeoutMs);
   };
 
+  const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
+
+  // Ends this reader's stream with an error, then fires onError once.
+  const deliverError = async (error: Error, delivery?: AgentErrorEventData['delivery']) => {
+    if (!controller || terminated) return;
+    if (delivery === 'reject') {
+      safeError(controller, error);
+    } else {
+      // Ordinary durable failures remain deferred error chunks so the stream
+      // closes normally even when no finish event follows.
+      safeEnqueue(controller, {
+        type: 'error',
+        payload: { error },
+      } as ChunkType<OUTPUT>);
+      safeClose(controller);
+    }
+    markTerminated();
+    try {
+      await onError?.({ error });
+    } catch (callbackError) {
+      logError(`[DurableAgentStream] onError callback error:`, callbackError);
+    }
+  };
+  let onChunkDelivery = Promise.resolve();
+
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
     // A later duplicate (a replayed pre-crash FINISH plus the recovered one)
     // must not fire onFinish/onError again.
     if (!controller || terminated) return;
 
+    // Parse the event data as AgentStreamEvent
+    const streamEvent = event as unknown as AgentStreamEvent;
+
+    // Another execution took the run over: what the superseded one still
+    // publishes is stale, and doesn't prove the run's producer is alive.
+    let keep = keepGeneration(streamEvent);
+    if (typeof keep !== 'boolean') {
+      keep = await keep;
+      if (!controller || terminated) return;
+    }
+    if (!keep) return;
+
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();
 
-    // Parse the event data as AgentStreamEvent
-    const streamEvent = event as unknown as AgentStreamEvent;
+    if (streamEvent.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
 
     try {
       switch (streamEvent.type) {
@@ -406,7 +541,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorCause = errPayload?.error ?? errPayload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
-          await onChunk?.(chunk as ChunkType<OUTPUT>);
+          const delivery = onChunkDelivery.then(() => onChunk?.(chunk as ChunkType<OUTPUT>));
+          onChunkDelivery = delivery.catch(() => {});
+          await delivery;
           break;
         }
 
@@ -426,6 +563,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
+          clearIdleTimer();
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
 
@@ -453,8 +593,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // consume the stream (for example, resume() with a delay-only wait).
           if (finishReason === 'abort') {
             try {
+              const steps = onAbort ? await withBufferedStepResponses(data.output?.steps, output) : [];
               await onAbort?.({
-                steps: (data.output?.steps ?? []) as unknown[],
+                steps,
                 text: (data.output?.text ?? '') as string,
               });
             } catch (callbackError) {
@@ -479,7 +620,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           } else if (onFinish) {
             try {
-              const steps = (data.output?.steps ?? []) as any[];
+              const steps = (await withBufferedStepResponses(data.output?.steps, output)) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               // The structured object is parsed while the output drains the (now closed) chunk
@@ -513,7 +654,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
                 request: { body: undefined },
-                response: {},
+                response: steps.at(-1)?.response ?? {},
                 reasoningText: undefined,
                 providerMetadata: undefined,
               });
@@ -532,32 +673,22 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.ERROR: {
           const data = streamEvent.data as AgentErrorEventData;
-          const error = new Error(data.error.message);
+          const error: Error & { id?: string } = new Error(data.error.message);
           error.name = data.error.name;
+          if (data.error.id) error.id = data.error.id;
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Enqueue an error chunk and close the stream normally (mirrors the
-          // regular agent's deferred-error-chunk pattern). Using
-          // controller.error() would error the base ReadableStream, which
-          // MastraModelOutput.consumeStream swallows — leaving fullStream
-          // hanging because no 'finish' event fires on the internal emitter.
-          safeEnqueue(controller, {
-            type: 'error',
-            payload: { error },
-          } as ChunkType<OUTPUT>);
-          safeClose(controller);
-          markTerminated();
-          try {
-            await onError?.({ error });
-          } catch (callbackError) {
-            logError(`[DurableAgentStream] onError callback error:`, callbackError);
-          }
+          await deliverError(error, data.delivery);
           break;
         }
 
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
+          // Let earlier chunk callbacks finish first, as FINISH does, so onSuspended
+          // sees every chunk that preceded the suspension.
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           // By default we leave the stream open on suspend so a later resume can
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
@@ -651,7 +782,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const subscribedCallback: EventCallback = (event, ack, nack) => {
     const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
     inFlightDeliveries.add(delivery);
-    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    void delivery
+      .finally(() => {
+        inFlightDeliveries.delete(delivery);
+      })
+      .catch(() => {});
     return delivery;
   };
   const waitForEventDelivery = async () => {
@@ -767,13 +902,31 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     },
   });
 
+  // Fail only this reader, without publishing to the run's topic, which other
+  // executions and their followers share. Waits for events already delivered.
+  const fail = async (error: Error) => {
+    await waitForEventDelivery();
+    await deliverError(error, shouldRejectStream(error) ? 'reject' : undefined);
+    cleanup();
+  };
+
   return {
     output,
     cleanup,
     detach,
+    fail,
     waitForEventDelivery,
     ready,
   };
+}
+
+/**
+ * Tags a run's stream event with the claim generation of the execution
+ * publishing it, read from the run fence scope unless the caller passes it.
+ */
+function generationTag(runId: string, generation?: number): { generation?: number } {
+  const tagged = generation ?? currentRunFenceScope()?.generationFor?.(runId);
+  return tagged === undefined ? {} : { generation: tagged };
 }
 
 /**
@@ -793,6 +946,33 @@ export async function emitChunkEvent<OUTPUT = undefined>(
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
     ...(outputProcessed ? { outputProcessed } : {}),
+    ...generationTag(runId),
+  });
+}
+
+/**
+ * Announce that the execution with `generation` claimed the run, so the run's
+ * stream consumers drop what older executions still publish from here on.
+ *
+ * Readers only learn a generation from events they see. Without this marker,
+ * a reader's floor would rise only at the new execution's first event, which
+ * comes after rehydration and the first model call. Until then, an execution
+ * that stalled past its claim and resumed keeps publishing: it only learns it
+ * was superseded at its next heartbeat or step check, so `fencePubSub` doesn't
+ * stop it yet. Its chunks would reach readers, and its `finish` would end their
+ * streams before the new execution's answer arrives.
+ *
+ * Published on the run's stream topic, not a separate one, so it is ordered
+ * against the chunks around it and replayed to readers that reconnect from an
+ * offset. Readers swallow it and never forward it as a chunk. Readers that
+ * reconnect past it read the claim's generation from storage instead.
+ */
+export async function emitOwnershipClaimedEvent(pubsub: PubSub, runId: string, generation: number): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
+    runId,
+    data: {},
+    generation,
   });
 }
 
@@ -813,6 +993,8 @@ export async function emitStepStartEvent(
     stepId?: string;
     messageId?: string;
     startedAt?: StepStartPayload['startedAt'];
+    modelId?: StepStartPayload['modelId'];
+    provider?: StepStartPayload['provider'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
   },
@@ -833,6 +1015,7 @@ export async function emitStepStartEvent(
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
+    ...generationTag(runId),
   });
 }
 
@@ -848,6 +1031,7 @@ export async function emitStepFinishEvent(
     type: AgentStreamEventTypes.STEP_FINISH,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
@@ -859,23 +1043,33 @@ export async function emitFinishEvent(pubsub: PubSub, runId: string, data: Agent
     type: AgentStreamEventTypes.FINISH,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
 /**
  * Helper to emit an error event to pubsub
  */
-export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error): Promise<void> {
+export async function emitErrorEvent(
+  pubsub: PubSub,
+  runId: string,
+  error: Error,
+  generation?: number,
+  delivery?: AgentErrorEventData['delivery'],
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ERROR,
     runId,
     data: {
       error: {
+        ...(error instanceof MastraError ? { id: error.id } : {}),
         name: error.name,
         message: error.message,
         // stack intentionally omitted — avoid leaking internals through external pubsub
       },
+      ...(delivery ? { delivery } : {}),
     },
+    ...generationTag(runId, generation),
   });
 }
 
@@ -887,6 +1081,7 @@ export async function emitSuspendedEvent(pubsub: PubSub, runId: string, data: Ag
     type: AgentStreamEventTypes.SUSPENDED,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
@@ -898,6 +1093,7 @@ export async function emitAbortEvent(pubsub: PubSub, runId: string, data: AgentA
     type: AgentStreamEventTypes.ABORT,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
@@ -913,5 +1109,6 @@ export async function emitIterationCompleteEvent(
     type: AgentStreamEventTypes.ITERATION_COMPLETE,
     runId,
     data,
+    ...generationTag(runId),
   });
 }

@@ -200,7 +200,7 @@ const result = await run.timeTravel({
 
 ## Error handling
 
-Time travel throws errors in specific situations:
+Time travel throws errors in specific situations. Before it runs anything, time travel atomically claims the run, so only one call proceeds at a time. A concurrent call throws `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED`, or `WORKFLOW_TIME_TRAVEL_RUN_RUNNING` if the run is already executing. See [Concurrent time travel calls](/reference/workflows/run-methods/timeTravel#concurrent-time-travel-calls).
 
 ### Running workflow
 

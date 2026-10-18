@@ -567,6 +567,7 @@ type ExpectedGenericStep = {
 export type ExpectedStep =
   | ToExpected<ToolCallStep>
   | ToExpected<McpToolCallStep>
+  | ToExpected<ProviderToolCallStep>
   | ToExpected<ModelGenerationStep>
   | ToExpected<AgentRunStep>
   | ToExpected<WorkflowStepStep>

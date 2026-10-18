@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { FormEvent } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   Dialog,
@@ -492,5 +492,94 @@ describe('Dialog submit action', () => {
       render(<SubmitFixture onSubmit={vi.fn()} pending />);
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
     });
+  });
+});
+
+describe('Dialog on a phone viewport', () => {
+  const PHONE_QUERY = '(max-width: 639px)';
+  let phoneMatches = false;
+  const listeners = new Set<() => void>();
+
+  const setPhoneViewport = (matches: boolean) => {
+    phoneMatches = matches;
+    listeners.forEach(listener => listener());
+  };
+
+  beforeEach(() => {
+    phoneMatches = true;
+    listeners.clear();
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      query =>
+        ({
+          get matches() {
+            return query === PHONE_QUERY && phoneMatches;
+          },
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: (_event: string, listener: () => void) => listeners.add(listener),
+          removeEventListener: (_event: string, listener: () => void) => listeners.delete(listener),
+          dispatchEvent: () => false,
+        }) satisfies MediaQueryList,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const isDrawer = () => document.querySelector('.drawer-popup[data-slot="dialog-content"]') !== null;
+
+  function EditFixture({ pending = false }) {
+    return (
+      <Dialog pending={pending}>
+        <DialogTrigger>Open</DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit agent</DialogTitle>
+          </DialogHeader>
+          <DialogBody>Body content</DialogBody>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  it('opens as a bottom drawer', () => {
+    render(<EditFixture />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
+    expect(isDrawer()).toBe(true);
+  });
+
+  it('closes from DialogCancel inside the drawer', () => {
+    render(<EditFixture />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { open: true })).toBeNull();
+  });
+
+  it('rejects Escape while pending', () => {
+    render(<EditFixture pending />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
+  });
+
+  it('stays open when the viewport grows past the phone breakpoint', () => {
+    render(<EditFixture />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(isDrawer()).toBe(true);
+
+    act(() => setPhoneViewport(false));
+
+    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
+    expect(isDrawer()).toBe(false);
   });
 });

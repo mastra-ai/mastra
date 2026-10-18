@@ -81,7 +81,10 @@ const Harness = () => {
 };
 
 const renderAuthRequiredAt = async (pathname: string) => {
-  server.use(http.get(`${BASE_URL}/`, () => HttpResponse.json({ status: 'ok' })));
+  // The instance status probe hits the capabilities route before the client renders; keep it out of handler counts.
+  server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(noLoginMethodCapabilities), { once: true }),
+  );
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(

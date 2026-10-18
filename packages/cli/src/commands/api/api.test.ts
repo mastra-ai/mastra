@@ -342,30 +342,17 @@ describe('api command executor', () => {
     );
   });
 
-  it('executes Factory decision and supervisor actions at the resolved origin', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ ok: true }))
-      .mockResolvedValueOnce(jsonResponse({ sessionId: 'factory-supervisor:project-1' }));
+  it('executes Factory decision actions at the resolved origin', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 
     await executeDescriptor(API_COMMANDS.factoryDecisionApprove, ['project-1', 'decision-1'], undefined, {
       url: 'https://example.com',
       header: [],
       pretty: false,
     });
-    await executeDescriptor(API_COMMANDS.factorySupervisorSession, ['project-1'], undefined, {
-      url: 'https://example.com',
-      header: [],
-      pretty: false,
-    });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
+    expect(fetchMock).toHaveBeenCalledWith(
       'https://example.com/web/factory/projects/project-1/decisions/decision-1/approve',
-      expect.objectContaining({ method: 'POST' }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      'https://example.com/web/factory/projects/project-1/supervisor/session',
       expect.objectContaining({ method: 'POST' }),
     );
   });

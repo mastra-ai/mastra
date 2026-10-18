@@ -1,5 +1,5 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
+import { BracesIcon, ListFilterIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
@@ -73,6 +73,7 @@ function FilterBarInputImpl({
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState<Item | null>(null);
@@ -278,9 +279,6 @@ function FilterBarInputImpl({
     [],
   );
 
-  const searchPlaceholder =
-    step === 'field' ? 'Search fields…' : step === 'operator' ? 'Search operators…' : 'Search values…';
-
   const inputPlaceholder =
     step === 'field'
       ? placeholder
@@ -332,6 +330,7 @@ function FilterBarInputImpl({
         modal={false}
       >
         <div
+          ref={anchorRef}
           data-slot="filter-bar-input-trigger"
           className={cn(
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
@@ -345,7 +344,7 @@ function FilterBarInputImpl({
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="-ml-[.3em] shrink-0 text-muted-foreground" />
+          <ListFilterIcon aria-hidden className="ml-[-.3em] shrink-0 text-muted-foreground" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -370,36 +369,17 @@ function FilterBarInputImpl({
         </div>
         <ComboboxPrimitive.Portal container={container}>
           <ComboboxPrimitive.Positioner
+            // Base UI anchors to the input, which starts after the filter icon; align with the pill instead.
+            anchor={anchorRef}
             align="start"
             sideOffset={MENU_SIDE_OFFSET}
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup // The input stretches across the bar, so drop the anchor-width floor: size to content.
-              className={cn(comboboxStyles.popup, 'min-w-56')}
+            <ComboboxPrimitive.Popup // Match the pill, with the DS Combobox's 11rem floor (replaces the menu's anchor-width minimum).
+              className={cn(comboboxStyles.popup, 'w-(--anchor-width) min-w-44')}
               data-slot="filter-bar-editor"
             >
-              {(step !== 'value' || valueStep.hasSuggestions) && (
-                // Search row mirroring the bar input, so the popup reads as a searchable combobox.
-                // The bar input stays the only real input: focus and keyboard navigation never move.
-                <div
-                  className={cn(comboboxStyles.searchContainer, 'cursor-text')}
-                  data-slot="filter-bar-search"
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => inputRef.current?.focus()}
-                >
-                  <Search className={comboboxStyles.searchIcon} />
-                  <span
-                    className={cn(
-                      comboboxStyles.searchInput,
-                      'flex items-center truncate',
-                      query === '' && comboboxStyles.placeholder,
-                    )}
-                  >
-                    {query === '' ? searchPlaceholder : query}
-                  </span>
-                </div>
-              )}
               {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"

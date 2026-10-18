@@ -19,7 +19,7 @@ function usableHighlight(highlighted: Highlighted | null, code: string, lang?: s
 /**
  * Low-level shiki token renderer shared by `CodeBlock` and `MarkdownRenderer`.
  * Dual-theme colors stay as `--shiki-light` / `--shiki-dark` CSS variables on
- * each token span; the `.shiki-token` class (index.css) picks the variant from
+ * each token span; the `.shiki-token` class (components.css) picks the variant from
  * the `.dark` root class, so theme switching is pure CSS — no ThemeProvider
  * required. Renders plain text while highlighting is pending or when the
  * language is missing/unknown.

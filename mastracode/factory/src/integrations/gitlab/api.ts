@@ -161,6 +161,16 @@ export interface GitLabMember {
   access_level?: number;
 }
 
+export type GitLabCommitStatusState = 'pending' | 'running' | 'success' | 'failed' | 'canceled' | 'skipped';
+
+export interface GitLabCommitStatus {
+  id: number;
+  sha: string;
+  name: string;
+  status: GitLabCommitStatusState;
+  target_url: string | null;
+}
+
 export interface GitLabApiClientConfig {
   baseUrl: string;
   accessToken: string;
@@ -486,6 +496,26 @@ export class GitLabApiClient {
       'PUT',
       `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions/${encodeURIComponent(discussionId)}`,
       { body: { resolved } },
+    );
+  }
+
+  async setCommitStatus(
+    projectId: string,
+    sha: string,
+    status: { state: GitLabCommitStatusState; name: string; ref?: string; description?: string; targetUrl?: string },
+  ): Promise<GitLabCommitStatus> {
+    return this.#request<GitLabCommitStatus>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/statuses/${encodeURIComponent(sha)}`,
+      {
+        body: {
+          state: status.state,
+          name: status.name,
+          ref: status.ref,
+          description: status.description,
+          target_url: status.targetUrl,
+        },
+      },
     );
   }
 

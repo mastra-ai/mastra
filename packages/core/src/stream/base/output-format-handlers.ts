@@ -651,6 +651,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   let currentRunId: string | undefined;
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
   let finishReason: MastraFinishReason | undefined;
+  let hasPendingToolCalls = false;
   // Characters appended since the last partial parse, and the chunk they came from.
   let pendingChars = 0;
   let lastTextChunk: ChunkType<OUTPUT> | undefined;
@@ -693,6 +694,22 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         currentRunId = chunk.runId;
       }
 
+      // A single transformer can span several model steps (durable agents pipe the whole run through
+      // one stream). Only the terminal step's text is the structured answer, so start each step fresh.
+      if (chunk.type === 'step-start') {
+        accumulatedText = '';
+        previousObject = undefined;
+        finalResult = undefined;
+        finishReason = undefined;
+        hasPendingToolCalls = false;
+        pendingChars = 0;
+        lastTextChunk = undefined;
+      }
+
+      if (chunk.type === 'tool-call' && !chunk.payload?.providerExecuted) {
+        hasPendingToolCalls = true;
+      }
+
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
         accumulatedText += chunk.payload.text;
         pendingChars += chunk.payload.text.length;
@@ -727,6 +744,13 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
     // Catch up on text skipped by partial-parse throttling so the last object chunk is current.
     if (pendingChars > 0 && lastTextChunk) {
       await parsePartial(lastTextChunk, controller);
+    }
+
+    // Text from a step that calls client-executed tools is narration before the tools run, not the
+    // final answer. Truncated steps still fall through so the truncation is reported; an error finish
+    // already surfaces its own error, so its narration must not become an object result.
+    if (hasPendingToolCalls && finishReason !== 'length' && finishReason !== 'content-filter') {
+      return;
     }
 
     if (finishReason === 'length' || finishReason === 'content-filter') {
