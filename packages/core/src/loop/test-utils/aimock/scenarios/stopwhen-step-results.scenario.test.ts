@@ -61,7 +61,6 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
   const itFailsOnDurable = isDurableEngineVariant(engine) ? it.fails : it;
 
   it('stops after the first tool step when the predicate sees a tool call', async () => {
-    let calls = 0;
     const { output, requests, chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -69,7 +68,6 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
       tools,
       collectChunks: true,
       stopWhen: (({ steps }: StopWhenArgs) => {
-        calls++;
         return steps.some(step => step.toolCalls.length > 0);
       }) as any,
       fixtures: llm => scriptThreeTurns(llm),
@@ -78,10 +76,9 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     await output.consumeStream();
 
     expect(requests).toHaveLength(1);
-    expect(calls).toBe(1);
-    expect(chunks.filter(chunk => chunk.type === 'step-start')).toHaveLength(1);
-    expect(chunks.some(chunk => chunk.type === 'tool-call')).toBe(true);
-    expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(false);
+    expect(chunks!.filter(chunk => chunk.type === 'step-start')).toHaveLength(1);
+    expect(chunks!.some(chunk => chunk.type === 'tool-call')).toBe(true);
+    expect(chunks!.some(chunk => chunk.type === 'text-delta')).toBe(false);
   });
 
   it('is called once per tool step with the accumulated steps, never on the final text step', async () => {
