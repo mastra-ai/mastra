@@ -265,35 +265,14 @@ interface IssueCreateMutationData {
   issueCreate: { success: boolean; issue: LinearCreatedIssue | null };
 }
 
-/**
- * Where Linear GraphQL requests go. Self-hosted passes the OAuth access token
- * (sent to `api.linear.app`); Platform passes a transport that targets the
- * Connect proxy with its own credentials.
- */
-export interface LinearTransport {
-  endpoint: string;
-  headers?: Record<string, string>;
-  fetchImpl?: typeof fetch;
-}
-
-export type LinearCredential = string | LinearTransport;
-
-/** POST a GraphQL query to Linear through the given credential. */
-export async function linearGraphql<T>(
-  credential: LinearCredential,
-  query: string,
-  variables?: Record<string, unknown>,
-): Promise<T> {
-  const transport: LinearTransport =
-    typeof credential === 'string'
-      ? { endpoint: LINEAR_GRAPHQL_URL, headers: { authorization: `Bearer ${credential}` } }
-      : credential;
-  const res = await (transport.fetchImpl ?? fetch)(transport.endpoint, {
+/** POST a GraphQL query to Linear with the given OAuth access token. */
+async function linearGraphql<T>(accessToken: string, query: string, variables?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(LINEAR_GRAPHQL_URL, {
     method: 'POST',
     signal: AbortSignal.timeout(15_000),
     headers: {
       'content-type': 'application/json',
-      ...transport.headers,
+      authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -746,7 +725,7 @@ export class LinearIntegration implements FactoryIntegration {
   // ── GraphQL reads/writes ─────────────────────────────────────────────────
 
   /** Fetch the workspace (organization) the access token is scoped to. */
-  async fetchWorkspace(accessToken: LinearCredential): Promise<LinearWorkspace> {
+  async fetchWorkspace(accessToken: string): Promise<LinearWorkspace> {
     const data = await linearGraphql<{ organization: { name: string; urlKey: string } }>(
       accessToken,
       `query { organization { name urlKey } }`,
@@ -866,7 +845,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   async #listTeamWorkflowStates(
-    accessToken: LinearCredential,
+    accessToken: string,
     teamKey: string,
   ): Promise<Array<{ id: string; name: string; type: string }>> {
     const data = await linearGraphql<{
@@ -882,7 +861,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /** List the workspace's projects (for the Settings intake-source picker). */
-  async listProjects(accessToken: LinearCredential): Promise<LinearProject[]> {
+  async listProjects(accessToken: string): Promise<LinearProject[]> {
     const data = await linearGraphql<{
       projects: {
         nodes: Array<{
@@ -905,7 +884,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /** List the workspace's teams (for the Settings intake-source picker). */
-  async listTeams(accessToken: LinearCredential): Promise<LinearTeam[]> {
+  async listTeams(accessToken: string): Promise<LinearTeam[]> {
     const teams: Array<{ id: string; key: string; name: string }> = [];
     let after: string | undefined;
     for (let page = 0; page < LINEAR_TEAMS_MAX_PAGES; page += 1) {
@@ -954,7 +933,7 @@ export class LinearIntegration implements FactoryIntegration {
    * AND-ed together.
    */
   async listActiveIssues(
-    accessToken: LinearCredential,
+    accessToken: string,
     after?: string,
     projectIds?: string[],
     labels?: string[],
@@ -1027,7 +1006,7 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** Follow `comments.pageInfo` until exhausted so long discussions aren't truncated. */
   async #fetchRemainingIssueComments(
-    accessToken: LinearCredential,
+    accessToken: string,
     issueId: string,
     firstPage: IssueCommentsPage,
   ): Promise<IssueCommentNode[]> {
@@ -1062,7 +1041,7 @@ export class LinearIntegration implements FactoryIntegration {
    * found" error).
    */
   async fetchIssueDetail(
-    accessToken: LinearCredential,
+    accessToken: string,
     idOrIdentifier: string,
     _sourceIds?: string[],
     _routedSourceIds?: string[],
@@ -1138,7 +1117,7 @@ export class LinearIntegration implements FactoryIntegration {
    * issue doesn't exist.
    */
   async createIssueComment(
-    accessToken: LinearCredential,
+    accessToken: string,
     idOrIdentifier: string,
     body: string,
   ): Promise<LinearCreatedComment | null> {
@@ -1170,7 +1149,7 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** Create an issue in a team (by team UUID). */
   async createIssue(
-    accessToken: LinearCredential,
+    accessToken: string,
     input: { teamId: string; title: string; description?: string; priority?: number },
   ): Promise<LinearCreatedIssue> {
     const data = await linearGraphql<IssueCreateMutationData>(

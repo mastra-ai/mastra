@@ -117,5 +117,24 @@ describe('buildPlatformLinearAgentTools', () => {
       });
       expect(linear.createIssue).not.toHaveBeenCalled();
     });
+
+    it('refuses a team key shared by two workspaces and names each match', async () => {
+      const otherEng = {
+        id: '33333333-3333-4333-8333-333333333333',
+        key: 'ENG',
+        name: 'Eng',
+        workspaceId: 'org-beta',
+        workspaceName: 'Beta',
+        connectionId: 'conn-beta',
+      };
+      linear.listAllTeams.mockResolvedValue([...teams, otherEng]);
+      await expect(run('linear_create_issue', { title: 'Bug', team: 'ENG' })).resolves.toEqual({
+        error: `Linear team "ENG" matches teams in more than one workspace. Pass the team id instead: ENG (Acme): ${teams[0]!.id}, ENG (Beta): ${otherEng.id}.`,
+      });
+      expect(linear.createIssue).not.toHaveBeenCalled();
+
+      await run('linear_create_issue', { title: 'Bug', team: otherEng.id });
+      expect(linear.createIssue).toHaveBeenCalledWith('conn-beta', { teamId: otherEng.id, title: 'Bug' });
+    });
   });
 });

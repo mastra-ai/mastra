@@ -574,7 +574,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
     const connections = (await this.listConnections()).filter(connection => connection.status === 'active');
-    const workspaces = await Promise.all(
+    // A token revoked at Linear can still be reported active by Platform; skip that
+    // connection instead of failing listing, intake and tools for every workspace.
+    const results = await Promise.allSettled(
       connections.map(async connection => {
         let organization = this.#organizationByConnectionId.get(connection.id);
         if (!organization) {
@@ -591,6 +593,17 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         } satisfies LinearWorkspace;
       }),
     );
+    const workspaces: LinearWorkspace[] = [];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        workspaces.push(result.value);
+        return;
+      }
+      logPlatformWarn('Platform Linear: skipping a connection whose workspace could not be loaded.', {
+        connectionId: connections[index]!.id,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
+    });
     return workspaces;
   }
 
@@ -760,8 +773,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const comments = [...(embedded?.nodes ?? [])];
     let pageInfo = embedded?.pageInfo;
     let page = 0;
+    const api = this.#apiFor(workspace);
     while (pageInfo?.hasNextPage && pageInfo.endCursor && page < MAX_COMMENT_PAGES) {
-      const result = await this.#apiFor(workspace).listComments(issueId, pageInfo.endCursor);
+      const result = await api.listComments(issueId, pageInfo.endCursor);
       comments.push(...result.comments);
       if (result.pageInfo.hasNextPage && result.pageInfo.endCursor === pageInfo.endCursor) throw invalidLinearCursor();
       pageInfo = result.pageInfo;

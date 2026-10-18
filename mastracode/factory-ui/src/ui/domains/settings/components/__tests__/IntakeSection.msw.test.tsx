@@ -1298,15 +1298,6 @@ describe('IntakeSection', () => {
       expect(nangoAuthCalls[0]?.integrationId).toBe('linear');
     });
 
-    it('offers Reconnect Linear for a legacy app install with no Connect connection', async () => {
-      seedGithubProject();
-      useIntakeHandlers({ status: { ...connectedStatus, mode: 'platform', connections: [] } });
-
-      renderIntakeSection();
-
-      expect(await screen.findByRole('button', { name: 'Reconnect Linear' })).toBeInTheDocument();
-    });
-
     it('reconnects the Linear connection that needs reauthorization', async () => {
       seedGithubProject();
       useIntakeHandlers({

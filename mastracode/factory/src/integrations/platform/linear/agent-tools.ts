@@ -99,11 +99,20 @@ function createLinearCreateIssueTool(linear: PlatformLinearIntegration) {
         let target: (typeof teams)[number] | undefined;
         if (team) {
           const needle = team.toLowerCase();
-          target =
-            (UUID_PATTERN.test(team) ? teams.find(t => t.id === team) : undefined) ??
-            teams.find(t => t.key.toLowerCase() === needle) ??
-            teams.find(t => t.name.toLowerCase() === needle);
-          if (!target) return { error: `Linear team "${team}" was not found. Available teams: ${listKeys()}.` };
+          const byId = UUID_PATTERN.test(team) ? teams.filter(t => t.id === team) : [];
+          const byKey = teams.filter(t => t.key.toLowerCase() === needle);
+          const byName = teams.filter(t => t.name.toLowerCase() === needle);
+          const matches = byId.length ? byId : byKey.length ? byKey : byName;
+          if (matches.length === 0) {
+            return { error: `Linear team "${team}" was not found. Available teams: ${listKeys()}.` };
+          }
+          if (matches.length > 1) {
+            const options = matches.map(t => `${t.key} (${t.workspaceName}): ${t.id}`).join(', ');
+            return {
+              error: `Linear team "${team}" matches teams in more than one workspace. Pass the team id instead: ${options}.`,
+            };
+          }
+          target = matches[0];
         } else if (teams.length === 1) {
           target = teams[0];
         } else if (teams.length === 0) {

@@ -37,6 +37,8 @@ type Workspace = {
   teams: Array<{ id: string; key: string; name: string }>;
   issues: Array<ReturnType<typeof rawIssue>>;
   comments?: Array<Record<string, unknown>>;
+  /** Serve projects one per page, keyed by the requested cursor, to exercise pagination. */
+  pageProjects?: boolean;
 };
 
 const acme = (): Workspace => ({
@@ -97,6 +99,7 @@ function fakePlatform(
   const workspaces = options.workspaces ?? { 'conn-acme': acme(), 'conn-beta': beta() };
   const mutations: Mutation[] = [];
   const proxied: string[] = [];
+  const projectQueries: Array<{ query: string; after: string | null }> = [];
 
   const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
     const url = String(input);
@@ -138,7 +141,20 @@ function fakePlatform(
       });
     }
     const page = { hasNextPage: false, endCursor: null };
-    if (query.includes('projects(')) return json({ data: { projects: { nodes: workspace.projects, pageInfo: page } } });
+    if (query.includes('projects(')) {
+      projectQueries.push({ query, after: variables.after ?? null });
+      if (!workspace.pageProjects) return json({ data: { projects: { nodes: workspace.projects, pageInfo: page } } });
+      const index = variables.after ? Number(variables.after) : 0;
+      const hasNextPage = index + 1 < workspace.projects.length;
+      return json({
+        data: {
+          projects: {
+            nodes: workspace.projects.slice(index, index + 1),
+            pageInfo: { hasNextPage, endCursor: hasNextPage ? String(index + 1) : null },
+          },
+        },
+      });
+    }
     if (query.includes('teams(')) return json({ data: { teams: { nodes: workspace.teams, pageInfo: page } } });
     if (query.includes('issues(')) {
       const projectId = variables.filter?.project?.id?.eq;
@@ -160,7 +176,7 @@ function fakePlatform(
   });
 
   vi.stubGlobal('fetch', fetchMock);
-  return { fetchMock, mutations, proxied };
+  return { fetchMock, mutations, proxied, projectQueries };
 }
 
 function json(data: unknown, status = 200): Response {
@@ -191,6 +207,50 @@ describe('PlatformLinearIntegration', () => {
       ['team', 'Operations', encodeTeamSourceId(BETA, 'team-ops')],
     ]);
     expect(proxied).not.toContain('conn-stale');
+  });
+
+  it('pages through every project with a query that stays under the Linear complexity limit', async () => {
+    const project = (n: number) => ({
+      id: `project-${n}`,
+      name: `Project ${n}`,
+      state: 'started',
+      teams: { nodes: [{ id: 'team-eng', key: 'ENG', name: 'Engineering' }] },
+    });
+    const { projectQueries } = fakePlatform({
+      connections: [{ id: 'conn-acme', status: 'active', accountLabel: 'Acme' }],
+      workspaces: { 'conn-acme': { ...acme(), projects: [project(1), project(2), project(3)], pageProjects: true } },
+    });
+
+    const projects = await new PlatformLinearIntegration().listProjects();
+
+    expect(projects.map(p => p.name)).toEqual(['Project 1', 'Project 2', 'Project 3']);
+    expect(projectQueries.map(q => q.after)).toEqual([null, '1', '2']);
+    for (const { query } of projectQueries) {
+      expect(query).toContain('projects(first: 100, after: $after)');
+      expect(query).toContain('teams(first: 10)');
+    }
+  });
+
+  it('skips an active connection whose workspace cannot be loaded instead of failing every workspace', async () => {
+    fakePlatform({
+      connections: [
+        { id: 'conn-acme', status: 'active', accountLabel: 'Acme' },
+        { id: 'conn-revoked', status: 'active', accountLabel: 'Revoked' },
+        { id: 'conn-beta', status: 'active', accountLabel: 'Beta' },
+      ],
+    });
+    const linear = new PlatformLinearIntegration();
+
+    expect((await linear.listWorkspaces()).map(workspace => workspace.connectionId)).toEqual([
+      'conn-acme',
+      'conn-beta',
+    ]);
+    expect((await linear.intake.listSources({ connection })).map(source => source.name)).toEqual([
+      'Platform',
+      'Engineering',
+      'Operations',
+    ]);
+    expect((await linear.listAllTeams()).map(team => team.key)).toEqual(['ENG', 'OPS']);
   });
 
   it('lists sources per connection and routes each through the connection it was bound with', async () => {

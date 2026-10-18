@@ -270,7 +270,7 @@ function LinearIntakeSection({
         size="sm"
       />
     ) : platformConnections.length === 0 ? (
-      <ProviderConnectControl provider="linear" label={connected ? 'Reconnect Linear' : 'Connect Linear'} size="sm" />
+      <ProviderConnectControl provider="linear" label="Connect Linear" size="sm" />
     ) : (
       <span className="flex items-center gap-2">
         <Txt tone="muted" as="span" variant="caption">
