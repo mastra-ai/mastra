@@ -940,7 +940,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // borrow another session: every Mastra Code process shares one database,
     // so the target thread may belong to another project, and running it with
     // this session's workspace would act on the wrong project.
-    const session = await controller.getSessionByResource(resourceId);
+    const session = await controller.getSessionForThread({ resourceId, threadId });
     // No session here owns the resource. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
     if (!session) return undefined;

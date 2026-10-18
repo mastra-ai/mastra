@@ -15,4 +15,4 @@ const agent = new Agent({
 await agent.sendNotificationSignal(notification, { resourceId, threadId, requestContext, tracingContext });
 ```
 
-Agents managed by `AgentController` get a default hook that builds options from the owning session, so every wake path (sessions, notifications, schedules, GitHub signals) uses the same context.
+Agents managed by `AgentController` get a default hook that builds options from the session bound to the woken thread (including scoped sessions, via the new `getSessionForThread`), so every wake path (sessions, notifications, schedules, GitHub signals) uses the same context.

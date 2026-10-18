@@ -834,6 +834,34 @@ export class AgentController<TState = {}> {
   }
 
   /**
+   * Resolve the live session a woken thread should run as. Prefers the session
+   * (in any scope) currently bound to `threadId`, then the unscoped session for
+   * the resource. Returns `undefined` rather than borrowing another scoped
+   * session, which may belong to a different workspace.
+   */
+  async getSessionForThread({
+    resourceId,
+    threadId,
+    requestContext,
+  }: {
+    resourceId: string;
+    threadId: string;
+    requestContext?: RequestContext;
+  }): Promise<Session<TState> | undefined> {
+    await this.requireAgentControllerFGA({
+      permission: MastraFGAPermissions.AGENT_CONTROLLER_READ,
+      requestContext,
+      resourceId,
+    });
+    for (const [key, pending] of this.#sessionsByResource) {
+      if ((JSON.parse(key) as [string, string | null])[0] !== resourceId) continue;
+      const session = await pending.catch(() => undefined);
+      if (session && session.thread.getId() === threadId) return session;
+    }
+    return this.#sessionsByResource.get(sessionRegistryKey(resourceId));
+  }
+
+  /**
    * Tear down the live session registered for a resource and optional scope.
    * This only removes runtime state; persisted threads and messages remain.
    * Returns `false` when no live session is registered.
@@ -1550,11 +1578,11 @@ export class AgentController<TState = {}> {
     // resolve agent.getWorkspace() — does not prematurely invoke a workspace
     // factory before the per-session request context is available.
     // A signal that wakes an idle thread (notification, schedule, peer message)
-    // runs as the session that owns the resource, so it gets that session's
-    // model, tools, and request context.
+    // runs as the session bound to that thread (in any scope), so it gets that
+    // session's model, tools, and request context.
     agent.__setDefaultWakeOptions?.(
       async ({ resourceId, threadId, requestContext, tracingContext, tracingOptions }) => {
-        const session = await this.getSessionByResource(resourceId);
+        const session = await this.getSessionForThread({ resourceId, threadId });
         if (!session) return undefined;
         return this.buildAgentMessageStreamOptions({
           session,
