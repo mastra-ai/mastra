@@ -30,6 +30,8 @@ import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import { TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   InputProcessorOrWorkflow,
   OutputProcessor,
@@ -133,6 +135,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   onDebugEvent?: ObservationalMemoryConfig['onDebugEvent'];
   hooks?: ObservationalMemoryConfig['hooks'];
   autoModels?: ObservationalMemoryConfig['autoModels'];
+  canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
   resolveModel?: ObservationalMemoryConfig['resolveModel'];
 };
 
@@ -2369,6 +2372,7 @@ ${workingMemory}`;
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       autoModels: omConfig.autoModels,
+      canUseProvider: omConfig.canUseProvider,
       resolveModel: omConfig.resolveModel,
       mastra: this._mastraInstance,
       onIndexObservations,
@@ -2383,6 +2387,7 @@ ${workingMemory}`;
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
             bufferOnIdle: omConfig.observation.bufferOnIdle,
+            observeOnContextOverflow: omConfig.observation.observeOnContextOverflow,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
@@ -3687,6 +3692,9 @@ Notes:
     cloned.id = crypto.randomUUID();
     cloned.createdAt = now;
     cloned.updatedAt = now;
+    // The clone starts live even if the source generation it was read from has since been
+    // replaced by a reflection; that source's `supersededBy` must not carry over.
+    cloned.supersededBy = null;
     await memoryStore.insertObservationalMemoryRecord(cloned);
   }
 
@@ -4073,12 +4081,31 @@ Notes:
   }
 
   /**
+   * Extends the base implementation to add ObservationalMemory as an error processor.
+   * OM uses processAPIError to observe pending messages and retry when the provider
+   * rejects a request for exceeding the model's context window.
+   */
+  async getErrorProcessors(
+    configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    const processors = await super.getErrorProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om as unknown as ErrorProcessor);
+    }
+
+    return processors;
+  }
+
+  /**
    * Creates an ObservationalMemory processor wrapping the shared engine.
    * Returns null if OM is not configured, not supported, or already present
    * in the user's configured processors.
    */
   private async createOMProcessor(
-    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
     const hasObservationalMemory = configuredProcessors.some(

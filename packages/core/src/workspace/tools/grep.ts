@@ -14,6 +14,14 @@ import { startWorkspaceSpan } from './tracing';
 const GREP_FILESYSTEM_CONCURRENCY = 8;
 
 /**
+ * Wall-clock budget for the host-side directory walk. On remote filesystems
+ * every directory and file is a round trip, so an unbounded walk over a large
+ * repository can stall an agent run for minutes; past this budget the tool
+ * returns what it found so far and says the search is incomplete.
+ */
+const HOST_WALK_BUDGET_MS = 60_000;
+
+/**
  * Options for {@link createGrepTool}.
  */
 export interface GrepToolOptions {
@@ -105,6 +113,19 @@ Usage:
       // from a genuinely empty one. In `strict` mode these throw instead.
       let skippedReadErrorCount = 0;
       let targetNotFound = false;
+      let scannedFileCount = 0;
+
+      // The host-side walk stops early (returning partial results) when the run
+      // is aborted or, for directory walks, once the time budget is spent.
+      let walkDeadline: number | undefined;
+      let incomplete: 'aborted' | 'time budget' | undefined;
+      const shouldStop = (): boolean => {
+        if (!incomplete) {
+          if (context?.abortSignal?.aborted) incomplete = 'aborted';
+          else if (walkDeadline !== undefined && Date.now() > walkDeadline) incomplete = 'time budget';
+        }
+        return incomplete !== undefined;
+      };
 
       const span = startWorkspaceSpan(context, workspace, {
         category: 'filesystem',
@@ -199,7 +220,7 @@ Usage:
                 const reason = error instanceof Error ? error.message : String(error);
                 if (error instanceof UnsupportedGrepPatternError) {
                   workspace.logger?.info(
-                    `Native grep on "${filesystem.provider}" filesystem does not support pattern "${pattern}"; falling back to host-side search`,
+                    `Native grep on "${filesystem.provider}" filesystem could not run pattern "${pattern}" (${reason}); falling back to host-side search`,
                   );
                 } else {
                   workspace.logger?.warn(
@@ -214,12 +235,15 @@ Usage:
               // Directory — walk recursively with bounded concurrent listings
               const entriesByDirectory = new Map<string, Awaited<ReturnType<typeof filesystem.readdir>>>();
               let directoryFrontier = [searchPath];
+              walkDeadline = Date.now() + HOST_WALK_BUDGET_MS;
 
               const pMap = (await import('p-map')).default;
-              while (directoryFrontier.length > 0) {
+              while (directoryFrontier.length > 0 && !shouldStop()) {
                 const directoryEntries = await pMap(
                   directoryFrontier,
                   async dir => {
+                    // Skip listings not yet started once the walk must stop.
+                    if (shouldStop()) return undefined;
                     try {
                       return await filesystem.readdir(dir);
                     } catch (err) {
@@ -234,7 +258,8 @@ Usage:
 
                 for (let directoryIndex = 0; directoryIndex < directoryFrontier.length; directoryIndex++) {
                   const dir = directoryFrontier[directoryIndex]!;
-                  const entries = directoryEntries[directoryIndex]!;
+                  const entries = directoryEntries[directoryIndex];
+                  if (!entries) continue;
                   entriesByDirectory.set(dir, entries);
 
                   for (const entry of entries) {
@@ -428,15 +453,17 @@ Usage:
         const pMap = (await import('p-map')).default;
         for (
           let batchStart = 0;
-          batchStart < filePaths.length && !truncated;
+          batchStart < filePaths.length && !truncated && !shouldStop();
           batchStart += GREP_FILESYSTEM_CONCURRENCY
         ) {
           const batchPaths = filePaths.slice(batchStart, batchStart + GREP_FILESYSTEM_CONCURRENCY);
           const batchContents = await pMap(
             batchPaths,
             async filePath => {
+              if (shouldStop()) return undefined;
               try {
                 const raw = await filesystem.readFile(filePath, { encoding: 'utf-8' });
+                scannedFileCount++;
                 return typeof raw === 'string' ? raw : undefined;
               } catch (err) {
                 if (strict) throw err;
@@ -489,6 +516,14 @@ Usage:
         summaryParts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
         if (truncated) {
           summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
+        }
+        if (incomplete) {
+          const scanned = `${scannedFileCount} file${scannedFileCount !== 1 ? 's' : ''} scanned`;
+          summaryParts.push(
+            incomplete === 'aborted'
+              ? `(search incomplete: aborted, ${scanned}; results are partial)`
+              : `(search incomplete: host-side search stopped after ${HOST_WALK_BUDGET_MS / 1000}s, ${scanned}; results are partial, narrow the path or pattern to search everything)`,
+          );
         }
         if (skippedExtensionCount > 0) {
           summaryParts.push(

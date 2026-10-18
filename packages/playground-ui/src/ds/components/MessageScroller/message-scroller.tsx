@@ -769,7 +769,7 @@ export const MessageScrollerViewport = React.forwardRef<HTMLDivElement, MessageS
         data-slot="message-scroller-viewport"
         className={cn(
           // Size container so consumers can size the room under a live turn in cqh.
-          '[container-type:size] size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain',
+          '[container-type:size] size-full min-h-0 min-w-0 overflow-y-auto overscroll-y-contain',
           'data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent',
           className,
         )}

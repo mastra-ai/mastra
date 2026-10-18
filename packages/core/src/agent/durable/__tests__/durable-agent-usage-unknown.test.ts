@@ -17,11 +17,17 @@
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import type {
+  ModelScript,
+  ModelTape,
+  ParityEngine,
+  ParitySnapshot,
+  ParityStreamOptions,
+} from '../../../loop/test-utils/aimock/parity';
+import { expectEngineParity } from '../../../loop/test-utils/aimock/parity';
 import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import type { ModelScript, ModelTape, ParityEngine, ParitySnapshot, ParityStreamOptions } from './parity-harness';
-import { expectEngineParity } from './parity-harness';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 
@@ -156,8 +162,7 @@ describe('durable agent usage that the provider never reported', () => {
           expect(usage?.outputTokens, `${engine}: outputTokens`).toBe(2);
         }
         const finishPayload = turn.finishChunk.payload as
-          | { isContinued?: unknown; output?: { isContinued?: unknown } }
-          | undefined;
+          { isContinued?: unknown; output?: { isContinued?: unknown } } | undefined;
         observed[engine] = {
           variant,
           usage,

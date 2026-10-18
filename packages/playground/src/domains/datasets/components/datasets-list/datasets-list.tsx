@@ -105,7 +105,6 @@ function SelectableDatasetRow({
   return (
     <DataList.RowButton {...rowProps} featured={featured} onClick={() => onSelect(ds)}>
       <DataList.NameCell>{ds.name}</DataList.NameCell>
-      <DataList.DescriptionCell>{ds.description}</DataList.DescriptionCell>
       <TagsCell tags={ds.tags} />
       <DataList.TextCell>v{ds.version ?? 1}</DataList.TextCell>
       <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
@@ -147,7 +146,6 @@ function DatasetRow({
         onClick={stopPropagation}
       >
         <DataList.NameCell>{ds.name}</DataList.NameCell>
-        <DataList.DescriptionCell>{ds.description}</DataList.DescriptionCell>
         <TagsCell tags={ds.tags} />
         <DataList.TextCell>v{ds.version ?? 1}</DataList.TextCell>
         <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
@@ -226,7 +224,6 @@ export function DatasetsList({
         ) : (
           <DataList.TopCell>Name</DataList.TopCell>
         )}
-        <DataList.TopCell>Description</DataList.TopCell>
         <DataList.TopCell>Tags</DataList.TopCell>
         <DataList.TopCell>Version</DataList.TopCell>
         {onSortChange ? (
@@ -242,6 +239,8 @@ export function DatasetsList({
         )}
         <DataList.TopCell>Experiments</DataList.TopCell>
       </DataList.Top>
+
+      {filteredData.length === 0 && !hasNextPage ? <DataList.NoMatch message="No datasets match your filters" /> : null}
 
       {filteredData.map((ds, index) =>
         onSelectDataset ? (

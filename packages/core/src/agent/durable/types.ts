@@ -420,6 +420,8 @@ export interface DurableLLMStepOutput {
   stepFinishPayload?: unknown;
   /** Deferred step-finish chunk carried until continuation policy resolves. */
   deferredStepFinishChunk?: unknown;
+  /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
+  completionStartTime?: Date;
 }
 
 /**
@@ -440,6 +442,8 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
+  completionStartTime?: Date;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -451,6 +455,8 @@ export interface DurableToolCallInput {
   hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
+  /** Model usage of the step that produced this call, reported on its suspension chunk */
+  stepUsage?: LanguageModelUsage;
 }
 
 /**
@@ -563,6 +569,8 @@ export interface DurableAgenticExecutionOutput {
   delegationBailed?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
+  /** When this iteration's inference streamed its first chunk */
+  completionStartTime?: Date;
 }
 
 /**
@@ -651,10 +659,13 @@ export interface AgentFinishEventData {
  */
 export interface AgentErrorEventData {
   error: {
+    /** Stable error id (e.g. `AGENT_RESUME_ALREADY_CLAIMED`) when the source was a `MastraError`. */
+    id?: string;
     name: string;
     message: string;
     stack?: string;
   };
+  delivery?: 'reject';
 }
 
 /**
@@ -748,6 +759,13 @@ export interface RunRegistryEntry {
    * `tools` when seeding a step (issue #22933).
    */
   baseTools?: Record<string, CoreTool>;
+  /**
+   * The tools built for the request that started (or last resumed) the run.
+   * A warm resume rebuilds these with the resuming call's request context and
+   * swaps out only entries that still hold one of them, so processor-added or
+   * replaced tools are kept (#25960).
+   */
+  requestTools?: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
@@ -804,6 +822,8 @@ export interface RunRegistryEntry {
   /** Exported forms of the resume spans, read by the workflow steps (same process). */
   resumeAgentSpanData?: unknown;
   resumeModelSpanData?: unknown;
+  /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
+  resumeCompletionStartTime?: Date;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from
@@ -960,6 +980,12 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /**
+   * Tool call resumed by the `resume()` currently driving this run in this
+   * process. Its in-flight marker is cleared when the segment suspends again.
+   * @internal
+   */
+  resumeToolCallId?: string;
   /**
    * Set while an engine that persists the suspended snapshot before returning
    * is executing. The tool-call step queues suspension chunks/events here so

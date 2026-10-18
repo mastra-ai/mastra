@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 // `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:-ml-[.3em]',
+  '[&>[data-slot=button-icon]]:ml-[-.3em]',
   '[&>[data-slot=button-icon-end]]:-mr-1',
   '[&>svg]:mx-[-.3em]',
 );
@@ -176,6 +176,8 @@ function preventLinkActivation(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
 
+type LinkRenderProps = { href?: string; to?: string; target?: string; className?: string };
+
 // One icon step per control step: a glyph is sized by the rung it sits in, so the
 // same nominal size renders the same icon whether it arrives as an icon-mode child,
 // the `icon` prop, or a bare SVG.
@@ -320,14 +322,25 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       ...(prefetch === undefined ? null : { prefetch }),
     };
 
-    const renderedLink = React.isValidElement(render) && isLinkElement(render) ? render : undefined;
+    const isLinkVariant = resolvedVariant === 'link';
+    const linkHref = href ?? to;
+    const linkRenderProps: LinkRenderProps = {
+      ...(linkHref === undefined ? null : { href: linkHref }),
+      ...(target === undefined ? null : { target }),
+    };
+    const renderedLink =
+      React.isValidElement(render) && isLinkElement(render)
+        ? render
+        : isLinkVariant
+          ? React.createElement('a', linkRenderProps)
+          : undefined;
     const renderedLinkProps = renderedLink?.props;
     const disabledHref = renderedLink?.type !== 'a' && renderedLinkProps?.href !== undefined ? '' : undefined;
     const disabledTo = renderedLinkProps?.to !== undefined ? '' : undefined;
     const disabledLinkProps = disabled
       ? {
-          href: disabledHref,
-          to: disabledTo,
+          ...(isLinkVariant ? null : { href: disabledHref }),
+          ...(isLinkVariant ? null : { to: disabledTo }),
           'aria-disabled': true,
           onClick: preventLinkActivation,
           onAuxClick: preventLinkActivation,

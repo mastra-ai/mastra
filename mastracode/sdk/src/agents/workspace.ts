@@ -255,6 +255,7 @@ export async function getDynamicWorkspace({
     name: 'Mastra Code Workspace',
     filesystem,
     sandbox: new LocalSandbox({
+      timeout: 30_000,
       workingDirectory: projectPath,
       env: buildSandboxEnv(),
     }),

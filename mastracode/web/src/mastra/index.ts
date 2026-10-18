@@ -22,14 +22,13 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { LocalSandbox } from '@mastra/core/workspace';
-import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
-import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
+import { E2BFactorySandbox } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
+import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
@@ -59,9 +58,21 @@ function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer
   return key;
 }
 
+// Outside development and tests, missing security configuration stops the boot
+// instead of falling back. Each fallback has its own explicit opt-in.
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+
 function credentialEncryption() {
   const encodedKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim();
   if (!encodedKey) {
+    const plaintextOptIn = process.env.FACTORY_CREDENTIAL_ENCRYPTION?.trim() === 'plaintext';
+    if (!localDevelopmentMode && !plaintextOptIn) {
+      throw new Error(
+        'FACTORY_CREDENTIAL_ENCRYPTION_KEY is required outside local development and tests. Generate a key with ' +
+          '`openssl rand -base64 32`, or set FACTORY_CREDENTIAL_ENCRYPTION=plaintext to store model-provider keys, ' +
+          'custom-provider API keys, and integration secrets unencrypted.',
+      );
+    }
     console.warn(
       '[factory] FACTORY_CREDENTIAL_ENCRYPTION_KEY is not set. Stored model-provider keys, custom-provider ' +
         'API keys, and integration secrets will be persisted as plaintext. Generate a key with ' +
@@ -300,7 +311,6 @@ if (process.env.APP_DATABASE_URL?.trim() && !process.env.DATABASE_URL?.trim()) {
       'The old name is honored as a fallback for now, but new deploys should use DATABASE_URL.',
   );
 }
-const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 if (!databaseUrl && !localDevelopmentMode) {
   throw new Error('DATABASE_URL is required outside local development and tests.');
 }
@@ -362,6 +372,32 @@ export const factoryConfigVersion = 'mastracode-web-v1';
 const hasPlatformSandboxEnv =
   ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
   ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
+const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+const e2bApiKey = process.env.E2B_API_KEY?.trim();
+if (!useLocalSandbox && !hasPlatformSandboxEnv && !e2bApiKey && !localDevelopmentMode) {
+  throw new Error(
+    'A sandbox provider is required outside local development and tests. Set MASTRA_PLATFORM_ACCESS_TOKEN or ' +
+      'MASTRA_PLATFORM_SECRET_KEY with MASTRA_PROJECT_ID and MASTRA_ENVIRONMENT_ID for Mastra platform sandboxes, ' +
+      'or E2B_API_KEY for E2B. To run agent commands directly on this machine as the server user, set ' +
+      'FACTORY_SANDBOX_PROVIDER=local.',
+  );
+}
+
+/**
+ * The host sandbox, chosen once at boot: local when forced, else the platform
+ * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local
+ * (development and tests only; see the guard above).
+ */
+const sandbox =
+  !useLocalSandbox && hasPlatformSandboxEnv
+    ? new PlatformFactorySandbox()
+    : !useLocalSandbox && e2bApiKey
+      ? new E2BFactorySandbox({ apiKey: e2bApiKey })
+      : new LocalFactorySandbox({
+          root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+          env: localSandboxEnv(),
+        });
+
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -370,34 +406,7 @@ export const factory = new MastraFactory({
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
-  sandbox: ctx => {
-    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
-    if (!useLocalSandbox && hasPlatformSandboxEnv) {
-      return new PlatformSandbox({
-        id: ctx.sessionId,
-        // Physical VM id from a prior start (undefined on first start) so
-        // resume reattaches the original VM instead of provisioning a replacement.
-        sandboxId: ctx.sandboxId,
-        template: createPlatformRepoTemplate(ctx),
-      });
-    }
-
-    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
-      return new E2BSandbox({
-        id: ctx.sessionId,
-        sandboxId: ctx.sandboxId,
-        template: createE2BRepoTemplate(ctx),
-      });
-    }
-
-    return new LocalSandbox({
-      workingDirectory: join(
-        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-        ctx.sessionId,
-      ),
-      env: localSandboxEnv(),
-    });
-  },
+  sandbox,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {
@@ -444,6 +453,7 @@ export const mastra = new Mastra({
   storage: preparedArgs.storage,
   pubsub: preparedArgs.pubsub,
   workers: preparedArgs.workers,
+  workflows: preparedArgs.workflows,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this
