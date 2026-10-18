@@ -45,6 +45,7 @@
     "google/gemma-3-4b-it",
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
+    "meta/muse-spark-open",
     "minimax/minimax-m3",
     "mistral/mistral-large-2512",
     "mistral/mistral-large-latest",
@@ -173,6 +174,7 @@
     "meta/llama-3.3-70b-instruct",
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
+    "meta/muse-spark-open",
     "minimax/minimax-m2",
     "minimax/minimax-m2.1",
     "minimax/minimax-m2.5",
@@ -302,7 +304,6 @@
     "cohere/command-r-plus-08-2024",
     "cohere/command-r7b-12-2024",
     "deepseek/deepseek-r1-0528",
-    "deepseek/deepseek-v3.1",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
@@ -692,6 +693,12 @@
     "deepseek/deepseek-v4-flash": [
       {
         "type": "toggle"
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "google/gemini-flash-latest": [

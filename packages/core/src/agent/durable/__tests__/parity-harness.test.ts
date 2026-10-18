@@ -29,6 +29,7 @@ import {
   toolCallTape,
   normalizeRequest,
   normalizePayload,
+  normalizeChunkPayload,
 } from './parity-harness';
 
 function systemText(request: CapturedRequest): string {
@@ -469,15 +470,13 @@ describe('expectEngineParity', () => {
       "durable: turns[0] finish payload now includes 'messageId'; remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)",
     ]);
 
-    // Plain stops emitting the keys the wrapped engines are declared to omit.
+    // If plain stops emitting keys the wrapped engines omit, that missing-key
+    // declaration no longer applies to this scenario.
     const plainWithoutEnvelope = observe(results.plain!);
     for (const key of ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response']) {
       delete payloadAt(plainWithoutEnvelope, finishIndex(plainWithoutEnvelope))[key];
     }
-    expect(staleKnownDifferences('durable', plainWithoutEnvelope, observe(results.durable!))).toEqual([
-      "durable: plain's finish payload no longer includes any of messageId, messages, metadata, " +
-        'processorRetryCount, response; update KNOWN_CHUNK_DIFFERENCES (COR-1390)',
-    ]);
+    expect(staleKnownDifferences('durable', plainWithoutEnvelope, observe(results.durable!))).toEqual([]);
 
     // A declared path starts matching: the difference is fixed.
     const matchedOnPlain = observe(results.plain!);
@@ -489,13 +488,90 @@ describe('expectEngineParity', () => {
         'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
     ]);
 
-    // A declared path disappears from both engines: nothing left to declare.
+    // A declared path absent from both engines does not apply to this chunk pair.
     const stepIdsGone = [observe(results.plain!), observe(results.durable!)];
     for (const observation of stepIdsGone) delete payloadAt(observation, stepStartIndex(observation)).stepId;
-    expect(staleKnownDifferences('durable', stepIdsGone[0]!, stepIdsGone[1]!)).toEqual([
-      'durable: the declared step-start chunk difference no longer reproduces; ' +
+    expect(staleKnownDifferences('durable', stepIdsGone[0]!, stepIdsGone[1]!)).toEqual([]);
+
+    // A multi-path declaration does not apply merely because its chunk exists.
+    // Call-level failures produce this identical finish.stepResult on every engine.
+    const matchingFailureFinish = [observe(results.plain!), observe(results.durable!)];
+    for (const observation of matchingFailureFinish) {
+      observation.turns[0]!.chunkTypes = ['finish'];
+      observation.turns[0]!.chunkPayloads = [{ stepResult: { reason: 'error', warnings: [], isContinued: false } }];
+    }
+    expect(staleKnownDifferences('durable', matchingFailureFinish[0]!, matchingFailureFinish[1]!)).toEqual([]);
+
+    // The error declaration likewise does not apply when neither payload has its
+    // declared `type` path, as with processor and structured-output failures.
+    const matchingUntypedError = [observe(results.plain!), observe(results.durable!)];
+    for (const observation of matchingUntypedError) {
+      observation.turns[0]!.chunkTypes = ['error'];
+      observation.turns[0]!.chunkPayloads = [{ error: { name: 'Error', message: 'boom' } }];
+    }
+    expect(staleKnownDifferences('durable', matchingUntypedError[0]!, matchingUntypedError[1]!)).toEqual([]);
+
+    // Once one field makes a chunk pair applicable, every other populated
+    // declared field in that same pair remains subject to the stale check.
+    const setPath = (payload: Record<string, unknown>, path: string, value: unknown) => {
+      const parts = path.split('.');
+      let cursor = payload;
+      for (const part of parts.slice(0, -1)) {
+        cursor = (cursor[part] ??= {}) as Record<string, unknown>;
+      }
+      cursor[parts.at(-1)!] = value;
+    };
+    for (const path of ['metadata.modelProvider', 'metadata.modelVersion', 'output.object']) {
+      const [plainStepFinish, wrappedStepFinish] = [observe(results.plain!), observe(results.durable!)];
+      plainStepFinish.turns[0]!.chunkTypes = ['step-finish'];
+      plainStepFinish.turns[0]!.chunkPayloads = [{ processorRetryCount: 0 }];
+      wrappedStepFinish.turns[0]!.chunkTypes = ['step-finish'];
+      wrappedStepFinish.turns[0]!.chunkPayloads = [{ processorRetryCount: 1 }];
+      setPath(plainStepFinish.turns[0]!.chunkPayloads[0] as Record<string, unknown>, path, 'same');
+      setPath(wrappedStepFinish.turns[0]!.chunkPayloads[0] as Record<string, unknown>, path, 'same');
+      expect(staleKnownDifferences('durable', plainStepFinish, wrappedStepFinish)).toContain(
+        `durable: turns[0] step-finish payload '${path}' no longer differs from plain; ` +
+          'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
+      );
+    }
+
+    // A converged declaration is stale even when other declared fields are absent.
+    const mixedStepFinishes = [observe(results.plain!), observe(results.durable!)];
+    for (const observation of mixedStepFinishes) {
+      observation.turns[0]!.chunkTypes = ['step-finish'];
+      observation.turns[0]!.chunkPayloads = [
+        {
+          processorRetryCount: 1,
+          metadata: { modelMetadata: { key: 'value' } },
+          output: { text: 'text' },
+        },
+      ];
+    }
+    expect(staleKnownDifferences('durable', mixedStepFinishes[0]!, mixedStepFinishes[1]!)).toContain(
+      'durable: the declared step-finish chunk difference no longer reproduces; ' +
         'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
-    ]);
+    );
+
+    // A fully converged, populated declaration is stale even though there is no
+    // remaining difference to establish applicability.
+    const [plainStepFinish, wrappedStepFinish] = [observe(results.plain!), observe(results.durable!)];
+    const convergedPayload = {
+      type: 'step-finish',
+      _durableStepContent: 'content',
+      _durableResponseMessages: ['response'],
+      processorRetryCount: 1,
+      metadata: { modelMetadata: { key: 'value' }, modelProvider: 'provider', modelVersion: 'version' },
+      messages: { all: ['all'], user: ['user'], nonUser: ['assistant'] },
+      output: { object: { ok: true }, text: 'text', steps: ['step'], toolCalls: ['call'] },
+    };
+    for (const observation of [plainStepFinish, wrappedStepFinish]) {
+      observation.turns[0]!.chunkTypes = ['step-finish'];
+      observation.turns[0]!.chunkPayloads = [structuredClone(convergedPayload)];
+    }
+    expect(staleKnownDifferences('durable', plainStepFinish, wrappedStepFinish)).toContain(
+      'durable: the declared step-finish chunk difference no longer reproduces; ' +
+        'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
+    );
   });
 
   it('preserves the approved tool call in every engine’s resumed output', async () => {
@@ -1078,18 +1154,25 @@ describe('expectEngineParity', () => {
     expect(normalizeRequest(request(1, false, nested(1)))).not.toEqual(normalizeRequest(request(1, false, nested(2))));
   });
 
-  it('drops an error stack but keeps a stack an application owns', () => {
-    // An `error` chunk's payload is the failure itself, and the stack it carries
-    // embeds the absolute checkout path: dropped where the payload is known to
-    // be a failure.
-    expect(
-      normalizePayload({ error: { name: 'Error', message: 'boom', stack: 'at /checkout/src/x.ts:1' } }, [], true),
-    ).toEqual({ error: { name: 'Error', message: 'boom' } });
+  it('drops failure chunk stacks but keeps a stack an application owns', () => {
+    const failure = {
+      args: { stack: ['a', 'b'] },
+      error: { name: 'Error', message: 'boom', stack: 'at /checkout/src/x.ts:1' },
+    };
+
+    expect(normalizeChunkPayload('error', failure)).toEqual({
+      args: {},
+      error: { name: 'Error', message: 'boom' },
+    });
+    expect(normalizeChunkPayload('tool-error', failure)).toEqual({
+      args: { stack: ['a', 'b'] },
+      error: { name: 'Error', message: 'boom' },
+    });
 
     // Everywhere else a `stack` is the application's data. Dropping it by key
     // name would have made the two cases below compare equal.
     const result = { name: 'deployment', message: 'ready', stack: ['a', 'b'] };
-    expect(normalizePayload(result)).toEqual(result);
+    expect(normalizeChunkPayload('tool-result', result)).toEqual(result);
     expect(normalizePayload({ stack: 'a' })).not.toEqual(normalizePayload({ stack: 'b' }));
   });
 

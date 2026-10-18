@@ -115,6 +115,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
+ * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
@@ -135,6 +136,7 @@ export type ObservabilityStorageFeature =
   | 'tag-discovery'
   | 'metric-discovery'
   | 'span-query'
+  | 'span-query-context-fields'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'

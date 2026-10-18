@@ -899,14 +899,21 @@ export class SessionThread {
   }
 
   /**
-   * Transfer the active thread to a new owner.
+   * Transfer a thread to a new owner. Defaults to the active thread; pass
+   * `threadId` to transfer another thread of this resource without switching to it.
    *
    * Transfers are serialized within this process. Hosts needing strict durable
    * compare-and-set semantics should commit that change in their own store before
    * mirroring it here.
    */
-  async transferOwnership({ toOwnerId }: { toOwnerId: string }): Promise<void> {
-    const threadId = this.requireId();
+  async transferOwnership({
+    toOwnerId,
+    threadId: requestedThreadId,
+  }: {
+    toOwnerId: string;
+    threadId?: string;
+  }): Promise<void> {
+    const threadId = requestedThreadId ?? this.requireId();
 
     await withThreadOwnershipMutex(threadId, async () => {
       const store = this.#store;
@@ -4717,10 +4724,13 @@ export class Session<TState = unknown> {
   async respondToPersistedToolApproval({
     toolCallId,
     approved,
+    alwaysAllowCategory,
     requestContext,
   }: {
     toolCallId: string;
     approved: boolean;
+    /** Also grant the tool's category to the run's thread, like a parked "always allow". */
+    alwaysAllowCategory?: boolean;
     requestContext?: RequestContext;
   }): Promise<void> {
     const threadId = this.thread.getId();
@@ -4732,6 +4742,11 @@ export class Session<TState = unknown> {
     );
     if (!run) throw new Error(`No suspended run is waiting on tool call ${toolCallId}`);
     const identity = { toolCallId, requestContext, runId: run.runId, threadId, resourceId };
+    if (approved && alwaysAllowCategory) {
+      const toolName = run.toolCalls.find(call => call.toolCallId === toolCallId)?.toolName;
+      const category = toolName ? this.#resolveCategory?.(toolName) : undefined;
+      if (category) this.grantCategory(category, threadId);
+    }
     if (approved) await this.approveToolCall(identity);
     else await this.declineToolCall(identity);
   }

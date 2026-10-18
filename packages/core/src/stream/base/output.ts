@@ -268,6 +268,14 @@ type StepMessagePart = MastraDBMessage['content']['parts'][number];
  *   3. for a different message, the trailing text matching the pre-processing step text, which finds
  *      the boundary when a processor replaced the id of the accumulated response;
  *   4. otherwise the whole message, which then holds only this iteration.
+ *
+ * The rules below are heuristics over the processed parts, so a processor can defeat them. When it
+ * rewrites the current iteration's text (so the pre-processing step text no longer appears) *and*
+ * moves the boundary while keeping the part count and kinds (for example by merging an earlier
+ * iteration's parts and splitting the current one), the measured offset still matches by count and
+ * kind and the step text is taken from the wrong position. That information is gone from the parts —
+ * only a processor that preserves the boundary (a `step-start` part, or positions it does not move)
+ * can be resolved exactly.
  */
 function resolveProcessedStepText({
   processedStepMessage,
@@ -291,23 +299,15 @@ function resolveProcessedStepText({
   if (!processedStepMessage || !processedStepParts) return outputText ?? '';
 
   const textWithin = (parts: StepMessagePart[]) => parts.map(part => (part.type === 'text' ? part.text : '')).join('');
-
-  // A `step-start` part in the processed message marks where its current iteration begins.
   const boundaryIndex = processedStepParts.findLastIndex(part => part.type === 'step-start');
-  if (boundaryIndex !== -1) {
-    return textWithin(processedStepParts.slice(boundaryIndex + 1));
-  }
+  if (boundaryIndex !== -1) return textWithin(processedStepParts.slice(boundaryIndex + 1));
 
   if (processedStepMessage.id === originalMessageId && originalParts) {
     const sliceFrom = (index: number) => textWithin(processedStepParts.slice(index));
     const offset = originalIterationPartOffset;
-
-    // The pre-processing step text still ends the current iteration when its text positions survived
-    // processing — an in-place rewrite, or a split that left the earlier parts untouched.
     const textOffset = findIterationOffsetInParts(processedStepParts, originalStepText);
     if (textOffset !== undefined) return sliceFrom(textOffset);
 
-    // The measured offset still applies while the parts before it are unchanged.
     if (
       offset !== undefined &&
       offset > 0 &&
@@ -317,8 +317,6 @@ function resolveProcessedStepText({
       return sliceFrom(offset);
     }
 
-    // A rewrite that keeps the part count and each part's kind preserves positions even when the text
-    // changed (redaction), so the measured offset still applies.
     if (
       offset !== undefined &&
       originalPartCount !== undefined &&
@@ -328,7 +326,6 @@ function resolveProcessedStepText({
       return sliceFrom(offset);
     }
 
-    // A changed part count or kind means positions moved; the unchanged prefix still marks the boundary.
     let common = 0;
     while (
       common < originalParts.length &&
@@ -342,13 +339,10 @@ function resolveProcessedStepText({
     return textWithin(processedStepParts);
   }
 
-  // A message the processor produced may still carry earlier iterations (its id was replaced), so find
-  // where the pre-processing step text ends. When it is not found the message holds only this iteration.
   const offset = findIterationOffsetInParts(processedStepParts, originalStepText);
   return offset !== undefined ? textWithin(processedStepParts.slice(offset)) : textWithin(processedStepParts);
 }
 
-/** Whether two parts carry the same content, for matching an unchanged prefix across processing. */
 function partMatches(a: StepMessagePart | undefined, b: StepMessagePart | undefined): boolean {
   if (!a || !b || a.type !== b.type) return false;
   if (a.type === 'text') return a.text === (b as typeof a).text;
@@ -360,7 +354,6 @@ function partMatches(a: StepMessagePart | undefined, b: StepMessagePart | undefi
   return true;
 }
 
-/** Index in `parts` where the trailing text that equals `stepText` begins, or undefined. */
 function findIterationOffsetInParts(parts: StepMessagePart[], stepText: string | undefined): number | undefined {
   if (!stepText) return undefined;
 
@@ -384,7 +377,7 @@ function findIterationPartOffset(
 
   const stepParts = messageList.partsSinceStepBoundary(message);
   if (stepParts.length < parts.length) return parts.length - stepParts.length;
-  if (!stepText) return parts.length;
+  if (!stepText) return undefined;
 
   let suffixText = '';
   for (let index = parts.length - 1; index >= 0; index--) {
@@ -395,6 +388,124 @@ function findIterationPartOffset(
   }
 
   return undefined;
+}
+
+function resolveMessageText(message: MastraDBMessage): string {
+  const converted = convertMessages([message]).to('AIV4.Core');
+  const convertedMessage = converted[converted.length - 1];
+  return convertedMessage ? coreContentToString(convertedMessage.content) : '';
+}
+
+// Enumerable so processor object spreads preserve it; removed before the split response is coalesced.
+const stepPartIndex = Symbol('stepPartIndex');
+
+type StepIndexedPart = {
+  [stepPartIndex]?: number;
+};
+
+type StepPartBoundaries = {
+  offsets: number[];
+};
+
+function findStepPartBoundaries<OUTPUT>(
+  message: MastraDBMessage | undefined,
+  steps: LLMStepResult<OUTPUT>[],
+): StepPartBoundaries | undefined {
+  const parts = message?.content.parts;
+  if (!parts) return undefined;
+
+  const offsets = Array<number>(steps.length + 1);
+  offsets[steps.length] = parts.length;
+  let partIndex = parts.length;
+
+  for (let stepIndex = steps.length - 1; stepIndex >= 0; stepIndex--) {
+    const stepText = steps[stepIndex]!.text;
+    let text = '';
+
+    while (partIndex > 0 && text !== stepText) {
+      const part = parts[--partIndex]!;
+      if (part.type === 'text') text = `${part.text}${text}`;
+    }
+
+    if (text !== stepText) return undefined;
+    offsets[stepIndex] = partIndex;
+  }
+
+  for (const [stepIndex] of steps.entries()) {
+    for (const part of parts.slice(offsets[stepIndex], offsets[stepIndex + 1])) {
+      if (part.type === 'text') (part as typeof part & StepIndexedPart)[stepPartIndex] = stepIndex;
+    }
+  }
+
+  return { offsets };
+}
+
+function clearStepPartIndexes(messages: MastraDBMessage[]): void {
+  for (const message of messages) {
+    for (const part of message.content.parts) delete (part as typeof part & StepIndexedPart)[stepPartIndex];
+  }
+}
+
+function reconcileBufferedStepTexts<OUTPUT>(
+  steps: LLMStepResult<OUTPUT>[],
+  processedText: string,
+  processedMessage?: MastraDBMessage,
+  stepPartBoundaries?: StepPartBoundaries,
+  originalText?: string,
+): void {
+  if (processedText === originalText) return;
+
+  const processedParts = processedMessage?.content.parts;
+  let processedOffsets: number[] | undefined;
+
+  if (processedParts && stepPartBoundaries) {
+    const processedStepTexts = steps.map(() => '');
+    let lastStepIndex = 0;
+    let hasUnknownPart = false;
+
+    for (const part of processedParts) {
+      if (part.type !== 'text') continue;
+      const stepIndex = (part as typeof part & StepIndexedPart)[stepPartIndex];
+      if (stepIndex === undefined || stepIndex < lastStepIndex) {
+        hasUnknownPart = true;
+        break;
+      }
+      processedStepTexts[stepIndex] += part.text;
+      lastStepIndex = stepIndex;
+    }
+
+    if (!hasUnknownPart) {
+      for (const [index, step] of steps.entries()) step.text = processedStepTexts[index]!;
+      return;
+    }
+
+    if (stepPartBoundaries.offsets.at(-1) === processedParts.length) {
+      processedOffsets = stepPartBoundaries.offsets;
+    }
+  }
+
+  if (processedParts && processedOffsets) {
+    for (const [index, step] of steps.entries()) {
+      step.text = processedParts
+        .slice(processedOffsets[index], processedOffsets[index + 1])
+        .map(part => (part.type === 'text' ? part.text : ''))
+        .join('');
+    }
+    return;
+  }
+
+  let offset = 0;
+  let index = 0;
+
+  while (index < steps.length && processedText.startsWith(steps[index]!.text, offset)) {
+    offset += steps[index]!.text.length;
+    index++;
+  }
+
+  if (index === steps.length) return;
+
+  steps[index]!.text = processedText.slice(offset);
+  for (const step of steps.slice(index + 1)) step.text = '';
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
@@ -1439,61 +1550,122 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
                   const stepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
-                  const stepMessageParts = stepMessage?.content?.parts;
                   const iterationPartOffset = stepMessage
                     ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
                     : undefined;
-                  // Snapshot the parts before processing so the reconciliation can tell whether the
-                  // prefix of the response survived unchanged (a processor may rewrite the array in place).
-                  const originalStepMessageParts = stepMessageParts ? [...stepMessageParts] : undefined;
-
-                  self.messageList = await self.processorRunner.runOutputProcessors(
-                    self.messageList,
-                    resolveObservabilityContext(options),
-                    self.#options.requestContext,
-                    0,
-                    outputResultWriter,
-                    outputResult,
-                  );
-
-                  const responseMessages = self.messageList.get.response.db();
-                  // Reconcile against the message the resolved output text is read from, not the
-                  // pre-processing message matched by id: a processor can retain that message and
-                  // append a revised response, in which case the id match returns the stale original
-                  // and the step text disagrees with `getFullOutput()`. Fall back to the id match in
-                  // the corner case where no non-completion response remains to resolve text from.
-                  const processedStepMessage = stepMessage
-                    ? (resolveOutputMessageSkippingCompletionChecks(self.messageList) ??
-                      responseMessages.find(message => message.id === stepMessage.id))
-                    : undefined;
-                  const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
-                  const processedStepParts = processedStepMessage?.content?.parts;
-                  const stepText =
-                    outputText !== outputTextBeforeProcessing
-                      ? resolveProcessedStepText({
-                          processedStepMessage,
-                          processedStepParts,
-                          originalMessageId: stepMessage?.id,
-                          originalIterationPartOffset: iterationPartOffset,
-                          originalPartCount: stepMessageParts?.length,
-                          originalParts: originalStepMessageParts,
-                          originalStepText: lastStepText,
-                          outputText,
-                        })
+                  const separatedIteration =
+                    stepMessage && iterationPartOffset !== undefined
+                      ? self.messageList.splitResponseMessageAtPartOffset(stepMessage.id, iterationPartOffset)
                       : undefined;
+                  const earlierStepMessage = separatedIteration
+                    ? self.messageList.get.response
+                        .db()
+                        .find(message => message.id === separatedIteration.earlierMessageId)
+                    : undefined;
+                  const earlierStepPartBoundaries = separatedIteration
+                    ? findStepPartBoundaries(earlierStepMessage, self.#bufferedSteps.slice(0, -1))
+                    : undefined;
+                  const earlierTextBeforeProcessing = earlierStepMessage
+                    ? resolveMessageText(earlierStepMessage)
+                    : undefined;
+                  const processorStepMessageId = separatedIteration?.currentMessageId ?? stepMessage?.id;
+                  const processorStepMessage = processorStepMessageId
+                    ? self.messageList.get.response.db().find(message => message.id === processorStepMessageId)
+                    : undefined;
+                  const processorStepMessageParts = processorStepMessage?.content?.parts;
+                  const originalProcessorStepMessageParts = processorStepMessageParts
+                    ? [...processorStepMessageParts]
+                    : undefined;
 
-                  // Earlier buffered steps retain their model text, so only the final step of a continuation
-                  // is reconciled against the processor's output. Compare against undefined, not truthiness,
-                  // so clearing to '' applies when the processor removes that iteration's response.
+                  let outputText: string | undefined;
+                  let stepText: string | undefined;
+                  let processedEarlierText: string | undefined;
+                  let processedEarlierMessage: MastraDBMessage | undefined;
+                  try {
+                    self.messageList = await self.processorRunner.runOutputProcessors(
+                      self.messageList,
+                      resolveObservabilityContext(options),
+                      self.#options.requestContext,
+                      0,
+                      outputResultWriter,
+                      outputResult,
+                    );
+
+                    const responseMessages = self.messageList.get.response.db();
+                    const resolvedProcessedStepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
+                    const idMatchedProcessedStepMessage = processorStepMessageId
+                      ? responseMessages.find(message => message.id === processorStepMessageId)
+                      : undefined;
+                    const processedStepMessage =
+                      resolvedProcessedStepMessage?.id === separatedIteration?.earlierMessageId
+                        ? idMatchedProcessedStepMessage
+                        : (resolvedProcessedStepMessage ?? idMatchedProcessedStepMessage);
+                    processedEarlierMessage = separatedIteration
+                      ? responseMessages.find(message => message.id === separatedIteration.earlierMessageId)
+                      : undefined;
+                    processedEarlierText = separatedIteration
+                      ? processedEarlierMessage
+                        ? resolveMessageText(processedEarlierMessage)
+                        : ''
+                      : undefined;
+                    const processedOutputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                    const processedStepParts = processedStepMessage?.content?.parts;
+                    stepText =
+                      separatedIteration || processedOutputText !== outputTextBeforeProcessing
+                        ? resolveProcessedStepText({
+                            processedStepMessage,
+                            processedStepParts,
+                            originalMessageId: processorStepMessage?.id,
+                            originalIterationPartOffset: separatedIteration ? 0 : iterationPartOffset,
+                            originalPartCount: processorStepMessageParts?.length,
+                            originalParts: originalProcessorStepMessageParts,
+                            originalStepText: lastStepText,
+                            outputText: processedOutputText,
+                          })
+                        : undefined;
+                    const stepMessageWasReplaced =
+                      separatedIteration &&
+                      processedStepMessage &&
+                      processedStepMessage.id !== processorStepMessage?.id;
+                    if (stepMessageWasReplaced && resolveMessageText(processedStepMessage) === processedEarlierText) {
+                      stepText = '';
+                    }
+                    outputText = separatedIteration
+                      ? stepMessageWasReplaced
+                        ? processedOutputText
+                        : `${processedEarlierText}${stepText ?? ''}`
+                      : processedOutputText;
+
+                    if (processedEarlierText !== undefined) {
+                      reconcileBufferedStepTexts(
+                        self.#bufferedSteps.slice(0, -1),
+                        processedEarlierText,
+                        processedEarlierMessage,
+                        earlierStepPartBoundaries,
+                        earlierTextBeforeProcessing,
+                      );
+                    }
+                  } finally {
+                    clearStepPartIndexes(self.messageList.get.response.db());
+                    if (separatedIteration) {
+                      self.messageList.coalesceSplitResponseMessages(
+                        separatedIteration.earlierMessageId,
+                        separatedIteration.currentMessageId,
+                      );
+                    }
+                  }
+
+                  // When multiple iterations share one response message, separate the current iteration before result
+                  // processing so both the earlier buffered steps and the current step are reconciled from processor
+                  // output. Compare against undefined, not truthiness, so clearing to '' applies when the processor
+                  // removes an iteration's response.
                   if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
                     lastStep.text = stepText;
                   }
 
                   // Use the processed text when a response message exists, even if the
-                  // processor intentionally emptied it. When the processor removed that
-                  // iteration's response entirely, resolve to '' so the text promise stays
-                  // consistent with the cleared step text. Only fall back to the raw model
-                  // text when there was no response message to process at all.
+                  // processor intentionally emptied it. Only fall back to the raw model
+                  // text when there is no processed message at all.
                   this.resolvePromises({
                     text: outputText ?? (stepMessage ? '' : lastStepText),
                     finishReason: self.#finishReason,
@@ -1655,6 +1827,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
 
               self.#closeTransportIfNeeded();
+
+              // A `processOutputResult` tripwire rejects the run: end the stream with a
+              // `tripwire` chunk instead of the `finish` chunk, matching every other tripwire.
+              if (outputResultTripwire) {
+                if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                  self.#status = 'tripwire';
+                }
+                const tripwireChunk = {
+                  type: 'tripwire',
+                  runId: chunk.runId,
+                  from: chunk.from,
+                  payload: { ...outputResultTripwire },
+                } as ChunkType<OUTPUT>;
+                self.#emitChunk(tripwireChunk);
+                controller.enqueue(tripwireChunk);
+                return;
+              }
               break;
 
             case 'goal':

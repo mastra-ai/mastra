@@ -87,6 +87,39 @@ export async function prepareSessionRunContext(
   return 'prepared';
 }
 
+/**
+ * Create the controller session for a Factory session that isn't live, as its
+ * row's owner in the row's organization. Used when an event or message has to
+ * reach a session nobody has open: there is no signed-in user, so the session
+ * runs as the person it belongs to.
+ */
+export async function createSessionAsRowOwner(
+  controller: Pick<MountedMastraCode['controller'], 'createSession'>,
+  args: {
+    sessionId: string;
+    ownerResourceId: string;
+    row: FactorySessionOwner;
+    tags: Record<string, string>;
+    scope?: string;
+    /** Bind this exact thread at creation instead of resuming or creating another. */
+    threadId?: string;
+  },
+) {
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: args.row.userId, organizationId: args.row.orgId });
+  const session = await controller.createSession({
+    id: args.sessionId,
+    ownerId: args.row.userId,
+    resourceId: args.ownerResourceId,
+    scope: args.scope,
+    tags: args.tags,
+    ...(args.threadId ? { threadId: args.threadId } : {}),
+    requestContext,
+  });
+  await seedSessionOrg(session, args.row.orgId);
+  return session;
+}
+
 export async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: SubscriptionSessionRow,
@@ -128,17 +161,13 @@ export async function resolveSubscriptionSession(
     if (!sessionRow) {
       throw new Error(`${label} subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
     }
-    const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
-    session = await controller.createSession({
-      id: sessionId,
-      ownerId: sessionRow.userId,
-      resourceId: ownerResourceId,
+    session = await createSessionAsRowOwner(controller, {
+      sessionId,
+      ownerResourceId,
+      row: sessionRow,
       scope,
       tags,
-      requestContext,
     });
-    await seedSessionOrg(session, sessionRow.orgId);
   } else if (!hasResolvedOrg(session.state?.get()?.factoryOrgId)) {
     // A session created before the org seed existed carries the project tag and
     // no org, so capture would refuse for the rest of its life even though the

@@ -10,6 +10,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import type { ThreadOwner } from '../services/reply-credential';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
@@ -28,7 +29,7 @@ import { isTimeGap } from './TranscriptSignals';
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
   const hookArgs = {
@@ -67,6 +68,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
         onRespond={onRespond}
         running={busy}
         viewerId={viewerId}
+        owner={owner}
         tail={tail}
       />
     </ArrivalScope>
@@ -81,6 +83,7 @@ export function TranscriptEntries({
   onRespond,
   running = false,
   viewerId,
+  owner,
   tail,
 }: {
   entries: TimelineEntry[];
@@ -92,6 +95,8 @@ export function TranscriptEntries({
   running?: boolean;
   /** The signed-in user; anyone else's message gets their avatar beside it. */
   viewerId?: string;
+  /** Whose personal credentials the thread runs on; names their replies for other viewers. */
+  owner?: ThreadOwner;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -166,6 +171,7 @@ export function TranscriptEntries({
                   }
                   isSubmitting={isSubmitting}
                   viewerId={viewerId}
+                  owner={owner}
                   onApprove={onApprove}
                   onRespond={onRespond}
                 />
@@ -196,6 +202,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension,
   isSubmitting,
   viewerId,
+  owner,
   onApprove,
   onRespond,
 }: {
@@ -205,6 +212,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
+  owner?: ThreadOwner;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
@@ -217,6 +225,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           reply={reply}
           isSubmitting={isSubmitting}
           viewerId={viewerId}
+          owner={owner}
           onRespond={onRespond}
         />
       );

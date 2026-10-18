@@ -258,7 +258,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // `workflows-finish`) survive intact. Mirrors the same contract honored by
   // `UnixSocketPubSub` so consumers like `Mastra.__registerInternalWorkflow`
   // get consistent semantics across transports.
-  #localCallbacks: Map<string, Set<EventCallback>> = new Map();
+  #localCallbacks: Map<string, Map<EventCallback, Set<ReturnType<typeof setTimeout>>>> = new Map();
   #closed = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
@@ -503,44 +503,55 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // racing publisher in the same process never misses this subscriber.
     let localBucket = this.#localCallbacks.get(topic);
     if (!localBucket) {
-      localBucket = new Set();
+      localBucket = new Map();
       this.#localCallbacks.set(topic, localBucket);
     }
-    localBucket.add(cb);
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    localBucket.set(cb, timers);
 
-    await this.#ensureWriterConnected();
-
-    const groupAnchor = options?.startFrom === 'latest' ? '$' : '0';
-    if (options?.group) {
-      const sub = await this.#openSubscription(topic, cb, options.group, groupAnchor);
-      this.#subscriptions.set(key, sub);
-      sub.loop = this.#runReadLoop(sub);
-      this.#startReclaimLoop(sub);
-      return;
-    }
-
-    // Fan-out: every subscriber to this topic in this instance shares one
-    // consumer group and reader. Join the topic's reader if one is open (or
-    // being opened); otherwise open it.
-    for (;;) {
-      const reader = this.#fanoutReaders.get(topic);
-      if (reader) return this.#joinFanoutReader(reader, cb, key, groupAnchor);
-      const opening = this.#pendingFanoutReaders.get(topic);
-      if (!opening) break;
-      await opening.catch(() => {});
-    }
-    const opening = this.#openSubscription(topic, cb, undefined, groupAnchor);
-    this.#pendingFanoutReaders.set(topic, opening);
     try {
-      const sub = await opening;
-      // Register in the same tick the pending entry is cleared, so a
-      // subscriber waiting on `opening` finds the reader and joins it.
-      this.#fanoutReaders.set(topic, sub);
-      this.#subscriptions.set(key, sub);
-      sub.loop = this.#runReadLoop(sub);
-      this.#startReclaimLoop(sub);
-    } finally {
-      this.#pendingFanoutReaders.delete(topic);
+      await this.#ensureWriterConnected();
+
+      const groupAnchor = options?.startFrom === 'latest' ? '$' : '0';
+      if (options?.group) {
+        const sub = await this.#openSubscription(topic, cb, options.group, groupAnchor);
+        this.#subscriptions.set(key, sub);
+        sub.loop = this.#runReadLoop(sub);
+        this.#startReclaimLoop(sub);
+        return;
+      }
+
+      // Fan-out: every subscriber to this topic in this instance shares one
+      // consumer group and reader. Join the topic's reader if one is open (or
+      // being opened); otherwise open it.
+      for (;;) {
+        const reader = this.#fanoutReaders.get(topic);
+        if (reader) return await this.#joinFanoutReader(reader, cb, key, groupAnchor);
+        const opening = this.#pendingFanoutReaders.get(topic);
+        if (!opening) break;
+        await opening.catch(() => {});
+      }
+      const opening = this.#openSubscription(topic, cb, undefined, groupAnchor);
+      this.#pendingFanoutReaders.set(topic, opening);
+      try {
+        const sub = await opening;
+        // Register in the same tick the pending entry is cleared, so a
+        // subscriber waiting on `opening` finds the reader and joins it.
+        this.#fanoutReaders.set(topic, sub);
+        this.#subscriptions.set(key, sub);
+        sub.loop = this.#runReadLoop(sub);
+        this.#startReclaimLoop(sub);
+      } finally {
+        this.#pendingFanoutReaders.delete(topic);
+      }
+    } catch (err) {
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+      if (this.#localCallbacks.get(topic)?.get(cb) === timers) {
+        localBucket.delete(cb);
+        if (localBucket.size === 0) this.#localCallbacks.delete(topic);
+      }
+      throw err;
     }
   }
 
@@ -794,6 +805,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     const localBucket = this.#localCallbacks.get(topic);
     if (localBucket) {
+      const timers = localBucket.get(cb);
+      if (timers) {
+        for (const timer of timers) clearTimeout(timer);
+        timers.clear();
+      }
       localBucket.delete(cb);
       if (localBucket.size === 0) this.#localCallbacks.delete(topic);
     }
@@ -1088,6 +1104,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    for (const callbacks of this.#localCallbacks.values()) {
+      for (const timers of callbacks.values()) {
+        for (const timer of timers) clearTimeout(timer);
+        timers.clear();
+      }
+    }
+    this.#localCallbacks.clear();
 
     // Let in-flight subscribes finish registering before the snapshot below,
     // so a subscription that lands mid-close is torn down rather than leaked.
@@ -1099,7 +1122,6 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // unsubscribe's key lookup works.
     const subs = new Set(this.#subscriptions.values());
     await Promise.all([...subs].flatMap(sub => [...sub.members.keys()].map(cb => this.unsubscribe(sub.topic, cb))));
-    this.#localCallbacks.clear();
 
     // Let publishes that were accepted before close() reach the stream. A
     // workflow's terminal event is often the last thing written before
@@ -1530,17 +1552,46 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #deliverLocal(topic: string, event: Event): void {
     const callbacks = this.#localCallbacks.get(topic);
     if (!callbacks || callbacks.size === 0) return;
-    for (const cb of callbacks) {
-      this.#invokeLocalCallback(topic, event, cb);
+    for (const [cb, timers] of callbacks) {
+      this.#invokeLocalCallback(topic, event, cb, timers);
     }
   }
 
-  #invokeLocalCallback(topic: string, event: Event, cb: EventCallback): void {
-    // `localOnly` deliveries don't have an external broker to redeliver from,
-    // so ack/nack are no-ops here. The caller still gets a real Event object
-    // and can branch on `deliveryAttempt` if it cares.
-    const ack = async () => {};
-    const nack = async () => {};
+  #invokeLocalCallback(
+    topic: string,
+    event: Event,
+    cb: EventCallback,
+    timers: Set<ReturnType<typeof setTimeout>>,
+  ): void {
+    // The set identifies this registration, so late settlements cannot revive
+    // an unsubscribed callback, even when the same callback subscribes again.
+    if (this.#closed || this.#localCallbacks.get(topic)?.get(cb) !== timers) return;
+    let settled = false;
+    const ack = async () => {
+      settled = true;
+    };
+    const nack = async () => {
+      if (settled) return;
+      settled = true;
+      if (this.#closed || this.#localCallbacks.get(topic)?.get(cb) !== timers) return;
+      const attempt = event.deliveryAttempt ?? 1;
+      if (attempt >= this.#maxDeliveryAttempts) {
+        this.#logger?.warn?.('redis-streams: dropping local event after max delivery attempts', {
+          topic,
+          eventId: event.id,
+          eventType: event.type,
+          attempt,
+          max: this.#maxDeliveryAttempts,
+        });
+        return;
+      }
+      const delay = Math.min(1000 * 2 ** Math.min(attempt - 1, 5), 30_000);
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        this.#invokeLocalCallback(topic, { ...event, deliveryAttempt: attempt + 1 }, cb, timers);
+      }, delay);
+      timers.add(timer);
+    };
     try {
       const result: unknown = (cb as (event: Event, ack: () => Promise<void>, nack: () => Promise<void>) => unknown)(
         event,
@@ -1553,6 +1604,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
             topic,
             err: err instanceof Error ? err.message : err,
           });
+          void nack();
         });
       }
     } catch (err) {
@@ -1560,6 +1612,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         topic,
         err: err instanceof Error ? err.message : err,
       });
+      void nack();
     }
   }
 }

@@ -31,7 +31,7 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
-import type { InputProcessor, Processor } from '@mastra/core/processors';
+import type { InputProcessor, OutputProcessor, Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
@@ -57,7 +57,11 @@ import { AgentConnectionsSignalProvider } from './agent-connections/signal-provi
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
 import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
-import { hasCredentialStoreProvider, withCredentialTenantPreparation } from './agents/credential-resolver.js';
+import {
+  hasCredentialStoreProvider,
+  setCredentialLogger,
+  withCredentialTenantPreparation,
+} from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -126,6 +130,8 @@ import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
 import { mastraBrand } from './theme-palette.js';
+import { isThinkingLevelSetting } from './thinking.js';
+import type { ThinkingLevelSetting } from './thinking.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
@@ -308,6 +314,14 @@ export interface MastraCodeConfig {
   inputProcessors?:
     | InputProcessor[]
     | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
+  /**
+   * Output processor instances appended after Mastra Code's built-in output processors,
+   * or a per-request resolver. They run before the memory layers the Agent appends,
+   * so changes they make to response messages are persisted.
+   */
+  outputProcessors?:
+    | OutputProcessor[]
+    | ((args: { requestContext: RequestContext }) => OutputProcessor[] | Promise<OutputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -335,6 +349,15 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /**
+   * Host-owned thinking default for a request without its own level. When set,
+   * it replaces the settings.json defaults (`preferences.thinkingLevel` and the
+   * per-mode defaults); a session's own level still wins. Called on every model
+   * resolution, so a changed default applies to the next request.
+   */
+  resolveDefaultThinkingLevel?: (ctx: {
+    requestContext: RequestContext;
+  }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
@@ -1235,7 +1258,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: withCredentialTenantPreparation(ctx => getDynamicModel(ctx, config?.settingsPath, { modeless })),
+    model: withCredentialTenantPreparation(async ctx => {
+      // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
+      const controller = ctx.requestContext.get('controller') as
+        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+        | undefined;
+      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+      return getDynamicModel(ctx, config?.settingsPath, {
+        modeless,
+        defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
+      });
+    }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1335,13 +1368,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // Like the input lane, plugin processors sit last — after the layers they
     // customize, before the channel and memory layers the Agent appends.
-    outputProcessors: () => [
-      // Anthropic cyber refusals finish a step instead of throwing, so they are
-      // handled here; OpenAI's throw and are handled in the error lane below.
-      new CyberRefusalHandler(),
-      ...readPluginProcessors().output.map(entry => entry.value),
-      ...(pluginSignalLane?.getOutputProcessors() ?? []),
-    ],
+    outputProcessors: ({ requestContext }) => {
+      const resolveProcessors = (configured: OutputProcessor[]) => [
+        // Anthropic cyber refusals finish a step instead of throwing, so they are
+        // handled here; OpenAI's throw and are handled in the error lane below.
+        new CyberRefusalHandler(),
+        ...configured,
+        ...readPluginProcessors().output.map(entry => entry.value),
+        ...(pluginSignalLane?.getOutputProcessors() ?? []),
+      ];
+      if (typeof config?.outputProcessors !== 'function') return resolveProcessors(config?.outputProcessors ?? []);
+      const configured = config.outputProcessors({ requestContext });
+      return configured instanceof Promise ? configured.then(resolveProcessors) : resolveProcessors(configured);
+    },
     errorProcessors: [
       // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
       // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
@@ -1388,6 +1427,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
         settingsPath: config?.settingsPath,
         modeless,
+        resolveDefaultThinkingLevel: config?.resolveDefaultThinkingLevel,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive
@@ -2125,6 +2165,7 @@ export async function prepareAgentControllerMount(
   const finalize = async () => {
     await controller.init();
     validateExperimentalAgent(codeAgent, controller.getMastra());
+    setCredentialLogger(controller.getMastra()?.getLogger());
     if (weOwnTheMastra) {
       const mastra = controller.getMastra();
       if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -42,6 +42,10 @@ export function ChatSessionConfigProvider({
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
+  const owner = useMemo(
+    () => storedSession && { id: storedSession.userId, name: storedSession.owner?.name },
+    [storedSession],
+  );
 
   const repository = storedSession
     ? factory?.repositories.find(
@@ -126,6 +130,7 @@ export function ChatSessionConfigProvider({
         : undefined,
     baseUrl,
     kind: userScoped ? ('user' as const) : ('factory' as const),
+    owner,
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

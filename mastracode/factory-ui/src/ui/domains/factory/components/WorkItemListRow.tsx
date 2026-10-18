@@ -1,4 +1,3 @@
-import { knownExternalAuthor } from '@mastra/factory/rules/types';
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
@@ -16,7 +15,6 @@ import {
   CardActions,
   CardStatus,
   CommentCount,
-  ExternalAuthorBadge,
   MetadataLabels,
   SourceTitle,
   WorkItemSourceIcon,
@@ -58,7 +56,6 @@ export function WorkItemListRow({
   actions: CardAction[];
   menu: ReactNode;
 }) {
-  const external = knownExternalAuthor(item);
   const verdict = columnReviewVerdict(item, columnStage);
   return (
     <BoardListRow
@@ -90,11 +87,10 @@ export function WorkItemListRow({
             <MetadataLabels metadata={item.metadata} />
           </span>
         ),
-        status: (status.kind !== 'idle' || external || verdict) && (
+        status: (status.kind !== 'idle' || verdict) && (
           <span className="flex items-center gap-2">
             <CardStatus status={status} />
             {verdict && <ReviewVerdictBadge verdict={verdict} />}
-            {external && <ExternalAuthorBadge />}
           </span>
         ),
         action: <CardActions actions={actions} />,

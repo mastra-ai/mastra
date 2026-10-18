@@ -57,6 +57,7 @@
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
@@ -107,6 +108,7 @@
     "moonshot/kimi-k3",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
@@ -304,6 +306,7 @@
     "deepseek/deepseek-v4-pro",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "fireworks_ai/gpt-oss-120b",
     "flexai/DeepSeek-V4-Flash-0731",
     "flexai/DeepSeek-V4-Flash-0731@eu",
@@ -373,6 +376,7 @@
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -562,6 +566,7 @@
     "deepseek/deepseek-v4-pro",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4-Flash-0731",
     "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
@@ -630,7 +635,9 @@
     "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -1130,7 +1137,7 @@
     "azure/gpt-5.1-codex-mini": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "flexai/DeepSeek-V4-Flash-0731@eu": [
@@ -1308,6 +1315,12 @@
       }
     ],
     "xai/grok-4.6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "nebius/meta-models/muse-spark-open": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
@@ -1671,6 +1684,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "mistral/mistral-small-latest": [

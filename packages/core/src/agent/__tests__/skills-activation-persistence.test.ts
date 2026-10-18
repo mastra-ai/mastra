@@ -318,3 +318,69 @@ describe('stateless skill tool behavior', () => {
     });
   });
 });
+
+describe('skill tools under global requireToolApproval', () => {
+  function skillCallingModel() {
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+        const parts =
+          callCount === 1
+            ? [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolCallType: 'function',
+                  toolName: 'skill',
+                  input: '{"name":"find-skills"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'done' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ];
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock', timestamp: new Date(0) },
+            ...parts,
+          ] as any),
+        };
+      },
+    });
+  }
+
+  it.each([
+    ['without tool hooks', undefined],
+    ['with tool hooks', { beforeToolCall: vi.fn(), afterToolCall: vi.fn() }],
+  ])('runs the skill tool without suspending for approval (%s)', async (_label, hooks) => {
+    const agent = new Agent({
+      id: 'approval-agent',
+      name: 'Approval Agent',
+      instructions: 'test',
+      model: skillCallingModel(),
+      workspace: createMockWorkspace(),
+      ...(hooks ? { hooks } : {}),
+    } as any);
+
+    const result = await agent.stream('Activate find-skills', { requireToolApproval: true });
+    const chunks: any[] = [];
+    for await (const chunk of result.fullStream) chunks.push(chunk);
+
+    expect(chunks.some(c => c.type === 'tool-call-approval')).toBe(false);
+    const toolResult = chunks.find(c => c.type === 'tool-result');
+    expect(toolResult?.payload.toolName).toBe('skill');
+    expect(toolResult?.payload.result).toContain(mockSkill.instructions);
+    if (hooks) expect(hooks.beforeToolCall).toHaveBeenCalled();
+  });
+});

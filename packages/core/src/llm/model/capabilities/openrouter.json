@@ -29,7 +29,9 @@
     "cohere/command-a-plus",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "dots-studio/dots-3-note-preview:free",
+    "elorian/glimpse",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -72,6 +74,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "meta/muse-wonder",
     "minimax/minimax-01",
     "minimax/minimax-m3",
@@ -93,6 +96,8 @@
     "mistralai/mistral-small-3.2-24b-instruct",
     "mistralai/mixtral-8x22b-instruct",
     "mistralai/voxtral-small-24b-2507",
+    "moondream/moondream3-preview",
+    "moondream/moondream3.1-9b-a2b",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
@@ -289,7 +294,9 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "dots-studio/dots-3-note-preview:free",
+    "elorian/glimpse",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -351,6 +358,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "meta/muse-wonder",
     "microsoft/phi-4",
     "microsoft/wizardlm-2-8x22b",
@@ -382,6 +390,8 @@
     "mistralai/mistral-small-3.2-24b-instruct",
     "mistralai/mixtral-8x22b-instruct",
     "mistralai/voxtral-small-24b-2507",
+    "moondream/moondream3-preview",
+    "moondream/moondream3.1-9b-a2b",
     "moonshotai/kimi-k2",
     "moonshotai/kimi-k2-0905",
     "moonshotai/kimi-k2-thinking",
@@ -486,6 +496,7 @@
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-omni-flash",
+    "reflection/beam-1.0-501b-a23b",
     "rekaai/reka-edge",
     "rekaai/reka-flash-3",
     "relace/relace-search",
@@ -527,6 +538,7 @@
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
     "xiaomi/mimo-v2.6-pro-ultraspeed",
+    "xingchen-agi/xing4.0-29b-a4b:free",
     "z-ai/glm-4.5",
     "z-ai/glm-4.5-air",
     "z-ai/glm-4.5v",
@@ -595,7 +607,9 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "dots-studio/dots-3-note-preview:free",
+    "elorian/glimpse",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -646,6 +660,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "meta/muse-wonder",
     "microsoft/phi-4",
     "minimax/minimax-m2",
@@ -682,6 +697,7 @@
     "nex-agi/nex-n2.5-pro",
     "nousresearch/hermes-3-llama-3.1-405b",
     "nousresearch/hermes-3-llama-3.1-70b",
+    "nousresearch/hermes-4-405b",
     "nvidia/nemotron-3-nano-30b-a3b",
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-super-120b-a12b:free",
@@ -798,6 +814,7 @@
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-omni-flash",
+    "reflection/beam-1.0-501b-a23b",
     "rekaai/reka-edge",
     "rekaai/reka-flash-3",
     "sakana/fugu-max",
@@ -833,6 +850,7 @@
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
     "xiaomi/mimo-v2.6-pro-ultraspeed",
+    "xingchen-agi/xing4.0-29b-a4b:free",
     "z-ai/glm-4.6",
     "z-ai/glm-4.7",
     "z-ai/glm-4.7-flash",
@@ -868,11 +886,8 @@
     ],
     "bytedance-seed/seed-2.0-lite": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "bytedance-seed/seed-2-1-turbo": [
@@ -882,20 +897,14 @@
     ],
     "bytedance-seed/seed-2.0-mini": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "bytedance-seed/seed-2.0-code": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "bytedance-seed/seed-1.6": [
@@ -905,11 +914,8 @@
     ],
     "~moonshotai/kimi-latest": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "poolside/laguna-s-2.1:free": [
@@ -934,11 +940,8 @@
     ],
     "prism-ml/ternary-bonsai-2-27b": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["medium", "xhigh"]
+        "values": ["none", "medium", "xhigh"]
       }
     ],
     "anthropic/claude-opus-4.1": [
@@ -953,11 +956,8 @@
     ],
     "anthropic/claude-opus-4.6": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["none", "low", "medium", "high", "max"]
       },
       {
         "type": "budget_tokens"
@@ -965,29 +965,20 @@
     ],
     "anthropic/claude-opus-4.7": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-haiku-5.5": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-haiku-4.5": [
@@ -997,11 +988,8 @@
     ],
     "anthropic/claude-opus-5": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-sonnet-5.5": [
@@ -1029,20 +1017,14 @@
     ],
     "anthropic/claude-sonnet-5": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-sonnet-4.6": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "anthropic/claude-opus-5.5": [
@@ -1080,29 +1062,20 @@
     ],
     "deepseek/deepseek-v4-flash-0731": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v4.1-flash": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v4-flash-vision-exp": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v3.1-terminus": [
@@ -1112,11 +1085,8 @@
     ],
     "deepseek/deepseek-v4-pro-0813": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v3.2-exp": [
@@ -1126,11 +1096,8 @@
     ],
     "deepseek/deepseek-v4-pro": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "deepseek/deepseek-v3.2": [
@@ -1138,13 +1105,16 @@
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
+    "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "tencent/hy3-preview": [
@@ -1253,11 +1223,8 @@
     ],
     "z-ai/glm-5.2": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "z-ai/glm-5.1": [
@@ -1279,6 +1246,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "reflection/beam-1.0-501b-a23b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "thinkingmachines/inkling-small:free": [
@@ -1365,6 +1338,12 @@
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "nousresearch/hermes-4-405b": [
       {
         "type": "toggle"
@@ -1447,6 +1426,11 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "elorian/glimpse": [
+      {
+        "type": "toggle"
+      }
+    ],
     "~anthropic/claude-opus-latest": [
       {
         "type": "effort",
@@ -1455,11 +1439,8 @@
     ],
     "~anthropic/claude-haiku-latest": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "~anthropic/claude-sonnet-latest": [
@@ -1494,29 +1475,20 @@
     ],
     "~deepseek/deepseek-flash-latest": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "~deepseek/deepseek-pro-latest": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "~deepseek/deepseek-v4-flash-latest": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "~x-ai/grok-latest": [
@@ -1532,11 +1504,8 @@
     ],
     "google/gemini-3.1-flash-image-preview": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "high"]
+        "values": ["none", "minimal", "high"]
       }
     ],
     "google/gemma-4-31b-it:free": [
@@ -1568,11 +1537,8 @@
     ],
     "google/gemini-3.1-flash-image": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "high"]
+        "values": ["none", "minimal", "high"]
       }
     ],
     "google/gemini-3.1-pro-preview": [
@@ -1601,11 +1567,8 @@
     ],
     "google/gemini-3.1-flash-lite-image": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "high"]
+        "values": ["none", "minimal", "high"]
       }
     ],
     "google/gemini-3.7-flash": [
@@ -1622,11 +1585,8 @@
     ],
     "google/gemini-3-flash-preview": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-3.8-flash": [
@@ -1649,20 +1609,14 @@
     ],
     "google/gemini-3.1-flash-lite-preview": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-nano-banana-2.1": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "high"]
+        "values": ["none", "minimal", "high"]
       }
     ],
     "google/gemini-4-argon": [
@@ -1673,11 +1627,18 @@
     ],
     "google/gemini-3.1-flash-lite": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "moondream/moondream3-preview": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moondream/moondream3.1-9b-a2b": [
+      {
+        "type": "toggle"
       }
     ],
     "ibm-granite/granite-4.2-8b": [
@@ -1688,11 +1649,8 @@
     ],
     "fireworks/ember-1": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "mistralai/mistral-medium-3-5": [
@@ -1754,11 +1712,8 @@
     ],
     "moonshotai/kimi-k3": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "moonshotai/kimi-k2.6": [
@@ -1801,11 +1756,8 @@
     ],
     "nvidia/nemotron-3-super-120b-a12b": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium"]
+        "values": ["none", "low", "medium"]
       },
       {
         "type": "budget_tokens"
@@ -1818,11 +1770,8 @@
     ],
     "nvidia/nemotron-3-ultra-550b-a55b:free": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["medium", "high"]
+        "values": ["none", "medium", "high"]
       },
       {
         "type": "budget_tokens"
@@ -1830,11 +1779,8 @@
     ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["medium", "high"]
+        "values": ["none", "medium", "high"]
       },
       {
         "type": "budget_tokens"
@@ -1842,11 +1788,8 @@
     ],
     "nvidia/nemotron-3-super-120b-a12b:free": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium"]
+        "values": ["none", "low", "medium"]
       },
       {
         "type": "budget_tokens"
@@ -1950,11 +1893,8 @@
     ],
     "qwen/qwen3.8-27b": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "qwen/qwen3.8-2.4t-a95b": [
@@ -2077,6 +2017,11 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "xingchen-agi/xing4.0-29b-a4b:free": [
+      {
+        "type": "toggle"
       }
     ],
     "openai/gpt-5.4": [
@@ -2304,9 +2249,6 @@
       }
     ],
     "openai/gpt-5.1-codex-mini": [
-      {
-        "type": "toggle"
-      },
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

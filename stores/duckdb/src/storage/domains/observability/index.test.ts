@@ -55,6 +55,16 @@ createObservabilityVNextTests({
     await sharedSuiteStore?.db.close();
     sharedSuiteStore = undefined;
   },
+  readTimeToFirstChunkMs: async (_storage, { traceId, spanId }) => {
+    const [row] = await sharedSuiteStore!.db.query<{ rows: bigint | number; timeToFirstChunkMs: number | null }>(
+      `SELECT count(*) AS rows,
+         arg_max(timeToFirstChunkMs, timestamp) FILTER (WHERE timeToFirstChunkMs IS NOT NULL) AS timeToFirstChunkMs
+       FROM span_events WHERE traceId = ? AND spanId = ?`,
+      [traceId, spanId],
+    );
+    if (!row || Number(row.rows) === 0) throw new Error(`span ${spanId} was not stored`);
+    return row.timeToFirstChunkMs;
+  },
 });
 
 async function setupLegacyStore(): Promise<DuckDBStore> {
@@ -145,6 +155,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-aggregate',
         'span-query',
+        'span-query-context-fields',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -167,6 +178,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-aggregate',
         'span-query',
+        'span-query-context-fields',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -204,6 +216,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-aggregate',
         'span-query',
+        'span-query-context-fields',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -225,6 +238,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-query',
         'trace-aggregate',
         'span-query',
+        'span-query-context-fields',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',

@@ -3,7 +3,12 @@ import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
 import type { StandardSchemaWithJSON } from '../../../schema';
 import type { RequireToolApproval } from '../../../tools';
-import { getBeforeApprovalFn, getNeedsApprovalFn, isBuiltBeforeApproval } from '../../../tools/toolchecks';
+import {
+  getBeforeApprovalFn,
+  getNeedsApprovalFn,
+  isApprovalExempt,
+  isBuiltBeforeApproval,
+} from '../../../tools/toolchecks';
 import type {
   BeforeApprovalContext,
   BeforeApprovalRuntime,
@@ -63,6 +68,8 @@ export async function resolveToolApprovalVerdict({
   context: ToolApprovalContext;
   logger?: IMastraLogger;
 }): Promise<boolean> {
+  if (isApprovalExempt(tool)) return false;
+
   let globalRequiresApproval: boolean;
   if (typeof requireToolApproval === 'function') {
     try {

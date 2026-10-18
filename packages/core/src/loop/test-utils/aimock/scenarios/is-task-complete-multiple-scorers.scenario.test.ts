@@ -13,9 +13,11 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * are preserved across refactors.
  */
 describeForAllEngines('AIMock loop scenario: isTaskComplete with multiple scorers', engine => {
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
-  it('strategy: all - requires all scorers to pass', async () => {
+  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  itFailsOnInngest('strategy: all - requires all scorers to pass', async () => {
     const tickTool = createTool({
       id: 'tick',
       description: 'Advance a counter.',
@@ -81,7 +83,8 @@ describeForAllEngines('AIMock loop scenario: isTaskComplete with multiple scorer
     expect(finalChunk.payload.results).toHaveLength(2);
   });
 
-  it('strategy: any - requires at least one scorer to pass', async () => {
+  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  itFailsOnInngest('strategy: any - requires at least one scorer to pass', async () => {
     const tickTool = createTool({
       id: 'tick',
       description: 'Advance a counter.',
@@ -133,7 +136,8 @@ describeForAllEngines('AIMock loop scenario: isTaskComplete with multiple scorer
     expect(finalChunk.payload.results).toHaveLength(2);
   });
 
-  it('strategy: all - fails when any scorer fails', async () => {
+  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  itFailsOnInngest('strategy: all - fails when any scorer fails', async () => {
     const tickTool = createTool({
       id: 'tick',
       description: 'Advance a counter.',

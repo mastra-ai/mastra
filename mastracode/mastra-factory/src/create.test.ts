@@ -421,7 +421,7 @@ describe('create (platform provisioning)', () => {
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
     expect(clack.text).not.toHaveBeenCalled();
-    expect(cliAuth.getToken).toHaveBeenCalledWith(undefined, { skipOnInput: true });
+    expect(cliAuth.getToken).toHaveBeenCalledWith(undefined, { skipOnInput: true, source: 'create-factory' });
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Provisioned on Mastra platform'), 'Next steps');
   });
 

@@ -208,7 +208,9 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   }
 
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
-  const client = resolveClient(options.client);
+  // Force the client's attribution header to match the project whose
+  // connections this resolver discovers.
+  const client = resolveClient({ ...options.client, projectId });
 
   // Construct long-lived provider instances up front (dynamic package import
   // + credential-less constructor; no platform calls) so `getRoutes()` is

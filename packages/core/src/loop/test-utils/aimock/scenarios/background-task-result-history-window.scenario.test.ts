@@ -37,91 +37,96 @@ function userMessage(index: number): MastraDBMessage {
   };
 }
 
-describeForAllEngines('AIMock loop scenario: background result outside the history window', engine => {
-  const getMock = useLoopScenarioAimock();
+describeForAllEngines(
+  'AIMock loop scenario: background result outside the history window',
+  engine => {
+    const getMock = useLoopScenarioAimock();
 
-  async function runScenario({ insertedMessages }: { insertedMessages: number }) {
-    let releaseTool!: () => void;
-    const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
-    let toolStarted = false;
+    async function runScenario({ insertedMessages }: { insertedMessages: number }) {
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
+      let toolStarted = false;
 
-    const slowAdd = createTool({
-      id: 'slowAdd',
-      description: 'Adds two numbers slowly',
-      inputSchema: z.object({ a: z.number(), b: z.number() }),
-      background: { enabled: true, timeoutMs: 30_000 },
-      execute: async ({ a, b }) => {
-        toolStarted = true;
-        await toolGate;
-        return { sum: a + b, marker: RESULT_MARKER };
-      },
-    });
-
-    const memory = new MockMemory({ options: { lastMessages: 3 } });
-
-    const { output, llm } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      prompt: 'What is 1+2?',
-      tools: { slowAdd },
-      agentBackgroundTasks: { tools: { slowAdd: true } },
-      backgroundTasks: { enabled: true },
-      memory,
-      threadId: THREAD_ID,
-      resourceId: RESOURCE_ID,
-      streamUntilIdle: true,
-      manualStreamConsumption: true,
-      fixtures: mock => {
-        mock.on(
-          { endpoint: 'chat', sequenceIndex: 0 },
-          { toolCalls: [{ id: 'call_1', name: 'slowAdd', arguments: { a: 1, b: 2 } }] },
-        );
-        mock.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Working on it.' });
-        mock.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The answer is 3.' });
-      },
-    });
-
-    const drained = (async () => {
-      for await (const _chunk of output.fullStream as AsyncIterable<unknown>) {
-        // drain
-      }
-    })();
-
-    await waitFor(() => toolStarted);
-    await waitFor(async () => {
-      const { messages } = await memory.recall({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
-      return JSON.stringify(messages).includes('Working on it.');
-    });
-
-    if (insertedMessages > 0) {
-      await memory.saveMessages({
-        messages: Array.from({ length: insertedMessages }, (_, index) => userMessage(index)),
+      const slowAdd = createTool({
+        id: 'slowAdd',
+        description: 'Adds two numbers slowly',
+        inputSchema: z.object({ a: z.number(), b: z.number() }),
+        background: { enabled: true, timeoutMs: 30_000 },
+        execute: async ({ a, b }) => {
+          toolStarted = true;
+          await toolGate;
+          return { sum: a + b, marker: RESULT_MARKER };
+        },
       });
+
+      const memory = new MockMemory({ options: { lastMessages: 3 } });
+
+      const { output, llm } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'What is 1+2?',
+        tools: { slowAdd },
+        agentBackgroundTasks: { tools: { slowAdd: true } },
+        backgroundTasks: { enabled: true },
+        memory,
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+        fixtures: mock => {
+          mock.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_1', name: 'slowAdd', arguments: { a: 1, b: 2 } }] },
+          );
+          mock.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Working on it.' });
+          mock.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The answer is 3.' });
+        },
+      });
+
+      const drained = (async () => {
+        for await (const _chunk of output.fullStream as AsyncIterable<unknown>) {
+          // drain
+        }
+      })();
+
+      await waitFor(() => toolStarted);
+      await waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+        return JSON.stringify(messages).includes('Working on it.');
+      });
+
+      if (insertedMessages > 0) {
+        await memory.saveMessages({
+          messages: Array.from({ length: insertedMessages }, (_, index) => userMessage(index)),
+        });
+      }
+
+      releaseTool();
+      await drained;
+
+      const requests = llm.getRequests();
+      const continuation = JSON.stringify(requests[requests.length - 1]?.body ?? {});
+      const { messages: stored } = await memory.recall({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+
+      return { requestCount: requests.length, continuation, stored: JSON.stringify(stored) };
     }
 
-    releaseTool();
-    await drained;
+    it('continuation carries the result when nothing was added during the task', async () => {
+      const { requestCount, continuation, stored } = await runScenario({ insertedMessages: 0 });
 
-    const requests = llm.getRequests();
-    const continuation = JSON.stringify(requests[requests.length - 1]?.body ?? {});
-    const { messages: stored } = await memory.recall({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+      expect(requestCount).toBe(3);
+      expect(stored).toContain(RESULT_MARKER);
+      expect(continuation).toContain(RESULT_MARKER);
+    }, 30_000);
 
-    return { requestCount: requests.length, continuation, stored: JSON.stringify(stored) };
-  }
-
-  it('continuation carries the result when nothing was added during the task', async () => {
-    const { requestCount, continuation, stored } = await runScenario({ insertedMessages: 0 });
-
-    expect(requestCount).toBe(3);
-    expect(stored).toContain(RESULT_MARKER);
-    expect(continuation).toContain(RESULT_MARKER);
-  }, 30_000);
-
-  it('continuation carries the result after more than lastMessages messages were added during the task', async () => {
-    const { requestCount, continuation, stored } = await runScenario({ insertedMessages: 4 });
-    expect(requestCount).toBe(3);
-    expect(stored).toContain(RESULT_MARKER);
-    expect(continuation).toContain('Their results are now in the conversation');
-    expect(continuation).toContain(RESULT_MARKER);
-  }, 30_000);
-});
+    it('continuation carries the result after more than lastMessages messages were added during the task', async () => {
+      const { requestCount, continuation, stored } = await runScenario({ insertedMessages: 4 });
+      expect(requestCount).toBe(3);
+      expect(stored).toContain(RESULT_MARKER);
+      expect(continuation).toContain('Their results are now in the conversation');
+      expect(continuation).toContain(RESULT_MARKER);
+    }, 30_000);
+  },
+  // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
+  { skip: ['inngest'] },
+);

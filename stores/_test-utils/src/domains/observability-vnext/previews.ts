@@ -107,7 +107,6 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
           span.spanId,
           {
             ...previewsOf(span),
-            truncated: [span.inputTruncated, span.outputTruncated, span.errorTruncated],
           },
         ]),
       );
@@ -125,8 +124,8 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       expect(await listLight()).toEqual({ 'trace-new': expected.root });
       if (options.spanQuery !== false) {
         expect(await listSpans()).toEqual({
-          'trace-new-root': { ...expected.root, truncated: [false, false, false] },
-          'trace-new-child': { ...expected.child, truncated: [true, false, false] },
+          'trace-new-root': { ...expected.root },
+          'trace-new-child': { ...expected.child },
         });
       }
     });
@@ -151,8 +150,8 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       expect(await listLight()).toEqual({ 'trace-upstream': rootPreviews });
       if (options.spanQuery !== false) {
         expect(await listSpans()).toEqual({
-          'trace-upstream-root': { ...rootPreviews, truncated: [true, false, false] },
-          'trace-upstream-child': { ...expected.child, truncated: [true, false, false] },
+          'trace-upstream-root': { ...rootPreviews },
+          'trace-upstream-child': { ...expected.child },
         });
       }
     });
@@ -170,7 +169,6 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
         expect((await listSpans())['trace-empty-child']).toEqual({
           ...expected.child,
           errorPreview: null,
-          truncated: [true, false, false],
         });
       }
     });
@@ -189,10 +187,10 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       expect(await listLight()).toEqual({ 'trace-old': oldRoot, 'trace-new': expected.root });
       if (options.spanQuery !== false) {
         expect(await listSpans()).toEqual({
-          'trace-old-root': { ...oldRoot, truncated: [false, false, false] },
-          'trace-old-child': { ...expected.child, truncated: [true, false, false] },
-          'trace-new-root': { ...expected.root, truncated: [false, false, false] },
-          'trace-new-child': { ...expected.child, truncated: [true, false, false] },
+          'trace-old-root': { ...oldRoot },
+          'trace-old-child': { ...expected.child },
+          'trace-new-root': { ...expected.root },
+          'trace-new-child': { ...expected.child },
         });
       }
     });
