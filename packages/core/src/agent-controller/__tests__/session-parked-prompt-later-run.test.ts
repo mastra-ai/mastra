@@ -73,8 +73,9 @@ function gate() {
  * A session on a thread, plus another agent that can run on that thread.
  * By default the session's run has parked on its prompt when this returns;
  * with `overlap`, nothing has run yet and both models wait for their gate.
+ * With `otherParks`, the other agent's first run parks on a prompt of its own.
  */
-async function createHarness(id: string, durable: boolean, { overlap = false } = {}) {
+async function createHarness(id: string, durable: boolean, { overlap = false, otherParks = false } = {}) {
   const requestAccess = createTool({
     id: 'request-access',
     description: 'Ask the user for access to a path.',
@@ -124,9 +125,10 @@ async function createHarness(id: string, durable: boolean, { overlap = false } =
       doStream: async ({ prompt }) => {
         otherPrompts.push(JSON.stringify(prompt));
         await otherModel.opened;
-        return { stream: reply('checked') };
+        return { stream: otherParks && otherPrompts.length === 1 ? askForAccess() : reply('checked') };
       },
     }),
+    tools: { requestAccess },
   });
 
   const cache = new InMemoryServerCache();
@@ -304,5 +306,22 @@ describe.each([false, true])('another run that overlaps the prompt, durable=%s',
     await vi.waitFor(() => expect(prompts).toHaveLength(2));
     expect(prompts[1]).toContain('access: granted');
     await vi.waitFor(() => expect(runEnds()).toEqual(['suspended', 'complete', 'complete']));
+  });
+});
+
+describe.each([false, true])('a message after another run on the thread parks and is aborted, durable=%s', durable => {
+  it('starts a run once the parked run that took the thread over is aborted', async () => {
+    const h = await createHarness('aborted-taker', durable, { otherParks: true });
+
+    const output = await h.otherAgent.stream('Is the work done?', {
+      memory: { thread: h.threadId, resource: h.resourceId },
+    });
+    await output.consumeStream();
+    expect(output.status).toBe('suspended');
+    expect(h.otherAgent.abortRunStream(output.runId)).toBe(true);
+
+    const sent = h.session.sendSignal({ content: 'Are you there?' }, { requireDelivery: true });
+    expect((await sent.accepted).action).toBe('wake');
+    await vi.waitFor(() => expect(h.prompts).toHaveLength(2));
   });
 });

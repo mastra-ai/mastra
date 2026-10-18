@@ -1069,12 +1069,12 @@ export class AgentThreadStreamRuntime {
           state.lostRunsByThread.delete(key);
           this.#handOffQueuedSignals(state, resolvedPubSub, key, data.runId, lost.streamId);
         }
+      } else if (data?.type === 'run-aborted' || data?.type === 'run-discarded') {
+        // A superseding run that parks and is then aborted, or whose
+        // registration is rolled back, never publishes a completion.
+        this.#releaseRunSupersededBy(state, resolvedPubSub, key, subscription, data.runId);
       } else if (data?.type === 'run-completed' || data?.type === 'run-failed') {
-        const supersededRunId = subscription.supersedingRunIds.get(data.runId);
-        if (supersededRunId !== undefined) {
-          subscription.supersedingRunIds.delete(data.runId);
-          this.#releaseSupersededParkedRun(state, resolvedPubSub, key, supersededRunId);
-        }
+        this.#releaseRunSupersededBy(state, resolvedPubSub, key, subscription, data.runId);
         const lostStreamId = subscription.successorRunIds.get(data.runId);
         if (lostStreamId === undefined || data.streamId === lostStreamId) return;
         subscription.successorRunIds.delete(data.runId);
@@ -1095,7 +1095,8 @@ export class AgentThreadStreamRuntime {
           // handleEvent: their registration may still be queued behind `tail`.
           (subscription.successorRunIds.has((event.data as { runId: string }).runId) ||
             this.#localActiveRunId(state, key) !== undefined)
-        )
+        ) &&
+        !((type === 'run-aborted' || type === 'run-discarded') && this.#localActiveRunId(state, key) !== undefined)
       )
         return ack?.();
       // Finish acknowledging the delivery before an empty queue can release its listener.
@@ -2726,6 +2727,20 @@ export class AgentThreadStreamRuntime {
       this.#releaseThreadLease(pubsub, key, runId);
     }
     return true;
+  }
+
+  /** Release the local run that `runId` superseded, if it superseded one. */
+  #releaseRunSupersededBy(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub,
+    key: string,
+    subscription: ThreadControlSubscription,
+    runId: string,
+  ): void {
+    const supersededRunId = subscription.supersedingRunIds.get(runId);
+    if (supersededRunId === undefined) return;
+    subscription.supersedingRunIds.delete(runId);
+    this.#releaseSupersededParkedRun(state, pubsub, key, supersededRunId);
   }
 
   /**
