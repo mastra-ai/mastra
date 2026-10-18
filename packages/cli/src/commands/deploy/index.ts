@@ -27,6 +27,7 @@ import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failu
 import { createLogCollector } from '../../utils/deploy-log-format.js';
 import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
+import { isEuRegion } from '../../utils/platform-region.js';
 import { abortableDelay, isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
@@ -270,6 +271,7 @@ const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
   neon: { label: 'Neon', tone: 'green' },
+  postgres: { label: 'Postgres', tone: 'blue' },
   mongodb: { label: 'MongoDB', tone: 'green' },
   redis: { label: 'Redis', tone: 'red' },
 };
@@ -290,7 +292,7 @@ const DEPLOY_REGION_PRESENTATION: Array<{
   location: string;
 }> = [
   {
-    matches: region => region === 'eu' || region === 'ams' || region.startsWith('europe-'),
+    matches: isEuRegion,
     label: 'EU West',
     location: EUROPE_DEPLOY_LOCATION,
   },

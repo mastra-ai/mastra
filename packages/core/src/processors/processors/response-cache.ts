@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { stableStringify } from '../../agent/message-list/cache/stable-stringify';
 import type { MastraServerCache } from '../../cache';
+import { parseMemoryRequestContext } from '../../memory/types';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import type {
   CachedLLMStepResponse,
@@ -118,7 +119,8 @@ export interface ResponseCacheOptions {
    * Optional scope appended to the auto-derived key for multi-tenant
    * isolation. `null` opts out of scoping. When omitted, the processor
    * falls back to the resource id resolved from the request context
-   * (`MASTRA_RESOURCE_ID_KEY`) so per-user data is isolated automatically.
+   * (`MASTRA_RESOURCE_ID_KEY`), then to the memory resource id
+   * (`memory: { resource }`), so per-user data is isolated automatically.
    */
   scope?: string | null;
 
@@ -338,15 +340,18 @@ export class ResponseCache implements Processor<'mastra/response-cache'> {
    *
    * Default scope precedence (when `merged.scope` is undefined):
    * 1. `MASTRA_RESOURCE_ID_KEY` from the request context
-   * 2. `undefined` (no scope)
+   * 2. The memory resource id (`memory: { resource }`)
+   * 3. `undefined` (no scope)
    *
    * `merged.scope === null` opts out explicitly and produces an unscoped key.
    */
   private async deriveKey(args: ProcessLLMRequestArgs, merged: ResponseCacheOptions): Promise<string> {
     let scope: string | null | undefined = merged.scope;
     if (scope === undefined) {
-      const resourceFromContext = args.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-      scope = typeof resourceFromContext === 'string' ? resourceFromContext : undefined;
+      const resourceFromContext =
+        (args.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) ??
+        parseMemoryRequestContext(args.requestContext)?.resourceId;
+      scope = typeof resourceFromContext === 'string' && resourceFromContext ? resourceFromContext : undefined;
     }
 
     const inputs: ResponseCacheKeyInputs = {

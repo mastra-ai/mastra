@@ -354,7 +354,7 @@ describe('AGGREGATE_TRACES', () => {
     expect(error.status).toBe(504);
     expect(getDeclaredErrorSchema(504).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
   });
 

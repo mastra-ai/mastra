@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { externalLinkLabel, itemThreadSession, metadataLabelColors, workItemMeta } from './boardItems';
+import {
+  externalLinkLabel,
+  isPersistedCandidate,
+  itemThreadSession,
+  metadataLabelColors,
+  persistedSourceKeys,
+  workItemMeta,
+} from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -114,5 +121,37 @@ describe('itemThreadSession', () => {
     const custom = session('custom-session');
 
     expect(itemThreadSession({ release: custom })).toBe(custom);
+  });
+});
+
+describe('persistedSourceKeys', () => {
+  it('keeps a same-numbered candidate from another linked repository visible', () => {
+    const keys = persistedSourceKeys([
+      workItem({ metadata: { githubPullRequestNumber: 22765, githubRepositoryId: 10 } }),
+    ]);
+
+    expect(
+      isPersistedCandidate(keys, {
+        sourceKey: 'github:10:pull-request:22765',
+        url: 'https://github.com/acme/repo/pull/22765',
+      }),
+    ).toBe(true);
+    expect(
+      isPersistedCandidate(keys, {
+        sourceKey: 'github:20:pull-request:22765',
+        url: 'https://github.com/other/repo/pull/22765',
+      }),
+    ).toBe(false);
+  });
+
+  it('matches an unstamped legacy card to its candidate by URL', () => {
+    const keys = persistedSourceKeys([workItem()]);
+
+    expect(
+      isPersistedCandidate(keys, {
+        sourceKey: 'github:10:pull-request:22765',
+        url: 'https://github.com/acme/repo/pull/22765',
+      }),
+    ).toBe(true);
   });
 });

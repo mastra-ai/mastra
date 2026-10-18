@@ -67,7 +67,16 @@ const componentEntries = (directory: string, prefix: string) => {
 const typeDeclarations = () =>
   dts({
     insertTypesEntry: true,
-    exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**', 'src/test/**'],
+    exclude: [
+      'vite.config.ts',
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'src/**/*.stories.ts',
+      'src/**/*.stories.tsx',
+      'src/**/__tests__/**',
+      'src/test/**',
+      '.storybook/**',
+    ],
     afterDiagnostic: diagnostics => {
       if (diagnostics.length > 0) {
         throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);

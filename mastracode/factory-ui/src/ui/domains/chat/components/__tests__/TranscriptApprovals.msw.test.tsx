@@ -29,7 +29,7 @@ describe('transcript approvals', () => {
         <TranscriptEntries entries={[toolApproval]} isSubmitting onApprove={onApprove} onRespond={vi.fn()} />,
       );
 
-      for (const button of screen.getAllByRole('button')) {
+      for (const button of screen.getAllByRole('button', { name: /^(Approve|Decline) write_file$/ })) {
         expect(button).toBeDisabled();
         fireEvent.click(button);
       }

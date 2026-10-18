@@ -1,6 +1,8 @@
 import type { ComponentProps } from 'react';
+import { Panel } from 'react-resizable-panels';
 
 import { useThreadTrace } from './thread-trace-context';
+import { MessageScroller, MessageScrollerContent, MessageScrollerViewport } from '@/ds/components/MessageScroller';
 import { cn } from '@/lib/utils';
 
 export interface ThreadTraceListProps extends ComponentProps<'div'> {
@@ -12,15 +14,17 @@ export interface ThreadTraceListProps extends ComponentProps<'div'> {
 export function ThreadTraceList({ className, innerClassName, children, ...props }: ThreadTraceListProps) {
   const { listRef } = useThreadTrace();
   return (
-    <div
-      ref={listRef}
-      data-slot="thread-trace-list"
-      className={cn('min-h-0 overflow-x-hidden overflow-y-auto', className)}
-      {...props}
-    >
-      <div data-slot="thread-trace-list-inner" className={cn('relative min-h-full', innerClassName)}>
-        {children}
-      </div>
-    </div>
+    <Panel id="thread-trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+      <MessageScroller data-slot="thread-trace-list" className={cn('min-h-0 flex-1', className)} {...props}>
+        <MessageScrollerViewport ref={listRef} className="overflow-x-hidden">
+          <MessageScrollerContent
+            data-slot="thread-trace-list-inner"
+            className={cn('relative min-h-full gap-0', innerClassName)}
+          >
+            {children}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+      </MessageScroller>
+    </Panel>
   );
 }

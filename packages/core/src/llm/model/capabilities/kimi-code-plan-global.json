@@ -1,4 +1,30 @@
 {
   "attachment": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
-  "structuredOutput": ["k3", "k3-256k", "kimi-for-coding-highspeed"]
+  "structuredOutput": ["k3", "k3-256k", "kimi-for-coding-highspeed"],
+  "reasoning": {
+    "kimi-for-coding": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "k3-256k": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
 }

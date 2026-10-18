@@ -9,5 +9,31 @@
     "qwen-image-2.1",
     "qwen3.6"
   ],
-  "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"]
+  "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"],
+  "reasoning": {
+    "glm5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "qwen3.6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "glm5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ]
+  }
 }

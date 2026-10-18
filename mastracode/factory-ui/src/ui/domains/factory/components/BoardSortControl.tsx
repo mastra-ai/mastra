@@ -1,10 +1,11 @@
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ArrowUpDown } from 'lucide-react';
 
+import { BOARD_SORTS } from '../boardOrder';
 import type { BoardSort } from '../boardOrder';
-import { isBoardSort } from '../boardSort';
+import { DEFAULT_BOARD_SORT } from '../boardSort';
 
-const SORT_LABELS: Record<BoardSort, string> = {
+export const BOARD_SORT_LABELS: Record<BoardSort, string> = {
   recent: 'Recently moved',
   'recent-mine': 'Recently moved by me',
   'created-newest': 'Newest on board',
@@ -20,23 +21,26 @@ export function BoardSortControl({
   currentUserId?: string;
   onChange: (sort: BoardSort) => void;
 }) {
+  const triggerLabel = `Sort filed cards: ${BOARD_SORT_LABELS[value]}`;
+  const options = BOARD_SORTS.filter(sort => sort !== 'recent-mine' || currentUserId).map(sort => ({
+    value: sort,
+    label: BOARD_SORT_LABELS[sort],
+  }));
+
   return (
-    <Select
-      value={value}
-      onValueChange={(next: string) => {
-        if (isBoardSort(next)) onChange(next);
-      }}
-    >
-      <SelectTrigger size="sm" aria-label="Sort filed cards" className="w-auto shrink-0">
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        size="icon-sm"
+        variant={value === DEFAULT_BOARD_SORT ? 'default' : 'primary'}
+        aria-label={triggerLabel}
+        tooltip={triggerLabel}
+      >
         <ArrowUpDown aria-hidden />
-        Filed cards: {SORT_LABELS[value]}
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="recent">{SORT_LABELS.recent}</SelectItem>
-        {currentUserId ? <SelectItem value="recent-mine">{SORT_LABELS['recent-mine']}</SelectItem> : null}
-        <SelectItem value="created-newest">{SORT_LABELS['created-newest']}</SelectItem>
-        <SelectItem value="created-oldest">{SORT_LABELS['created-oldest']}</SelectItem>
-      </SelectContent>
-    </Select>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start">
+        <DropdownMenu.Label>Sort filed cards</DropdownMenu.Label>
+        <DropdownMenu.RadioOptions options={options} value={value} onValueChange={onChange} />
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 }

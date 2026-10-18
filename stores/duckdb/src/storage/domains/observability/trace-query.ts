@@ -21,8 +21,9 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
-import { parseJson } from './helpers';
+import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
+import { needsPreview } from './preview-compat';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -30,10 +31,21 @@ type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
 type SqlFragment = { sql: string; values: unknown[] };
 type RelatedCollection = 'spans' | 'scores' | 'feedback';
 
-const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
+export const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
 
-function durationMsSql(startedAt: string, endedAt: string): string {
+export function durationMsSql(startedAt: string, endedAt: string): string {
   return `date_diff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
+/**
+ * Top-level string metadata value of the trace root (alias `r`). The SQL binds the JSON path
+ * twice; use `traceMetadataPathValues` for the matching parameters.
+ */
+export const TRACE_METADATA_VALUE_SQL = `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`;
+
+export function traceMetadataPathValues(key: string): [string, string] {
+  const path = `$.${JSON.stringify(key)}`;
+  return [path, path];
 }
 
 const TRACE_FIELDS = {
@@ -76,6 +88,27 @@ const SPAN_FIELDS = {
   organizationId: { sql: 's.organizationId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
+// Direct querySpans policy is separate from trace-related span predicates.
+const SPAN_QUERY_FIELDS = {
+  ...SPAN_FIELDS,
+  traceId: { sql: 's.traceId', parameterType: 'scalar' },
+  spanId: { sql: 's.spanId', parameterType: 'scalar' },
+  parentSpanId: { sql: 's.parentSpanId', parameterType: 'scalar' },
+  threadId: { sql: 's.threadId', parameterType: 'scalar' },
+  resourceId: { sql: 's.resourceId', parameterType: 'scalar' },
+  requestId: { sql: 's.requestId', parameterType: 'scalar' },
+  serviceName: { sql: 's.serviceName', parameterType: 'scalar' },
+  experimentId: { sql: 's.experimentId', parameterType: 'scalar' },
+  environment: { sql: 's.environment', parameterType: 'scalar' },
+  executionSource: { sql: 's.executionSource', parameterType: 'scalar' },
+  parentEntityType: { sql: 's.parentEntityType', parameterType: 'scalar' },
+  parentEntityId: { sql: 's.parentEntityId', parameterType: 'scalar' },
+  parentEntityName: { sql: 's.parentEntityName', parameterType: 'scalar' },
+  rootEntityType: { sql: 's.rootEntityType', parameterType: 'scalar' },
+  rootEntityId: { sql: 's.rootEntityId', parameterType: 'scalar' },
+  rootEntityName: { sql: 's.rootEntityName', parameterType: 'scalar' },
+} as const;
+
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'scalar' },
   scorerVersion: { sql: 's.scorerVersion', parameterType: 'scalar' },
@@ -107,7 +140,12 @@ const TRACE_SELECT = `
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadata AS metadata,
-  r.input AS input,
+  r.inputPreview AS inputPreview,
+  r.outputPreview AS outputPreview,
+  r.errorPreview AS errorPreview,
+  r.eventType AS rootEventType,
+  r.timestamp AS rootTimestamp,
+  r.cursorId AS rootCursorId,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -158,13 +196,8 @@ function compileScalarPredicate<TField extends string>(
   let fieldValues: unknown[] = [];
   if (isMetadataField(predicate.field)) {
     if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
-    const key = predicate.field.slice('metadata.'.length);
-    const path = `$.${JSON.stringify(key)}`;
-    field = {
-      sql: `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
-      parameterType: 'scalar',
-    };
-    fieldValues = [path, path];
+    field = { sql: TRACE_METADATA_VALUE_SQL, parameterType: 'scalar' };
+    fieldValues = traceMetadataPathValues(predicate.field.slice('metadata.'.length));
   } else {
     field = fieldDefinition(registry, predicate.field);
   }
@@ -188,6 +221,17 @@ function compileScalarPredicate<TField extends string>(
     return {
       sql: `len(${members}) > 0 AND NOT list_contains(${members}, ?)`,
       values: [...fieldValues, ...fieldValues, predicate.value],
+    };
+  }
+
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of
+    // letters, marks, and digits. DuckDB's `lower()` already folds `İ` to `i`.
+    const words = `' ' || replace(lower(regexp_replace(nfc_normalize(${field.sql}), '[^\\p{L}\\p{M}\\p{N}]+', ' ', 'g')), 'ς', 'σ') || ' '`;
+    const found = `contains(${words}, ?)`;
+    return {
+      sql: `coalesce(${predicate.operator === 'matches' ? found : `NOT ${found}`}, false)`,
+      values: [...fieldValues, ` ${predicate.value} `],
     };
   }
 
@@ -349,9 +393,50 @@ export interface CompiledDuckDBTraceQuery {
   values: unknown[];
 }
 
+// Columns stored on each root event row, so a predicate over them has the same value on the raw
+// event as on the current root. `startedAt` is excluded: it is derived from the preceding event.
+// Computed fields (status, durationMs, metadata.*) and tags stay in `candidates`, as in PostgreSQL.
+const ROOT_PUSHDOWN_FIELDS = new Set<string>([
+  'traceId',
+  'threadId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'userId',
+  'organizationId',
+  'endedAt',
+  'entityName',
+  'entityType',
+  'environment',
+]);
+
+function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean {
+  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'boolean') return predicate.args.every(isRootPushdownPredicate);
+  if (predicate.type === 'not') return isRootPushdownPredicate(predicate.arg);
+  return ROOT_PUSHDOWN_FIELDS.has(predicate.field);
+}
+
+/** Top-level AND conjuncts of `where` that only read root-row columns. */
+function rootPushdownPredicates(predicate: TrustedTraceQueryPredicate | undefined): TrustedTraceQueryPredicate[] {
+  if (!predicate) return [];
+  const conjuncts = predicate.type === 'boolean' && predicate.operator === 'and' ? predicate.args : [predicate];
+  return conjuncts.filter(isRootPushdownPredicate);
+}
+
+/**
+ * Builds the selection CTEs. `root_trace_ids` narrows the root scan to traces that could have a
+ * qualifying current root before the window functions run: some root event carries the current
+ * root's own conditions (ended, tenant, pushed `where` conjuncts) and some root event has a
+ * timestamp in the window (the current root's `startedAt` is a root event's timestamp in its
+ * trace). This only removes traces that cannot qualify; `root_events` / `current_roots` still see
+ * every root event of the remaining traces, and the full `where` is applied in `candidates`.
+ */
 function compileDuckDBTraceScope(
   relatedCollections: Set<RelatedCollection>,
   scope: TraceQueryTenantScope | undefined,
+  timeRange: { from: string; to: string },
+  rootPredicates: TrustedTraceQueryPredicate[] = [],
 ): { ctes: string[]; values: unknown[] } {
   // Rows with a NULL organizationId never match a scope: `NULL = ?` is not true.
   const tenantConditions = (alias: string): string[] =>
@@ -367,8 +452,33 @@ function compileDuckDBTraceScope(
     const conditions = tenantConditions(alias);
     return conditions.length ? `\n      WHERE ${conditions.join(' AND ')}` : '';
   };
-  const values: unknown[] = [...tenantValues];
+  const rowConditions = ['r.endedAt IS NOT NULL', ...tenantConditions('r')];
+  const values: unknown[] = [timeRange.from, timeRange.to, ...tenantValues];
+  for (const predicate of rootPredicates) {
+    const compiled = compilePredicate(predicate);
+    rowConditions.push(`(${compiled.sql})`);
+    values.push(...compiled.values);
+  }
+  values.push(timeRange.from, timeRange.to, ...tenantValues);
   const ctes = [
+    `root_trace_ids AS (
+      SELECT r.traceId
+      FROM span_events r
+      WHERE r.parentSpanId IS NULL
+      GROUP BY r.traceId
+      HAVING bool_or(r.timestamp >= CAST(? AS TIMESTAMP) AND r.timestamp < CAST(? AS TIMESTAMP))
+        AND bool_or(${rowConditions.join('\n          AND ')})
+    )`,
+    // The `traceId IN (...)` semi-join cannot be pushed into the table scan,
+    // so without a range DuckDB still decompresses the payload columns of every
+    // root row in the table. root_bounds is the exact timestamp range of the
+    // candidate traces' root rows, read from (traceId, timestamp) only, so the
+    // scan below keeps every root row of those traces.
+    `root_bounds AS (
+      SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+      FROM span_events
+      WHERE parentSpanId IS NULL AND traceId IN (SELECT traceId FROM root_trace_ids)
+    )`,
     `root_events AS (
       SELECT
         *,
@@ -378,6 +488,9 @@ function compileDuckDBTraceScope(
         END AS startedAt
       FROM span_events
       WHERE parentSpanId IS NULL
+        AND timestamp >= (SELECT minTs FROM root_bounds)
+        AND timestamp <= (SELECT maxTs FROM root_bounds)
+        AND traceId IN (SELECT traceId FROM root_trace_ids)
     )`,
     `current_roots AS (
       SELECT * EXCLUDE (rootRank)
@@ -400,7 +513,15 @@ function compileDuckDBTraceScope(
   ];
 
   if (relatedCollections.has('spans')) {
-    ctes.push(`current_span_rows AS (
+    ctes.push(`span_bounds AS (
+      -- Exact event-time range of the in-scope traces, from a narrow
+      -- (traceId, timestamp) pass. The join below cannot be pushed into the
+      -- scan, so the range keeps it from decompressing every span row.
+      SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+      FROM span_events
+      WHERE traceId IN (SELECT traceId FROM root_scope)
+    ),
+    current_span_rows AS (
       SELECT
         e.*,
         coalesce(
@@ -412,7 +533,11 @@ function compileDuckDBTraceScope(
           ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
         ) AS currentRank
       FROM span_events e
-      INNER JOIN root_scope roots ON roots.traceId = e.traceId${tenantWhere('e')}
+      INNER JOIN root_scope roots ON roots.traceId = e.traceId
+      WHERE e.timestamp >= (SELECT minTs FROM span_bounds)
+        AND e.timestamp <= (SELECT maxTs FROM span_bounds)${tenantConditions('e')
+          .map(condition => `\n        AND ${condition}`)
+          .join('')}
     ),
     current_spans AS (
       SELECT
@@ -467,27 +592,42 @@ function compileDuckDBTraceScope(
   return { ctes, values };
 }
 
-export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
+/**
+ * Builds the trace selection stages shared by trace queries and trace aggregates: root scope,
+ * related-collection scopes, and a `candidates` CTE projecting `columns` from matching roots.
+ */
+export function compileDuckDBTraceCandidates(
+  plan: Pick<TrustedTraceQueryPlan, 'timeRange' | 'where' | 'scope'>,
+  columns: string,
+): { ctes: string[]; values: unknown[] } {
   const relatedCollections = collectRelatedCollections(plan.where);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
-  const conditions = [
-    `r.endedAt IS NOT NULL`,
-    `r.startedAt >= CAST(? AS TIMESTAMP)`,
-    `r.startedAt < CAST(? AS TIMESTAMP)`,
-  ];
+  const { ctes, values } = compileDuckDBTraceScope(
+    relatedCollections,
+    plan.scope,
+    plan.timeRange,
+    rootPushdownPredicates(plan.where),
+  );
 
+  let predicateSql = 'TRUE';
   if (plan.where) {
     const predicate = compilePredicate(plan.where);
-    conditions.push(`(${predicate.sql})`);
+    predicateSql = `(${predicate.sql})`;
     values.push(...predicate.values);
   }
 
   ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}
+    SELECT ${columns}
     FROM root_scope r
-    WHERE ${conditions.slice(3).join('\n      AND ') || 'TRUE'}
+    WHERE ${predicateSql}
   )`);
+  return { ctes, values };
+}
+
+export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
+  const { ctes, values } = compileDuckDBTraceCandidates(
+    plan,
+    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}`,
+  );
 
   const candidates = `WITH ${ctes.join(',\n  ')}`;
 
@@ -515,7 +655,7 @@ LIMIT ?`,
     values.push(watermark ?? '0', plan.limit + 1);
     return {
       sql: `${candidates},
-  delta_head AS (SELECT coalesce(max(cursorId), 0) AS streamHead FROM root_events),
+  delta_head AS (SELECT coalesce(max(cursorId), 0) AS streamHead FROM span_events WHERE parentSpanId IS NULL),
   delta_rows AS (
     SELECT * FROM candidates
     WHERE deltaWatermark > CAST(? AS BIGINT) ${watermark === undefined ? 'AND FALSE' : ''}
@@ -546,7 +686,7 @@ ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
     SELECT COUNT(*) AS total
     FROM candidates
   )
-SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? ', (SELECT coalesce(max(cursorId), 0) FROM root_events) AS streamHead' : ''}
+SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? ', (SELECT coalesce(max(cursorId), 0) FROM span_events WHERE parentSpanId IS NULL) AS streamHead' : ''}
 FROM page_total
 LEFT JOIN page_rows ON TRUE
 ORDER BY page_rows.__row_position ASC NULLS LAST`,
@@ -576,8 +716,7 @@ LIMIT ?`,
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.traces.where);
   collectThreadRelatedCollections(plan.where, relatedCollections);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
-  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to, ...scopeValues];
+  const { ctes, values } = compileDuckDBTraceScope(relatedCollections, plan.scope, plan.traces.timeRange);
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -644,8 +783,7 @@ function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope
 export function compileDuckDBTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledDuckDBTraceQuery {
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(new Set(), plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values } = compileDuckDBTraceScope(new Set(), plan.scope, plan.timeRange);
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower(?)) > 0` : '';
@@ -668,8 +806,11 @@ LIMIT ?`,
 }
 
 export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledDuckDBTraceQuery {
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope), plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values } = compileDuckDBTraceScope(
+    discoveryCollections(plan.predicateScope),
+    plan.scope,
+    plan.timeRange,
+  );
   let fieldSql: string;
   let source = discoverySource(plan.predicateScope);
   if (plan.predicateScope === 'trace' && plan.path === 'tags') {
@@ -702,7 +843,7 @@ LIMIT ?`,
   };
 }
 
-function isDuckDBResourceLimit(error: unknown): boolean {
+export function isDuckDBResourceLimit(error: unknown): boolean {
   return error instanceof Error && error.message.toLowerCase().includes('out of memory');
 }
 
@@ -745,8 +886,51 @@ export async function getTraceQueryValues(
   });
 }
 
-function asIsoTimestamp(value: unknown): string {
+export function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
+}
+
+const TRACE_PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input'],
+  ['outputPreview', 'output'],
+  ['errorPreview', 'error'],
+] as const;
+
+/**
+ * Builds the previews of listed roots whose current row was written before previews were stored
+ * (NULL preview), from that same row's payload. Only the flagged rows' payloads are read, so the
+ * fallback fades out as old rows age out of the listed range. Rows written since then carry a
+ * non-NULL preview (`''` when there is nothing to preview) for every payload they hold.
+ */
+async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<string, unknown>[]): Promise<void> {
+  const flagged = rows.filter(
+    row => row.traceId != null && TRACE_PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])),
+  );
+  if (flagged.length === 0) return;
+
+  const values: unknown[] = [];
+  const where = flagged
+    .map(row => {
+      values.push(row.traceId, row.rootSpanId, row.rootEventType, row.rootTimestamp, row.rootCursorId);
+      return '(traceId = ? AND spanId = ? AND eventType = ? AND timestamp = ? AND cursorId IS NOT DISTINCT FROM ?)';
+    })
+    .join(' OR ');
+  const payloads = await db.query<Record<string, unknown>>(
+    `SELECT traceId,
+      ${payloadColumnSql('input')} AS input,
+      ${payloadColumnSql('output')} AS output,
+      error
+    FROM span_events
+    WHERE parentSpanId IS NULL AND (${where})`,
+    values,
+  );
+  const byTrace = new Map(payloads.map(payload => [String(payload.traceId), payload]));
+  for (const row of flagged) {
+    const payload = byTrace.get(String(row.traceId));
+    for (const [preview, column] of TRACE_PREVIEW_PAYLOADS) {
+      if (needsPreview(row[preview])) row[preview] = previewFromPayload(payload?.[column] ?? null);
+    }
+  }
 }
 
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
@@ -755,6 +939,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
+    await fillMissingTracePreviews(db, rows);
     const traces = rows
       .filter(row => row.traceId != null)
       .map(row => ({
@@ -765,7 +950,9 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
         parentSpanId: row.parentSpanId ?? null,
         createdAt: asIsoTimestamp(row.startedAt),
         metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+        inputPreview: apiPreview(row.inputPreview),
+        outputPreview: apiPreview(row.outputPreview),
+        errorPreview: apiPreview(row.errorPreview),
         threadId: row.threadId == null ? null : String(row.threadId),
         resourceId: row.resourceId == null ? null : String(row.resourceId),
         startedAt: asIsoTimestamp(row.startedAt),
@@ -809,6 +996,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
 
+  await fillMissingTracePreviews(db, visibleRows);
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
@@ -817,7 +1005,9 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: apiPreview(row.inputPreview),
+    outputPreview: apiPreview(row.outputPreview),
+    errorPreview: apiPreview(row.errorPreview),
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -871,4 +1061,9 @@ export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQuer
           : null,
     },
   });
+}
+
+/** Compile a direct span-query filter using its dedicated field mapping. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS);
 }

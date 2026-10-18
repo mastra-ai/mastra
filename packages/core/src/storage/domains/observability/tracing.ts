@@ -136,6 +136,20 @@ export const spanRecordSchema = z
     endedAt: endedAtField.nullish(),
     requestContext: z.record(z.string(), z.unknown()).nullish().describe('Request context data'),
 
+    // Short text previews of input / output / error (see `buildPreview`). When a written span
+    // carries them (e.g. built upstream by an exporter), stores that keep previews store these,
+    // cut to the shared format, instead of building their own.
+    inputPreview: z.string().nullish().describe('Short text preview of the span input'),
+    outputPreview: z.string().nullish().describe('Short text preview of the span output'),
+    errorPreview: z.string().nullish().describe('Short text preview of the span error'),
+
+    // Derived from `attributes.completionStartTime` when an exporter builds the record, so stores
+    // persist it without computing it themselves.
+    timeToFirstChunkMs: z
+      .number()
+      .nullish()
+      .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
+
     // Database timestamps
     ...dbTimestamps,
   })
@@ -457,19 +471,41 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-/** Maximum length of the rendered `inputPreview` text. */
-export const INPUT_PREVIEW_MAX_LENGTH = 100;
+/** Maximum generated preview length, before the trailing `…`. Supplied previews have no cap. */
+export const PREVIEW_MAX_LENGTH = 100;
+
+/** @deprecated Use {@link PREVIEW_MAX_LENGTH}. */
+export const INPUT_PREVIEW_MAX_LENGTH = PREVIEW_MAX_LENGTH;
 
 const inputPreviewField = z.string().describe('Short text preview of the span input');
+const outputPreviewField = z.string().describe('Short text preview of the span output');
+const errorPreviewField = z.string().describe('Short text preview of the span error');
 
-type PreviewMessage = { role?: string; content?: unknown };
+type PreviewMessage = { role?: unknown; content?: unknown };
 
-function truncatePreview(text: string, maxLength: number): string | undefined {
-  if (!text) return undefined;
-  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+function truncatePreview(text: string, maxLength = PREVIEW_MAX_LENGTH): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= maxLength) return trimmed;
+  // Never end on half of a surrogate pair.
+  const end = maxLength > 0 && /[\uD800-\uDBFF]/.test(trimmed[maxLength - 1]!) ? maxLength - 1 : maxLength;
+  return `${trimmed.slice(0, end)}…`;
 }
 
-function previewTextFromContent(content: unknown): string {
+function isMessage(value: unknown): value is PreviewMessage {
+  return value != null && typeof value === 'object' && typeof (value as PreviewMessage).role === 'string';
+}
+
+/** A message list is a bare array or a `messages` array whose elements carry a string `role`. */
+function extractMessages(value: unknown): PreviewMessage[] | null {
+  const list =
+    value && typeof value === 'object' && !Array.isArray(value) && 'messages' in value
+      ? (value as { messages: unknown }).messages
+      : value;
+  return Array.isArray(list) && list.some(isMessage) ? list : null;
+}
+
+function textFromContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content
@@ -485,65 +521,142 @@ function previewTextFromContent(content: unknown): string {
     .join(' ');
 }
 
-/**
- * Builds the short text shown in a trace list's input column, mirroring what the
- * full-payload list previously derived client-side. Stores call this at read time,
- * from their lightweight list row mappers, so the raw `input` blob never reaches
- * the caller.
- *
- * Accepts a parsed `input` value or its JSON string. An unparseable JSON document
- * previews as empty, mirroring how store read paths treat an unparseable column.
- */
-export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_LENGTH): string | undefined {
-  if (input == null) return undefined;
+function lastMessageText(messages: PreviewMessage[], accept: (role: string) => boolean): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!isMessage(message) || !accept(message.role as string)) continue;
+    const text = textFromContent(message.content).trim();
+    if (text) return text;
+  }
+  return null;
+}
 
-  let value = input;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+function textField(value: object): string | null {
+  for (const key of ['text', 'message'] as const) {
+    const field = (value as Record<string, unknown>)[key];
+    if (typeof field === 'string' && field.trim()) return field;
+  }
+  return null;
+}
+
+/**
+ * Short text preview of a decoded span payload (`input`, `output` or `error`), at most
+ * {@link PREVIEW_MAX_LENGTH} characters plus `…` when cut. Returns `null` when there is nothing
+ * to preview.
+ *
+ * - A string previews as itself.
+ * - A message list (a bare array, or a `messages` array, of objects with a string `role`)
+ *   previews as the last user message's text, else the last non-system message's text.
+ * - An object with a non-blank `text` or `message` string previews as that string.
+ * - Anything else previews as its compact JSON.
+ *
+ * `serialized` is the value's JSON text when the caller already has it, so the compact-JSON
+ * case does not serialize it twice. Writers call this on the value they store; readers of a
+ * stored JSON column call {@link buildPreviewFromJson}, so both produce the same preview.
+ */
+export function buildPreview(value: unknown, serialized?: string | null): string | null {
+  return previewOf(value, serialized, PREVIEW_MAX_LENGTH);
+}
+
+function previewOf(value: unknown, serialized: string | null | undefined, maxLength: number): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') return truncatePreview(value, maxLength);
+
+  const messages = extractMessages(value);
+  if (messages) {
+    const text =
+      lastMessageText(messages, role => role === 'user') ?? lastMessageText(messages, role => role !== 'system');
+    return text == null ? null : truncatePreview(text, maxLength);
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const text = textField(value);
+    if (text != null) return truncatePreview(text, maxLength);
+  }
+
+  return truncatePreview(serialized ?? JSON.stringify(value) ?? '', maxLength);
+}
+
+/**
+ * Preview of a stored JSON payload column. Stores always write valid JSON, so text that does not
+ * parse previews as blank rather than as a guess at a sliced document.
+ */
+export function buildPreviewFromJson(json: string | null | undefined): string | null {
+  return previewOfJson(json, PREVIEW_MAX_LENGTH);
+}
+
+function previewOfJson(json: string | null | undefined, maxLength: number): string | null {
+  if (json == null || !json.trim()) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  return previewOf(value, json, maxLength);
+}
+
+/**
+ * The preview a store writes for one payload: an upstream preview when the span record carries
+ * a nonblank one, otherwise one built from the payload. Both are capped the same way, at
+ * {@link PREVIEW_MAX_LENGTH} characters plus `…`, so an exporter can't store an unbounded preview.
+ * `''` means there is nothing to preview.
+ */
+export function buildStoredPreview(
+  upstream: string | null | undefined,
+  value: unknown,
+  serialized?: string | null,
+): string {
+  return (upstream ? truncatePreview(upstream) : null) ?? buildPreview(value, serialized) ?? '';
+}
+
+/**
+ * Whether a preview built by {@link buildPreview} was cut. A cut preview is the first
+ * {@link PREVIEW_MAX_LENGTH} characters plus `…`, or one character fewer plus `…` when the cut
+ * would split a surrogate pair; an uncut one is at most {@link PREVIEW_MAX_LENGTH} characters.
+ * An uncut text of exactly {@link PREVIEW_MAX_LENGTH} characters that itself ends in `…` reads as
+ * cut, which is the one case the preview alone cannot tell apart.
+ */
+export function isPreviewTruncated(preview: string | null | undefined): boolean {
+  if (!preview) return false;
+  return preview.endsWith('…') && (preview.length === PREVIEW_MAX_LENGTH || preview.length === PREVIEW_MAX_LENGTH + 1);
+}
+
+/**
+ * @deprecated Use {@link buildPreview} (decoded values) or {@link buildPreviewFromJson} (stored
+ * JSON text). Kept for callers of the old trace-list preview; it now uses the shared preview
+ * format, so a message list previews as its last user message rather than every user message
+ * joined with ` | `.
+ *
+ * Accepts a decoded value or a JSON string. A string that looks like a JSON document or a
+ * JSON-encoded scalar is parsed first; an unparseable JSON document previews as empty.
+ * `maxLength` caps the preview at that many characters plus `…`, as before.
+ */
+export function buildInputPreview(input: unknown, maxLength = PREVIEW_MAX_LENGTH): string | undefined {
+  if (input == null) return undefined;
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return previewOfJson(trimmed, maxLength) ?? undefined;
+    if (trimmed.startsWith('"')) {
       try {
-        value = JSON.parse(trimmed);
-      } catch {
-        // Malformed JSON previews as empty. Writers keep stored JSON valid (truncation
-        // replaces values inside the structure, never slices the document), and message
-        // property order is caller-controlled — a best-effort scan of broken JSON can
-        // surface assistant text, so empty is the safe answer, matching `parseJson`.
-        return undefined;
-      }
-    } else if (trimmed.startsWith('"')) {
-      // A JSON-encoded scalar string ('"hello"') — unwrap it so the preview drops the
-      // quotes; a truncated one falls through and previews as plain text.
-      try {
-        value = JSON.parse(trimmed);
+        return previewOf(JSON.parse(trimmed), undefined, maxLength) ?? undefined;
       } catch {
         // Not valid JSON — treat as plain text below.
       }
     }
   }
+  return previewOf(input, undefined, maxLength) ?? undefined;
+}
 
-  const messages = Array.isArray(value)
-    ? value
-    : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
-      ? (value as { messages: unknown[] }).messages
-      : null;
-
-  if (messages) {
-    const text = (messages as PreviewMessage[])
-      .filter(m => m?.role === 'user')
-      .map(m => previewTextFromContent(m.content))
-      .filter(Boolean)
-      .join(' | ');
-    return truncatePreview(text, maxLength);
-  }
-
-  if (typeof value === 'string') return truncatePreview(value, maxLength);
-  return truncatePreview(JSON.stringify(value) ?? '', maxLength);
+/** Stored preview when the record carries one (`''` means none), else one built from the value. */
+function lightPreview(stored: string | null | undefined, value: unknown): string | null {
+  return stored == null ? buildPreview(value) : stored.trim() || null;
 }
 
 /**
  * Projects a full span record down to the lightweight row a trace list renders,
- * deriving `inputPreview` from `input`.
+ * with `inputPreview` / `outputPreview` / `errorPreview`: the stored previews when the record
+ * carries them, otherwise built from `input` / `output` / `error` with {@link buildPreview}.
  *
  * This is the read-time fallback. Backends that can project inside the query should
  * do so instead — that is what keeps the blob columns off the read path — but every
@@ -567,7 +680,9 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
     threadId: span.threadId,
     resourceId: span.resourceId,
     metadata: span.metadata,
-    inputPreview: buildInputPreview(span.input),
+    inputPreview: lightPreview(span.inputPreview, span.input),
+    outputPreview: lightPreview(span.outputPreview, span.output),
+    errorPreview: lightPreview(span.errorPreview, span.error),
     createdAt: span.createdAt,
     updatedAt: span.updatedAt,
   };
@@ -611,10 +726,12 @@ export const lightSpanRecordSchema = z
     // Nullable and optional for rows that predate the field.
     metadata: metadataField.nullable().optional(),
 
-    // Short text preview of `input`, so trace lists can render their preview column
-    // without transferring the whole prompt. See `buildInputPreview`. Nullable and
-    // optional for rows that predate the field.
+    // Short text previews of `input` / `output` / `error`, so trace lists can render their
+    // preview columns without transferring the whole payload. See `buildPreview`. Nullable
+    // and optional for rows that predate the fields.
     inputPreview: inputPreviewField.nullable().optional(),
+    outputPreview: outputPreviewField.nullable().optional(),
+    errorPreview: errorPreviewField.nullable().optional(),
 
     // Database timestamps
     ...dbTimestamps,

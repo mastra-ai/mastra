@@ -249,7 +249,7 @@ const result = await agent.generate('message for agent')
                 parameters: [
                   {
                     name: 'messageFilter',
-                    type: '(context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>',
+                    type: '(context: MessageFilterContext) => ModelMessage[] | Promise<ModelMessage[]>',
                     isOptional: true,
                     description:
                       'Callback function called before delegating to a subagent. Use this to filter the messages that are passed to the subagent.',
@@ -516,6 +516,13 @@ const result = await agent.generate('message for agent')
             isOptional: true,
             description:
               '**Deprecated.** Use structuredOutput without a model to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.',
+          },
+          {
+            name: 'scopes',
+            type: 'string[]',
+            isOptional: true,
+            description:
+              "Scopes the run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`). Memory reads its resource and thread from `resource:` and `thread:` scopes. Other scopes are passed to tools and processors. Combined with the agent's `scopes` and the `mastra__scopes` request context key. Throws if a `resource:` or `thread:` scope conflicts with another resource or thread value.",
           },
           {
             name: 'memory',
@@ -843,6 +850,17 @@ const result = await agent.generate('message for agent')
                     isOptional: true,
                     description:
                       'Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'nestUnderParent',
+                    type: 'boolean',
+                    isOptional: true,
+                    description:
+                      "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
                   },
                 ],
               },
@@ -1425,6 +1443,8 @@ const response = await agent.generate([
 
 console.log(response.text)
 ```
+
+The `image` value, or `data` for a `type: 'file'` part, should be an absolute URL, a data URL, or base64 content. The model can't see an attachment given as a relative path such as `/api/images/foo.png`, so resolve it to an absolute URL before sending. The agent replaces it with a placeholder and logs a warning. It does the same for inline content that can't be decoded or isn't the image or PDF its media type says, and for any attachment it can't download, instead of failing. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures).
 
 ### Using `maxSteps`
 

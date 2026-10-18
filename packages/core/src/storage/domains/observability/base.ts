@@ -65,6 +65,7 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
 import type { TraceAggregateResponse } from './trace-aggregate';
 import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import type {
@@ -113,6 +114,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `entity-type-discovery`, `entity-name-discovery`, `service-name-discovery`,
  *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
+ * - `span-query`: `querySpans` over completed spans
+ * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
@@ -132,6 +135,8 @@ export type ObservabilityStorageFeature =
   | 'environment-discovery'
   | 'tag-discovery'
   | 'metric-discovery'
+  | 'span-query'
+  | 'span-query-context-fields'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'
@@ -390,6 +395,16 @@ export class ObservabilityStorage extends StorageDomain {
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     const { spans, ...rest } = await this.listTraces(args);
     return { ...rest, spans: spans.map(toLightSpanRecord) };
+  }
+
+  /** Executes a validated span-row query; unsupported stores fail explicitly. */
+  async querySpans(_plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support span queries',
+    });
   }
 
   /**

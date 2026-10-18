@@ -8,8 +8,8 @@ export function effectiveBoard(item: WorkItemRow): string {
 }
 
 /**
- * Put one card on `targetBoard`, at `targetStage` or the board's initial phase. Terminal cards and
- * cards with a session attached to a current stage stay put; so does a card that changed under us
+ * Put one card on `targetBoard`, at `targetStage` or the board's initial phase. Terminal cards,
+ * cards on a board that is not installed, and cards with a session attached to a current stage stay put; so does a card that changed under us
  * (a run started or someone moved it), a card already on the target board when no phase is named,
  * and a card already sitting at the named destination.
  */
@@ -46,10 +46,12 @@ export async function moveCardToBoard({
   )
     return 'unchanged';
   const current = boardRegistry.get(currentBoard);
+  // Without the board definition we can't tell terminal phases or attached sessions apart, so leave the card alone.
+  if (!current) return 'skipped';
   // Sessions are keyed by the phase's role, not the phase id.
   const movable = item.stages.every(currentStage => {
-    if (current?.phases[currentStage]?.kind === 'terminal') return false;
-    const role = current?.roleForPhase(currentStage);
+    if (current.phases[currentStage]?.kind === 'terminal') return false;
+    const role = current.roleForPhase(currentStage);
     return role === undefined || item.sessions[role] === undefined;
   });
   if (!movable) return 'skipped';

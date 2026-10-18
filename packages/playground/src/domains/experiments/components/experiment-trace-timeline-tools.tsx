@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import type { LightSpanRecord } from '@mastra/playground-ui/domains/traces/types';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
@@ -57,16 +57,11 @@ export function ExperimentTraceTimelineTools({
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex">
-        <SearchFieldBlock
-          name="search-spans"
+        <SearchInput
           label="Find span by name"
-          labelIsHidden
           placeholder="Look for span name"
           value={localSearchPhrase}
-          onChange={e => {
-            setLocalSearchPhrase(e.target.value);
-          }}
-          onReset={() => setLocalSearchPhrase('')}
+          onValueChange={setLocalSearchPhrase}
         />
       </div>
       <ButtonsGroup>

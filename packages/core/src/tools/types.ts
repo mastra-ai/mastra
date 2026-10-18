@@ -9,6 +9,7 @@ import type {
 } from '@internal/external-types';
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
+import type { MastraDBMessage } from '../agent/message-list';
 import type { ActorSignal } from '../auth/ee';
 import type { BackgroundTaskAdoptionContext, ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
@@ -78,6 +79,38 @@ export type NeedsApprovalContext = {
  * `createTool` over setting this directly.
  */
 export type NeedsApprovalFn = (input: any, ctx?: NeedsApprovalContext) => boolean | Promise<boolean>;
+
+/**
+ * Context passed to a tool's `beforeApproval` hook alongside the parsed tool input.
+ */
+export type BeforeApprovalContext = NeedsApprovalContext & {
+  /** ID of the tool call awaiting approval. */
+  toolCallId: string;
+  /** Name the model used to call the tool. */
+  toolName: string;
+};
+
+/**
+ * Per-tool hook that runs after the call is known to require approval but before the
+ * run suspends for it. Return `{ proceed: false, output }` to reject the call: the run
+ * does not pause, the tool does not execute, and `output` is returned to the model as
+ * the tool result. Return nothing to continue to the approval gate. `input` is validated
+ * against the tool's `inputSchema`; calls whose input fails validation skip the hook.
+ */
+export type BeforeApprovalFn<TInput = any, TOutput = unknown> = (
+  input: TInput,
+  ctx: BeforeApprovalContext,
+) => void | ToolBeforeHookResult<TOutput> | Promise<void | ToolBeforeHookResult<TOutput>>;
+
+/**
+ * Trusted runtime values the agent runtime passes to a built tool's `beforeApproval`
+ * wrapper so it can run the same authorization check as `execute`. Not exposed to user hooks.
+ * @internal
+ */
+export type BeforeApprovalRuntime = {
+  requestContext?: RequestContext;
+  actor?: ActorSignal;
+};
 
 export interface ToolHookContext<
   TInput = unknown,
@@ -209,6 +242,12 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
   agentId: string;
   toolCallId: string;
   messages: any[];
+  /**
+   * Reads the current in-memory conversation, including remembered messages and this run's responses.
+   * Reflects message-list removals, but not transient provider-prompt transforms. Treat messages as read-only.
+   * Not available outside a supported agent loop.
+   */
+  getMessages?: () => readonly MastraDBMessage[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
 
   // Optional - memory identifiers
@@ -372,6 +411,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * stream is not memory-backed.
      */
     flushMessages?: () => Promise<void>;
+    /** Live conversation reader supplied by the agent loop. Never serialized in workflow state. */
+    getMessages?: AgentToolExecutionContext<unknown, unknown>['getMessages'];
     /** Observability helper to expose on the final tool execution context. */
     observe?: ToolObserve;
     /** Set by the agent tool-call step when the tool runs as a background task. */
@@ -714,7 +755,7 @@ export interface ToolAction<
    * When provided, the request context will be validated against this schema before tool execution.
    * If validation fails, a validation error is returned instead of executing the tool.
    */
-  requestContextSchema?: PublicSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext, any>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
@@ -760,11 +801,29 @@ export interface ToolAction<
         ctx?: { requestContext?: Record<string, unknown>; workspace?: Workspace },
       ) => boolean | Promise<boolean>);
   /**
+   * Runs before the approval gate for calls that require approval. Use it to validate a
+   * call (e.g. check that referenced records exist) so invalid calls are never shown to a
+   * human. Return `{ proceed: false, output }` to reject: the run does not suspend, the
+   * tool does not execute, and `output` is returned to the model as the tool result.
+   * Not run on resume, so keep validating inside `execute` if state can change while paused.
+   * If the hook throws, the error is logged and the call continues to the approval gate.
+   */
+  beforeApproval?: BeforeApprovalFn<TSchemaIn>;
+  /**
    * Enables strict tool input generation for providers that support it.
    * When enabled, supported providers will attempt to generate arguments
    * that exactly match the tool schema.
    */
   strict?: boolean;
+  /**
+   * How a result that fails `outputSchema` validation is handled.
+   * - `'strict'` (default): the result is replaced with a validation error object, so the
+   *   model is told the call failed.
+   * - `'warn'`: the failure is logged and the tool's actual result is returned unchanged.
+   *   Use this for tools whose side effects have already happened when the result is
+   *   produced (an order was placed, a message was sent), so the model does not retry them.
+   */
+  outputValidation?: 'strict' | 'warn';
   /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.

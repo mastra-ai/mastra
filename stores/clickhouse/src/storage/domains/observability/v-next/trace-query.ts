@@ -16,6 +16,7 @@ import type {
   TrustedThreadQueryPlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryTracesPlan,
   TrustedTraceQueryValuesPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
@@ -26,12 +27,13 @@ import { TABLE_FEEDBACK_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRAC
 import { CH_SETTINGS, parseJson } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported } from './polling';
+import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import { currentScoresRelation } from './scores';
 
-type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
+export type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
 type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
 type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
-type QueryParams = Record<string, string | number>;
+export type QueryParams = Record<string, string | number>;
 type SqlFragment = { sql: string; params: QueryParams };
 type RelatedCollection = 'spans' | 'scores' | 'feedback';
 type TraceSelection = {
@@ -39,10 +41,15 @@ type TraceSelection = {
   where?: TrustedTraceQueryPredicate;
 };
 
-const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
+export const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
-function durationMsSql(startedAt: string, endedAt: string): string {
+export function durationMsSql(startedAt: string, endedAt: string): string {
   return `dateDiff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
+/** Top-level metadata string value on a trace root (alias `r`); `key` is a bound parameter placeholder. */
+export function traceMetadataValueSql(key: string): string {
+  return `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
 }
 
 const TRACE_FIELDS = {
@@ -85,6 +92,27 @@ const SPAN_FIELDS = {
   organizationId: { sql: 's.organizationId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
+// Direct querySpans policy is separate from trace-related span predicates.
+const SPAN_QUERY_FIELDS = {
+  ...SPAN_FIELDS,
+  traceId: { sql: 's.traceId', parameterType: 'String' },
+  spanId: { sql: 's.spanId', parameterType: 'String' },
+  parentSpanId: { sql: 's.parentSpanId', parameterType: 'String' },
+  threadId: { sql: 's.threadId', parameterType: 'String' },
+  resourceId: { sql: 's.resourceId', parameterType: 'String' },
+  requestId: { sql: 's.requestId', parameterType: 'String' },
+  serviceName: { sql: 's.serviceName', parameterType: 'String' },
+  experimentId: { sql: 's.experimentId', parameterType: 'String' },
+  environment: { sql: 's.environment', parameterType: 'String' },
+  executionSource: { sql: 's.executionSource', parameterType: 'String' },
+  parentEntityType: { sql: 's.parentEntityType', parameterType: 'String' },
+  parentEntityId: { sql: 's.parentEntityId', parameterType: 'String' },
+  parentEntityName: { sql: 's.parentEntityName', parameterType: 'String' },
+  rootEntityType: { sql: 's.rootEntityType', parameterType: 'String' },
+  rootEntityId: { sql: 's.rootEntityId', parameterType: 'String' },
+  rootEntityName: { sql: 's.rootEntityName', parameterType: 'String' },
+} as const;
+
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'String' },
   scorerVersion: { sql: 's.scorerVersion', parameterType: 'String' },
@@ -112,11 +140,15 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
+  r.dedupeKey AS dedupeKey,
+  r.organizationId AS organizationId,
   r.name AS name,
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadataRaw AS metadata,
-  r.input AS input,
+  r.inputPreview AS inputPreview,
+  r.outputPreview AS outputPreview,
+  r.errorPreview AS errorPreview,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -126,7 +158,7 @@ const TRACE_SELECT = `
   r.environment AS environment,
   ${TRACE_STATUS_SQL} AS status`;
 
-class ParameterBuilder {
+export class ParameterBuilder {
   readonly params: QueryParams = {};
   #next = 1;
 
@@ -176,7 +208,7 @@ function compileScalarPredicate<TField extends string>(
         if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
         const key = parameters.add(predicate.field.slice('metadata.'.length), 'String');
         return {
-          sql: `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`,
+          sql: traceMetadataValueSql(key),
           parameterType: 'String' as const,
         };
       })()
@@ -192,6 +224,14 @@ function compileScalarPredicate<TField extends string>(
     return predicate.operator === 'includes'
       ? `has(${field.sql}, ${member})`
       : `notEmpty(${field.sql}) AND NOT has(${field.sql}, ${member})`;
+  }
+
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of
+    // letters, marks, and digits. `lowerUTF8('İ')` is `i` plus a combining dot, so fold `İ` after NFC composes it.
+    const words = `concat(' ', replaceAll(lowerUTF8(replaceRegexpAll(replaceAll(normalizeUTF8NFC(${field.sql}), 'İ', 'i'), '[^\\\\p{L}\\\\p{M}\\\\p{N}]+', ' ')), 'ς', 'σ'), ' ')`;
+    const found = `position(${words}, ${parameters.add(` ${predicate.value} `, 'String')}) > 0`;
+    return `ifNull(${predicate.operator === 'matches' ? found : `NOT (${found})`}, 0)`;
   }
 
   if (predicate.type === 'membership') {
@@ -276,13 +316,14 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
             predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS,
             parameters,
           );
-    const existence = `EXISTS (
-      SELECT 1 FROM ${table} s
+    // Uncorrelated IN keeps the related scan set-based: the subquery runs once
+    // instead of being decorrelated into a join per reference.
+    const matching = `(
+      SELECT s.traceId FROM ${table} s
       WHERE isNotNull(s.traceId)
-        AND s.traceId = r.traceId
         AND (${nested})
     )`;
-    return predicate.quantifier === 'some' ? existence : `NOT ${existence}`;
+    return `r.traceId ${predicate.quantifier === 'some' ? 'IN' : 'NOT IN'} ${matching}`;
   }
 
   if (predicate.type === 'boolean') {
@@ -296,12 +337,12 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
 
 function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: ParameterBuilder): string {
   if (predicate.type === 'relation') {
-    const existence = `EXISTS (
-      SELECT 1 FROM eligible_roots r
-      WHERE r.threadId = t.threadId
+    const matching = `(
+      SELECT r.threadId FROM eligible_roots r
+      WHERE isNotNull(r.threadId)
         AND (${compilePredicate(predicate.predicate, parameters)})
     )`;
-    return predicate.quantifier === 'some' ? existence : `NOT ${existence}`;
+    return `t.threadId ${predicate.quantifier === 'some' ? 'IN' : 'NOT IN'} ${matching}`;
   }
   if (predicate.type === 'boolean') {
     const parts = predicate.args.map(arg => `(${compileThreadPredicate(arg, parameters)})`);
@@ -312,7 +353,7 @@ function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: P
 
 export interface CompiledClickHouseTraceQuery {
   query: string;
-  query_params: QueryParams;
+  query_params: Record<string, unknown>;
   sharedSnapshot?: boolean;
 }
 
@@ -320,49 +361,102 @@ export interface CompiledClickHouseTraceQuery {
  * Tenant conditions ANDed into every root and related-signal scan. Columns are
  * `Nullable(String)`, so rows without a tenant never match a scope.
  */
-function compileTenantScope(scope: TraceQueryTenantScope | undefined, parameters: ParameterBuilder): string {
+export function compileTenantScope(scope: TraceQueryTenantScope | undefined, parameters: ParameterBuilder): string {
   if (!scope) return '';
   let sql = `\n      AND organizationId = ${parameters.add(scope.organizationId, 'String')}`;
   if (scope.resourceId !== undefined) sql += `\n      AND resourceId = ${parameters.add(scope.resourceId, 'String')}`;
   return sql;
 }
 
+/**
+ * Trace scope options. `queryTraces()` uses all of them; `aggregateTraces()` can opt into `oneRootPerTrace`.
+ * - `oneRootPerTrace`: a trace has exactly one root span, so `root_scope` is the window's root rows,
+ *   read once without re-deriving a current root from all of a trace's roots. It may hold
+ *   unmerged copies of a root, so consumers collapse by `traceId`. A trace written with several
+ *   root spans (a writer bug) is listed under one of them.
+ * - `spanExistence`: spans are only tested for existence (`traceId IN`), which copies of a span
+ *   cannot change, so the span dedupe is skipped.
+ */
+export type TraceScopeOptions = {
+  oneRootPerTrace?: boolean;
+  spanExistence?: boolean;
+  /** Delta mode: the delta index rows to page over; emits `delta_candidates` and seeds the scope with its traces. */
+  delta?: string;
+};
+
 function compileClickHouseTraceScope(
   selection: TraceSelection,
   relationCollections: Set<RelatedCollection>,
   parameters: ParameterBuilder,
   scope: TraceQueryTenantScope | undefined,
+  seedConjuncts: TrustedTraceQueryPredicate[] = [],
+  options: TraceScopeOptions = {},
 ): string[] {
   const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
   const tenant = compileTenantScope(scope, parameters);
-  // ClickHouse cannot push the time range through `LIMIT 1 BY`, so narrow the dedupe to
-  // traces with a root in the range first. All roots of those traces stay in, so a
-  // non-current root inside the range cannot resurrect a trace whose current root is outside it.
-  const ctes = [
-    `current_roots AS (
-    SELECT * FROM (
-      SELECT *
-      FROM ${TABLE_TRACE_ROOTS}
-      WHERE traceId IN (
+  const seedFilter = seedConjuncts
+    .map(conjunct => `\n          AND (${compilePredicate(conjunct, parameters)})`)
+    .join('');
+  const bound = options.delta ? `\n          AND (traceId IN (SELECT traceId FROM delta_candidates))` : '';
+  // Traces with any root row in the window, for seeding related-signal scans.
+  const windowTraces = (more: string) => `
         SELECT traceId
-        FROM ${TABLE_TRACE_ROOTS}
+        FROM ${TABLE_TRACE_ROOTS} w
         WHERE startedAt >= ${from}
-          AND startedAt < ${to}${tenant}
-      )
-      ORDER BY dedupeKey
-      LIMIT 1 BY dedupeKey
-    )
+          AND startedAt < ${to}${tenant}${more}
+      `;
+  // The delta index has no tenant columns, so keep only its traces with a root row in this
+  // tenant's window before grouping; the root scope applies the same window anyway.
+  const delta = options.delta
+    ? [
+        `delta_candidates AS (
+    SELECT traceId, max(cursorId) AS latestCursorId
+    FROM ${TABLE_TRACE_ROOTS_DELTA}
+    WHERE ${options.delta}
+      AND traceId IN (${windowTraces('')})
+    GROUP BY traceId
+  )`,
+      ]
+    : [];
+  const ctes = options.oneRootPerTrace
+    ? [
+        ...delta,
+        // A trace has one root span, so the window's root rows are the traces' roots. Unmerged
+        // copies of a root stay; consumers collapse them by traceId.
+        `root_scope AS (
+    SELECT *
+    FROM ${TABLE_TRACE_ROOTS} r
+    WHERE startedAt >= ${from}
+      AND startedAt < ${to}${tenant}${seedFilter}${bound}
+  )`,
+      ]
+    : [
+        // ClickHouse cannot push the time range through `LIMIT 1 BY`, so narrow the dedupe to
+        // traces with a root in the range first. All roots of those traces stay in, so a
+        // non-current root inside the range cannot resurrect a trace whose current root is outside it.
+        // The re-read carries the tenant scope so it reads only the tenant's rows, and another
+        // tenant's root with the same traceId cannot win the dedupe. One `LIMIT 1 BY traceId`
+        // picks the same root as deduping by dedupeKey first: the lowest dedupeKey of the trace.
+        `current_roots AS (
+    SELECT *
+    FROM ${TABLE_TRACE_ROOTS}
+    WHERE traceId IN (
+      SELECT traceId
+      FROM ${TABLE_TRACE_ROOTS} r
+      WHERE startedAt >= ${from}
+        AND startedAt < ${to}${tenant}${seedFilter}
+    )${tenant}
     ORDER BY traceId, dedupeKey
     LIMIT 1 BY traceId
   )`,
-    `root_scope AS (
+        `root_scope AS (
     SELECT *
     FROM current_roots
     WHERE startedAt >= ${from}
       AND startedAt < ${to}${tenant}
   )`,
-  ];
+      ];
 
   if (relationCollections.has('spans')) {
     ctes.push(`current_spans AS (
@@ -389,9 +483,17 @@ function compileClickHouseTraceScope(
       organizationId
     FROM ${TABLE_SPAN_EVENTS}
     WHERE isNotNull(traceId)
-      AND traceId IN (SELECT traceId FROM root_scope)${tenant}
+      AND traceId IN (${
+        // Existence checks only meet root_scope's traces in `candidates`, so the window's
+        // traces are a large enough seed without the root filters.
+        options.spanExistence && options.oneRootPerTrace ? windowTraces(bound) : 'SELECT traceId FROM root_scope'
+      })${tenant}${
+        options.spanExistence
+          ? ''
+          : `
     ORDER BY dedupeKey
-    LIMIT 1 BY dedupeKey
+    LIMIT 1 BY dedupeKey`
+      }
   )`);
   }
   if (relationCollections.has('scores')) {
@@ -430,6 +532,15 @@ function compileClickHouseTraceScope(
     FROM (
       SELECT *
       FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+      -- ClickHouse cannot push the scope filter through LIMIT 1 BY, so keep
+      -- every version of each feedbackId that ever pointed into the scope
+      -- (traceId leads the sort key). A rewrite may move a feedback to another
+      -- trace, so the current version is still filtered below.
+      WHERE feedbackId IN (
+        SELECT feedbackId
+        FROM ${TABLE_FEEDBACK_EVENTS}
+        WHERE traceId IN (SELECT traceId FROM root_scope)
+      )
       ORDER BY feedbackId, writeVersion DESC, timestamp DESC
       LIMIT 1 BY feedbackId
     ) AS current
@@ -460,27 +571,190 @@ function parseDeltaWatermark(value: string): DeltaWatermark {
   }
 }
 
+/**
+ * Builds the CTE chain ending in `candidates`: the completed, current trace roots in the
+ * selection's time range and tenant scope that match its `where` predicate. Trace queries and
+ * trace aggregates both select from this CTE so they always see the same population.
+ */
+export function compileClickHouseTraceCandidates(
+  selection: TraceSelection & { scope?: TraceQueryTenantScope },
+  columns: string,
+  parameters: ParameterBuilder,
+  options: TraceScopeOptions = {},
+): string[] {
+  // Top-level `where` conjuncts that only read the root row are copied into the window seed so
+  // the retry-collapse sorts only see traces that can match. This cannot drop a result: a trace's
+  // current root is itself a root row in the window that satisfies the conjunct. `candidates`
+  // still applies the full `where` to the current root, so traces seeded only by an older root
+  // are filtered out there.
+  const rootConjuncts = selection.where
+    ? (selection.where.type === 'boolean' && selection.where.operator === 'and'
+        ? selection.where.args
+        : [selection.where]
+      ).filter(conjunct => collectRelationCollections(conjunct).size === 0)
+    : [];
+  const ctes = compileClickHouseTraceScope(
+    selection,
+    collectRelationCollections(selection.where),
+    parameters,
+    selection.scope,
+    rootConjuncts,
+    options,
+  );
+  const predicate = selection.where ? compilePredicate(selection.where, parameters) : '1';
+  ctes.push(`candidates AS (
+    SELECT ${columns}
+    FROM root_scope r
+    WHERE ${predicate}
+  )`);
+  return ctes;
+}
+
+/**
+ * `queryTraces()` statements read one root per trace and only test spans for existence
+ * (TraceScopeOptions). The list statements carry narrow columns; `metadata` and the previews are fetched
+ * for the returned rows afterwards (compileClickHouseTraceRootPayloads).
+ */
+const QUERY_TRACES_SCOPE = { oneRootPerTrace: true, spanExistence: true } as const;
+
+const TRACE_LIST_SELECT = TRACE_SELECT.split('\n')
+  .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview),$/.test(line))
+  .join('\n');
+
+type TraceOrder = { field: 'startedAt' | 'endedAt'; direction: 'ASC' | 'DESC' };
+
+function traceOrder(plan: TrustedTraceQueryTracesPlan): TraceOrder {
+  return {
+    field: resolveOrderField(plan.orderBy.field),
+    direction: plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC',
+  };
+}
+
+/**
+ * Keyset cursor on a trace's sort value. Applied after each trace is reduced to one sort value:
+ * filtering root rows first would let a trace with several roots (or unmerged copies with
+ * different `endedAt`) come back on a later page under a root that sorts after the cursor.
+ */
+function keysetCursorCondition(
+  plan: TrustedTraceQueryTracesPlan,
+  order: TraceOrder,
+  parameters: ParameterBuilder,
+): string {
+  if (plan.paginationMode !== 'keyset' || !plan.cursor) return '';
+  const comparison = order.direction === 'ASC' ? '>' : '<';
+  const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
+  const traceId = parameters.add(plan.cursor.traceId, 'String');
+  return `(sortValue ${comparison} ${sortValue} OR (sortValue = ${sortValue} AND traceId > ${traceId}))`;
+}
+
+/**
+ * First statement of keyset and page mode: the page's traces (after the keyset cursor, `limit + 1`
+ * for keyset mode, `perPage` at the page offset for page mode) as root keys, and the
+ * number of matching traces on every row. Per trace, the root row that sorts first gives the sort
+ * value and the key, so the key always names a row with that sort value. No blob columns are read.
+ */
+export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPlan): CompiledClickHouseTraceQuery {
+  if (plan.paginationMode === 'delta') throw new Error('Delta trace queries have no keys statement');
+  const parameters = new ParameterBuilder();
+  const order = traceOrder(plan);
+  const ctes = compileClickHouseTraceCandidates(
+    plan,
+    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt',
+    parameters,
+    QUERY_TRACES_SCOPE,
+  );
+  const cursor = keysetCursorCondition(plan, order, parameters);
+  const pick = order.direction === 'DESC' ? 'max' : 'min';
+  const limit =
+    plan.paginationMode === 'page'
+      ? `LIMIT ${parameters.add(plan.perPage, 'UInt64')} OFFSET ${parameters.add(plan.page * plan.perPage, 'UInt64')}`
+      : `LIMIT ${parameters.add(plan.limit + 1, 'UInt64')}`;
+  return {
+    query: `WITH ${ctes.join(',\n')},
+per_trace AS (
+  SELECT traceId, ${pick}(${order.field}) AS sortValue,
+    ${pick === 'max' ? 'argMax' : 'argMin'}((dedupeKey, startedAt), ${order.field}) AS root
+  FROM candidates
+  GROUP BY traceId${cursor ? `\n  HAVING ${cursor}` : ''}
+)
+SELECT traceId, root.1 AS dedupeKey, sortValue, root.2 AS rootStartedAt, count() OVER () AS __total
+FROM per_trace
+ORDER BY sortValue ${order.direction}, traceId ASC
+${limit}`,
+    query_params: parameters.params,
+    sharedSnapshot: true,
+  };
+}
+
+export type ClickHouseTraceRootKey = { traceId: string; dedupeKey: string; sortValue: string; rootStartedAt: string };
+
+/**
+ * Second statement of keyset and page mode: the rows of the keyed roots, with `metadata`
+ * and the stored previews, read by sort-key tuple. Unmerged copies of a root key are redeliveries of one
+ * span; the relation-free `where` conjuncts are re-applied so a copy that doesn't match isn't
+ * returned, and the copy that sorts first is kept, as in the keys statement.
+ */
+export function compileClickHouseTraceRowsByKey(
+  plan: TrustedTraceQueryTracesPlan,
+  keys: ClickHouseTraceRootKey[],
+): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const order = traceOrder(plan);
+  const ts = (value: string) => parameters.add(value, "DateTime64(3, 'UTC')");
+  const byEnd = order.field === 'endedAt';
+  const tuples = keys.map(key => {
+    const started = ts(byEnd ? key.rootStartedAt : key.sortValue);
+    const id = `${parameters.add(key.traceId, 'String')}, ${parameters.add(key.dedupeKey, 'String')}`;
+    return byEnd ? `(${started}, ${id}, ${ts(key.sortValue)})` : `(${started}, ${id})`;
+  });
+  const conjuncts = plan.where
+    ? (plan.where.type === 'boolean' && plan.where.operator === 'and' ? plan.where.args : [plan.where]).filter(
+        conjunct => collectRelationCollections(conjunct).size === 0,
+      )
+    : [];
+  const predicate = conjuncts.map(conjunct => `\n  AND (${compilePredicate(conjunct, parameters)})`).join('');
+  return {
+    query: `SELECT ${TRACE_SELECT}
+FROM ${TABLE_TRACE_ROOTS} r
+WHERE (r.startedAt, r.traceId, r.dedupeKey${byEnd ? ', r.endedAt' : ''}) IN (${tuples.join(', ')})${compileTenantScope(plan.scope, parameters)}${predicate}
+ORDER BY ${order.field} ${order.direction}, traceId ASC
+LIMIT 1 BY traceId`,
+    query_params: parameters.params,
+  };
+}
+
+/** Number of matching traces, for numbered pages past the last one (the keys statement returns no rows). */
+export function compileClickHouseTraceQueryTotal(plan: TrustedTraceQueryTracesPlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const ctes = compileClickHouseTraceCandidates(plan, 'r.traceId AS traceId', parameters, QUERY_TRACES_SCOPE);
+  return {
+    query: `WITH ${ctes.join(',\n')}
+SELECT uniqExact(traceId) AS traces
+FROM candidates`,
+    query_params: parameters.params,
+    sharedSnapshot: true,
+  };
+}
+
+/**
+ * The list statement of groups and delta mode (rows without `metadata` and the previews). Keyset
+ * and page mode list with compileClickHouseTraceQueryKeys and compileClickHouseTraceRowsByKey.
+ * A trace with several candidate rows (several roots, or unmerged copies of one) is listed in delta
+ * mode under the row that sorts first in the list order, as in the keys statement; ties go to the
+ * lowest dedupeKey, then the latest endedAt, so every poll picks the same row.
+ */
 export function compileClickHouseTraceQuery(
   plan: TrustedTraceQueryPlan,
   deltaHead?: DeltaWatermark,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const relationCollections = collectRelationCollections(plan.where);
-  const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters, plan.scope);
-
-  const predicate = plan.where ? compilePredicate(plan.where, parameters) : '1';
-  ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}
-    FROM root_scope r
-    WHERE ${predicate}
-  )`);
-  const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.result === 'groups') {
+    const ctes = compileClickHouseTraceCandidates(plan, TRACE_LIST_SELECT, parameters, QUERY_TRACES_SCOPE);
     const pageCondition = plan.cursor ? `AND threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
     const limit = parameters.add(plan.limit + 1, 'UInt64');
     return {
-      query: `${candidates}
+      query: `WITH ${ctes.join(',\n')}
 SELECT threadId
 FROM candidates
 WHERE isNotNull(threadId) ${pageCondition}
@@ -488,96 +762,102 @@ GROUP BY threadId
 ORDER BY threadId ASC
 LIMIT ${limit}`,
       query_params: parameters.params,
+      sharedSnapshot: true,
     };
   }
 
-  if (plan.paginationMode === 'delta') {
-    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'clickhouse');
-    const after = watermark ? parseDeltaWatermark(watermark) : { cursorId: '0', traceId: '' };
-    const lower = `tuple(${parameters.add(after.cursorId, 'UInt64')}, ${parameters.add(after.traceId, 'String')})`;
-    const upper = deltaHead
-      ? `AND tuple(cursorId, traceId) <= tuple(${parameters.add(deltaHead.cursorId, 'UInt64')}, ${parameters.add(deltaHead.traceId, 'String')})`
-      : '';
-    const limit = parameters.add(plan.limit + 1, 'UInt64');
-    return {
-      query: `${candidates}, delta_candidates AS (
-  SELECT traceId, max(cursorId) AS latestCursorId
-  FROM ${TABLE_TRACE_ROOTS_DELTA}
-  WHERE tuple(cursorId, traceId) > ${lower} ${upper}
-  GROUP BY traceId
-)
+  if (plan.paginationMode !== 'delta') {
+    throw new Error(
+      'Keyset and page trace queries use compileClickHouseTraceQueryKeys and compileClickHouseTraceRowsByKey',
+    );
+  }
+  const order = traceOrder(plan);
+  const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'clickhouse');
+  const after = watermark ? parseDeltaWatermark(watermark) : { cursorId: '0', traceId: '' };
+  const lowerCursor = parameters.add(after.cursorId, 'UInt64');
+  // The plain `cursorId >=` bound lets the delta primary key prune; the tuple
+  // comparison alone is not used for index analysis.
+  const lower = `tuple(${lowerCursor}, ${parameters.add(after.traceId, 'String')})`;
+  const upper = deltaHead
+    ? `AND tuple(cursorId, traceId) <= tuple(${parameters.add(deltaHead.cursorId, 'UInt64')}, ${parameters.add(deltaHead.traceId, 'String')})`
+    : '';
+  // Only traces with a delta row can join, so the scope is seeded with them alone.
+  const ctes = compileClickHouseTraceCandidates(plan, TRACE_LIST_SELECT, parameters, {
+    ...QUERY_TRACES_SCOPE,
+    delta: `cursorId >= ${lowerCursor} AND tuple(cursorId, traceId) > ${lower} ${upper}`,
+  });
+  const limit = parameters.add(plan.limit + 1, 'UInt64');
+  return {
+    query: `WITH ${ctes.join(',\n')}
 SELECT c.*, toString(d.latestCursorId) AS __delta_cursor
 FROM candidates c
 INNER JOIN delta_candidates d ON c.traceId = d.traceId
-ORDER BY d.latestCursorId ASC, c.traceId ASC
+ORDER BY d.latestCursorId ASC, c.traceId ASC, c.${order.field} ${order.direction}, c.dedupeKey ASC, c.endedAt DESC
+LIMIT 1 BY c.traceId
 LIMIT ${limit}`,
-      query_params: parameters.params,
-      sharedSnapshot: true,
-    };
-  }
+    query_params: parameters.params,
+    sharedSnapshot: true,
+  };
+}
 
-  const orderField = resolveOrderField(plan.orderBy.field);
-  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
-  if (plan.paginationMode === 'page') {
-    const limit = parameters.add(plan.perPage, 'UInt64');
-    const offset = parameters.add(plan.page * plan.perPage, 'UInt64');
-    return {
-      query: `${candidates},
-page_rows AS (
-  SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
-  FROM candidates
-  ORDER BY ${orderField} ${direction}, traceId ASC
-  LIMIT ${limit} OFFSET ${offset}
-),
-page_total AS (
-  SELECT count() AS total
-  FROM candidates
-)
-SELECT page_rows.*, page_total.total, 0 AS __metadata
-FROM page_rows
-CROSS JOIN page_total
-UNION ALL
-SELECT
-  '' AS traceId,
-  '' AS rootSpanId,
-  '' AS name,
-  CAST(NULL, 'Nullable(String)') AS entityId,
-  CAST(NULL, 'Nullable(String)') AS parentSpanId,
-  CAST(NULL, 'Nullable(String)') AS metadata,
-  CAST(NULL, 'Nullable(String)') AS input,
-  CAST(NULL, 'Nullable(String)') AS threadId,
-  CAST(NULL, 'Nullable(String)') AS resourceId,
-  toDateTime64(0, 3, 'UTC') AS startedAt,
-  toDateTime64(0, 3, 'UTC') AS endedAt,
-  CAST(NULL, 'Nullable(String)') AS entityName,
-  CAST(NULL, 'Nullable(String)') AS entityType,
-  CAST(NULL, 'Nullable(String)') AS environment,
-  '' AS status,
-  0 AS __row_position,
-  page_total.total AS total,
-  1 AS __metadata
-FROM page_total
-ORDER BY __metadata ASC, __row_position ASC`,
-      query_params: parameters.params,
-      sharedSnapshot: true,
-    };
-  }
+/** Identity of one listed trace_roots row: its sort key, its version (`endedAt`) and its tenant. */
+export type ClickHouseTraceRootRowKey = {
+  traceId: string;
+  dedupeKey: string;
+  startedAt: string;
+  endedAt: string;
+  organizationId: string | null;
+  resourceId: string | null;
+};
 
-  let pageCondition = '';
-  if (plan.cursor) {
-    const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
-    const traceId = parameters.add(plan.cursor.traceId, 'String');
-    pageCondition = `WHERE (${orderField} ${comparison} ${sortValue} OR (${orderField} = ${sortValue} AND traceId > ${traceId}))`;
-  }
-  const limit = parameters.add(plan.limit + 1, 'UInt64');
+/** Map key matching a payload row to the listed row it was read for. */
+export function traceRootRowKey(row: Record<string, unknown>): string {
+  return JSON.stringify([
+    String(row.traceId),
+    String(row.dedupeKey),
+    row.organizationId == null ? null : String(row.organizationId),
+    row.resourceId == null ? null : String(row.resourceId),
+  ]);
+}
+
+/** A listed row's {@link ClickHouseTraceRootRowKey}. */
+export function toTraceRootRowKey(row: Record<string, unknown>): ClickHouseTraceRootRowKey {
   return {
-    query: `${candidates}
-SELECT *
-FROM candidates
-${pageCondition}
-ORDER BY ${orderField} ${direction}, traceId ASC
-LIMIT ${limit}`,
+    traceId: String(row.traceId),
+    dedupeKey: String(row.dedupeKey),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    organizationId: row.organizationId == null ? null : String(row.organizationId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+  };
+}
+
+/**
+ * Fetches payloads for listed rows: `metadata` and the stored previews, or `input` / `output` /
+ * `error` alone for rows written before the previews were stored. Each row is looked up by its
+ * own identity: the trace_roots sort key `(startedAt, traceId, dedupeKey)`, so only the page's
+ * granules are read; `endedAt`, so the payload comes from the same version as the listed row (a
+ * root can have unmerged versions in different `endedAt` partitions); and its own
+ * `organizationId` / `resourceId`, so a page holding several tenants' rows that share a trace and
+ * span id never takes another tenant's payload. NULL tenant columns match only NULL. Callers
+ * match the returned rows back with {@link traceRootRowKey}.
+ */
+export function compileClickHouseTraceRootPayloads(
+  keys: ClickHouseTraceRootRowKey[],
+  scope?: TraceQueryTenantScope,
+  columns: 'payload' | 'previewPayloads' = 'payload',
+): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const tenant = (value: string | null) => `${parameters.add(value ?? '', 'String')}, ${value === null ? 1 : 0}`;
+  const tuples = keys.map(
+    key =>
+      `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.dedupeKey, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")}, ${tenant(key.organizationId)}, ${tenant(key.resourceId)})`,
+  );
+  return {
+    query: `SELECT traceId, spanId AS rootSpanId, dedupeKey, organizationId, resourceId, ${columns === 'payload' ? `metadataRaw AS metadata, ${PREVIEW_COLUMNS.join(', ')}` : 'input, output, error'}
+FROM ${TABLE_TRACE_ROOTS}
+WHERE (startedAt, traceId, dedupeKey, endedAt, ifNull(organizationId, ''), isNull(organizationId), ifNull(resourceId, ''), isNull(resourceId)) IN (${tuples.join(', ')})${compileTenantScope(scope, parameters)}
+LIMIT 1 BY traceId, dedupeKey, organizationId, resourceId`,
     query_params: parameters.params,
   };
 }
@@ -680,7 +960,7 @@ export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesP
   let field: string;
   if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const key = parameters.add(plan.path.slice('metadata.'.length), 'String');
-    field = `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
+    field = traceMetadataValueSql(key);
   } else if (plan.predicateScope === 'trace' && plan.path === 'tags') {
     // One row per (root, distinct tag) so the count is traces carrying the tag, not tag occurrences.
     field = `arrayJoin(arrayDistinct(${TRACE_FIELDS.tags.sql}))`;
@@ -829,56 +1109,17 @@ export async function queryTraces(
       });
     }
   }
-  if (plan.paginationMode === 'page') {
-    const rows = await runWithClickHouseTraceQueryTimeout(
-      client,
-      { timeoutMs: deltaHead ? remaining() : timeoutMs },
-      compileClickHouseTraceQuery(plan, deltaHead),
-    );
-    const total = Number(rows.at(-1)?.total ?? 0);
-    const traces = rows
-      .filter(row => Number(row.__metadata) === 0)
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
-    return coreStorage.traceQueryResponseSchema.parse({
-      traces,
-      ...(deltaHead
-        ? { deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(deltaHead)) }
-        : {}),
-      pagination: {
-        total,
-        page: plan.page,
-        perPage: plan.perPage,
-        hasMore: (plan.page + 1) * plan.perPage < total,
-      },
-    });
-  }
-
-  const rows = await runWithClickHouseTraceQueryTimeout(
-    client,
-    { timeoutMs: deltaHead ? remaining() : timeoutMs },
-    compileClickHouseTraceQuery(plan, deltaHead),
-  );
-  const visibleRows = rows.slice(0, plan.limit);
+  // The first statement gets the whole budget; later ones get what is left of it.
+  let first = !deltaHead;
+  const run = (compiled: CompiledClickHouseTraceQuery) => {
+    const budget = first ? timeoutMs : remaining();
+    first = false;
+    return runWithClickHouseTraceQueryTimeout(client, { timeoutMs: budget }, compiled);
+  };
 
   if (plan.result === 'groups') {
-    const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
+    const rows = await run(compileClickHouseTraceQuery(plan));
+    const groups = rows.slice(0, plan.limit).map(row => ({ threadId: String(row.threadId) }));
     const last = groups.at(-1);
     return coreStorage.traceQueryResponseSchema.parse({
       groups,
@@ -891,7 +1132,30 @@ export async function queryTraces(
     });
   }
 
-  const traces = visibleRows.map(row => ({
+  /** Rows written before the previews were stored have none; theirs are built from the payloads. */
+  const toTraceRecords = async (rows: Record<string, unknown>[]) => {
+    const missing = rows.filter(needsPreviewPayloads);
+    const payloads = new Map<string, Record<string, unknown>>();
+    if (missing.length > 0) {
+      const payloadRows = await run(
+        compileClickHouseTraceRootPayloads(missing.map(toTraceRootRowKey), plan.scope, 'previewPayloads'),
+      );
+      for (const row of payloadRows) payloads.set(traceRootRowKey(row), row);
+    }
+    return rows.map(row =>
+      toTraceRecord({ ...row, ...resolveStoredPreviews(row, payloads.get(traceRootRowKey(row))) }),
+    );
+  };
+  /** Lists rows, then fetches `metadata` and the previews for the rows that are returned. */
+  const listTraces = async (rows: Record<string, unknown>[]) => {
+    const payloads = new Map<string, Record<string, unknown>>();
+    if (rows.length > 0) {
+      const payloadRows = await run(compileClickHouseTraceRootPayloads(rows.map(toTraceRootRowKey), plan.scope));
+      for (const payload of payloadRows) payloads.set(traceRootRowKey(payload), payload);
+    }
+    return toTraceRecords(rows.map(row => ({ ...row, ...payloads.get(traceRootRowKey(row)) })));
+  };
+  const toTraceRecord = (row: Record<string, unknown>) => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
     name: row.name,
@@ -899,7 +1163,9 @@ export async function queryTraces(
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: row.inputPreview ?? null,
+    outputPreview: row.outputPreview ?? null,
+    errorPreview: row.errorPreview ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -908,9 +1174,12 @@ export async function queryTraces(
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
-  }));
-  const last = traces.at(-1);
+  });
+
   if (plan.paginationMode === 'delta') {
+    const rows = await run(compileClickHouseTraceQuery(plan, deltaHead));
+    const visibleRows = rows.slice(0, plan.limit);
+    const traces = await listTraces(visibleRows);
     const lastRow = visibleRows.at(-1);
     let watermark = lastRow
       ? { cursorId: String(lastRow.__delta_cursor), traceId: String(lastRow.traceId) }
@@ -928,15 +1197,59 @@ export async function queryTraces(
       deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(watermark)),
     });
   }
+
+  // Keyset and page mode: the page's root keys (and the total), then those rows with
+  // their payloads.
+  const keys = await run(compileClickHouseTraceQueryKeys(plan));
+  let total = Number(keys[0]?.__total ?? 0);
+  if (plan.paginationMode === 'page' && keys.length === 0 && plan.page > 0) {
+    const [stats] = await run(compileClickHouseTraceQueryTotal(plan));
+    total = Number(stats?.traces ?? 0);
+  }
+  // Keyset keys carry one look-ahead trace, which only decides whether there is a next page.
+  const visible = plan.paginationMode === 'page' ? keys : keys.slice(0, plan.limit);
+  const rows =
+    visible.length > 0
+      ? await run(
+          compileClickHouseTraceRowsByKey(
+            plan,
+            visible.map(key => ({
+              traceId: String(key.traceId),
+              dedupeKey: String(key.dedupeKey),
+              sortValue: asIsoTimestamp(key.sortValue),
+              rootStartedAt: asIsoTimestamp(key.rootStartedAt),
+            })),
+          ),
+        )
+      : [];
+
+  if (plan.paginationMode === 'page') {
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces: await toTraceRecords(rows),
+      ...(deltaHead
+        ? { deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(deltaHead)) }
+        : {}),
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    });
+  }
+
+  // The cursor comes from the keys statement, whose HAVING it is compared against: the rows are
+  // read in a later statement, where a merge can leave the page short or empty.
+  const lastKey = visible.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
-    traces,
+    traces: await toTraceRecords(rows),
     page: {
       next:
-        rows.length > plan.limit && last
+        keys.length > plan.limit && lastKey
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
-              traceId: last.traceId,
+              sortValue: asIsoTimestamp(lastKey.sortValue),
+              traceId: String(lastKey.traceId),
             })
           : null,
     },
@@ -960,4 +1273,11 @@ export async function queryThreads(
           : null,
     },
   });
+}
+
+/** Compile a direct span-query filter using its dedicated field mapping. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  const parameters = new ParameterBuilder();
+  const sql = compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, parameters);
+  return { sql, params: parameters.params };
 }

@@ -102,6 +102,18 @@ describe('resolveClient', () => {
     vi.stubEnv('MASTRA_ORG_ID', 'org_env');
     expect(resolveClient({ accessToken: TOKEN }).headers['x-organization-id']).toBe('org_env');
   });
+
+  it('omits x-mastra-project-id unless configured', () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    const client = resolveClient({ accessToken: TOKEN });
+    expect(client.headers['x-mastra-project-id']).toBeUndefined();
+  });
+
+  it('sends x-mastra-project-id from the option or MASTRA_PROJECT_ID', () => {
+    expect(resolveClient({ accessToken: TOKEN, projectId: 'proj_1' }).headers['x-mastra-project-id']).toBe('proj_1');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    expect(resolveClient({ accessToken: TOKEN }).headers['x-mastra-project-id']).toBe('proj_env');
+  });
 });
 
 describe('listProjectConnections', () => {
@@ -313,6 +325,24 @@ describe('proxyRequest', () => {
     expect(init.headers['x-custom']).toBe('v1');
     expect(init.headers['base-url-override']).toBe('https://project.supabase.co');
     expect(JSON.parse(init.body)).toEqual({ query: '{ viewer { id } }' });
+  });
+
+  it('drops caller-supplied authorization headers so the platform bearer is never corrupted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await proxyRequest(client, 'c_1', {
+      method: 'GET',
+      path: 'api/v10/users/@me/guilds',
+      // Mixed casing: a tool-set `Authorization` would otherwise survive the
+      // spread alongside the client's lowercase `authorization` and the two
+      // would be joined into one invalid header value.
+      headers: { Authorization: 'Bot tool-token', 'Proxy-Authorization': 'Basic x', 'x-custom': 'v1' },
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    const sent = new Headers(init.headers);
+    expect(sent.get('authorization')).toBe(`Bearer ${client.accessToken}`);
+    expect(sent.get('proxy-authorization')).toBeNull();
+    expect(sent.get('x-custom')).toBe('v1');
   });
 
   it('rejects baseUrlOverride values that are not safe HTTPS URLs before sending the request', async () => {

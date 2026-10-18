@@ -2,9 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Button } from '@/ds/components/Button';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Toaster } from '@/ds/components/Toaster';
-import { Txt } from '@/ds/components/Txt';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 function CopyToClipboardDemo({ copiedDuration }: { copiedDuration: number }) {
@@ -13,20 +13,20 @@ function CopyToClipboardDemo({ copiedDuration }: { copiedDuration: number }) {
   const dynamic = useCopyToClipboard({ copiedDuration });
   return (
     <HookDemo>
-      <Txt as="label" htmlFor="clipboard-text">
-        Text to copy
-      </Txt>
-      <Input id="clipboard-text" value={text} onChange={event => setText(event.target.value)} />
+      <Field>
+        <FieldLabel>Text to copy</FieldLabel>
+        <Input value={text} onChange={event => setText(event.target.value)} />
+      </Field>
       <Button disabled={!text} onClick={configured.handleCopy}>
         {configured.isCopied ? 'Copied configured text' : 'Copy configured text'}
       </Button>
       <Button disabled={!text} onClick={() => dynamic.copyToClipboard(text)}>
         {dynamic.isCopied ? 'Copied per-call text' : 'Copy per-call text'}
       </Button>
-      <Txt as="label" htmlFor="clipboard-paste">
-        Paste here to verify
-      </Txt>
-      <Input id="clipboard-paste" />
+      <Field>
+        <FieldLabel>Paste here to verify</FieldLabel>
+        <Input />
+      </Field>
       <Toaster />
     </HookDemo>
   );

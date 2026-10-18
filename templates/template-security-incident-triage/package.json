@@ -50,7 +50,7 @@
     "@mastra/observability": "latest",
     "@mastra/rag": "latest",
     "@workos-inc/node": "8.13.0",
-    "hono": "4.13.5",
+    "hono": "4.13.11",
     "tsx": "4.23.12",
     "zod": "4.4.3"
   },

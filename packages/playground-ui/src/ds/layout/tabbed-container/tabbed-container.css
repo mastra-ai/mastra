@@ -21,23 +21,6 @@
   padding: 4px 4px 0;
   border-radius: var(--tab-frame-radius) var(--tab-frame-radius) 0 0;
   background: var(--muted);
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    transform 160ms cubic-bezier(0.32, 0.72, 0, 1),
-    opacity 140ms ease-out,
-    visibility 160ms allow-discrete;
-}
-
-[data-slot='tabbed-container-controls']:not([data-active]) {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
-  visibility: hidden;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(6px);
 }
 
 [data-slot='tabbed-container-controls']::before {
@@ -222,11 +205,5 @@
   .tabbed-container > [data-slot='tabs-content'] {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-slot='tabbed-container-controls'] {
-    transition: none;
   }
 }

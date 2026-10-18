@@ -48,3 +48,18 @@ type Story = StoryObj<typeof Demo>;
 export const Overflowing: Story = { args: { paragraphs: 8 } };
 export const Fits: Story = { args: { paragraphs: 1 } };
 export const CustomHeight: Story = { args: { paragraphs: 8, collapsedHeight: 100 } };
+
+function ExpandButtonDemo() {
+  const box = useCollapsibleBox();
+  return (
+    <CollapsibleBox state={box} expandLabel="Expand" className="w-96 rounded-lg bg-card p-3">
+      {Array.from({ length: 8 }, (_, index) => (
+        <Txt key={index} as="p" variant="body" className="mb-2">
+          Paragraph {index + 1}. Click the fade or the button to expand.
+        </Txt>
+      ))}
+    </CollapsibleBox>
+  );
+}
+
+export const WithExpandButton: Story = { render: () => <ExpandButtonDemo /> };

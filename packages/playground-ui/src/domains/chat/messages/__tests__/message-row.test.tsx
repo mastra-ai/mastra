@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';
@@ -382,7 +382,7 @@ describe('MessageRow', () => {
         }),
       );
 
-      const image = screen.getByRole<HTMLImageElement>('img', { name: 'Preview' });
+      const image = screen.getByRole<HTMLImageElement>('img', { name: 'Image' });
       expect(image.src).toBe('data:image/png;base64,iVBORw0KGgo=');
     });
   });

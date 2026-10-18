@@ -2,6 +2,7 @@ import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import { Check, Minus } from 'lucide-react';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { selectionControlStyle } from '@/ds/primitives/selection-control';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         checked={isCheckedIndeterminate ? false : checked}
         indeterminate={indeterminate ?? isCheckedIndeterminate}
         data-slot="checkbox"
+        render={<span {...keepOwnAccessibleName(props)} />}
         className={cn(
           'peer rounded-[0.3125rem]',
           selectionControlStyle,

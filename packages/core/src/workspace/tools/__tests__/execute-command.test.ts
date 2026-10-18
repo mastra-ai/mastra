@@ -375,6 +375,44 @@ describe('executeCommandTool data chunks', () => {
 
       expect(result).toBe('stdout:\ncompleted\n\nstderr:\nwarning');
     });
+
+    it('tells the model when the sandbox dropped the start of the output', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return {
+            success: false,
+            exitCode: 1,
+            stdout: 'newest line\n',
+            stderr: 'err tail\n',
+            stdoutTruncated: true,
+            stdoutDroppedBytes: 2048,
+            stderrTruncated: true,
+            stderrDroppedBytes: 7,
+            executionTimeMs: 5,
+          };
+        },
+      });
+
+      const result = await execute({ command: 'build', args: [], timeout: null, cwd: null }, context);
+
+      expect(result).toContain(
+        '[stdout: the first 2048 bytes were dropped; only the newest output was kept. Redirect output to a file to read all of it.]\nnewest line',
+      );
+      expect(result).toContain('[stderr: the first 7 bytes were dropped;');
+      expect(result).toContain('Exit code: 1');
+    });
+
+    it('adds no dropped-output note when nothing was dropped', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', stdoutDroppedBytes: 0, executionTimeMs: 5 };
+        },
+      });
+
+      const result = await execute({ command: 'ok', args: [], timeout: null, cwd: null }, context);
+
+      expect(result).toBe('ok');
+    });
   });
 
   describe('streaming chunks match return value', () => {
@@ -423,6 +461,8 @@ describe('executeCommandTool data chunks', () => {
       expect(result.endsWith('Error: boom')).toBe(true);
       // 1 MiB cap per stream, so the 16 MiB streamed stays far out of the result.
       expect(result.length).toBeLessThan(4 * 1024 * 1024);
+      expect(result).toContain('[stdout: the first ');
+      expect(result).toContain('[stderr: the first ');
     });
 
     it('streamed chunks + error match return value when command throws after streaming', async () => {
@@ -498,6 +538,167 @@ describe('executeCommandTool data chunks', () => {
       await execute({ command: 'echo hi', timeout: null, cwd: null, tail: null }, context);
 
       expect(receivedOpts.abortSignal).toBeUndefined();
+    });
+  });
+
+  describe('aborted commands', () => {
+    const abortNote =
+      'Command aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.';
+    const cancelledNote = 'The run was cancelled (by the user or system) while this command was running.';
+
+    function createAbortedContext(executeCommand: Parameters<typeof createMockContext>[0]['executeCommand']) {
+      const controller = new AbortController();
+      const { context } = createMockContext({
+        executeCommand: async (cmd, args, opts) => {
+          controller.abort();
+          return executeCommand(cmd, args, opts);
+        },
+      });
+      context.abortSignal = controller.signal;
+      return context;
+    }
+
+    it('explains that a command killed by the abort signal was aborted', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: 128,
+        stdout: 'started\n',
+        stderr: '',
+        executionTimeMs: 300,
+        killed: true,
+      }));
+
+      const result = await execute({ command: 'echo started; sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe(`started\n\n${abortNote}\nExit code: 128`);
+    });
+
+    it('does not claim a kill when the provider does not report killed', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: -1,
+        stdout: '',
+        stderr: '',
+        executionTimeMs: 300,
+      }));
+
+      const result = await execute({ command: 'sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe(`${cancelledNote}\nExit code: -1`);
+    });
+
+    it('does not label a command the provider reports was not killed', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: 128,
+        stdout: '',
+        stderr: 'fatal: not a git repository',
+        executionTimeMs: 5,
+        killed: false,
+      }));
+
+      const result = await execute({ command: 'git status', timeout: null, cwd: null }, context);
+
+      expect(result).toBe('stderr:\nfatal: not a git repository\n\nExit code: 128');
+    });
+
+    it('does not label a timed-out command as aborted', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: 124,
+        stdout: '',
+        stderr: 'Process timed out after 1000ms',
+        executionTimeMs: 1000,
+        killed: true,
+        timedOut: true,
+      }));
+
+      const result = await execute({ command: 'sleep 10', timeout: 1, cwd: null }, context);
+
+      expect(result).toBe('stderr:\nProcess timed out after 1000ms\n\nExit code: 124');
+    });
+
+    it('does not label a killed command when the run was not aborted', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => ({
+          success: false,
+          exitCode: 128,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 5,
+          killed: true,
+        }),
+      });
+      context.abortSignal = new AbortController().signal;
+
+      const result = await execute({ command: 'sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe('Exit code: 128');
+    });
+
+    it('does not claim a kill when the sandbox throws after the abort', async () => {
+      const context = createAbortedContext(async (_cmd, _args, opts) => {
+        opts?.onStdout?.('started\n');
+        throw new Error('process terminated');
+      });
+
+      const result = await execute({ command: 'echo started; sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe(`started\n\n${cancelledNote}\nError: process terminated`);
+    });
+
+    it('preserves provider uncertainty when observation is aborted but remote work may continue', async () => {
+      const context = createAbortedContext(async (_cmd, _args, opts) => {
+        opts?.onStdout?.('partial\n');
+        throw new Error('Observation aborted. Remote work may still be running.');
+      });
+
+      const result = await execute({ command: 'deploy', timeout: null, cwd: null }, context);
+
+      expect(result).not.toMatch(/so it was killed/);
+      expect(result).toBe(`partial\n\n${cancelledNote}\nError: Observation aborted. Remote work may still be running.`);
+    });
+
+    function abortOnExitChunk(writerCustom: ReturnType<typeof vi.fn>, controller: AbortController) {
+      writerCustom.mockImplementation(async (chunk: { type: string }) => {
+        if (chunk.type === 'data-sandbox-exit') controller.abort();
+      });
+    }
+
+    it('does not label a failed command when the abort arrives after it finished', async () => {
+      const controller = new AbortController();
+      const { context, writerCustom } = createMockContext({
+        executeCommand: async () => ({
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: 'error: tests failed',
+          executionTimeMs: 5,
+        }),
+      });
+      context.abortSignal = controller.signal;
+      abortOnExitChunk(writerCustom, controller);
+
+      const result = await execute({ command: 'pnpm test', timeout: null, cwd: null }, context);
+
+      expect(controller.signal.aborted).toBe(true);
+      expect(result).toBe('stderr:\nerror: tests failed\n\nExit code: 1');
+    });
+
+    it('does not label a sandbox error when the abort arrives after it was thrown', async () => {
+      const controller = new AbortController();
+      const { context, writerCustom } = createMockContext({
+        executeCommand: async () => {
+          throw new Error('connection reset');
+        },
+      });
+      context.abortSignal = controller.signal;
+      abortOnExitChunk(writerCustom, controller);
+
+      const result = await execute({ command: 'pnpm test', timeout: null, cwd: null }, context);
+
+      expect(controller.signal.aborted).toBe(true);
+      expect(result).toBe('Error: connection reset');
     });
   });
 

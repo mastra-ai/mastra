@@ -38,6 +38,7 @@ vi.mock('@earendil-works/pi-tui', () => ({
   Container: class {},
   Spacer: class {},
   Text: class {},
+  visibleWidth: (s: string) => s.length,
 }));
 
 vi.mock('../components/banner.js', () => ({
@@ -55,6 +56,10 @@ vi.mock('../display.js', () => ({
 
 vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
+}));
+
+vi.mock('../model-packs/apply.js', () => ({
+  switchModeWithPack: vi.fn(),
 }));
 
 import { showError, showInfo } from '../display.js';
@@ -267,6 +272,25 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
+    expect(commandNames).not.toContain('fork');
+    expect(commandNames).toContain('resume');
+    expect(commandNames).toContain('rename');
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'name')?.description).toBe(
+      'Rename current thread',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'rename')?.description).toBe(
+      'Alias for /name',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'clone')?.description).toBe(
+      'Clone the current thread',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'threads')?.description).toBe(
+      'Switch between threads',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'resume')?.description).toBe(
+      'Alias for /threads',
+    );
+    expect(commandNames).not.toContain('upgrade');
     expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
@@ -608,7 +632,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(component.setInterrupted).toHaveBeenCalledTimes(1);
     expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(state.goalManager.pause).toHaveBeenCalledWith('Judge evaluation was interrupted.');
-    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state.local);
     expect(state.activeGoalJudge).toBeUndefined();
     expect(state.userInitiatedAbort).toBe(true);
   });

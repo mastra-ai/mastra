@@ -109,14 +109,19 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
 Add role-based or custom authorization logic:
 
 ```typescript
+import { SimpleAuth, getWebRequest } from '@mastra/core/server'
+
 new SimpleAuth<User>({
   tokens: {
     'sk-admin-token': { id: '1', name: 'Admin', role: 'admin' },
     'sk-user-token': { id: '2', name: 'User', role: 'user' },
   },
   authorizeUser: (user, request) => {
+    const webRequest = getWebRequest(request)
+    const path = webRequest ? new URL(webRequest.url).pathname : ''
+
     // Only admins can access /admin routes
-    if (request.url.includes('/admin')) {
+    if (path.includes('/admin')) {
       return user.role === 'admin'
     }
     return true

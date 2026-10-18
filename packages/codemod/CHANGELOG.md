@@ -1,5 +1,23 @@
 # @mastra/codemod
 
+## 1.1.7-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.6
+
+### Patch Changes
+
+- Fixed the `v1/agent-abort-signal` codemod creating a duplicate `abortSignal` key when the call already had one at the top level. It now leaves those calls unchanged and asks you to resolve them manually. ([#25617](https://github.com/mastra-ai/mastra/pull/25617))
+
+## 1.1.6-alpha.0
+
+### Patch Changes
+
+- Fixed the `v1/agent-abort-signal` codemod creating a duplicate `abortSignal` key when the call already had one at the top level. It now leaves those calls unchanged and asks you to resolve them manually. ([#25617](https://github.com/mastra-ai/mastra/pull/25617))
+
 ## 1.1.5
 
 ### Patch Changes

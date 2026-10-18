@@ -11,11 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
 
 export interface AddItemsToDatasetDialogProps {
@@ -91,23 +92,23 @@ export function AddItemsToDatasetDialog({
         <DialogHeader>
           <DialogTitle>Add Items to Dataset</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <DialogBody>
-            <div className="space-y-2">
-              <Label htmlFor="target-dataset">Target Dataset *</Label>
+            <Field>
+              <FieldLabel required>Target Dataset</FieldLabel>
               <Select
                 value={selectedDatasetId}
                 onValueChange={setSelectedDatasetId}
                 disabled={isAdding || isDatasetsLoading}
               >
-                <SelectTrigger id="target-dataset">
+                <SelectTrigger>
                   <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <div className="px-2 py-4 text-center text-body text-muted-foreground">
+                    <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
                       No other datasets available
-                    </div>
+                    </Txt>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>
@@ -117,7 +118,7 @@ export function AddItemsToDatasetDialog({
                   )}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
             <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
@@ -127,7 +128,7 @@ export function AddItemsToDatasetDialog({
               <div className="space-y-2">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="bg-primary h-full transition-all duration-200"
+                    className="h-full bg-success-indicator transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -143,7 +144,7 @@ export function AddItemsToDatasetDialog({
               {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
             </DialogAction>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

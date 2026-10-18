@@ -15,9 +15,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMastraPackages } from '@mastra/react/hooks/configuration';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
-import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates } from '../hooks/use-package-updates';
 import type { PackageUpdateInfo } from '../hooks/use-package-updates';
 
@@ -39,7 +39,7 @@ const packageManagerCommands: Record<PackageManager, string> = {
 };
 
 const versionBadgeClassName =
-  'inline-flex h-[1.375rem] items-center rounded-full bg-fill px-2.5 font-body text-meta leading-none tracking-normal text-foreground tabular-nums whitespace-nowrap';
+  'inline-flex h-[1.375rem] items-center rounded-full bg-fill px-2.5 tabular-nums whitespace-nowrap';
 
 export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => {
   const { data, isLoading: isLoadingPackages } = useMastraPackages();
@@ -110,7 +110,9 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
                     )}
                   </span>
                 )}
-                <span className={versionBadgeClassName}>v{mainVersion}</span>
+                <Txt as="span" variant="meta" tone="ink" font="body" className={versionBadgeClassName}>
+                  v{mainVersion}
+                </Txt>
               </span>
             </button>
           }
@@ -204,7 +206,7 @@ const PackagesModalContent = ({
         </div>
 
         <div className="max-h-64 overflow-y-auto rounded-md border border-border">
-          <div className="grid grid-cols-[1fr_auto_auto] text-body">
+          <div className="grid grid-cols-[1fr_auto_auto]">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border')}>
                 <div className="min-w-0 truncate px-3 py-2 text-foreground">

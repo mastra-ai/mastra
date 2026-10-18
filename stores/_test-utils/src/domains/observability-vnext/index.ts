@@ -17,6 +17,7 @@ import {
 import type {
   TraceQueryTenantScope,
   CreateFeedbackRecord,
+  CreateMetricRecord,
   CreateScoreRecord,
   CreateSpanRecord,
   ObservabilityStorage,
@@ -40,6 +41,7 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
+import type { TraceAggregateFixtureData } from './trace-aggregate';
 import type { TraceQueryFixtureData } from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
@@ -98,6 +100,15 @@ export interface CreateObservabilityVNextTestsOptions {
    * inline (InMemory upsert-by-id, DuckDB `INSERT OR IGNORE`) can omit this.
    */
   flushPendingMerges?: (storage: ObservabilityStorage) => Promise<void> | void;
+  /**
+   * Optional raw read of the stored `timeToFirstChunkMs` column for one span,
+   * taken from the row that reads resolve that span to. Adapters that persist
+   * the column pass this so the suite can check what the write path stored.
+   */
+  readTimeToFirstChunkMs?: (
+    storage: ObservabilityStorage,
+    span: { traceId: string; spanId: string },
+  ) => Promise<number | null>;
 }
 
 /**
@@ -143,7 +154,7 @@ function traceQueryFixtureForWriteModel(
   };
 }
 
-async function writeTraceQueryFixture(
+export async function writeTraceQueryFixture(
   storage: ObservabilityStorage,
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
@@ -232,6 +243,44 @@ async function writeTraceQueryFixture(
   }
 }
 
+/**
+ * Writes a trace-aggregate fixture: the trace-query fixture plus its token metric rows.
+ * The n-th copy of each `metricId` goes in batch n, so duplicates always arrive in
+ * separate inserts (ClickHouse writes each insert as its own part, which is what an
+ * exporter retry produces).
+ */
+export async function writeTraceAggregateFixture(
+  storage: ObservabilityStorage,
+  data: TraceAggregateFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+) {
+  await writeTraceQueryFixture(storage, data, writeModel);
+
+  const batches: CreateMetricRecord[][] = [];
+  const copies = new Map<string, number>();
+  for (const metric of data.metrics ?? []) {
+    const copy = copies.get(metric.metricId) ?? 0;
+    copies.set(metric.metricId, copy + 1);
+    (batches[copy] ??= []).push({
+      metricId: metric.metricId,
+      timestamp: new Date(metric.timestamp),
+      name: metric.name,
+      value: metric.value,
+      traceId: metric.traceId,
+      spanId: metric.spanId,
+      provider: metric.provider,
+      model: metric.model,
+      estimatedCost: metric.estimatedCost,
+      costUnit: metric.costUnit,
+      costMetadata: metric.costMetadata,
+      organizationId: metric.organizationId,
+      resourceId: metric.resourceId,
+      labels: {},
+    });
+  }
+  for (const metrics of batches) await storage.batchCreateMetrics({ metrics });
+}
+
 async function waitFor<T>(
   fn: () => Promise<T>,
   predicate: (value: T) => boolean,
@@ -250,7 +299,7 @@ async function waitFor<T>(
 }
 
 export function createObservabilityVNextTests(options: CreateObservabilityVNextTestsOptions) {
-  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges } = options;
+  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges, readTimeToFirstChunkMs } = options;
 
   describe(`observability vNext shared suite — ${capabilities.label}`, () => {
     let storage: ObservabilityStorage;
@@ -2257,6 +2306,39 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    if (readTimeToFirstChunkMs) {
+      describe('timeToFirstChunkMs column', () => {
+        it('stores the time to first chunk from the span record, keeping zero and leaving missing values empty', async () => {
+          await storage.batchCreateSpans({
+            records: [
+              makeSpan({ traceId: 'ttfc', spanId: 'present', timeToFirstChunkMs: 250 }),
+              makeSpan({ traceId: 'ttfc', spanId: 'zero', timeToFirstChunkMs: 0 }),
+              makeSpan({ traceId: 'ttfc', spanId: 'empty', timeToFirstChunkMs: null }),
+              // Records built by a core version that predates the field leave it out.
+              makeSpan({ traceId: 'ttfc', spanId: 'missing' }),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+
+          const read = (spanId: string) => readTimeToFirstChunkMs(storage, { traceId: 'ttfc', spanId });
+          expect(await read('present')).toBe(250);
+          expect(await read('zero')).toBe(0);
+          expect(await read('empty')).toBeNull();
+          expect(await read('missing')).toBeNull();
+        });
+
+        it('reads the ended value when the span started before its first chunk', async () => {
+          await storage.createSpan({ span: makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', endedAt: null }) });
+          await storage.batchCreateSpans({
+            records: [makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', timeToFirstChunkMs: 400 })],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+
+          expect(await readTimeToFirstChunkMs(storage, { traceId: 'ttfc', spanId: 'lifecycle' })).toBe(400);
+        });
+      });
+    }
+
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {
         await storage.createSpan({
@@ -3285,6 +3367,52 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ).toEqual([
             ['trace-a', 10],
             ['trace-c', 30],
+          ]);
+        });
+      });
+
+      describe('when a batch of experiment IDs is filtered', () => {
+        it('returns token totals and cost for each selected experiment', async () => {
+          const tokenMetric = (
+            metricId: string,
+            experimentId: string,
+            name: string,
+            value: number,
+            estimatedCost: number,
+          ) => ({
+            metricId,
+            timestamp: new Date('2026-01-01T03:00:00Z'),
+            name,
+            value,
+            experimentId,
+            estimatedCost,
+            costUnit: 'usd',
+            labels: {},
+          });
+          await storage.batchCreateMetrics({
+            metrics: [
+              tokenMetric('exp-a-in', 'exp-a', 'mastra_model_total_input_tokens', 100, 0.25),
+              tokenMetric('exp-a-out', 'exp-a', 'mastra_model_total_output_tokens', 40, 0.5),
+              tokenMetric('exp-b-in', 'exp-b', 'mastra_model_total_input_tokens', 300, 0.75),
+              tokenMetric('exp-c-in', 'exp-c', 'mastra_model_total_input_tokens', 700, 1.25),
+            ],
+          });
+
+          const result = await storage.getMetricBreakdown({
+            name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+            groupBy: ['experimentId', 'name'],
+            aggregation: 'sum',
+            filters: { experimentIds: ['exp-a', 'exp-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.experimentId, group.dimensions.name, group.value, group.estimatedCost])
+              .sort((left, right) => `${left[0]}:${left[1]}`.localeCompare(`${right[0]}:${right[1]}`)),
+          ).toEqual([
+            ['exp-a', 'mastra_model_total_input_tokens', 100, 0.25],
+            ['exp-a', 'mastra_model_total_output_tokens', 40, 0.5],
+            ['exp-c', 'mastra_model_total_input_tokens', 700, 1.25],
           ]);
         });
       });

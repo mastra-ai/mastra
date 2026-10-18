@@ -3,35 +3,47 @@ import { cn } from '@/utils/cn';
 
 export interface TraceMessagesSkeletonProps {
   className?: string;
+  /**
+   * Hold the skeleton invisible for its first 500ms (`delay-500` + `fill-mode-backwards`) so cached or fast
+   * responses swap straight to content without a flash. Turn off when a parent skeleton already handles the delay.
+   */
+  delayed?: boolean;
+}
+
+/** One `text-body` line box (14px × 143% ≈ 20px) holding a bar. */
+function BodyLine({ width }: { width: string }) {
+  return (
+    <div className="flex h-5 items-center">
+      <Skeleton className="h-3.5" style={{ width }} />
+    </div>
+  );
 }
 
 /**
- * Same layout as `TraceThreadItemView` once it resolves — `p-4`, `max-w-3xl`, a user bubble on
- * the right then assistant text on the left — so the column keeps its shape while spans load.
- *
- * Stays invisible for the first 500ms (`delay-500` + `fill-mode-backwards`) so cached or fast
- * responses swap straight to content without a skeleton flash.
+ * Same layout as `TraceThreadItemView` once it resolves — `p-4`, `max-w-3xl`, a user bubble on the right
+ * (`Message`: `px-4 py-2` + border around one body line, `my-3` with the leading margin stripped), assistant
+ * body lines, then a one-line tool activity (`py-1` + caption line) — so the column keeps its shape while spans load.
  */
-export function TraceMessagesSkeleton({ className }: TraceMessagesSkeletonProps) {
+export function TraceMessagesSkeleton({ className, delayed = true }: TraceMessagesSkeletonProps) {
   return (
     <div
       role="status"
       aria-label="Loading messages"
-      className={cn('animate-in p-4 delay-500 duration-200 fade-in-0 fill-mode-backwards', className)}
+      className={cn(
+        'min-w-0 p-4',
+        delayed && 'animate-in delay-500 duration-200 fade-in-0 fill-mode-backwards',
+        className,
+      )}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        <Skeleton className="ml-auto h-9 w-[60%] rounded-xl" />
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-3.5 w-[90%]" />
-          <Skeleton className="h-3.5 w-[75%]" />
-          <Skeleton className="h-3.5 w-[85%]" />
-          <Skeleton className="h-3.5 w-[40%]" />
-        </div>
-        <Skeleton className="h-8 w-[55%] rounded-lg" />
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-3.5 w-[80%]" />
-          <Skeleton className="h-3.5 w-[50%]" />
-        </div>
+      <div className="mx-auto flex w-full max-w-3xl flex-col">
+        <Skeleton className="mb-3 ml-auto h-[38px] w-[60%] max-w-[70%] rounded-xl" />
+        <BodyLine width="90%" />
+        <BodyLine width="75%" />
+        <BodyLine width="85%" />
+        <BodyLine width="40%" />
+        <Skeleton className="my-2.5 h-7 w-[55%] rounded-md" />
+        <BodyLine width="80%" />
+        <BodyLine width="50%" />
       </div>
     </div>
   );

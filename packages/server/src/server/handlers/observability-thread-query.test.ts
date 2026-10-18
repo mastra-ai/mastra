@@ -367,7 +367,7 @@ describe('QUERY_THREADS', () => {
     const body = await error.getResponse().json();
     expect(getDeclaredErrorSchema(504).parse(body)).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
     expect(JSON.stringify(body)).not.toContain('driver');
   });

@@ -10,7 +10,10 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   TraceQueryCursorError,
+  getTraceAggregateDimensionDescriptors,
+  getTraceAggregateMeasureDescriptors,
   getTraceQueryFieldsArgsSchema,
+  getTraceQueryFieldsResponseSchema,
   getTraceQueryValuesArgsSchema,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
@@ -138,6 +141,8 @@ describe('QUERY_TRACES', () => {
           createdAt: '2026-08-20T10:00:00.000Z',
           metadata: null,
           inputPreview: null,
+          outputPreview: null,
+          errorPreview: null,
           threadId: 'thread-1',
           resourceId: 'resource-1',
           startedAt: '2026-08-20T10:00:00.000Z',
@@ -160,7 +165,7 @@ describe('QUERY_TRACES', () => {
 
     expect(response).toMatchObject({ traces: [{ traceId: 'trace-a' }] });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
     expect(response.traces[0]).not.toHaveProperty('scores');
     expect(getStore).toHaveBeenCalledWith('observability');
     expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
@@ -625,7 +630,7 @@ describe('QUERY_TRACES', () => {
     expect(error.status).toBe(504);
     expect(getDeclaredErrorSchema(504).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
   });
 
@@ -849,6 +854,35 @@ describe('trace-query discovery routes', () => {
     });
   });
 
+  it('describes aggregation for trace-scope discovery on stores that support it', async () => {
+    const { mastra } = createHarness(['trace-query', 'trace-query-discovery', 'trace-aggregate']);
+    const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' });
+
+    const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+
+    expect(response.aggregate?.dimensions).toEqual(getTraceAggregateDimensionDescriptors());
+    expect(response.aggregate?.measures).toEqual(getTraceAggregateMeasureDescriptors());
+    // Groupable but not filterable, so absent from canonicalFields.
+    expect(response.aggregate?.dimensions).toContainEqual({ path: 'serviceName', valueKind: 'string' });
+    expect(response.canonicalFields).not.toContainEqual(expect.objectContaining({ path: 'serviceName' }));
+    expect(getTraceQueryFieldsResponseSchema.parse(response)).toEqual(response);
+  });
+
+  it('omits aggregation from discovery for other scopes and for stores without aggregation', async () => {
+    const cases = [
+      { features: ['trace-query', 'trace-query-discovery', 'trace-aggregate'], predicateScope: 'spans' },
+      { features: ['trace-query', 'trace-query-discovery'], predicateScope: 'trace' },
+    ] as const;
+    for (const { features, predicateScope } of cases) {
+      const { mastra } = createHarness([...features]);
+      const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope });
+
+      const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+
+      expect(response).not.toHaveProperty('aggregate');
+    }
+  });
+
   it('hides root duration discovery from stores without the capability', async () => {
     const { mastra } = createHarness(['trace-query', 'trace-query-discovery']);
     const request = getTraceQueryFieldsArgsSchema.parse({
@@ -1016,7 +1050,7 @@ describe('trace-query discovery routes', () => {
     expect(error.status).toBe(503);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_RESOURCE_LIMIT',
-      message: 'The trace query exceeded its resource limit',
+      message: 'The query exceeded its resource limit',
     });
   });
 
@@ -1036,7 +1070,7 @@ describe('trace-query discovery routes', () => {
     expect(error.status).toBe(504);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
   });
 });

@@ -80,6 +80,7 @@ import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
@@ -151,14 +152,8 @@ export type {
   CreatedAgentSignal,
 } from './signals';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
 /**
@@ -167,8 +162,6 @@ export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
  * Controls whether the thread should be woken, the signal persisted without
  * waking, or the signal discarded. Also carries optional stream options
  * (e.g. request context) and attributes for the delivery message.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   behavior?: AgentSignalIdleBehavior;
@@ -178,9 +171,6 @@ export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   requireClaimedOwner?: boolean;
 };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentThreadPeerInfo = {
   id: string;
   agentId: string;
@@ -259,6 +249,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       tracingContext?: TracingContext;
       /** Tracing options for a run started when the signal wakes an idle thread. */
       tracingOptions?: TracingOptions;
+      /**
+       * Validated, but does not change the scopes of the run receiving the signal:
+       * a run's scopes are fixed when it starts.
+       */
+      scopes?: string[];
     }
   | {
       runId?: string;
@@ -278,6 +273,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       tracingContext?: TracingContext;
       /** Tracing options for a run started when the signal wakes an idle thread. */
       tracingOptions?: TracingOptions;
+      /**
+       * Scopes for a run this signal starts, unioned with `ifIdle.streamOptions.scopes`.
+       * `resource:`/`thread:` scopes must equal `resourceId`/`threadId`.
+       */
+      scopes?: string[];
     };
 
 /**
@@ -305,8 +305,6 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
  * - `persist` — the signal was written to memory by a `persist` behavior. To
  *               await the storage write, use the top-level `persisted` promise.
  * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'wake'; runId: string; output: MastraModelOutput<OUTPUT> }
@@ -315,9 +313,6 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'discard' }
   | { action: 'blocked'; reason: 'thread-blocked'; runId: string };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
    * Resolves once the runtime has decided what to do with the signal
@@ -343,32 +338,21 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
   persisted?: Promise<void>;
 }
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type SendAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type SendAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT> & {
   /** Local grouping metadata for queue observation and cancellation. It is not serialized or authorization. */
   queueOwnerId?: string;
 };
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
+export type QueueAgentSignalOptions<OUTPUT = unknown> = QueueAgentMessageOptions<OUTPUT>;
+
+export type QueueAgentSignalResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
 export interface SubscribeAgentThreadEventsOptions {
   resourceId: string;
   threadId: string;
@@ -376,30 +360,18 @@ export interface SubscribeAgentThreadEventsOptions {
   queueOwnerId?: string;
 }
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type AgentThreadEvent =
   /** Locally pending messages: FIFO entries plus a non-cancelled lease handoff. */
   { type: 'queue-count-changed'; count: number };
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type CancelQueuedAgentMessagesOptions =
   /** Cancel selected pending input across all Agents sharing this runtime and thread. */
   | { resourceId?: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
   /** Cancel only the calling Agent's queued messages in this owner group. */
   | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export interface CancelQueuedAgentMessagesResult {
   cancelledSignalIds: string[];
 }
@@ -425,41 +397,22 @@ export interface SendAgentStreamResumeResult {
   toolCallId?: string;
 }
 
-/**
- * @experimental Agent state signal APIs are experimental and may change in a future release.
- */
 export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
 
-/**
- * @experimental Agent state signal APIs are experimental and may change in a future release.
- */
 export type SendAgentStateSignalResult<OUTPUT = unknown> =
-  | (SendAgentSignalResult<OUTPUT> & { skipped?: false })
-  | { skipped: true; reason: 'unchanged'; signal?: undefined };
+  (SendAgentSignalResult<OUTPUT> & { skipped?: false }) | { skipped: true; reason: 'unchanged'; signal?: undefined };
 
-/**
- * @experimental Agent notification signal APIs are experimental and may change in a future release.
- */
 export type AgentNotificationSignal = SendNotificationSignalInput;
 
-/**
- * @experimental Agent notification signal APIs are experimental and may change in a future release.
- */
 export type SendAgentNotificationSignalOptions<OUTPUT = unknown> = Extract<
   SendAgentSignalOptions<OUTPUT>,
   { resourceId: string; threadId: string }
 >;
 
-/**
- * @experimental Agent notification signal APIs are experimental and may change in a future release.
- */
 export type AgentNotificationConfig = {
   deliveryPolicy?: NotificationDeliveryPolicyConfig;
 };
 
-/**
- * @experimental Agent notification signal APIs are experimental and may change in a future release.
- */
 export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
   record: NotificationRecord;
   /**
@@ -477,8 +430,6 @@ export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
    * dropped or deferred the notification without sending a signal. Resolves with
    * the routing decision and rejects if the underlying agent is misconfigured.
    * See {@link SendAgentSignalResult.accepted}.
-   *
-   * @experimental
    */
   accepted?: Promise<SendAgentSignalAccepted<OUTPUT>>;
 };
@@ -492,15 +443,11 @@ export interface AgentThreadRun<OUTPUT = unknown> {
   cleanup: () => void;
 }
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface AgentThreadIdentityOptions {
   resourceId?: string;
   threadId: string;
 }
 
-/** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
   /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
   clearPendingSignals?: boolean;
@@ -516,7 +463,6 @@ export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
   localOnly?: boolean;
 }
 
-/** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
@@ -531,9 +477,6 @@ export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOption
   requestContext?: RequestContext;
 }
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
   /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
   stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
@@ -551,8 +494,7 @@ export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<OUTPUT = undefined> =
-  | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
+  { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never } | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
 export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
@@ -658,8 +600,6 @@ export type AgentEditorConfig =
  * thread state overrides them when it carries a value. A judge model is required
  * at runtime (resolved from the objective record or `judge` here) — without one
  * the goal step is a no-op.
- *
- * @experimental Agent goals are experimental and may change in a future release.
  */
 export interface GoalConfig {
   /**
@@ -952,6 +892,12 @@ interface AgentConfigBase<
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
+   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
+   * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
+   * A resolver function runs once per call with the request context.
+   */
+  scopes?: DynamicArgument<string[], TRequestContext>;
+  /**
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *
    * Accepts an array of path strings (pointing to SKILL.md directories on disk) and/or
@@ -1119,16 +1065,12 @@ interface AgentConfigBase<
    *   signals: [new GithubSignals({ cwd: project.rootPath })],
    * });
    * ```
-   *
-   * @experimental Agent signals are experimental and may change in a future release.
    */
   signals?: SignalProvider[];
   /**
    * Native goal configuration. When set, an objective set via
    * {@link Agent.setObjective} is judged in the execution loop and the agent
    * keeps working until the objective is complete or the budget is exhausted.
-   *
-   * @experimental Agent goals are experimental and may change in a future release.
    */
   goal?: GoalConfig;
   /**
@@ -1451,6 +1393,17 @@ export interface DurableAgentLike {
    */
   readonly pubsub?: PubSub;
   /**
+   * Subscribe to the events of a run's stream, without those an execution
+   * that lost the run still publishes. Used by the server to observe a run;
+   * when absent, it subscribes to `pubsub` directly.
+   * @internal
+   */
+  __subscribeToRunStream?(
+    runId: string,
+    options: { offset?: number },
+    onEvent: (event: AgentStreamEvent) => void,
+  ): Promise<() => Promise<void>>;
+  /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.
    */
@@ -1469,10 +1422,12 @@ export interface DurableAgentLike {
    */
   [key: string]: any;
   /**
-   * Recover active runs for this durable agent.
+   * Recover active runs for this durable agent, or only `runId` when given.
+   * A run another execution still drives is reported as `skipped`, with
+   * `retryAt` (epoch ms) when it may be recoverable later.
    */
-  recoverActiveRuns(): Promise<{
-    recovered: Array<{ runId: string }>;
+  recoverActiveRuns(options?: { runId?: string }): Promise<{
+    recovered: Array<{ runId: string; status?: 'success' | 'failed' | 'skipped'; retryAt?: number }>;
     succeeded: number;
     failed: number;
   }>;

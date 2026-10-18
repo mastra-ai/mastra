@@ -1,15 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DataList } from './data-list';
-
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -276,6 +270,18 @@ describe('DataListRoot', () => {
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
       expect(errorRow.dataset.variant).toBe('error');
       expect(defaultRow.dataset.variant).toBe('default');
+    });
+
+    it('exposes the info tone as data-variant', () => {
+      const { container } = render(
+        <DataList columns="1fr">
+          <DataList.RowButton variant="info">
+            <DataList.Cell>highlighted</DataList.Cell>
+          </DataList.RowButton>
+        </DataList>,
+      );
+      const row = container.querySelector<HTMLButtonElement>('.data-list-row');
+      expect(row?.dataset.variant).toBe('info');
     });
 
     describe('when the error row is pressed', () => {
