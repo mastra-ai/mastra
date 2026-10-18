@@ -1054,7 +1054,7 @@ export class ProcessorRunner {
                 state: state.customState,
                 agent: this.agent,
                 abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-                  throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
+                  throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
                 },
                 ...createObservabilityContext({ currentSpan: state.span }),
                 requestContext,
