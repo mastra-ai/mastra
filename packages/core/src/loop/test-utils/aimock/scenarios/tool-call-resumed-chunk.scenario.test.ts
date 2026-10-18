@@ -60,9 +60,11 @@ describeForAllEngines('AIMock loop scenario: tool-call-resumed ack', engine => {
     expect(chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
     expect(chunks!.some(c => c.type === 'tool-call-resumed')).toBe(false);
 
-    const resumed = await collect(
-      await shared.agent.resumeStream({ answer: 'blue' }, { runId: output.runId, toolCallId: 'tc-1' }),
+    const resumedStream = await shared.agent.resumeStream(
+      { answer: 'blue' },
+      { runId: output.runId, toolCallId: 'tc-1' },
     );
+    const resumed = await collect(resumedStream);
     const acks = resumed.filter(c => c.type === 'tool-call-resumed');
     expect(acks).toHaveLength(1);
     expect(acks[0].payload).toMatchObject({
@@ -75,6 +77,9 @@ describeForAllEngines('AIMock loop scenario: tool-call-resumed ack', engine => {
     const resultIndex = resumed.findIndex(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-1');
     expect(resultIndex).toBeGreaterThan(resumed.indexOf(acks[0]));
     expect(resumed.some(c => c.type === 'tool-call-suspended')).toBe(false);
+    expect(await resumedStream.toolCalls).toMatchObject([
+      { payload: { toolCallId: 'tc-1', toolName: 'askUser', args: { question: 'color?' } } },
+    ]);
   });
 
   it('acks an approved call before its tool-result', async () => {
