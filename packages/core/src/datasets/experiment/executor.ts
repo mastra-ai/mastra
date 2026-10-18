@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
@@ -13,6 +12,7 @@ import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
+import type { AgentExperimentOutput, ScorerExperimentOutput } from './types';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -21,11 +21,11 @@ import { ToolMockMatcher } from './tool-mocks';
 interface AgentGenerateResult {
   text?: string;
   object?: unknown;
-  toolCalls?: unknown[];
-  toolResults?: unknown[];
-  sources?: unknown[];
-  files?: unknown[];
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  toolCalls?: Record<string, unknown>[];
+  toolResults?: Record<string, unknown>[];
+  sources?: Record<string, unknown>[];
+  files?: Record<string, unknown>[];
+  usage?: Record<string, unknown>;
   reasoningText?: string;
   traceId?: string;
   error?: Error;
@@ -83,11 +83,14 @@ async function executeScorer(
       console.warn(`Scorer ${scorer.id} returned invalid score: ${result.score}`);
     }
 
+    const output: ScorerExperimentOutput = {
+      score,
+      reason: typeof result.reason === 'string' ? result.reason : null,
+      ...(result.notScorable ? { notScorable: result.notScorable } : {}),
+    };
+
     return {
-      output: {
-        score,
-        reason: typeof result.reason === 'string' ? result.reason : null,
-      },
+      output,
       error: null,
       traceId: null, // Scorers don't produce traces
     };
@@ -253,7 +256,7 @@ async function executeAgent(
     !requestContext?.[MASTRA_THREAD_ID_KEY] &&
     typeof agent.hasOwnMemory === 'function' &&
     agent.hasOwnMemory();
-  const injectedThreadId = shouldInjectThread ? randomUUID() : undefined;
+  const injectedThreadId = shouldInjectThread ? globalThis.crypto.randomUUID() : undefined;
   const memoryOption = injectedThreadId
     ? {
         memory: {
@@ -272,7 +275,7 @@ async function executeAgent(
           },
           resource: contextResourceId
             ? String(contextResourceId)
-            : `dataset-experiment:${experimentId ?? randomUUID()}:thread:${injectedThreadId}`,
+            : `dataset-experiment:${experimentId ?? globalThis.crypto.randomUUID()}:thread:${injectedThreadId}`,
           // Suppress title generation: these threads are runner bookkeeping, so an
           // extra title LLM call per item (and per retry) is pure waste (precedent:
           // ephemeral subagent-delegation threads, issue #18738). lastMessages is
@@ -301,7 +304,7 @@ async function executeAgent(
   // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
   const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
 
-  const assignedTraceId = randomUUID().replaceAll('-', '');
+  const assignedTraceId = globalThis.crypto.randomUUID().replaceAll('-', '');
   onTraceIdAssigned?.(assignedTraceId);
   const tracingOptions = {
     traceId: assignedTraceId,
@@ -359,7 +362,7 @@ async function executeAgent(
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals
-  const trimmedOutput = {
+  const trimmedOutput: AgentExperimentOutput = {
     text: result.text,
     object: result.object,
     toolCalls: result.toolCalls,
@@ -369,7 +372,8 @@ async function executeAgent(
     usage: result.usage,
     reasoningText: result.reasoningText,
     traceId,
-    error: result.error ?? null,
+    // Error instances serialize to {} — persist the readable parts explicitly
+    error: result.error ? { message: result.error.message, stack: result.error.stack } : null,
   };
 
   return {
@@ -533,19 +537,27 @@ async function executeWorkflow(
       const suspendedPaths: string[][] = result.suspended ?? [];
       if (suspendedPaths.length === 0) break;
 
-      // For each suspended step, look up resume data
-      const firstSuspendedStep = suspendedPaths[0]?.[0];
-      if (!firstSuspendedStep) break;
+      // An earlier branch without data must not block a later branch with data.
+      // Prefer per-step data over the flat fallback, preserving falsy payloads.
+      let stepToResume: string | undefined;
+      let stepResumeData: unknown;
+      for (const suspendedPath of suspendedPaths) {
+        const suspendedStep = suspendedPath?.[0];
+        if (!suspendedStep) continue;
 
-      // Resolve resume data: per-step map takes precedence, then flat fallback.
-      // Use explicit undefined check so falsy values (null, false, 0) are forwarded.
-      const perStepValue = perStep?.[firstSuspendedStep];
-      const stepResumeData = perStepValue !== undefined ? perStepValue : flat;
-      if (stepResumeData === undefined) break; // No data for this step, stop resuming
+        const perStepValue = perStep?.[suspendedStep];
+        const candidate = perStepValue !== undefined ? perStepValue : flat;
+        if (candidate === undefined) continue;
+
+        stepToResume = suspendedStep;
+        stepResumeData = candidate;
+        break;
+      }
+      if (stepToResume === undefined) break; // No data for any suspended step, stop resuming
 
       result = await run.resume({
         resumeData: stepResumeData,
-        step: firstSuspendedStep,
+        step: stepToResume,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...observabilityContext,
       });

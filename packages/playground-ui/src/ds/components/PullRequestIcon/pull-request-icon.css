@@ -1,0 +1,7 @@
+.pull-request-icon-merged {
+  color: var(--purple-400) !important;
+}
+
+html.light .pull-request-icon-merged {
+  color: var(--purple-700) !important;
+}

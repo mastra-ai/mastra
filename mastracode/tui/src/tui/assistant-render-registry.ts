@@ -130,7 +130,8 @@ export class AssistantRenderRegistry {
 
   queueActive(messageId: string, message: MastraDBMessage, afterApply?: () => void): AssistantQueueResult | undefined {
     const segment = this.getActive(messageId);
-    return segment ? this.queueSegment(segment, message, afterApply) : undefined;
+    if (!segment) return undefined;
+    return this.queueSegment(segment, message, afterApply);
   }
 
   queueActiveTerminalStatus(messageId: string, terminalStatus: AssistantTerminalStatus): boolean {

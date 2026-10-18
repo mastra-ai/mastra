@@ -21,7 +21,7 @@ permissions: {}
 jobs:
   publish-e2e-registry:
     name: Publish E2E registry
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -84,7 +84,7 @@ jobs:
     needs: publish-e2e-registry
     if: inputs.experiment_worker_e2e_changed
     name: E2E experiments
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -147,7 +147,7 @@ jobs:
   e2e-monorepo:
     needs: publish-e2e-registry
     name: E2E monorepo
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -165,6 +165,11 @@ jobs:
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.15'
 
       - name: Build
         run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
@@ -192,7 +197,7 @@ jobs:
   e2e-softwarefactory:
     needs: publish-e2e-registry
     name: E2E softwarefactory template
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -239,7 +244,7 @@ jobs:
   e2e-no-bundling:
     needs: publish-e2e-registry
     name: E2E no-bundling
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -281,10 +286,39 @@ jobs:
           MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
+  e2e-mcp-compat:
+    name: E2E MCP compatibility
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # Builds one package and runs PR-controlled scripts: no Turbo credentials needed here.
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build core
+        run: pnpm turbo --filter "@mastra/core" build
+
+      # Packs the built core and installs it into disposable consumers: published
+      # @mastra/mcp 1.x (the compatibility floor for the core MCP contract) and the
+      # core-native suspend/resume fixture.
+      - name: Test packed core against published MCP 1.x and the core-native fixture
+        run: pnpm --filter "@mastra/mcp" test:compat
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+
   e2e-create-mastra:
     needs: publish-e2e-registry
     name: E2E create-mastra
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -329,7 +363,7 @@ jobs:
   e2e-commonjs:
     needs: publish-e2e-registry
     name: E2E CommonJS
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -373,7 +407,7 @@ jobs:
   e2e-deployers:
     needs: publish-e2e-registry
     name: E2E deployers
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -418,7 +452,7 @@ jobs:
   e2e-type-check:
     needs: publish-e2e-registry
     name: E2E Type check
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -461,7 +495,7 @@ jobs:
 
   e2e-kitchen-sink:
     name: E2E kitchen-sink (${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -507,7 +541,7 @@ jobs:
 
   e2e-client-js:
     name: E2E client-js (optional)
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     permissions:

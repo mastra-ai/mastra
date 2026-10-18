@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { VercelDeployer } from '@mastra/deployer-vercel';
 import { MastraEditor } from '@mastra/editor';
 import { editorShowcaseAgent, studioPreviewAgent } from './agents/studio-preview-agent';
+import { workflowReviewAgent } from './agents/workflow-review-agent';
 import { previewScorers } from './scorers/preview-scorers';
 import { seedStudioPreview } from './seed/seed';
 import { seedPreviewWorkflowRuns } from './seed/workflow-runs';
@@ -13,6 +14,7 @@ export const mastra = new Mastra({
   agents: {
     studioPreviewAgent,
     editorShowcaseAgent,
+    workflowReviewAgent,
   },
   tools: {
     previewStatusTool,

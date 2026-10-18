@@ -6,6 +6,10 @@ import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
+import {
+  __clearSessionEnvironmentsForTests,
+  recordSessionEnvironment,
+} from '../session/environment-state-processor.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 
 afterEach(() => {
@@ -14,11 +18,13 @@ afterEach(() => {
 import {
   buildFsRoutes,
   listArtifacts,
+  listSessionFilesystemFiles,
   listSessionRenderedPath,
   listSessionWorkspaceChanges,
   listWorkspaceRenderedPath,
   parseWorkspaceChanges,
   parseWorkspaceChangeStats,
+  parseWorkspaceTrackedChanges,
   readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
@@ -210,6 +216,7 @@ describe('readWorkspaceFile', () => {
 // ── Session-backed (sandbox) workspace access ────────────────────────────────
 
 const WORKDIR = '/workspaces/acme/repo';
+const BASE_SHA = '0123456789abcdef0123456789abcdef01234567';
 
 function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
@@ -238,13 +245,28 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
  */
 function seedSessionSandbox(
   respond: (script: string, command: string, args: string[]) => { exitCode: number; stdout: string; stderr?: string },
-  { sessionRowId = 'row-1', workdir = WORKDIR } = {},
+  {
+    sessionRowId = 'row-1',
+    workdir = WORKDIR,
+    comparisonBase = BASE_SHA,
+    trackedChanges,
+  }: { sessionRowId?: string; workdir?: string; comparisonBase?: string; trackedChanges?: string } = {},
 ) {
-  const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
-    const script = args[1] ?? '';
-    const result = respond(script, command, args);
-    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
-  });
+  const executeCommand = vi.fn(
+    async (command: string, args: string[] = [], _options?: { maxRetainedBytes?: number }) => {
+      if (command === 'git' && args[2] === 'merge-base') {
+        return { exitCode: 0, stdout: comparisonBase + '\n', stderr: '' };
+      }
+      if (command === 'git' && args[2] === 'diff' && args.includes('--name-status')) {
+        return trackedChanges === undefined
+          ? { exitCode: 1, stdout: '', stderr: 'tracked diff not configured' }
+          : { exitCode: 0, stdout: trackedChanges, stderr: '' };
+      }
+      const script = args[1] ?? '';
+      const result = respond(script, command, args);
+      return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
+    },
+  );
   // The memo derives the workdir from the constructed instance: a local
   // provider checks out under <workingDirectory>/<repo name>.
   getSessionSandbox(
@@ -382,6 +404,7 @@ describe('listSessionRenderedPath', () => {
       expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
     ]);
     expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand.mock.calls[0]?.[2]?.maxRetainedBytes).toBe(Infinity);
   });
 
   it('returns an empty listing when this process holds no sandbox for the session', async () => {
@@ -504,6 +527,14 @@ describe('workspace changes', () => {
     ]);
   });
 
+  it('parses committed add, delete, and rename records from null-delimited name-status output', () => {
+    expect(parseWorkspaceTrackedChanges('A\0src/added.ts\0D\0src/deleted.ts\0R100\0src/old.ts\0src/new.ts\0')).toEqual([
+      { path: 'src/added.ts', status: 'added' },
+      { path: 'src/deleted.ts', status: 'deleted' },
+      { path: 'src/new.ts', previousPath: 'src/old.ts', status: 'renamed' },
+    ]);
+  });
+
   it('parses text, binary, and renamed file counts from null-delimited numstat output', () => {
     const output = ['12\t3\tsrc/edited.ts', '-\t-\tpublic/image.png', '4\t2\t', 'src/old.ts', 'src/new.ts', ''].join(
       '\0',
@@ -527,7 +558,7 @@ describe('workspace changes', () => {
       expect(script).toContain('diff --numstat -z --find-renames');
       expect(script).toContain('ls-files --others --exclude-standard -z');
       expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
-      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR]);
+      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA]);
       return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
 
@@ -542,7 +573,32 @@ describe('workspace changes', () => {
         { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
       ],
     });
-    expect(executeCommand).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenCalledTimes(4);
+    // Parsed outputs must not be cut to the default 1 MiB tail; merge-base is a single SHA.
+    for (const [command, args, options] of executeCommand.mock.calls) {
+      if (command === 'git' && args?.[2] === 'merge-base') continue;
+      expect(options?.maxRetainedBytes).toBe(Infinity);
+    }
+  });
+
+  it('keeps committed session-branch changes visible after the worktree is clean', async () => {
+    const { executeCommand } = seedSessionSandbox(
+      (_script, command) =>
+        command === 'git' ? { exitCode: 0, stdout: '' } : { exitCode: 0, stdout: '7\t2\tsrc/committed.ts\0' },
+      { trackedChanges: 'M\0src/committed.ts\0' },
+    );
+
+    const session = makeSession({ branch: 'factory/issue-42', baseBranch: 'main' });
+    await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      additions: 7,
+      deletions: 2,
+      changes: [{ path: 'src/committed.ts', status: 'modified', additions: 7, deletions: 2 }],
+    });
+    expect(executeCommand).toHaveBeenCalledWith('git', ['-C', WORKDIR, 'merge-base', 'HEAD', 'origin/main'], {
+      timeout: 30_000,
+    });
   });
 
   it('keeps file statuses available when line counting fails', async () => {
@@ -583,7 +639,7 @@ describe('workspace changes', () => {
         '--no-ext-diff',
         '--no-color',
         '--unified=3',
-        'HEAD',
+        BASE_SHA,
         '--',
         'src/edited.ts',
       ]);
@@ -597,7 +653,7 @@ describe('workspace changes', () => {
       patch,
       truncated: false,
     });
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(2);
   });
 
   it('marks and limits a diff that exceeds the output boundary', async () => {
@@ -635,7 +691,7 @@ describe('workspace changes', () => {
         '--no-ext-diff',
         '--no-color',
         '--unified=3',
-        'HEAD',
+        BASE_SHA,
         '--',
         'src/old.ts',
         'src/renamed.ts',
@@ -662,7 +718,7 @@ describe('workspace changes', () => {
         '--no-ext-diff',
         '--no-color',
         '--unified=3',
-        'HEAD',
+        BASE_SHA,
         '--',
         path,
       ]);
@@ -717,7 +773,9 @@ describe('workspace changes', () => {
     await expect(readSessionWorkspaceDiff(makeSession(), 'src/new.ts')).resolves.toEqual(
       expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
     );
-    expect(executeCommand).toHaveBeenCalledTimes(3);
+    expect(executeCommand).toHaveBeenCalledTimes(4);
+    const lsFiles = executeCommand.mock.calls.find(([, args]) => args?.includes('ls-files'));
+    expect(lsFiles?.[2]?.maxRetainedBytes).toBe(Infinity);
   });
 
   it('rejects diff paths that escape the workspace before running git', async () => {
@@ -725,5 +783,302 @@ describe('workspace changes', () => {
 
     await expect(readSessionWorkspaceDiff(makeSession(), '../secret')).rejects.toThrow('path escapes workspace');
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe('workspace changes across environment repositories', () => {
+  const ROOT = '/workspaces/acme';
+  const DIRS = { 'acme/repo': `${ROOT}/repo`, 'acme/docs': `${ROOT}/docs`, 'acme/site': `${ROOT}/site` };
+  type Answer = { exitCode: number; stdout: string; stderr?: string };
+
+  /**
+   * Seed a three-repository layout (own repository `acme/repo`, base `main`;
+   * `acme/docs` and `acme/site` on their default branch `develop`) whose fake
+   * sandbox answers each git call by the checkout it names.
+   */
+  function seedEnvironment(
+    answer: (
+      dir: string,
+      kind: 'merge-base' | 'status' | 'tracked' | 'numstat' | 'diff' | 'other',
+      args: string[],
+    ) => Answer,
+    { recorded = ['acme/repo', 'acme/docs', 'acme/site'] }: { recorded?: string[] } = {},
+  ) {
+    const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
+      const script = args[1] ?? '';
+      const dirIndex = args.indexOf('-C');
+      const dir = dirIndex >= 0 ? args[dirIndex + 1]! : (args[3] ?? '');
+      const kind =
+        command === 'git' && args[2] === 'merge-base'
+          ? 'merge-base'
+          : command === 'git' && args[2] === 'status'
+            ? 'status'
+            : command === 'git' && args[2] === 'diff'
+              ? 'tracked'
+              : script.includes('diff --numstat')
+                ? 'numstat'
+                : script.includes('head -c')
+                  ? 'diff'
+                  : 'other';
+      const result = answer(dir, kind, args);
+      return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
+    });
+    getSessionSandbox(
+      'row-1',
+      'acme/repo',
+      () => ({ id: 'sbx-1', provider: 'local', workingDirectory: ROOT, executeCommand }) as never,
+      ['acme/repo', 'acme/docs', 'acme/site'],
+    );
+    const session = makeSession({ baseBranch: 'main' });
+    recordSessionEnvironment(session.sessionId, {
+      workingDirectory: ROOT,
+      repositories: recorded.map((slug, index) => ({
+        slug,
+        dir: DIRS[slug as keyof typeof DIRS],
+        branch: slug === 'acme/repo' ? 'factory/issue-1' : 'develop',
+        defaultBranch: 'develop',
+        position: index + 1,
+        setupStatus: 'ok' as const,
+      })),
+    });
+    return { executeCommand, session };
+  }
+
+  afterEach(() => {
+    __clearSessionEnvironmentsForTests();
+  });
+
+  it('groups changes per repository with prefixed paths and sums the totals over the groups', async () => {
+    const { executeCommand, session } = seedEnvironment((dir, kind) => {
+      if (kind === 'merge-base') return { exitCode: 0, stdout: `${BASE_SHA}\n` };
+      if (kind === 'status') {
+        if (dir === DIRS['acme/repo']) return { exitCode: 0, stdout: ' M src/edited.ts\0' };
+        if (dir === DIRS['acme/docs']) return { exitCode: 0, stdout: '?? guide.md\0' };
+        return { exitCode: 0, stdout: '' };
+      }
+      if (kind === 'tracked') return { exitCode: 1, stdout: '', stderr: 'not configured' };
+      if (kind === 'numstat') {
+        if (dir === DIRS['acme/repo']) return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' };
+        if (dir === DIRS['acme/docs']) return { exitCode: 0, stdout: '5\t0\t\0/dev/null\0guide.md\0' };
+        return { exitCode: 0, stdout: '' };
+      }
+      return { exitCode: 1, stdout: '', stderr: `unexpected ${kind}` };
+    });
+
+    await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      additions: 8,
+      deletions: 1,
+      changes: [
+        { path: 'docs/guide.md', status: 'untracked', additions: 5, deletions: 0 },
+        { path: 'repo/src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
+      ],
+      repositories: [
+        {
+          slug: 'acme/repo',
+          prefix: 'repo/',
+          available: true,
+          additions: 3,
+          deletions: 1,
+          changes: [{ path: 'repo/src/edited.ts', status: 'modified', additions: 3, deletions: 1 }],
+        },
+        {
+          slug: 'acme/docs',
+          prefix: 'docs/',
+          available: true,
+          additions: 5,
+          deletions: 0,
+          changes: [{ path: 'docs/guide.md', status: 'untracked', additions: 5, deletions: 0 }],
+        },
+        { slug: 'acme/site', prefix: 'site/', available: true, additions: 0, deletions: 0, changes: [] },
+      ],
+    });
+    // The own repository compares against the session base branch, the others against their default branch.
+    const mergeBases = executeCommand.mock.calls.filter(call => call[1]?.[2] === 'merge-base').map(call => call[1]);
+    expect(mergeBases).toEqual([
+      ['-C', DIRS['acme/repo'], 'merge-base', 'HEAD', 'origin/main'],
+      ['-C', DIRS['acme/docs'], 'merge-base', 'HEAD', 'origin/develop'],
+      ['-C', DIRS['acme/site'], 'merge-base', 'HEAD', 'origin/develop'],
+    ]);
+    // Four git calls per checkout: merge-base, status, name-status, numstat.
+    expect(executeCommand).toHaveBeenCalledTimes(12);
+  });
+
+  it('marks a repository whose status fails unavailable, and compares an unrecorded one against its HEAD', async () => {
+    const { executeCommand, session } = seedEnvironment(
+      (dir, kind) => {
+        if (kind === 'merge-base') return { exitCode: 0, stdout: `${BASE_SHA}\n` };
+        if (kind === 'status') {
+          if (dir === DIRS['acme/docs']) return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' };
+          return { exitCode: 0, stdout: dir === DIRS['acme/site'] ? ' M s.ts\0' : ' M a.ts\0' };
+        }
+        if (kind === 'tracked') return { exitCode: 1, stdout: '' };
+        if (kind === 'numstat') {
+          return { exitCode: 0, stdout: dir === DIRS['acme/site'] ? '2\t0\ts.ts\0' : '1\t0\ta.ts\0' };
+        }
+        return { exitCode: 1, stdout: '' };
+      },
+      { recorded: ['acme/repo', 'acme/docs'] },
+    );
+
+    await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      additions: 3,
+      deletions: 0,
+      changes: [
+        { path: 'repo/a.ts', status: 'modified', additions: 1, deletions: 0 },
+        { path: 'site/s.ts', status: 'modified', additions: 2, deletions: 0 },
+      ],
+      repositories: [
+        {
+          slug: 'acme/repo',
+          prefix: 'repo/',
+          available: true,
+          additions: 1,
+          deletions: 0,
+          changes: [{ path: 'repo/a.ts', status: 'modified', additions: 1, deletions: 0 }],
+        },
+        { slug: 'acme/docs', prefix: 'docs/', available: false, changes: [] },
+        {
+          slug: 'acme/site',
+          prefix: 'site/',
+          available: true,
+          additions: 2,
+          deletions: 0,
+          changes: [{ path: 'site/s.ts', status: 'modified', additions: 2, deletions: 0 }],
+        },
+      ],
+    });
+    // The boot has not recorded `acme/site` yet: it compares against its own HEAD.
+    expect(executeCommand).toHaveBeenCalledWith('git', ['-C', DIRS['acme/site'], 'merge-base', 'HEAD', 'origin/HEAD'], {
+      timeout: 30_000,
+    });
+  });
+
+  it('is unavailable as a whole, still listing the groups, when every checkout fails', async () => {
+    const { session } = seedEnvironment((_dir, kind) =>
+      kind === 'merge-base' ? { exitCode: 0, stdout: `${BASE_SHA}\n` } : { exitCode: 128, stdout: '' },
+    );
+
+    await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: false,
+      changes: [],
+      repositories: [
+        { slug: 'acme/repo', prefix: 'repo/', available: false, changes: [] },
+        { slug: 'acme/docs', prefix: 'docs/', available: false, changes: [] },
+        { slug: 'acme/site', prefix: 'site/', available: false, changes: [] },
+      ],
+    });
+  });
+
+  it('runs the diff of a prefixed path inside its checkout and echoes the prefixed path', async () => {
+    const patch = 'diff --git a/guide.md b/guide.md\n+hello\n';
+    const { executeCommand, session } = seedEnvironment((dir, kind, args) => {
+      if (kind === 'merge-base') {
+        expect(args).toEqual(['-C', DIRS['acme/docs'], 'merge-base', 'HEAD', 'origin/develop']);
+        return { exitCode: 0, stdout: `${BASE_SHA}\n` };
+      }
+      if (kind === 'diff') {
+        expect(dir).toBe(DIRS['acme/docs']);
+        expect(args.slice(-3)).toEqual([BASE_SHA, '--', 'guide.md']);
+        return { exitCode: 0, stdout: patch };
+      }
+      return { exitCode: 1, stdout: '', stderr: `unexpected ${kind}` };
+    });
+
+    await expect(readSessionWorkspaceDiff(session, 'docs/guide.md')).resolves.toEqual({
+      workspacePath: session.sessionId,
+      path: 'docs/guide.md',
+      patch,
+      truncated: false,
+    });
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes both halves of a rename relative to their checkout', async () => {
+    const { session } = seedEnvironment((_dir, kind, args) => {
+      if (kind === 'merge-base') return { exitCode: 0, stdout: `${BASE_SHA}\n` };
+      if (kind === 'diff') {
+        expect(args.slice(-4)).toEqual([BASE_SHA, '--', 'old.md', 'new.md']);
+        return { exitCode: 0, stdout: 'renamed' };
+      }
+      return { exitCode: 1, stdout: '' };
+    });
+
+    await expect(readSessionWorkspaceDiff(session, 'docs/new.md', 'docs/old.md')).resolves.toMatchObject({
+      path: 'docs/new.md',
+      patch: 'renamed',
+    });
+  });
+
+  it('rejects a rename whose previous path lives in another repository before running git', async () => {
+    const { executeCommand, session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
+
+    await expect(readSessionWorkspaceDiff(session, 'docs/new.md', 'repo/old.md')).rejects.toThrow(
+      'previousPath is not available',
+    );
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects a bare repository prefix, an unknown prefix and a traversal through a prefix before running git', async () => {
+    const { executeCommand, session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
+
+    await expect(readSessionWorkspaceDiff(session, 'docs')).rejects.toThrow('path is not available');
+    await expect(readSessionWorkspaceDiff(session, 'docs/')).rejects.toThrow('path is not available');
+    await expect(readSessionWorkspaceDiff(session, '.workspace-setup-ran')).rejects.toThrow('path is not available');
+    await expect(readSessionWorkspaceDiff(session, 'docs/../repo/x')).rejects.toThrow('path escapes workspace');
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('reads a root artifact and a prefixed file on the workspace root filesystem', async () => {
+    const files: Record<string, string> = {
+      [`${ROOT}/.artifacts/report.md`]: '# Report',
+      [`${ROOT}/docs/guide.md`]: '# Guide',
+    };
+    const { session } = seedEnvironment((_dir, _kind, args) => {
+      const script = args[1] ?? '';
+      const match = /p='([^']+)'/.exec(script);
+      const abs = match?.[1];
+      if (abs && files[abs] !== undefined && script.includes('readlink'))
+        return { exitCode: 0, stdout: `${ROOT}\n${abs}` };
+      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
+      const read = /base64 < '([^']+)'/.exec(script);
+      if (read && files[read[1]!] !== undefined) {
+        return { exitCode: 0, stdout: Buffer.from(files[read[1]!]!, 'utf8').toString('base64') };
+      }
+      return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
+    });
+
+    await expect(readSessionWorkspaceFile(session, '.artifacts/report.md')).resolves.toMatchObject({
+      path: '.artifacts/report.md',
+      content: '# Report',
+    });
+    await expect(
+      readSessionWorkspaceFile(session, 'docs/guide.md', { allowUnapprovedPath: true }),
+    ).resolves.toMatchObject({ path: 'docs/guide.md', content: '# Guide' });
+  });
+
+  it('lists the repositories beside the persisted files, and omits them for a one-repository session', async () => {
+    const { session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
+    const listFiles = vi.fn(async () => [{ path: 'docs/guide.md' }, { path: '.artifacts/report.md' }]);
+
+    await expect(listSessionFilesystemFiles({ listFiles }, session, 'thread-1')).resolves.toEqual({
+      workspacePath: session.sessionId,
+      threadId: 'thread-1',
+      files: [{ path: 'docs/guide.md' }, { path: '.artifacts/report.md' }],
+      repositories: [
+        { slug: 'acme/repo', prefix: 'repo/' },
+        { slug: 'acme/docs', prefix: 'docs/' },
+        { slug: 'acme/site', prefix: 'site/' },
+      ],
+    });
+
+    __clearSessionSandboxesForTests();
+    seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
+    const single = await listSessionFilesystemFiles({ listFiles }, makeSession(), 'thread-1');
+    expect('repositories' in single).toBe(false);
   });
 });

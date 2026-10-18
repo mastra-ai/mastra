@@ -84,6 +84,20 @@ export function createOnScorerHook(mastra: Mastra) {
         targetMetadata,
       } as any);
 
+      if (runResult.notScorable) {
+        // The scorer declared this run has nothing to evaluate. There is no
+        // score to store, and storing one would put a vacuous value into the
+        // scorer's aggregates. The outcome is recorded on the scorer-run span.
+        const { step, reason } = runResult.notScorable;
+        mastra
+          .getLogger()
+          ?.debug?.(
+            `Scorer ${scorerId} declared run ${runResult.runId} not scorable in step "${step}"` +
+              (reason ? `: ${reason}` : ''),
+          );
+        return;
+      }
+
       const payload = {
         ...rest,
         ...runResult,
@@ -160,11 +174,19 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
       // Resolution or scorer listing failed — fall back to mastra-registered scorer
     }
   } else if (entityType === 'WORKFLOW') {
-    const scorers = await mastra.getWorkflowById(entityId).listScorers();
-    for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.id === scorerId) {
-        scorerToUse = scorer;
-        break;
+    let workflow: ReturnType<Mastra['getWorkflowById']> | undefined;
+    try {
+      workflow = mastra.getWorkflowById(entityId);
+    } catch {
+      // Nested workflows aren't registered on Mastra — fall back to mastra-registered scorer
+    }
+    if (workflow) {
+      const scorers = await workflow.listScorers();
+      for (const [_, scorer] of Object.entries(scorers)) {
+        if (scorer.scorer.id === scorerId) {
+          scorerToUse = scorer;
+          break;
+        }
       }
     }
   }

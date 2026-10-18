@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
@@ -55,7 +53,7 @@ export class GithubReconcileWorker extends MastraWorker {
   readonly #intervalMs: number;
   readonly #issueIntervalMs: number;
   readonly #leaseTtlMs: number;
-  readonly #leaseOwner = randomUUID();
+  readonly #leaseOwner = globalThis.crypto.randomUUID();
   readonly #now: () => number;
 
   #running = false;
@@ -185,7 +183,10 @@ export class GithubReconcileWorker extends MastraWorker {
           const { errors, ...counts } = await this.#reconcile(targets);
           const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
           if (counts.failed > 0) {
-            this.deps?.logger.warn('GitHub pull request reconcile sweep completed with failures', { ...context, errors });
+            this.deps?.logger.warn('GitHub pull request reconcile sweep completed with failures', {
+              ...context,
+              errors,
+            });
           } else if (counts.merged > 0 || counts.closed > 0) {
             this.deps?.logger.info('GitHub pull request reconcile replayed missed merges/closes', context);
           } else {
@@ -207,6 +208,8 @@ export class GithubReconcileWorker extends MastraWorker {
             this.deps?.logger.warn('GitHub issue reconcile sweep completed with failures', { ...context, errors });
           } else if (counts.closed > 0) {
             this.deps?.logger.info('GitHub issue reconcile replayed closed work items', context);
+          } else if (counts.relabeled > 0) {
+            this.deps?.logger.info('GitHub issue reconcile re-applied label routing', context);
           } else if (counts.updated > 0) {
             this.deps?.logger.info('GitHub issue reconcile patched stale metadata', context);
           } else {
@@ -220,7 +223,6 @@ export class GithubReconcileWorker extends MastraWorker {
       } else if (reconcileIssues && this.#reconcileIssues && !hasLease) {
         this.deps?.logger.debug('GitHub issue reconcile skipped: lease lost during pull-request sweep');
       }
-
     } finally {
       clearInterval(renewalTimer);
       if (hasLease) {

@@ -1,38 +1,39 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
-import { PROVIDERS } from './providers/index.js';
+import type { ChannelProviderRegistration } from './providers/channel-provider.js';
+import { CHANNELS as CHANNELS_LIST } from './providers/channels.js';
+import { PROVIDERS as GENERATED_PROVIDERS } from './providers/index.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
-/**
- * A provider registration. One entry per provider directory generated under
- * `packages/connect/src/providers/<integrationId>/` by the maintainer-only
- * `pnpm --filter @mastra/connect add-provider` command.
- *
- * `integrationId` is the Platform catalog id and the provider directory name.
- * Provider matching against project connections is by `integrationId` only;
- * `connect()` merges each matching provider's tools into one flat record.
- *
- * `envVar` is the fallback connection-id env var read at execute time when
- * no `connectionId` override is given and more than one active connection
- * exists on the project for this provider.
- */
-export interface ProviderRegistration {
+interface ProviderRegistrationBase {
+  /** Platform catalog id used to match project connections. */
   integrationId: string;
+  /** Legacy connection-id env fallback; kept working but intentionally undocumented. */
   envVar: string;
+}
+
+/** A provider whose checked-in tools call the Platform HTTP proxy. */
+export interface ProxyProviderRegistration extends ProviderRegistrationBase {
+  transport?: 'proxy';
   createTools: (options?: ProviderToolsOptions) => ToolsInput;
 }
 
-/**
- * Providers with shipped toolsets. The list is assembled declaratively in the
- * generated `src/providers/index.ts` barrel — each generated provider module
- * exports a `ProviderRegistration` const, and the barrel collects them.
- * `connect()` reads this list and merges tools from every matching Platform
- * connection on the project. Providers with no matching connection yet are
- * kept and warned about once, so tools appear automatically once a connection
- * is attached.
- */
-export { PROVIDERS };
-
-export function findRegistration(integrationId: string): ProviderRegistration | undefined {
-  return PROVIDERS.find(p => p.integrationId === integrationId);
+/** A provider whose tools are discovered from an MCP server through Platform. */
+export interface McpProviderRegistration extends ProviderRegistrationBase {
+  transport: 'mcp';
 }
+
+export type ProviderRegistration = ProxyProviderRegistration | McpProviderRegistration;
+
+/**
+ * Providers with checked-in HTTP toolsets. MCP-backed providers are discovered
+ * from the Platform integration catalog at runtime.
+ */
+export const PROVIDERS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
+
+/**
+ * Channel-capable providers with a hand-maintained `channels()` registration.
+ * The launch ships three (Slack, Telegram, Discord); the provider generator
+ * grows to cover new entries when a fourth lands.
+ */
+export const CHANNELS: readonly ChannelProviderRegistration[] = CHANNELS_LIST;

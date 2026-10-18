@@ -7,13 +7,7 @@ packages:
 
 # Schedules
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
-A file-based agent discovers **schedules** from its `schedules/` directory. Each file declares one recurring task: a cron expression plus what the agent should do when it fires. Mastra registers them into schedule storage at startup, so a scheduled agent needs no runtime registration code.
+A file-based agent discovers **schedules** from its `schedules/` directory. Each file declares one recurring task: a cron expression plus what the agent should do when it fires. Mastra registers them into schedule storage at startup. A scheduled agent needs no runtime registration code.
 
 Use this page for the file-based convention. To create schedules at runtime instead, see [Schedules](/reference/schedules/overview).
 
@@ -97,11 +91,11 @@ export default defineSchedule({
 })
 ```
 
-The handler's return value is merged over the schedule's stored fields. Returning `undefined` applies no overrides, so the fire falls back to those stored fields. Since a handler-mode schedule can't declare a `prompt`, that fire then fails for a missing prompt. Return a `prompt` to run, or `null` to skip.
+The handler's return value is merged over the schedule's stored fields. Returning `undefined` applies no overrides. The fire falls back to those stored fields. Since a handler-mode schedule can't declare a `prompt`, that fire then fails for a missing prompt. Return a `prompt` to run, or `null` to skip.
 
 Handlers are functions, so they can't be persisted on the stored schedule row. Mastra resolves them in-process when the schedule fires. A handler-mode schedule that supplies no prompt (and declares none) fails that fire with a reason rather than sending the agent an empty message.
 
-That in-process lookup means the process running the scheduler must have the owning agent registered. A normal deployment boots a single entry and gets that for free. Standalone workers need the same entry as your server. Boot one from a trimmed entry and it has no handler to call, so its fires fail rather than run.
+That in-process lookup means the process running the scheduler must have the owning agent registered. A normal deployment boots a single entry and gets that for free. Standalone workers need the same entry as your server. Boot one from a trimmed entry and it has no handler to call. Its fires fail rather than run.
 
 ### Markdown schedules
 
@@ -130,8 +124,7 @@ Frontmatter accepts every option below except `handler`, which needs a function 
   {
     name: 'cron',
     type: 'string',
-    description:
-      'Standard five-field cron expression. Required. The scheduler evaluates schedules on a tick loop, so the effective granularity is one minute. Sub-minute fields are not supported.',
+    description: 'A 5-, 6-, or 7-part cron expression. Required.',
   },
   {
     name: 'prompt',
@@ -215,7 +208,7 @@ Frontmatter accepts every option below except `handler`, which needs a function 
     name: 'status',
     type: "'active' | 'paused'",
     description:
-      'Status the row is created with. Applies on first create only, because the sync never patches `status` so that pausing through the API survives a redeploy. Changing this value in code later has no effect on an existing schedule.',
+      'Status the row is created with. Applies on first create, because a redeploy that leaves the cadence unchanged never patches `status`, so pausing through the API survives it. Changing this value in code later has no effect on an existing schedule. A cadence with no future occurrence is registered as `completed`, and a later cadence edit that can fire reactivates a completed row.',
     isOptional: true,
     defaultValue: "'active'",
   },

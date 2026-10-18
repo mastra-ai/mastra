@@ -6,9 +6,49 @@
 import { statSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { readJSON } from 'fs-extra/esm';
-import { getPackageInfo } from 'local-pkg';
+import { findUp } from 'find-up-simple';
+import { readJson, readJSON } from 'fs-extra/esm';
+import { getPackageInfo as getOriginalPackageInfo } from 'local-pkg';
 import { getPackageName } from './utils';
+
+export async function getPackageInfo(
+  packageName: string,
+  options?: { paths?: string[] },
+): Promise<ReturnType<typeof getOriginalPackageInfo>> {
+  const pkgInfo = await getOriginalPackageInfo(packageName, options);
+
+  async function searchUpForPackageJson(rootPath: string) {
+    const path = await findUp('package.json', {
+      cwd: rootPath,
+    });
+
+    if (!path) {
+      return undefined;
+    }
+
+    const pkgJson = await readJson(path);
+
+    if (!pkgJson.version && pkgJson.name !== getPackageName(packageName)) {
+      return searchUpForPackageJson(dirname(rootPath));
+    }
+
+    return {
+      name: pkgJson.name,
+      version: pkgJson.version,
+      rootPath: dirname(path),
+      packageJsonPath: path,
+      packageJson: pkgJson,
+    };
+  }
+
+  // A nested manifest (e.g. dist/esm/package.json with only "type") has no version, so search up for the
+  // real package root. A manifest named after the package is already the root, even if it has no version.
+  if (!pkgInfo?.version && pkgInfo?.rootPath && pkgInfo.packageJson?.name !== getPackageName(packageName)) {
+    return searchUpForPackageJson(dirname(pkgInfo.rootPath));
+  }
+
+  return pkgInfo;
+}
 
 /**
  * Normalize a resolution base path to a directory path.

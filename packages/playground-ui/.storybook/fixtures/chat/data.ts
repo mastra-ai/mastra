@@ -1,4 +1,4 @@
-import type { FilePart } from '@mastra/react';
+import type { FilePart } from '@mastra/react/ui';
 import type { ToolCallGroupStep } from '@/ds/components/ai/tool-call';
 
 export type ChatFile = FilePart & { filename: string };

@@ -123,6 +123,36 @@ describe('handleError', () => {
     });
   });
 
+  describe('AGENT_RESUME_ALREADY_CLAIMED', () => {
+    it('maps a losing concurrent approval or resume to 409', () => {
+      const err = Object.assign(new Error('already being resumed'), { id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('already being resumed');
+    });
+  });
+
+  describe.each(['AGENT_RESUME_RUN_NOT_SUSPENDED', 'WORKFLOW_RUN_NOT_SUSPENDED'])('%s', id => {
+    it('maps resuming a run that is not waiting to be resumed to 409', () => {
+      const err = Object.assign(new Error('not suspended'), { id });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('not suspended');
+    });
+  });
+
   describe('WORKFLOW_RESUME_ALREADY_CLAIMED', () => {
     it('maps a losing concurrent resume to 409', () => {
       const err = Object.assign(new Error('already resumed'), { id: 'WORKFLOW_RESUME_ALREADY_CLAIMED' });
@@ -146,6 +176,101 @@ describe('handleError', () => {
         caught = e as HTTPException;
       }
       expect(caught!.status).not.toBe(409);
+    });
+  });
+
+  describe('time travel conflicts', () => {
+    it.each(['WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED', 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'])('maps %s to 409', id => {
+      const err = Object.assign(new Error('already claimed'), { id });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('already claimed');
+    });
+  });
+
+  describe('durable agent run conflicts', () => {
+    it.each([
+      'DURABLE_AGENT_RUN_ACTIVE',
+      'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY',
+      'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
+      'DURABLE_AGENT_RECOVER_RUN_SUSPENDED',
+      'DURABLE_AGENT_EXECUTION_CONFLICT',
+    ])('maps %s to 409 and keeps the message', id => {
+      const err = Object.assign(new Error('run is busy'), { id });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('run is busy');
+    });
+
+    it('does not treat a superseded execution as a request conflict', () => {
+      const err = Object.assign(new Error('superseded'), { id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught!.status).not.toBe(409);
+    });
+  });
+
+  describe('OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT', () => {
+    it('maps a superseded review-status update to 409', () => {
+      const err = Object.assign(new Error('feedback changed'), {
+        id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT',
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('feedback changed');
+    });
+  });
+
+  describe('OBSERVABILITY_STORAGE_*_NOT_IMPLEMENTED', () => {
+    it('maps a missing optional storage capability to 501 with the original message', () => {
+      const err = Object.assign(new Error('This storage provider does not support listing feedback'), {
+        id: 'OBSERVABILITY_STORAGE_LIST_FEEDBACK_NOT_IMPLEMENTED',
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(501);
+      expect(caught!.message).toBe('This storage provider does not support listing feedback');
+    });
+
+    it('does not treat other observability storage errors as unsupported', () => {
+      const err = Object.assign(new Error('query failed'), {
+        id: 'OBSERVABILITY_STORAGE_LIST_FEEDBACK_FAILED',
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(500);
     });
   });
 });

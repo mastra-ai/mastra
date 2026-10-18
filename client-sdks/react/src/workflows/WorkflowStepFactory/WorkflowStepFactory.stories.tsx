@@ -38,7 +38,7 @@ const allSteps: ResolvedWorkflowStep[] = [
     kind: 'foreach-step',
     id: 'foreach-step',
     step: baseStep('foreach-step'),
-    flow: { type: 'foreach', step: baseStep('foreach-step'), opts: { concurrency: 3 } },
+    flow: { type: 'foreach', step: { type: 'step', step: baseStep('foreach-step') }, opts: { concurrency: 3 } },
     result: { ...successfulResult, status: 'running' },
     workflowStatus: 'running',
   },
@@ -76,7 +76,7 @@ const allSteps: ResolvedWorkflowStep[] = [
     step: baseStep('loop-step'),
     flow: {
       type: 'loop',
-      step: baseStep('loop-step'),
+      step: { type: 'step', step: baseStep('loop-step') },
       serializedCondition: { id: 'until-ready', fn: 'output.ready === true' },
       loopType: 'dountil',
     },

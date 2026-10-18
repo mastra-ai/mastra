@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import * as React from 'react';
 
 import { Button } from '../Button';
+import { Field, FieldLabel } from '../Field';
 import { Input } from '../Input';
-import { Label } from '../Label';
+import { createDrawerHandle } from './create-drawer-handle';
 import {
-  createDrawerHandle,
   Drawer,
   DrawerBackdrop,
   DrawerBody,
@@ -21,6 +21,7 @@ import {
   DrawerTrigger,
   DrawerViewport,
 } from './drawer';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Drawer> = {
   title: 'Feedback/Drawer',
@@ -45,11 +46,13 @@ export const Default: Story = {
           <DrawerDescription>You are all caught up. Good job!</DrawerDescription>
         </DrawerHeader>
         <DrawerBody>
-          <p className="text-ui-sm text-neutral4">Swipe down or press the close button to dismiss this sheet.</p>
+          <p className="text-caption text-muted-foreground">
+            Swipe down or press the close button to dismiss this sheet.
+          </p>
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button>Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -94,7 +97,7 @@ export const Sides: Story = {
       {sideOptions.map(({ side, label, title, description, body }) => (
         <Drawer key={side} side={side}>
           <DrawerTrigger asChild>
-            <Button variant={side === 'bottom' ? 'default' : 'outline'}>{label}</Button>
+            <Button>{label}</Button>
           </DrawerTrigger>
           <DrawerContent>
             <DrawerHeader>
@@ -102,11 +105,11 @@ export const Sides: Story = {
               <DrawerDescription>{description}</DrawerDescription>
             </DrawerHeader>
             <DrawerBody>
-              <p className="text-ui-sm text-neutral4">{body}</p>
+              <p className="text-caption text-muted-foreground">{body}</p>
             </DrawerBody>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
+                <Button>Close</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerContent>
@@ -117,13 +120,11 @@ export const Sides: Story = {
 };
 
 type RepositoryPanelProps = {
-  idPrefix: string;
   title?: string;
   description?: string;
 };
 
 function RepositoryPanel({
-  idPrefix,
   title = 'Repository setup',
   description = 'Select the repository and branch to attach to this project.',
 }: RepositoryPanelProps) {
@@ -134,18 +135,18 @@ function RepositoryPanel({
         <DrawerDescription>{description}</DrawerDescription>
       </DrawerHeader>
       <DrawerBody className="grid content-start gap-4">
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${idPrefix}-repository`}>Repository</Label>
-          <Input id={`${idPrefix}-repository`} defaultValue="mastra-ai/mastra" />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${idPrefix}-branch`}>Branch</Label>
-          <Input id={`${idPrefix}-branch`} defaultValue="main" />
-        </div>
+        <Field className="gap-1.5">
+          <FieldLabel>Repository</FieldLabel>
+          <Input defaultValue="mastra-ai/mastra" />
+        </Field>
+        <Field className="gap-1.5">
+          <FieldLabel>Branch</FieldLabel>
+          <Input defaultValue="main" />
+        </Field>
       </DrawerBody>
       <DrawerFooter>
         <DrawerClose asChild>
-          <Button variant="outline">Cancel</Button>
+          <Button>Cancel</Button>
         </DrawerClose>
         <DrawerClose asChild>
           <Button>Save</Button>
@@ -159,50 +160,48 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
   const [deployments, setDeployments] = React.useState(12);
 
   return (
-    <div className="bg-surface1 min-h-140 p-4 sm:p-6">
+    <div className="min-h-140 bg-sidebar p-4 sm:p-6">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <div className="border-border1 bg-surface2 flex flex-col gap-4 rounded-lg border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 rounded-lg border border-border bg-fill p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="grid gap-1">
-            <h2 className="text-ui-lg text-neutral6 font-medium">Deployments</h2>
-            <p className="text-ui-sm text-neutral3">{deployments} active preview environments</p>
+            <h2 className="text-heading text-foreground">Deployments</h2>
+            <p className="text-caption text-muted-foreground">{deployments} active preview environments</p>
           </div>
           <div className="flex flex-wrap gap-2">{children}</div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
-          <div className="border-border1 bg-surface2 rounded-lg border p-4">
+          <div className="rounded-lg border border-border bg-background p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-ui-md text-neutral6 font-medium">Recent runs</h3>
-                <p className="text-ui-sm text-neutral3">Production checks across connected branches</p>
+                <h3 className="text-subheading text-foreground">Recent runs</h3>
+                <p className="text-caption text-muted-foreground">Production checks across connected branches</p>
               </div>
-              <Button variant="outline" onClick={() => setDeployments(count => count + 1)}>
-                Queue run
-              </Button>
+              <Button onClick={() => setDeployments(count => count + 1)}>Queue run</Button>
             </div>
             <div className="grid gap-2">
               {['main', 'release/canary', 'codex/drawer-floating-variant'].map((branch, index) => (
                 <div
                   key={branch}
-                  className="border-border1 bg-surface3 flex items-center justify-between rounded-md border px-3 py-2"
+                  className={`${raisedSurfaceStyle} flex items-center justify-between rounded-md px-3 py-2`}
                 >
-                  <span className="text-ui-sm text-neutral5 font-medium">{branch}</span>
-                  <span className="text-ui-xs text-neutral3">{index === 0 ? 'Ready' : 'Building'}</span>
+                  <span className="text-column text-foreground">{branch}</span>
+                  <span className="text-meta text-muted-foreground">{index === 0 ? 'Ready' : 'Building'}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="border-border1 bg-surface2 rounded-lg border p-4">
-            <h3 className="text-ui-md text-neutral6 font-medium">Environment</h3>
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-subheading text-foreground">Environment</h3>
             <div className="mt-3 grid gap-3">
-              <div className="bg-surface3 rounded-md p-3">
-                <p className="text-ui-xs text-neutral3">Region</p>
-                <p className="text-ui-sm text-neutral5">eu-west-1</p>
+              <div className="rounded-md bg-card p-3">
+                <p className="text-meta text-muted-foreground">Region</p>
+                <p className="text-caption text-foreground">eu-west-1</p>
               </div>
-              <div className="bg-surface3 rounded-md p-3">
-                <p className="text-ui-xs text-neutral3">Runtime</p>
-                <p className="text-ui-sm text-neutral5">Node.js 22</p>
+              <div className="rounded-md bg-card p-3">
+                <p className="text-meta text-muted-foreground">Runtime</p>
+                <p className="text-caption text-foreground">Node.js 22</p>
               </div>
             </div>
           </div>
@@ -217,21 +216,16 @@ export const FloatingOverlayModes: Story = {
     <WorkspaceSurface>
       <Drawer side="right" variant="floating">
         <DrawerTrigger asChild>
-          <Button variant="outline">No overlay</Button>
+          <Button>No overlay</Button>
         </DrawerTrigger>
-        <RepositoryPanel
-          idPrefix="floating-none"
-          title="No overlay"
-          description="The workspace remains available while the panel is open."
-        />
+        <RepositoryPanel title="No overlay" description="The workspace remains available while the panel is open." />
       </Drawer>
 
       <Drawer side="right" variant="floating" overlay="transparent">
         <DrawerTrigger asChild>
-          <Button variant="outline">Transparent overlay</Button>
+          <Button>Transparent overlay</Button>
         </DrawerTrigger>
         <RepositoryPanel
-          idPrefix="floating-transparent"
           title="Transparent overlay"
           description="Outside clicks dismiss the panel without drawing a dimmed backdrop."
         />
@@ -242,7 +236,6 @@ export const FloatingOverlayModes: Story = {
           <Button>Visible overlay</Button>
         </DrawerTrigger>
         <RepositoryPanel
-          idPrefix="floating-visible"
           title="Visible overlay"
           description="The floating panel uses the standard modal backdrop treatment."
         />
@@ -259,8 +252,8 @@ function ControlledExample() {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-ui-sm text-neutral4">
-        Drawer is <span className="text-neutral6">{open ? 'open' : 'closed'}</span>
+      <p className="text-caption text-muted-foreground">
+        Drawer is <span className="text-foreground">{open ? 'open' : 'closed'}</span>
       </p>
       <Button onClick={() => setOpen(true)}>Open from outside</Button>
       <Drawer side="right" open={open} onOpenChange={setOpen}>
@@ -270,9 +263,7 @@ function ControlledExample() {
             <DrawerDescription>Open state is owned by the parent component.</DrawerDescription>
           </DrawerHeader>
           <DrawerFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Close from outside
-            </Button>
+            <Button onClick={() => setOpen(false)}>Close from outside</Button>
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -296,18 +287,18 @@ export const WithForm: Story = {
           <DrawerDescription>Make changes to your profile. Save when you are done.</DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="grid gap-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="drawer-name">Name</Label>
-            <Input id="drawer-name" defaultValue="John Doe" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="drawer-username">Username</Label>
-            <Input id="drawer-username" defaultValue="@johndoe" />
-          </div>
+          <Field className="gap-1.5">
+            <FieldLabel>Name</FieldLabel>
+            <Input defaultValue="John Doe" />
+          </Field>
+          <Field className="gap-1.5">
+            <FieldLabel>Username</FieldLabel>
+            <Input defaultValue="@johndoe" />
+          </Field>
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button>Cancel</Button>
           </DrawerClose>
           <DrawerClose asChild>
             <Button>Save changes</Button>
@@ -332,7 +323,7 @@ export const Nested: Story = {
         <DrawerBody>
           <Drawer>
             <DrawerTrigger asChild>
-              <Button variant="outline">Security settings</Button>
+              <Button>Security settings</Button>
             </DrawerTrigger>
             <DrawerContent>
               <DrawerHeader>
@@ -340,7 +331,7 @@ export const Nested: Story = {
                 <DrawerDescription>Review sign-in activity and update your preferences.</DrawerDescription>
               </DrawerHeader>
               <DrawerBody>
-                <ul className="text-ui-sm text-neutral4 list-disc pl-5">
+                <ul className="list-disc pl-5 text-caption text-muted-foreground">
                   <li>Passkeys enabled</li>
                   <li>2FA via authenticator app</li>
                   <li>3 signed-in devices</li>
@@ -348,16 +339,18 @@ export const Nested: Story = {
                 <div className="mt-4">
                   <Drawer>
                     <DrawerTrigger asChild>
-                      <Button variant="outline">Advanced options</Button>
+                      <Button>Advanced options</Button>
                     </DrawerTrigger>
                     <DrawerContent>
                       <DrawerHeader>
                         <DrawerTitle>Advanced</DrawerTitle>
                         <DrawerDescription>A third level to demonstrate deep nesting.</DrawerDescription>
                       </DrawerHeader>
-                      <DrawerBody className="grid gap-1.5">
-                        <Label htmlFor="drawer-device">Device name</Label>
-                        <Input id="drawer-device" defaultValue="Personal laptop" />
+                      <DrawerBody>
+                        <Field className="gap-1.5">
+                          <FieldLabel>Device name</FieldLabel>
+                          <Input defaultValue="Personal laptop" />
+                        </Field>
                       </DrawerBody>
                       <DrawerFooter>
                         <DrawerClose asChild>
@@ -370,7 +363,7 @@ export const Nested: Story = {
               </DrawerBody>
               <DrawerFooter>
                 <DrawerClose asChild>
-                  <Button variant="outline">Close</Button>
+                  <Button>Close</Button>
                 </DrawerClose>
               </DrawerFooter>
             </DrawerContent>
@@ -378,7 +371,7 @@ export const Nested: Story = {
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button>Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -401,12 +394,12 @@ export const SnapPoints: Story = {
         </DrawerHeader>
         <DrawerBody className="grid gap-3">
           {Array.from({ length: 16 }, (_, index) => (
-            <div key={index} className="bg-surface4 h-12 shrink-0 rounded-md" />
+            <div key={index} className="h-12 shrink-0 rounded-md bg-muted" />
           ))}
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button>Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -432,7 +425,7 @@ export const NonModal: Story = {
             </DrawerHeader>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
+                <Button>Close</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerPopup>
@@ -447,11 +440,14 @@ function SwipeToOpenExample() {
   const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
 
   return (
-    <div ref={setContainer} className="border-border1 bg-surface2 relative h-80 w-96 overflow-hidden rounded-xl border">
+    <div
+      ref={setContainer}
+      className="relative h-80 w-96 overflow-hidden rounded-xl border border-border bg-background"
+    >
       <Drawer side="right" modal={false}>
-        <DrawerSwipeArea className="border-border2 bg-surface4/40 absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed" />
+        <DrawerSwipeArea className="absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed border-border-strong bg-muted/40" />
         <div className="flex h-full items-center justify-center px-12 text-center">
-          <p className="text-ui-sm text-neutral3">Swipe from the right edge to open the drawer.</p>
+          <p className="text-caption text-muted-foreground">Swipe from the right edge to open the drawer.</p>
         </div>
         <DrawerPortal container={container}>
           <DrawerBackdrop className="absolute" />
@@ -463,7 +459,7 @@ function SwipeToOpenExample() {
               </DrawerHeader>
               <DrawerFooter>
                 <DrawerClose asChild>
-                  <Button variant="outline">Close</Button>
+                  <Button>Close</Button>
                 </DrawerClose>
               </DrawerFooter>
             </DrawerPopup>
@@ -505,10 +501,10 @@ function ActionSheetExample() {
             </Button>
           ))}
         </div>
-        <DrawerFooter className="border-border1 border-t">
+        <DrawerFooter className="border-t border-border">
           <Button
             variant="ghost"
-            className="text-negative1 w-full justify-center rounded-none"
+            className="w-full justify-center rounded-none text-destructive-foreground"
             onClick={() => setOpen(false)}
           >
             Block user
@@ -588,7 +584,7 @@ const profileDrawer = createDrawerHandle<ProfilePayload>();
 function DetachedTriggersExample() {
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-ui-sm text-neutral4">Triggers live outside the drawer and pass it a payload.</p>
+      <p className="text-caption text-muted-foreground">Triggers live outside the drawer and pass it a payload.</p>
       <div className="flex gap-2">
         <DrawerTrigger
           handle={profileDrawer}
@@ -602,7 +598,7 @@ function DetachedTriggersExample() {
           payload={{ title: 'Settings', description: 'Manage your workspace settings.' }}
           asChild
         >
-          <Button variant="outline">Settings</Button>
+          <Button>Settings</Button>
         </DrawerTrigger>
       </div>
       <Drawer side="right" handle={profileDrawer}>
@@ -614,7 +610,7 @@ function DetachedTriggersExample() {
             </DrawerHeader>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
+                <Button>Close</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerContent>

@@ -345,10 +345,94 @@ describe('WorkItemsStorage', () => {
     expect(adopted.item).toMatchObject({ id: legacy.item.id, claimKey: 'linear:issue:2' });
   });
 
+  it('mints a fresh binding when re-entered after the prior binding is revoked', async () => {
+    const storage = await makeStorage();
+    const start = (kickoffKey: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role: 'work',
+        session: { sessionId: `session-${kickoffKey}`, branch: 'factory/42', threadId: `thread-${kickoffKey}` },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+
+    const first = await start('kickoff-1');
+    expect(first.replayed).toBe(false);
+    expect(first.binding.status).toBe('active');
+
+    // Abort recovery: revoke the item's bindings, then re-enter with the same key.
+    await storage.revokeRunBindingsForWorkItem({
+      orgId: 'org1',
+      factoryProjectId: 'project1',
+      workItemId: first.item.id,
+      revokedAt: new Date(),
+    });
+
+    const second = await start('kickoff-1');
+    expect(second.replayed).toBe(false);
+    expect(second.binding.id).not.toBe(first.binding.id);
+    expect(second.binding.status).toBe('active');
+    expect(second.pendingStart.bindingId).toBe(second.binding.id);
+  });
+
+  it("revokes an earlier role's binding when a later role continues in its session", async () => {
+    const storage = await makeStorage();
+    const start = (role: string, threadId: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role,
+        session: { sessionId: 'session-shared', branch: 'factory/42', threadId },
+        resourceId: 'resource-1',
+        kickoffKey: `kickoff-${role}`,
+        kickoffMessage: null,
+      });
+
+    const plan = await start('plan', 'thread-plan');
+    const work = await start('work', 'thread-work');
+
+    const bindings = await storage.listRunBindings('org1', 'project1', work.item.id);
+    expect(bindings.find(binding => binding.id === plan.binding.id)?.status).toBe('revoked');
+    expect(bindings.find(binding => binding.id === work.binding.id)?.status).toBe('active');
+  });
+
+  it('replays the same binding when re-entered while it is still live', async () => {
+    const storage = await makeStorage();
+    const start = (kickoffKey: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role: 'work',
+        session: { sessionId: `session-${kickoffKey}`, branch: 'factory/42', threadId: `thread-${kickoffKey}` },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+
+    const first = await start('kickoff-1');
+    expect(first.replayed).toBe(false);
+
+    const second = await start('kickoff-1');
+    expect(second.replayed).toBe(true);
+    expect(second.binding.id).toBe(first.binding.id);
+  });
+
   it('purges replay state when a linked work item is deleted', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
-    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const created = await storage.upsert({
+      ...scope,
+      userId: 'u',
+      input: { ...input, externalSource: { ...input.externalSource, externalId: 'github-issue:42' } },
+    });
     const commit = () =>
       storage.commitRuleEvaluation({
         ...scope,
@@ -361,7 +445,8 @@ describe('WorkItemsStorage', () => {
         decisions: [
           {
             type: 'upsertLinkedWorkItem',
-            sourceKey: 'github:issue:42',
+            source: 'github-issue',
+            sourceKey: 'github-issue:42',
             idempotencyKey: 'decision-1',
             board: 'work',
             stage: 'triage',
@@ -372,12 +457,130 @@ describe('WorkItemsStorage', () => {
       });
 
     expect((await commit()).status).toBe('committed');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a claimable decision');
+    await storage.completeDeferredDecision(
+      { orgId: 'org1', factoryProjectId: 'p1', id: claimed.id, ownerId: 'worker-1' },
+      now,
+    );
+
+    // The card still exists, so the replayed ingress leaves the spent decision alone
+    // instead of re-leasing work that already happened.
     expect((await commit()).status).toBe('replayed');
+    const [spent] = await storage.listDeferredDecisions('org1', 'p1');
+    expect(spent).toMatchObject({ idempotencyKey: 'decision-1', status: 'succeeded' });
 
     await storage.delete({ orgId: 'org1', id: created.item.id });
 
     // Stale ingress no longer short-circuits, so nothing resurrects the deleted card.
     expect((await commit()).status).toBe('committed');
+  });
+
+  it('persists nothing for a stale rule evaluation, so the same delivery can commit at the fresh revision', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const commit = (expectedRevision: number) =>
+      storage.commitRuleEvaluation({
+        orgId: 'org1',
+        factoryProjectId: 'p1',
+        workItemId: created.item.id,
+        ingress: { identity: 'github:delivery-1', triggerType: 'github.issueComment' },
+        configVersion: 'v1',
+        expectedRevision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'transition', stage: 'done', idempotencyKey: 'decision-1' }] as never,
+        causalChain: [],
+        now: new Date(),
+      });
+
+    expect(await commit(created.item.revision - 1)).toEqual({ status: 'stale' });
+    expect(await storage.listDeferredDecisions('org1', 'p1')).toEqual([]);
+
+    const fresh = await commit(created.item.revision);
+    expect(fresh.status).toBe('committed');
+    expect(fresh.status === 'committed' && fresh.result).toMatchObject({ status: 'accepted' });
+    expect((await storage.listDeferredDecisions('org1', 'p1')).map(d => d.idempotencyKey)).toEqual(['decision-1']);
+
+    const other = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: { integrationId: 'github', type: 'issue', externalId: 'other-card' } },
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: 'p1',
+      workItemId: other.item.id,
+      ingress: { identity: 'github:delivery-2', triggerType: 'github.issueComment' },
+      configVersion: 'v1',
+      expectedRevision: other.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', stage: 'done', idempotencyKey: 'decision-2' }] as never,
+      causalChain: [],
+      now: new Date(),
+    });
+    const forCard = async (workItemId: string) =>
+      (await storage.listDeferredDecisions('org1', 'p1', { workItemId })).map(d => d.idempotencyKey);
+    expect(await forCard(created.item.id)).toEqual(['decision-1']);
+    expect(await forCard(other.item.id)).toEqual(['decision-2']);
+    expect(await forCard('some-other-card')).toEqual([]);
+  });
+
+  it('claims deferred decisions by payload filter, paging past any backlog of filtered-out rows', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const runDecisions = Array.from({ length: 700 }, (_, index) => ({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'triage',
+      idempotencyKey: `run-${index}`,
+    }));
+    const commitResult = await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: null,
+      ingress: { identity: 'github:issue:1:1', triggerType: 'issue.observed' },
+      configVersion: 'v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [...runDecisions, { type: 'transition', stage: 'done', idempotencyKey: 'bookkeeping-1' }] as never,
+      causalChain: [],
+      now: new Date(),
+    });
+    expect(commitResult.status).toBe('committed');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    const lease = { ownerId: 'worker-1', now, leaseExpiresAt: new Date(now.getTime() + 30_000) };
+
+    const bookkeeping = await storage.claimDeferredDecisions({
+      ...lease,
+      limit: 5,
+      decisionFilter: decision => decision.type !== 'invokeSkill',
+    });
+    expect(bookkeeping.map(d => d.idempotencyKey)).toEqual(['bookkeeping-1']);
+
+    const runs = await storage.claimDeferredDecisions({
+      ...lease,
+      limit: 3,
+      decisionFilter: decision => decision.type === 'invokeSkill',
+    });
+    expect(runs.map(d => d.decision.type)).toEqual(['invokeSkill', 'invokeSkill', 'invokeSkill']);
+
+    const all = await storage.listDeferredDecisions('org1', 'p1');
+    expect(all.filter(d => d.status === 'leased')).toHaveLength(4);
+    expect(all.filter(d => d.status === 'pending')).toHaveLength(697);
+
+    const leased = await storage.listDeferredDecisions('org1', 'p1', { statuses: ['leased'] });
+    expect(leased).toHaveLength(4);
+    expect(leased.every(d => d.status === 'leased')).toBe(true);
+    expect(await storage.listDeferredDecisions('org1', 'p1', { statuses: ['failed'] })).toEqual([]);
   });
 
   it('lists newest-first within the org/project scope and updates atomically', async () => {
@@ -831,6 +1034,108 @@ describe('WorkItemsStorage', () => {
     expect(opened.by).toBe('mover');
     expect(opened.exitedAt).toBeUndefined();
     expect(opened.exitedBy).toBeUndefined();
+  });
+});
+
+describe('work item subscriptions', () => {
+  const follow = (workItemId: string, sessionId: string, reason: 'created' | 'started' | 'subscribed') => ({
+    orgId: 'org1',
+    factoryProjectId: 'project1',
+    workItemId,
+    sessionId,
+    threadId: `${sessionId}-thread`,
+    resourceId: sessionId,
+    userId: 'user1',
+    reason,
+  });
+
+  async function seed() {
+    const storage = await makeStorage();
+    const { item } = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    const { item: other } = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, externalSource: { ...input.externalSource, externalId: '43' } },
+    });
+    return { storage, item, other };
+  }
+
+  it('is idempotent and keeps the earliest reason', async () => {
+    const { storage, item } = await seed();
+    const first = await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+    const again = await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'subscribed'));
+
+    expect(again).toEqual(first);
+    expect(first).toMatchObject({
+      workItemId: item.id,
+      sessionId: 'sess-a',
+      threadId: 'sess-a-thread',
+      reason: 'created',
+    });
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toHaveLength(1);
+  });
+
+  it("lists an item's subscribers and a session's subscriptions, scoped by org and Factory", async () => {
+    const { storage, item, other } = await seed();
+    // Distinct timestamps, so "earliest first" doesn't fall to the random-id tiebreak.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-14T10:00:00Z') });
+    try {
+      await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+      vi.setSystemTime(new Date('2026-10-14T10:00:01Z'));
+      await storage.subscribeToWorkItem(follow(item.id, 'sess-b', 'subscribed'));
+      vi.setSystemTime(new Date('2026-10-14T10:00:02Z'));
+      await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'started'));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const subscribers = await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id });
+    expect(subscribers.map(row => [row.sessionId, row.reason])).toEqual([
+      ['sess-a', 'created'],
+      ['sess-b', 'subscribed'],
+    ]);
+    const followed = await storage.listSessionSubscriptions({
+      orgId: 'org1',
+      factoryProjectId: 'project1',
+      sessionId: 'sess-a',
+    });
+    expect(followed.map(row => row.workItemId).sort()).toEqual([item.id, other.id].sort());
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org2', workItemId: item.id })).toEqual([]);
+    expect(
+      await storage.listSessionSubscriptions({ orgId: 'org1', factoryProjectId: 'project2', sessionId: 'sess-a' }),
+    ).toEqual([]);
+  });
+
+  it('unsubscribes one session from one item', async () => {
+    const { storage, item, other } = await seed();
+    await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'subscribed'));
+    await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'subscribed'));
+
+    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
+      true,
+    );
+    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
+      false,
+    );
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toEqual([]);
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: other.id })).toHaveLength(1);
+  });
+
+  it("removes an item's subscriptions when the item is deleted", async () => {
+    const { storage, item, other } = await seed();
+    await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+    await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'created'));
+
+    await storage.delete({ orgId: 'org1', id: item.id });
+
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toEqual([]);
+    const followed = await storage.listSessionSubscriptions({
+      orgId: 'org1',
+      factoryProjectId: 'project1',
+      sessionId: 'sess-a',
+    });
+    expect(followed.map(row => row.workItemId)).toEqual([other.id]);
   });
 });
 

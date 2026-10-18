@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
@@ -165,6 +166,19 @@ describe('GeminiLiveVoice', () => {
       // Verify we emitted a connecting event and transitioned to connected
       await expect(connectingEvent).resolves.toMatchObject({ state: 'connecting' });
       expect(voice.getConnectionState()).toBe('connected');
+    });
+
+    it('should connect API-key sessions to the v1beta Live endpoint', async () => {
+      vi.spyOn((voice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (voice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await voice.connect();
+
+      expect(currentWsUrl).toContain('generativelanguage.googleapis.com');
+      expect(currentWsUrl).toContain('v1beta.GenerativeService.BidiGenerateContent');
+      expect(currentWsUrl).not.toContain('v1alpha');
+
+      await voice.disconnect();
     });
 
     it('should handle connection errors', async () => {
@@ -1009,6 +1023,67 @@ describe('GeminiLiveVoice', () => {
       await expect(sessionPromise).resolves.toMatchObject({
         state: 'disconnected',
       });
+    });
+
+    it('should surface an abnormal WebSocket close as an error so connect() rejects quickly', async () => {
+      // Wire a real EventEmitter as the socket so the production close handler runs.
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const errors: any[] = [];
+      const sessions: any[] = [];
+      voice.on('error', event => errors.push(event));
+      voice.on('session', event => sessions.push(event));
+
+      // A server-side setup rejection (e.g. bad model id) arrives as a clean close, not a socket error.
+      fakeWs.emit('close', 1007, Buffer.from('invalid model id'));
+
+      expect(sessions).toContainEqual(
+        expect.objectContaining({ state: 'disconnected', code: 1007, reason: 'invalid model id' }),
+      );
+      expect(errors).toContainEqual(
+        expect.objectContaining({
+          code: 'websocket_closed',
+          details: { code: 1007, reason: 'invalid model id' },
+        }),
+      );
+    });
+
+    it('should not emit an error for a normal (1000) WebSocket close', async () => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const errors: any[] = [];
+      const sessions: any[] = [];
+      voice.on('error', event => errors.push(event));
+      voice.on('session', event => sessions.push(event));
+
+      fakeWs.emit('close', 1000, Buffer.from(''));
+
+      expect(sessions).toContainEqual(expect.objectContaining({ state: 'disconnected', code: 1000 }));
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should reject a pending waitForSessionCreated() on an abnormal close', async () => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const waitPromise = (voice as any).waitForSessionCreated() as Promise<void>;
+      fakeWs.emit('close', 1007, Buffer.from('invalid model id'));
+
+      await expect(waitPromise).rejects.toThrow(/invalid model id/);
     });
   });
 
@@ -2025,6 +2100,130 @@ describe('GeminiLiveVoice', () => {
 
         v.disconnect();
       });
+    });
+  });
+
+  describe('Server-initiated close cleanup', () => {
+    const audioFrame = () => ({
+      serverContent: {
+        modelTurn: {
+          parts: [{ inlineData: { mimeType: 'audio/pcm;rate=24000', data: Buffer.alloc(320).toString('base64') } }],
+        },
+      },
+    });
+
+    const wireConnected = (v: GeminiLiveVoice) => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (v as any).ws = fakeWs;
+      (v as any).connectionManager.setWebSocket(fakeWs);
+      (v as any).setupEventListeners();
+      (v as any).state = 'connected';
+      return fakeWs;
+    };
+
+    const startReply = async (v: GeminiLiveVoice) => {
+      let speaker: PassThrough | undefined;
+      v.on('speaker', s => {
+        speaker = s as PassThrough;
+      });
+      // The model starts answering: audio arrives, no turnComplete yet.
+      await (v as any).handleGeminiMessage(audioFrame());
+      expect(speaker).toBeDefined();
+      speaker!.resume(); // the consumer is reading, e.g. piping to playback
+      return speaker!;
+    };
+
+    const endsWithin = (stream: PassThrough, ms: number) =>
+      Promise.race([
+        new Promise<string>(resolve => {
+          stream.once('end', () => resolve('end'));
+          stream.once('close', () => resolve('close'));
+        }),
+        new Promise<string>(resolve => setTimeout(() => resolve('still open'), ms)),
+      ]);
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('ends the in-flight speaker stream when the server closes the socket mid-reply (1011)', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+      const fakeWs = wireConnected(v);
+      const sessionEvents: any[] = [];
+      const errors: any[] = [];
+      v.on('session', e => sessionEvents.push(e));
+      v.on('error', e => errors.push(e));
+      const speaker = await startReply(v);
+
+      fakeWs.emit('close', 1011, Buffer.from('Internal error encountered.'));
+
+      expect(await endsWithin(speaker, 500)).not.toBe('still open');
+      // Consumers still get the same close events as before.
+      expect(sessionEvents).toContainEqual({
+        state: 'disconnected',
+        code: 1011,
+        reason: 'Internal error encountered.',
+      });
+      expect(errors.map(e => e.code)).toContain('websocket_closed');
+    });
+
+    it('clears the maxDuration and sessionExpiring timers when the server closes the socket', async () => {
+      vi.useFakeTimers();
+      const v = new GeminiLiveVoice({ apiKey: 'k', sessionConfig: { maxDuration: '1h' } });
+      const fakeWs = wireConnected(v);
+      v.on('error', () => {});
+      const expiring = vi.fn();
+      v.on('sessionExpiring', expiring);
+      const disconnect = vi.spyOn(v, 'disconnect');
+
+      const baseline = vi.getTimerCount();
+      (v as any).startSessionDurationMonitor();
+      expect(vi.getTimerCount()).toBe(baseline + 2); // expiry + 5-minute warning
+
+      fakeWs.emit('close', 1011, Buffer.from('Internal error encountered.'));
+      await v.disconnect(); // the app's usual cleanup; returns early with "Already disconnected"
+
+      expect((v as any).sessionDurationTimeout).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(baseline);
+
+      // Nothing from the dead session fires later against whatever session is current.
+      disconnect.mockClear();
+      vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+      expect(expiring).not.toHaveBeenCalled();
+      expect(disconnect).not.toHaveBeenCalled();
+    });
+
+    it('disconnect() clears the sessionExpiring warning timer too', async () => {
+      vi.useFakeTimers();
+      const v = new GeminiLiveVoice({ apiKey: 'k', sessionConfig: { maxDuration: '1h' } });
+      wireConnected(v);
+      const expiring = vi.fn();
+      v.on('sessionExpiring', expiring);
+
+      const baseline = vi.getTimerCount();
+      (v as any).startSessionDurationMonitor();
+      await v.disconnect();
+
+      expect(vi.getTimerCount()).toBe(baseline);
+      vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+      expect(expiring).not.toHaveBeenCalled();
+    });
+
+    it('cleans up on a socket error even if no close event follows', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', sessionConfig: { maxDuration: '1h' } });
+      const fakeWs = wireConnected(v);
+      v.on('error', () => {});
+      (v as any).startSessionDurationMonitor();
+      const speaker = await startReply(v);
+
+      fakeWs.emit('error', new Error('read ECONNRESET'));
+
+      expect(await endsWithin(speaker, 500)).not.toBe('still open');
+      expect((v as any).sessionDurationTimeout).toBeUndefined();
+      expect((v as any).sessionExpiringTimeout).toBeUndefined();
     });
   });
 });

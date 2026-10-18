@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
@@ -27,12 +25,12 @@ import { parseFieldKey } from '@mastra/core/utils';
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
-import { recordDeletionRequest } from './deletion-requests';
+import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 
 // ============================================================================
@@ -90,6 +88,8 @@ function getAggregationSql(aggregation: AggregationType, measure = 'valueNumber'
       return `toFloat64(count(${measure}))`;
     case 'last':
       return `argMax(${measure}, timestamp)`;
+    case 'count_distinct':
+      return `toFloat64(uniq(${measure}))`;
     default:
       return `sum(${measure})`;
   }
@@ -158,13 +158,25 @@ function toSeriesName(values: unknown[]): string {
   return values.map(v => (v == null ? '' : String(v))).join('|');
 }
 
-async function queryJson<T>(client: ClickHouseClient, query: string, params: Record<string, unknown>): Promise<T[]> {
+/**
+ * Lets `FINAL` reads use skip indexes on older servers, where it defaults off.
+ * Only for lookups on a column shared by every version of a sort key (so a
+ * skipped granule can never hold a newer version of a matching row).
+ */
+const FINAL_SKIP_INDEX_SETTINGS = { use_skip_indexes_if_final: 1 } as const;
+
+async function queryJson<T>(
+  client: ClickHouseClient,
+  query: string,
+  params: Record<string, unknown>,
+  settings: Record<string, string | number> = {},
+): Promise<T[]> {
   return (await (
     await client.query({
       query,
       query_params: params,
       format: 'JSONEachRow',
-      clickhouse_settings: CH_SETTINGS,
+      clickhouse_settings: { ...CH_SETTINGS, ...settings },
     })
   ).json()) as T[];
 }
@@ -223,9 +235,13 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * `organizationId` and `resourceId` values are ANDed into the predicate to
  * restrict deletion to records with matching scope fields.
  *
- * A durable deletion request is recorded before the lightweight delete. The
- * delete is immediately visible to subsequent reads; physical purge depends on
- * the table's configured retention TTL. The delta table is intentionally not
+ * A durable deletion request is recorded before the lightweight delete and
+ * marked applied once the delete succeeds. If the delete fails, the request
+ * stays unapplied and does not block updates to the still-visible rows; retry
+ * by calling this function again.
+ *
+ * The delete is immediately visible to subsequent reads; physical purge depends
+ * on the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
  */
 export async function deleteFeedback(
@@ -235,8 +251,8 @@ export async function deleteFeedback(
 ): Promise<void> {
   if (args.feedbackIds.length === 0) return;
 
-  await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+  const request = await recordDeletionRequest(client, {
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'feedback',
@@ -269,6 +285,8 @@ export async function deleteFeedback(
     query_params: params,
     clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
   });
+
+  await markDeletionRequestApplied(client, request, replication);
 }
 
 // ============================================================================
@@ -285,26 +303,47 @@ function feedbackNotFoundError(feedbackId: string): MastraError {
   });
 }
 
+/**
+ * Finds a deletion request covering this feedback. With `appliedOnly`, only
+ * requests whose DELETE succeeded count; otherwise pending requests count too,
+ * including a delete that is still running or one that failed.
+ */
 async function hasFeedbackDeletionRequest(
   client: ClickHouseClient,
   feedbackId: string,
   organizationId: string | null,
   resourceId: string | null,
+  { appliedOnly }: { appliedOnly: boolean },
 ): Promise<boolean> {
   const rows = await queryJson<{ found: number }>(
     client,
     `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
      WHERE signal = 'feedback'
        AND predicateType = 'itemIds'
-       AND has(predicateValues, {feedbackId:String})
+       AND has(predicateValues, {feedbackId:String})${appliedOnly ? '\n       AND lastAppliedAt > toDateTime64(0, 3)' : ''}
        AND (organizationId = '' OR organizationId = {organizationId:String})
        AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,
     { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
+    FINAL_SKIP_INDEX_SETTINGS,
   );
   return rows.length > 0;
 }
 
+/**
+ * Review updates insert a replacement row, so they need only `INSERT` and the
+ * insert materialized view publishes the delta cursor.
+ *
+ * A replacement written after a concurrent DELETE is not covered by that
+ * DELETE. The post-write check therefore looks for any request, pending or
+ * applied, and re-runs the delete when it finds one. Only applied requests
+ * block the update up front, so feedback whose delete failed stays editable.
+ *
+ * If the post-write check reads a replica that has not received the request
+ * yet, or the check or its delete fails, the replacement stays visible. A row
+ * that is still visible under an applied request can only be such a leftover,
+ * so the next update deletes it again.
+ */
 export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
   args: UpdateFeedbackReviewStatusArgs,
@@ -319,32 +358,38 @@ export async function updateFeedbackReviewStatus(
      ORDER BY writeVersion DESC, timestamp DESC
      LIMIT 1`,
     { feedbackId },
+    FINAL_SKIP_INDEX_SETTINGS,
   );
   const existingRow = existing[0];
   if (!existingRow) {
     throw feedbackNotFoundError(feedbackId);
   }
-
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+  const { organizationId, resourceId } = existingRow;
+  const redelete = async (): Promise<never> => {
+    await deleteFeedback(
+      client,
+      {
+        feedbackIds: [feedbackId],
+        organizationId: organizationId ?? undefined,
+        resourceId: resourceId ?? undefined,
+      },
+      replication,
+    );
     throw feedbackNotFoundError(feedbackId);
+  };
+
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: true })) {
+    return redelete();
   }
 
   const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
   await batchCreateFeedback(client, { feedbacks: [updated] });
 
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
-    await deleteFeedback(
-      client,
-      {
-        feedbackIds: [feedbackId],
-        organizationId: existingRow.organizationId ?? undefined,
-        resourceId: existingRow.resourceId ?? undefined,
-      },
-      replication,
-    );
-    throw feedbackNotFoundError(feedbackId);
+  // A pending request is either a delete that failed or one still running.
+  // They look the same here, so re-run the delete in both cases.
+  if (await hasFeedbackDeletionRequest(client, feedbackId, organizationId, resourceId, { appliedOnly: false })) {
+    return redelete();
   }
-
   return updated;
 }
 
@@ -430,6 +475,11 @@ async function queryFeedbackAfterCursor(
   limit: number,
   cursorId: string,
 ): Promise<FeedbackDeltaRow[]> {
+  // feedback_events drives the scan and is narrowed to the delta rows before
+  // FINAL merges; only the small delta slice is built into the hash table.
+  // traceId is Nullable, so the key filter uses (timestamp, feedbackId) —
+  // tuple IN never matches NULL — and the join matches traceId NULL-safely.
+  const deltaKeys = `SELECT timestamp, feedbackId FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64}`;
   return await queryJson<FeedbackDeltaRow>(
     client,
     `
@@ -439,12 +489,20 @@ async function queryFeedbackAfterCursor(
         f.timestamp AS timestamp,
         f.feedbackId AS feedbackId,
         toString(d.cursorId) AS cursorId
-      FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
-        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
+      FROM ${TABLE_FEEDBACK_EVENTS} f FINAL
+      INNER JOIN (
+        SELECT cursorId, traceId, timestamp, feedbackId
+        FROM ${TABLE_FEEDBACK_EVENTS_DELTA}
+        WHERE cursorId > {afterCursor:UInt64}
+      ) d
+        ON isNotDistinctFrom(f.traceId, d.traceId)
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
-      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ${appendWhere(
+        whereClause,
+        `f.timestamp >= (SELECT min(timestamp) FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})`,
+        `(f.timestamp, f.feedbackId) IN (${deltaKeys})`,
+      )}
       ORDER BY d.cursorId ASC
       LIMIT {fetchLimit:UInt32}
     `,
@@ -452,21 +510,28 @@ async function queryFeedbackAfterCursor(
   );
 }
 
+/**
+ * Newest delta cursor whose feedback matches the filters. Without filters
+ * this is the stream head; with filters, the feedback scan is bounded below by
+ * the oldest `timestamp` still in the delta table.
+ */
 async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
 ): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
   const rows = await queryJson<{ cursorId?: string | null }>(
     client,
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
-        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
-       AND f.timestamp = d.timestamp
-       AND f.feedbackId = d.feedbackId
-      ${whereClause}
+      WHERE (d.timestamp, d.feedbackId) IN (
+        SELECT f.timestamp, f.feedbackId
+        FROM ${TABLE_FEEDBACK_EVENTS} f FINAL
+        ${appendWhere(whereClause, `f.timestamp >= (SELECT min(timestamp) FROM ${TABLE_FEEDBACK_EVENTS_DELTA})`)}
+      )
     `,
     params,
   );
@@ -476,13 +541,7 @@ async function getDeltaCursor(
     return cursorId;
   }
 
-  const streamRows = await queryJson<{ cursorId?: string | null }>(
-    client,
-    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_FEEDBACK_EVENTS_DELTA}`,
-    {},
-  );
-
-  return streamRows[0]?.cursorId ?? '0';
+  return getStreamHeadCursor(client);
 }
 
 async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
@@ -671,29 +730,30 @@ export async function getFeedbackPercentiles(
     throw new Error('Percentiles must include at least one value between 0 and 1.');
   }
 
-  const series = [];
   for (const p of args.percentiles) {
     if (!Number.isFinite(p) || p < 0 || p > 1) {
       throw new Error(`Percentile value must be a finite number between 0 and 1, got ${p}`);
     }
-    const sql = `
-      SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
-             quantile(${p})(valueNumber) AS pvalue
-      FROM ${TABLE_FEEDBACK_EVENTS} FINAL
-      ${whereClause}
-      GROUP BY bucket
-      ORDER BY bucket
-    `;
-    const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
-
-    series.push({
-      percentile: p,
-      points: rows.map(row => ({
-        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
-        value: Number(row.pvalue ?? 0),
-      })),
-    });
   }
+
+  // One scan for every requested level instead of one query per percentile.
+  const sql = `
+    SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
+           quantiles(${args.percentiles.join(', ')})(valueNumber) AS pvalues
+    FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+    ${whereClause}
+    GROUP BY bucket
+    ORDER BY bucket
+  `;
+  const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+
+  const series = args.percentiles.map((percentile, index) => ({
+    percentile,
+    points: rows.map(row => ({
+      timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+      value: Number((row.pvalues as unknown[] | undefined)?.[index] ?? 0),
+    })),
+  }));
 
   return { series };
 }

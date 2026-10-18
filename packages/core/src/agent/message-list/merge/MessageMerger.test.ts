@@ -53,6 +53,28 @@ describe('MessageMerger insertion positions', () => {
     expectParts(merge([step, tool('c1')], [tool('c1', true), ...reasoning]), [step, tool('c1', true), ...reasoning]);
   });
 
+  it('inserts a step-start when a new step opens with a tool call', () => {
+    expectParts(merge([step, tool('c1', true)], [tool('c2')]), [step, tool('c1', true), step, tool('c2')]);
+  });
+
+  it('keeps parallel tool calls of one step together', () => {
+    expectParts(merge([step, tool('c1', true)], [tool('c2'), tool('c3')]), [
+      step,
+      tool('c1', true),
+      step,
+      tool('c2'),
+      tool('c3'),
+    ]);
+  });
+
+  it('does not duplicate an explicit step-start before an opening tool call', () => {
+    expectParts(merge([step, tool('c1', true)], [step, tool('c2')]), [step, tool('c1', true), step, tool('c2')]);
+  });
+
+  it('does not start a new step for the result of an existing call', () => {
+    expectParts(merge([step, tool('c1')], [tool('c1', true)]), [step, tool('c1', true)]);
+  });
+
   it('preserves explicit incoming step-starts', () => {
     expectParts(merge([tool('c1')], [tool('c1', true), step, text('A'), text('B')]), [
       tool('c1', true),
@@ -162,5 +184,24 @@ describe('MessageMerger insertion positions', () => {
       text(`${i}-B`),
     ]);
     expectParts(merge([step, ...calls], incoming), [step, ...expected]);
+  });
+});
+
+describe('MessageMerger tool updatedAt', () => {
+  it('stamps updatedAt on the tool part when its state changes, keeping createdAt', () => {
+    const list = merge([step, { ...tool('c1'), createdAt: 1 } as Part], [tool('c1', true)]);
+    const part = list.get.all.db()[0]!.content.parts[1] as Part & { createdAt?: number; updatedAt?: number };
+    expect(part.createdAt).toBe(1);
+    expect(part.updatedAt).toBeGreaterThan(1);
+  });
+
+  it('keeps an incoming updatedAt instead of restamping', () => {
+    const list = merge([step, tool('c1')], [{ ...tool('c1', true), updatedAt: 42 } as Part]);
+    expect((list.get.all.db()[0]!.content.parts[1] as { updatedAt?: number }).updatedAt).toBe(42);
+  });
+
+  it('keeps the stamp when a merge repeats the same tool state', () => {
+    const list = merge([step, { ...tool('c1', true), updatedAt: 7 } as Part], [tool('c1', true)]);
+    expect((list.get.all.db()[0]!.content.parts[1] as { updatedAt?: number }).updatedAt).toBe(7);
   });
 });

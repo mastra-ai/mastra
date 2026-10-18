@@ -39,16 +39,18 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
           <DialogDescription>View the metadata of the agent's network choice.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody>
           <div className="space-y-2">
-            <Txt className="text-neutral3">Selection Reason</Txt>
-            <div className="text-ui-md text-neutral6">{selectionReason}</div>
+            <Txt tone="muted">Selection Reason</Txt>
+            <Txt as="p" variant="body" tone="ink">
+              {selectionReason}
+            </Txt>
           </div>
 
           {inputSlot && (
             <div className="space-y-2">
-              <Txt className="text-neutral3">Input</Txt>
-              <div className="text-ui-md text-neutral6">{inputSlot}</div>
+              <Txt tone="muted">Input</Txt>
+              {inputSlot}
             </div>
           )}
         </DialogBody>
@@ -70,7 +72,7 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   return (
     <>
       <Button variant="default" size="icon-md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
-        <Share2 className="text-neutral3 size-5" />
+        <Share2 className="size-5 text-muted-foreground" />
       </Button>
 
       <NetworkChoiceMetadata

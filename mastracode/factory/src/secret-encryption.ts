@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv } from 'node:crypto';
 
 const ENVELOPE_PREFIX = 'mastra:factory-secret:v1:';
 const ALGORITHM = 'aes-256-gcm';
@@ -76,7 +76,7 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
 
   return {
     async encrypt<T>(value: T): Promise<string> {
-      const iv = randomBytes(IV_BYTES);
+      const iv = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(IV_BYTES)));
       const cipher = createCipheriv(ALGORITHM, primaryKey, iv);
       const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
       const envelope: SecretEnvelopeV1 = {
@@ -89,8 +89,18 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
     },
 
     async decrypt<T>(value: unknown): Promise<DecryptedFactorySecret<T>> {
-      if (typeof value !== 'string' || !value.startsWith(ENVELOPE_PREFIX)) {
+      if (typeof value !== 'string') {
         return { value: structuredClone(value) as T, needsReencryption: true };
+      }
+      if (!value.startsWith(ENVELOPE_PREFIX)) {
+        // JSON text written by the plaintext encryptor, or a raw pre-encryption
+        // secret string. Decode it the same way the plaintext encryptor does so
+        // migration encrypts the original value, not its JSON text.
+        try {
+          return { value: JSON.parse(value) as T, needsReencryption: true };
+        } catch {
+          return { value: value as T, needsReencryption: true };
+        }
       }
 
       const envelope = parseEnvelope(value);

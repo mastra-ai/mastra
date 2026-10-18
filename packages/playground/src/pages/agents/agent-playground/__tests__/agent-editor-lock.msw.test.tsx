@@ -10,8 +10,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import AgentPlayground from '..';
 import { AGENT_ID, makeCodeAgent, versionsList } from './fixtures/agent-editor-lock';
-import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -26,13 +24,9 @@ const renderAgentPlayground = () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/editor`]}>
           <TooltipProvider>
-            <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>
-                <Routes>
-                  <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
-                </Routes>
-              </SchemaRequestContextProvider>
-            </TracingSettingsProvider>
+            <Routes>
+              <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
+            </Routes>
           </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>

@@ -5,6 +5,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 import type { Workspace } from '@mastra/core/workspace';
 
+import { REVIEW_ONLY_FACTORY_SKILLS, rescanFactorySkills } from '../workspace.js';
+
 export interface SkillInvocationInput {
   resourceId: string;
   scope?: string;
@@ -43,6 +45,21 @@ export class SkillInvocationError extends Error {
   }
 }
 
+async function findSkill(session: SkillSession, name: string) {
+  const skills = session.getWorkspace().skills;
+  if (!skills) return undefined;
+  await skills.maybeRefresh();
+  const skill = await skills.get(name);
+  if (skill || !REVIEW_ONLY_FACTORY_SKILLS.has(name)) return skill;
+  // The cache may predate the review binding this run was just given.
+  try {
+    await rescanFactorySkills(skills);
+  } catch {
+    return undefined;
+  }
+  return skills.get(name);
+}
+
 function escapeSkillBoundary(value: string): string {
   return value.replaceAll('</skill>', '&lt;/skill&gt;');
 }
@@ -64,15 +81,45 @@ export async function resolveSkillInvocation(
   const session = (await controller.getSessionByResource(input.resourceId, input.scope)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
 
-  const skills = session.getWorkspace().skills;
-  await skills?.maybeRefresh();
-  const skill = await skills?.get(input.name);
+  const skill = await findSkill(session, input.name);
   if (!skill || skill['user-invocable'] === false) {
     throw new SkillInvocationError('skill_not_found', `Skill not found: ${input.name}.`);
   }
 
   const args = input.arguments?.trim();
   const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
+  return {
+    session,
+    skillName: skill.name,
+    message: `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`,
+  };
+}
+
+/**
+ * Same-stage re-entry: the skill is already active in the card's live session.
+ * Resolve a compact continuation that references the skill by name and carries
+ * only the fresh arguments, instead of re-pasting the whole skill document. If
+ * the skill body was compacted out of context, the agent can re-open it with the
+ * skill tool.
+ */
+export async function resolveSkillResumeInvocation(
+  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
+  input: SkillInvocationInput,
+): Promise<{ session: SkillSession; skillName: string; message: string }> {
+  const session = (await controller.getSessionByResource(input.resourceId, input.scope)) as SkillSession | undefined;
+  if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
+
+  const skill = await findSkill(session, input.name);
+  if (!skill || skill['user-invocable'] === false) {
+    throw new SkillInvocationError('skill_not_found', `Skill not found: ${input.name}.`);
+  }
+
+  const args = input.arguments?.trim();
+  const content = [
+    `Resume the active ${skill.name} session — it is already open in this thread; continue it rather than restarting.`,
+    `Re-open the ${skill.name} skill with the skill tool if its instructions are no longer in context.`,
+    ...(args ? [`ARGUMENTS: ${args}`] : []),
+  ].join('\n');
   return {
     session,
     skillName: skill.name,

@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getConnectionContext, getCredential, listProjectConnections, proxyRequest, resolveClient } from '../client.js';
+import {
+  getConnectionContext,
+  getCredential,
+  listIntegrations,
+  listProjectConnections,
+  proxyRequest,
+  proxyRequestWithResponse,
+  resolveClient,
+} from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 const TOKEN = 'fake-test-token';
@@ -94,6 +102,18 @@ describe('resolveClient', () => {
     vi.stubEnv('MASTRA_ORG_ID', 'org_env');
     expect(resolveClient({ accessToken: TOKEN }).headers['x-organization-id']).toBe('org_env');
   });
+
+  it('omits x-mastra-project-id unless configured', () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    const client = resolveClient({ accessToken: TOKEN });
+    expect(client.headers['x-mastra-project-id']).toBeUndefined();
+  });
+
+  it('sends x-mastra-project-id from the option or MASTRA_PROJECT_ID', () => {
+    expect(resolveClient({ accessToken: TOKEN, projectId: 'proj_1' }).headers['x-mastra-project-id']).toBe('proj_1');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    expect(resolveClient({ accessToken: TOKEN }).headers['x-mastra-project-id']).toBe('proj_env');
+  });
 });
 
 describe('listProjectConnections', () => {
@@ -160,6 +180,36 @@ describe('listProjectConnections', () => {
       expect((error as Error).message).not.toContain(TOKEN);
       expect((error as Error).message).toContain('[REDACTED]');
     }
+  });
+});
+
+describe('listIntegrations', () => {
+  it('returns the MCP capability from the public catalog', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        integrations: [
+          {
+            id: 'catalog-mcp',
+            provider: 'generic',
+            displayName: 'Catalog MCP',
+            logoUrl: null,
+            authType: 'MCP_OAUTH2_GENERIC',
+            capabilities: { proxy: true, webhooks: false, mcp: true },
+          },
+        ],
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(listIntegrations(client)).resolves.toEqual([{ id: 'catalog-mcp', capabilities: { mcp: true } }]);
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/integrations');
+  });
+
+  it('rejects a malformed integration catalog', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ integrations: [{ id: 'broken' }] }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(listIntegrations(client)).rejects.toMatchObject({ code: 'platform_error' });
   });
 });
 
@@ -277,6 +327,24 @@ describe('proxyRequest', () => {
     expect(JSON.parse(init.body)).toEqual({ query: '{ viewer { id } }' });
   });
 
+  it('drops caller-supplied authorization headers so the platform bearer is never corrupted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await proxyRequest(client, 'c_1', {
+      method: 'GET',
+      path: 'api/v10/users/@me/guilds',
+      // Mixed casing: a tool-set `Authorization` would otherwise survive the
+      // spread alongside the client's lowercase `authorization` and the two
+      // would be joined into one invalid header value.
+      headers: { Authorization: 'Bot tool-token', 'Proxy-Authorization': 'Basic x', 'x-custom': 'v1' },
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    const sent = new Headers(init.headers);
+    expect(sent.get('authorization')).toBe(`Bearer ${client.accessToken}`);
+    expect(sent.get('proxy-authorization')).toBeNull();
+    expect(sent.get('x-custom')).toBe('v1');
+  });
+
   it('rejects baseUrlOverride values that are not safe HTTPS URLs before sending the request', async () => {
     const fetchMock = vi.fn();
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -296,6 +364,22 @@ describe('proxyRequest', () => {
       });
     }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends a pre-encoded string body unchanged with the caller content type', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    const multipart = '--b\r\nContent-Disposition: form-data; name="file"\r\n\r\nemail\r\n--b--\r\n';
+    await proxyRequest(client, 'c_1', {
+      method: 'POST',
+      path: 'contacts/imports',
+      headers: { 'Content-Type': 'multipart/form-data; boundary=b' },
+      body: multipart,
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.body).toBe(multipart);
+    expect(init.headers['Content-Type']).toBe('multipart/form-data; boundary=b');
+    expect(init.headers['content-type']).toBeUndefined();
   });
 
   it('keeps a provider 404 as proxy_error (never connection_not_found)', async () => {
@@ -348,6 +432,23 @@ describe('proxyRequest', () => {
     });
   });
 
+  it('surfaces the nested error.message from an OpenAI-style provider error', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: { message: 'No such batch: batch_abc123', type: 'invalid_request_error', param: null, code: null } },
+          { status: 404 },
+        ),
+      );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'batches/batch_abc123' })).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 404,
+      message: 'Provider request failed (404): No such batch: batch_abc123',
+    });
+  });
+
   it('keeps a provider 401 as proxy_error', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'expired token' }, { status: 401 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -380,12 +481,43 @@ describe('proxyRequest', () => {
     }
   });
 
-  it('returns parsed JSON on 2xx and null on empty bodies', async () => {
+  it('returns parsed JSON with the relayed status on 2xx and null data on empty bodies', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: 1 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'x' })).resolves.toEqual({ data: 1 });
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'GET', path: 'x' })).resolves.toMatchObject({
+      data: { data: 1 },
+      status: 200,
+    });
+
+    fetchMock.mockResolvedValue(Response.json({ statementHandle: 'h-1' }, { status: 202 }));
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'POST', path: 'x' })).resolves.toMatchObject({
+      data: { statementHandle: 'h-1' },
+      status: 202,
+    });
 
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
-    await expect(proxyRequest(client, 'c_1', { method: 'DELETE', path: 'x' })).resolves.toBeNull();
+    await expect(proxyRequestWithResponse(client, 'c_1', { method: 'DELETE', path: 'x' })).resolves.toMatchObject({
+      data: null,
+      status: 204,
+    });
+  });
+
+  it('returns the raw ArrayBuffer body without parsing when responseType is arraybuffer', async () => {
+    const binary = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG magic bytes
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(binary, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    const response = await proxyRequestWithResponse(client, 'c_1', {
+      method: 'GET',
+      path: 'files/x',
+      responseType: 'arraybuffer',
+    });
+    expect(response.status).toBe(200);
+    expect(response.data).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(binary);
   });
 });

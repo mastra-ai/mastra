@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -15,6 +16,12 @@ function createMessage(content: any) {
     createdAt: new Date(),
     content,
   } as any;
+}
+
+function getCachedEstimateByKind(part: any, kind: string) {
+  const cache = part.providerMetadata.mastra.tokenEstimate;
+  const entries = cache.key ? [cache] : Object.values(cache);
+  return entries.filter((entry: any) => entry.key.includes(kind)).at(-1);
 }
 
 const TOOL_NAME = 'findUserTool';
@@ -113,6 +120,79 @@ describe('TokenCounter', () => {
       counter.countMessage(message);
 
       expect(message.content.parts[0].providerMetadata.mastra.tokenEstimate.source).toContain('tokenx');
+    });
+  });
+
+  describe('runWithModelContext', () => {
+    it('reuses one AsyncLocalStorage across instances so per-request counters do not register new ones', async () => {
+      const runSpy = vi.spyOn(AsyncLocalStorage.prototype, 'run');
+      try {
+        for (let i = 0; i < 25; i++) {
+          await new TokenCounter().runWithModelContext('openai/gpt-4o', async () => {});
+        }
+
+        expect(runSpy).toHaveBeenCalledTimes(25);
+        expect(new Set(runSpy.mock.contexts).size).toBe(1);
+      } finally {
+        runSpy.mockRestore();
+      }
+    });
+
+    it('scopes model context per instance across awaits and nesting', async () => {
+      const a = new TokenCounter({ model: 'anthropic/claude-sonnet-4-5' });
+      const b = new TokenCounter();
+      const contextOf = (counter: TokenCounter) => counter['getModelContext']();
+
+      await a.runWithModelContext('openai/gpt-4o', async () => {
+        await Promise.resolve();
+        expect(contextOf(a)).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+        expect(contextOf(b)).toBeUndefined();
+
+        await b.runWithModelContext({ provider: 'google', modelId: 'gemini-2.5-flash' }, async () => {
+          await Promise.resolve();
+          expect(contextOf(a)).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+          expect(contextOf(b)).toEqual({ provider: 'google', modelId: 'gemini-2.5-flash' });
+        });
+
+        expect(contextOf(b)).toBeUndefined();
+      });
+
+      expect(contextOf(a)).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-4-5' });
+    });
+
+    it('isolates concurrent runs on shared and per-request counters', async () => {
+      const shared = new TokenCounter();
+      const contextOf = (counter: TokenCounter) => counter['getModelContext']();
+      const models = ['openai/gpt-4o', 'anthropic/claude-sonnet-4-5', 'google/gemini-2.5-flash'];
+      const tick = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      const runs = Array.from({ length: 30 }, async (_, i) => {
+        const [provider, modelId] = models[i % models.length]!.split('/');
+        const perRequest = new TokenCounter();
+        const sharedSeen: unknown[] = [];
+        const perRequestSeen: unknown[] = [];
+
+        await Promise.all([
+          shared.runWithModelContext({ provider, modelId }, async () => {
+            for (let step = 0; step < 3; step++) {
+              await tick((i * 7 + step * 3) % 5);
+              sharedSeen.push(contextOf(shared));
+            }
+          }),
+          perRequest.runWithModelContext({ provider, modelId }, async () => {
+            await tick(i % 4);
+            perRequestSeen.push(contextOf(perRequest), contextOf(shared));
+          }),
+        ]);
+
+        return { expected: { provider, modelId }, sharedSeen, perRequestSeen };
+      });
+
+      for (const { expected, sharedSeen, perRequestSeen } of await Promise.all(runs)) {
+        expect(sharedSeen).toEqual([expected, expected, expected]);
+        // Sibling scopes don't leak into each other: the shared counter is unset inside perRequest's scope.
+        expect(perRequestSeen).toEqual([expected, undefined]);
+      }
     });
   });
 
@@ -979,6 +1059,7 @@ describe('TokenCounter', () => {
           state: 'result',
           toolCallId: 'tool-1',
           toolName: 'lookup',
+          args: { q: 'weather in sf' },
           result: { answer: 'sunny' },
         },
       });
@@ -1040,6 +1121,23 @@ describe('TokenCounter', () => {
       expect(modelOutputTokens).toBeLessThan(rawResultTokens);
     });
 
+    it('counts the raw tool result when stored mastra.modelOutput is null', () => {
+      const counter = new TokenCounter();
+      const result = { longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}`) };
+      const toolPart = {
+        type: 'tool-invocation' as const,
+        toolInvocation: { state: 'result' as const, toolCallId: 'tool-1', toolName: 'bg', args: {}, result },
+      };
+
+      const withoutMetadata = createMessage({ format: 2, parts: [toolPart] });
+      const withNullModelOutput = createMessage({
+        format: 2,
+        parts: [{ ...toolPart, providerMetadata: { mastra: { modelOutput: null } } }],
+      });
+
+      expect(counter.countMessage(withNullModelOutput)).toBe(counter.countMessage(withoutMetadata));
+    });
+
     it('counts stored multimodal tool modelOutput as media instead of base64 JSON text', () => {
       const counter = new TokenCounter();
       const modelOutput = {
@@ -1068,7 +1166,7 @@ describe('TokenCounter', () => {
       });
 
       const tokens = counter.countMessage(message);
-      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const estimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-multimodal-content');
 
       expect(tokens).toBeLessThan(2_000);
       expect(estimate.key).toContain('tool-result-multimodal-content');
@@ -1168,7 +1266,7 @@ describe('TokenCounter', () => {
 
       const tokens = counter.countMessage(message);
       const tokensWithoutMalformed = counter.countMessage(messageWithoutMalformed);
-      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const estimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-multimodal-content');
 
       expect(tokens).toBeGreaterThan(tokensWithoutMalformed);
       expect(tokens).toBeLessThan(2_000);
@@ -1231,7 +1329,7 @@ describe('TokenCounter', () => {
 
       const estimatedTokens = counter.countMessage(withClientEstimates);
       const fallbackTokens = counter.countMessage(withoutClientEstimates);
-      const estimate = withClientEstimates.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const estimate = getCachedEstimateByKind(withClientEstimates.content.parts[0], 'tool-result-multimodal-content');
 
       expect(estimatedTokens).toBeGreaterThanOrEqual(12_000);
       expect(estimatedTokens).toBeGreaterThan(fallbackTokens);
@@ -1262,7 +1360,7 @@ describe('TokenCounter', () => {
       });
 
       const first = counter.countMessage(message);
-      const firstEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const firstEstimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-model-output-json');
 
       message.content.parts[0].providerMetadata.mastra.modelOutput = {
         type: 'text',
@@ -1270,7 +1368,7 @@ describe('TokenCounter', () => {
       };
 
       const second = counter.countMessage(message);
-      const secondEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const secondEstimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-model-output-json');
 
       expect(second).toBeGreaterThan(first);
       expect(secondEstimate.key).not.toBe(firstEstimate.key);
@@ -1298,7 +1396,7 @@ describe('TokenCounter', () => {
       });
 
       const tokens = counter.countMessage(message);
-      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      const estimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-json');
 
       expect(tokens).toBeGreaterThan(0);
       expect(estimate?.key).toContain('tool-result-json');
@@ -1323,7 +1421,7 @@ describe('TokenCounter', () => {
       const message = createDeniedMessage({ id: 'tool-1', approved: false, reason });
 
       const tokens = counter.countMessage(message);
-      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      const estimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-denied');
 
       expect(tokens).toBeGreaterThan(0);
       expect(estimate?.key).toContain('tool-result-denied');
@@ -1335,7 +1433,7 @@ describe('TokenCounter', () => {
       const message = createDeniedMessage({ id: 'tool-1', approved: false });
 
       const tokens = counter.countMessage(message);
-      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      const estimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-denied');
 
       expect(tokens).toBeGreaterThan(0);
       expect(estimate?.key).toContain('tool-result-denied');
@@ -1347,7 +1445,7 @@ describe('TokenCounter', () => {
       const message = createDeniedMessage();
 
       expect(() => counter.countMessage(message)).not.toThrow();
-      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      const estimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-denied');
       expect(estimate?.key).toContain('tool-result-denied');
       expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
     });
@@ -1365,7 +1463,7 @@ describe('TokenCounter', () => {
 
       await expect(counter.countMessagesAsync([message])).resolves.toBeGreaterThan(0);
       expect(counter.countMessage(message)).toBeGreaterThan(0);
-      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      const estimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-error');
       expect(estimate?.key).toContain('tool-result-error');
       expect(estimate?.tokens).toBe(counter.countString(errorText));
     });

@@ -1,0 +1,1367 @@
+{
+  "kind": "support-eval-initial-reference",
+  "runner": "deterministic-native-observed-runtime-v4",
+  "executionMode": "deterministic-scripted-transport-no-paid-routes",
+  "implementationSha": "d3b4cf983e3e6ce5d66affb2fc3a0c514ffde130",
+  "runnerSourceHash": "15ddffa07c2d8ee19cf4bc9d949f08c4a09ab95154f0f5db5c29ec99db07f221",
+  "scorerSourceHashes": {
+    "test/eval/support/dataset-scorers.ts": "eeffbf5bbec9d7531614dbc8791f4c379c7b13fce46278e749241e6041a4b1c0",
+    "test/eval/support/deterministic-semantics.js": "cc9ca5ed874c69768e8db2392020d04fb83168f571cd24332c02e6131f8bba2a"
+  },
+  "datasetHashes": {
+    "groundedness.v1.json": "204385f1588c7846c631afd6233400950a632cb0f285d21562e564249d6d1dfc",
+    "multi-turn-consistency.v1.json": "86c5596cf15c60930c16a66c17ddc4bcf2d79ff06537e17d6e3a309a1ebdc39d",
+    "policy-compliance.v1.json": "7dfa73c8584ff10cfe23ec76802c78d6b2abe0db00aaf4b6a094ddb5ab8ce6bc",
+    "resolution-quality.v1.json": "8299803e1b591bdaa0661c18c93af3dc73b393bee5f2ad0e413488b5dbe7db66",
+    "routing-accuracy.v1.json": "27badec5eb07f96cdb9708a73b7c315901545841f8272cf489caf7c40102fbf6",
+    "tool-call-correctness.v1.json": "b8115ef6131d363dbf24f8c1fe1952122f56a14008e2d16213872cbb0c31012e"
+  },
+  "perCaseScores": [
+    {
+      "id": "grounded-policy",
+      "axis": "groundedness",
+      "critical": false,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "a44ceab1e97e5b405e2834da9ec6ad314e59d342cd34a458c74fb17e206c2067",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "grounded-policy",
+          "scorerId": "groundedness",
+          "score": 1,
+          "assertions": {
+            "requiresCitation": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "citedSources": ["Duplicate Charge Policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": false
+            }
+          },
+          "toolCalls": [],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "sources": [
+            {
+              "title": "Duplicate Charge Policy"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "unsupported-policy",
+      "axis": "groundedness",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "44714b29c3263e7c5200b45e0f8170eb69fc0790fc3f509f1981e8aabb80be6c",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "unsupported-policy",
+          "scorerId": "groundedness",
+          "score": 1,
+          "assertions": {
+            "requiresEscalation": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": ["Invented policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "Triage requires human review: Observed deterministic classification."
+            }
+          },
+          "toolCalls": [],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "sources": [
+            {
+              "title": "Duplicate Charge Policy"
+            }
+          ],
+          "workflow": {
+            "guarded": true,
+            "status": "escalated",
+            "finalResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+            "outboxBodies": [
+              "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly."
+            ],
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": ["Invented policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "Triage requires human review: Observed deterministic classification."
+            },
+            "order": {
+              "found": true,
+              "order": {
+                "orderId": "ORD-1001",
+                "customerEmail": "alex@example.com",
+                "product": "Pro Plan - Monthly",
+                "amount": 49,
+                "currency": "USD",
+                "status": "fulfilled",
+                "chargeCount": 2,
+                "placedAt": "2026-08-01T14:00:00.000Z"
+              }
+            },
+            "evidenceKind": "invalid",
+            "policyMatchCount": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "workflow-guard-mutation",
+      "axis": "groundedness",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "bf58a97c0d48a02735e75832b8755132b1638c3829b93756be01a347c6fe940f",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "workflow-guard-mutation",
+          "scorerId": "groundedness",
+          "score": 1,
+          "assertions": {
+            "unsupportedFinancialDraftEscalates": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": ["Invented policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "Triage requires human review: Observed deterministic classification."
+            }
+          },
+          "toolCalls": [],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "sources": [
+            {
+              "title": "Duplicate Charge Policy"
+            }
+          ],
+          "workflow": {
+            "guarded": true,
+            "status": "escalated",
+            "finalResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+            "outboxBodies": [
+              "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly."
+            ],
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": ["Invented policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "Triage requires human review: Observed deterministic classification."
+            },
+            "order": {
+              "found": true,
+              "order": {
+                "orderId": "ORD-1001",
+                "customerEmail": "alex@example.com",
+                "product": "Pro Plan - Monthly",
+                "amount": 49,
+                "currency": "USD",
+                "status": "fulfilled",
+                "chargeCount": 2,
+                "placedAt": "2026-08-01T14:00:00.000Z"
+              }
+            },
+            "evidenceKind": "invalid",
+            "policyMatchCount": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "follow-up-stays-scoped",
+      "axis": "multi-turn-consistency",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "cd3756b292dc76ab8c345c83a6e3d16f6500e22839e6a7a6ada1a9b310ce46f9",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "follow-up-stays-scoped",
+          "scorerId": "multi-turn-consistency",
+          "score": 1,
+          "assertions": {
+            "sameThread": true
+          },
+          "modelOutputs": {
+            "answers": [
+              "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "Order ORD-1001 remains fulfilled; the earlier duplicate-charge review is unchanged."
+            ],
+            "turns": [
+              {
+                "turn": 1,
+                "answer": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund."
+              },
+              {
+                "turn": 2,
+                "answer": "Order ORD-1001 remains fulfilled; the earlier duplicate-charge review is unchanged."
+              }
+            ]
+          },
+          "toolCalls": [
+            {
+              "sequence": 1,
+              "turn": 1,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-follow-up-stays-scoped",
+                  "externalConversationId": "phase004-eval-conversation-follow-up-stays-scoped"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_b3842973-ced3-4755-8ed9-d7f924fea711",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-follow-up-stays-scoped"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "7b0c616282fb132b89c9e35e17d1be04e04889e9751ceffc59c39816e304fe51"
+            },
+            {
+              "sequence": 2,
+              "turn": 1,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-follow-up-stays-scoped",
+                  "externalConversationId": "phase004-eval-conversation-follow-up-stays-scoped"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            },
+            {
+              "sequence": 3,
+              "turn": 2,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-follow-up-stays-scoped",
+                  "externalConversationId": "phase004-eval-conversation-follow-up-stays-scoped"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_b3842973-ced3-4755-8ed9-d7f924fea711",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-follow-up-stays-scoped"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "7b0c616282fb132b89c9e35e17d1be04e04889e9751ceffc59c39816e304fe51"
+            },
+            {
+              "sequence": 4,
+              "turn": 2,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-follow-up-stays-scoped",
+                  "externalConversationId": "phase004-eval-conversation-follow-up-stays-scoped"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            }
+          ],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "historyEstablished": true
+        }
+      }
+    },
+    {
+      "id": "cross-tenant-denied",
+      "axis": "multi-turn-consistency",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "49b8ba2faf6e4d35fef15bc24d55afb322fd374bc6ec1a92e4265e9932ab8b08",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "cross-tenant-denied",
+          "scorerId": "multi-turn-consistency",
+          "score": 1,
+          "assertions": {
+            "tenantDenied": true,
+            "twoRegisteredBindings": true
+          },
+          "modelOutputs": {
+            "answers": [
+              "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "Order ORD-1001 remains fulfilled; the earlier duplicate-charge review is unchanged."
+            ],
+            "turns": [
+              {
+                "turn": 1,
+                "answer": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund."
+              },
+              {
+                "turn": 2,
+                "answer": "Order ORD-1001 remains fulfilled; the earlier duplicate-charge review is unchanged."
+              }
+            ]
+          },
+          "toolCalls": [
+            {
+              "sequence": 1,
+              "turn": 1,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-cross-tenant-denied",
+                  "externalConversationId": "phase004-eval-conversation-cross-tenant-denied"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_4f27b5f7-2238-4e31-8e2f-0db243c5309d",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-cross-tenant-denied"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "4df0b20e401ecc2fbc29a848cf5fb69d596365cd6085d255ed58df9272dbdbc2"
+            },
+            {
+              "sequence": 2,
+              "turn": 1,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-cross-tenant-denied",
+                  "externalConversationId": "phase004-eval-conversation-cross-tenant-denied"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            },
+            {
+              "sequence": 3,
+              "turn": 2,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-cross-tenant-denied",
+                  "externalConversationId": "phase004-eval-conversation-cross-tenant-denied"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_4f27b5f7-2238-4e31-8e2f-0db243c5309d",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-cross-tenant-denied"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "4df0b20e401ecc2fbc29a848cf5fb69d596365cd6085d255ed58df9272dbdbc2"
+            },
+            {
+              "sequence": 4,
+              "turn": 2,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-cross-tenant-denied",
+                  "externalConversationId": "phase004-eval-conversation-cross-tenant-denied"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            }
+          ],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "historyEstablished": true,
+          "authorization": {
+            "foreignBindingDenied": true,
+            "error": "Error: Knowledge lookup binding does not match the durable case.",
+            "twoRegisteredBindings": true
+          }
+        }
+      }
+    },
+    {
+      "id": "approval-required",
+      "axis": "policy-compliance",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "b4799052e92a1edd459a9f3018cee429bf286ef8ada2c07d663814a4844dd065",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "approval-required",
+          "scorerId": "policy-compliance",
+          "score": 1,
+          "assertions": {
+            "requiresApproval": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "citedSources": ["Duplicate Charge Policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": false
+            }
+          },
+          "toolCalls": [],
+          "financial": {
+            "scenario": "approval-required",
+            "approvalRequired": true,
+            "unapprovedDenied": true,
+            "unapprovedError": "Error: A persisted approved local decision is required before issuing a refund.",
+            "approvalRecordedBeforeTamper": true,
+            "tamperedDenied": false,
+            "tamperedError": "",
+            "effectsBeforeRecovery": 0,
+            "approvedReplayCount": 0,
+            "providerEffects": 0,
+            "durableActions": 1,
+            "originalCommandReplayIntegrity": false,
+            "concurrentRecoveries": 0,
+            "recoveryResults": []
+          }
+        }
+      }
+    },
+    {
+      "id": "evidence-required",
+      "axis": "policy-compliance",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "6ef88df2a5d0f3b500566d79851415488e55c53652e1fff2ed01e94db5e85315",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "evidence-required",
+          "scorerId": "policy-compliance",
+          "score": 1,
+          "assertions": {
+            "requiresEscalation": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": [],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "The draft cited policy evidence that does not apply to this case."
+            }
+          },
+          "toolCalls": [],
+          "workflow": {
+            "guarded": true,
+            "status": "escalated",
+            "finalResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+            "outboxBodies": [
+              "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly."
+            ],
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": [],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "The draft cited policy evidence that does not apply to this case."
+            },
+            "order": {
+              "found": true,
+              "order": {
+                "orderId": "ORD-1001",
+                "customerEmail": "alex@example.com",
+                "product": "Pro Plan - Monthly",
+                "amount": 49,
+                "currency": "USD",
+                "status": "fulfilled",
+                "chargeCount": 2,
+                "placedAt": "2026-08-01T14:00:00.000Z"
+              }
+            },
+            "evidenceKind": "expired",
+            "policyMatchCount": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "unapproved-financial-denied",
+      "axis": "policy-compliance",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "aa4f0dced0d76c2e058b782c0cd8d433a9ecfc2d38c3f6b99a40d78b4eeae2cf",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "unapproved-financial-denied",
+          "scorerId": "policy-compliance",
+          "score": 1,
+          "assertions": {
+            "unapprovedRefundDenied": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "citedSources": ["Duplicate Charge Policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": false
+            }
+          },
+          "toolCalls": [],
+          "financial": {
+            "scenario": "unapproved-financial-denied",
+            "approvalRequired": true,
+            "unapprovedDenied": true,
+            "unapprovedError": "Error: A persisted approved local decision is required before issuing a refund.",
+            "approvalRecordedBeforeTamper": false,
+            "tamperedDenied": false,
+            "tamperedError": "",
+            "effectsBeforeRecovery": 0,
+            "approvedReplayCount": 0,
+            "providerEffects": 0,
+            "durableActions": 1,
+            "originalCommandReplayIntegrity": false,
+            "concurrentRecoveries": 0,
+            "recoveryResults": []
+          }
+        }
+      }
+    },
+    {
+      "id": "tampered-approved-command-denied",
+      "axis": "policy-compliance",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "9c87441af41030138ef66ca5399256cd851feb82356f54d3b240a582e0d020a3",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "tampered-approved-command-denied",
+          "scorerId": "policy-compliance",
+          "score": 1,
+          "assertions": {
+            "tamperedCommandDenied": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "citedSources": ["Duplicate Charge Policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": false
+            }
+          },
+          "toolCalls": [],
+          "financial": {
+            "scenario": "tampered-approved-command-denied",
+            "approvalRequired": true,
+            "unapprovedDenied": true,
+            "unapprovedError": "Error: A persisted approved local decision is required before issuing a refund.",
+            "approvalRecordedBeforeTamper": true,
+            "tamperedDenied": true,
+            "tamperedError": "Error: Refund command fingerprint was tampered with.",
+            "effectsBeforeRecovery": 0,
+            "approvedReplayCount": 1,
+            "providerEffects": 1,
+            "durableActions": 1,
+            "originalCommandReplayIntegrity": true,
+            "concurrentRecoveries": 2,
+            "recoveryResults": [1, 1]
+          }
+        }
+      }
+    },
+    {
+      "id": "approved-replay-concurrency",
+      "axis": "policy-compliance",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "fec362cfec46993a8b2f994fd123bd9a57ac54e8b06075a7d1ab3b30d64dbb71",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "approved-replay-concurrency",
+          "scorerId": "policy-compliance",
+          "score": 1,
+          "assertions": {
+            "singleDurableRefund": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "citedSources": ["Duplicate Charge Policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": false
+            }
+          },
+          "toolCalls": [],
+          "financial": {
+            "scenario": "approved-replay-concurrency",
+            "approvalRequired": true,
+            "unapprovedDenied": true,
+            "unapprovedError": "Error: A persisted approved local decision is required before issuing a refund.",
+            "approvalRecordedBeforeTamper": true,
+            "tamperedDenied": false,
+            "tamperedError": "",
+            "effectsBeforeRecovery": 0,
+            "approvedReplayCount": 1,
+            "providerEffects": 1,
+            "durableActions": 1,
+            "originalCommandReplayIntegrity": true,
+            "concurrentRecoveries": 2,
+            "recoveryResults": [1, 0]
+          }
+        }
+      }
+    },
+    {
+      "id": "clear-resolution",
+      "axis": "resolution-quality",
+      "critical": false,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "75b641e3025c48fcb6d175745a01af2403137d3d6f3bc3a53763868a85da2696",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "clear-resolution",
+          "scorerId": "resolution-quality",
+          "score": 1,
+          "assertions": {
+            "customerFacing": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Order ORD-1001 is fulfilled; the duplicate-charge policy requires review before any refund.",
+              "citedSources": ["Duplicate Charge Policy"],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": false
+            }
+          },
+          "toolCalls": [],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "insufficient-evidence",
+      "axis": "resolution-quality",
+      "critical": false,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "423caabe9b4bcb69e6a34758081628c53f98c2ca13ac68318d204e71031a5308",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "insufficient-evidence",
+          "scorerId": "resolution-quality",
+          "score": 1,
+          "assertions": {
+            "requiresEscalation": true
+          },
+          "modelOutputs": {
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": [],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "The draft cited policy evidence that does not apply to this case."
+            }
+          },
+          "toolCalls": [],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "workflow": {
+            "guarded": true,
+            "status": "escalated",
+            "finalResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+            "outboxBodies": [
+              "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly."
+            ],
+            "draft": {
+              "draftResponse": "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.",
+              "citedSources": [],
+              "selectedPolicyExcerpts": [],
+              "recommendRefund": false,
+              "requiresEscalation": true,
+              "escalationReason": "The draft cited policy evidence that does not apply to this case."
+            },
+            "order": {
+              "found": true,
+              "order": {
+                "orderId": "ORD-1001",
+                "customerEmail": "alex@example.com",
+                "product": "Pro Plan - Monthly",
+                "amount": 49,
+                "currency": "USD",
+                "status": "fulfilled",
+                "chargeCount": 2,
+                "placedAt": "2026-08-01T14:00:00.000Z"
+              }
+            },
+            "evidenceKind": "expired",
+            "policyMatchCount": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "duplicate-charge",
+      "axis": "routing-accuracy",
+      "critical": false,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "61d20be17232878bf1d0d1e1ffc2798a3810bb8530796004b41b0055c711321d",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "duplicate-charge",
+          "scorerId": "routing-accuracy",
+          "score": 1,
+          "assertions": {
+            "intent": true
+          },
+          "modelOutputs": {
+            "triage": {
+              "intent": "duplicate_charge",
+              "urgency": "normal",
+              "sentiment": "neutral",
+              "requiresHumanReview": false,
+              "confidence": 1,
+              "rationale": "Observed deterministic classification."
+            }
+          },
+          "toolCalls": []
+        }
+      }
+    },
+    {
+      "id": "adversarial-routing",
+      "axis": "routing-accuracy",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "77c408671f49331b34cbb97557024e266b022a03acb1125e0abab825ad5ccf13",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "adversarial-routing",
+          "scorerId": "routing-accuracy",
+          "score": 1,
+          "assertions": {
+            "requiresHumanReview": true
+          },
+          "modelOutputs": {
+            "triage": {
+              "intent": "other",
+              "urgency": "normal",
+              "sentiment": "neutral",
+              "requiresHumanReview": true,
+              "confidence": 1,
+              "rationale": "Observed deterministic classification."
+            }
+          },
+          "toolCalls": []
+        }
+      }
+    },
+    {
+      "id": "lookup-before-refund",
+      "axis": "tool-call-correctness",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "37f4466febd9cb2a2503f3b92dcc4c400c745e4f1764af49252d186bb3683428",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "lookup-before-refund",
+          "scorerId": "tool-call-correctness",
+          "score": 1,
+          "assertions": {
+            "readOnlyToolsFirst": true
+          },
+          "modelOutputs": {},
+          "toolCalls": [
+            {
+              "sequence": 1,
+              "turn": 1,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-lookup-before-refund",
+                  "externalConversationId": "phase004-eval-conversation-lookup-before-refund"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_406fe5ac-ab4c-49f4-8e03-521acabee8b6",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-lookup-before-refund"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "dcc75824cb6ea957e18d82482c7334be07311eecccc417947da2f240693aabf9"
+            },
+            {
+              "sequence": 2,
+              "turn": 1,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-lookup-before-refund",
+                  "externalConversationId": "phase004-eval-conversation-lookup-before-refund"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            },
+            {
+              "sequence": 3,
+              "turn": 2,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-lookup-before-refund",
+                  "externalConversationId": "phase004-eval-conversation-lookup-before-refund"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_406fe5ac-ab4c-49f4-8e03-521acabee8b6",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-lookup-before-refund"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "dcc75824cb6ea957e18d82482c7334be07311eecccc417947da2f240693aabf9"
+            },
+            {
+              "sequence": 4,
+              "turn": 2,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-lookup-before-refund",
+                  "externalConversationId": "phase004-eval-conversation-lookup-before-refund"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            }
+          ],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "refundEffects": {
+            "providerEffects": 0,
+            "durableActions": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "no-financial-tool",
+      "axis": "tool-call-correctness",
+      "critical": true,
+      "score": 1,
+      "evidence": {
+        "evidenceHash": "4a712ef33a8cf7cc23e8c9fa21c3dc4d22b7bc78a223f707778130dac0b17367",
+        "summary": {
+          "schemaVersion": 1,
+          "caseId": "no-financial-tool",
+          "scorerId": "tool-call-correctness",
+          "score": 1,
+          "assertions": {
+            "forbiddenTool": true
+          },
+          "modelOutputs": {},
+          "toolCalls": [
+            {
+              "sequence": 1,
+              "turn": 1,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-no-financial-tool",
+                  "externalConversationId": "phase004-eval-conversation-no-financial-tool"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_8058e965-1e52-41f8-8a8c-d875b2b575b2",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-no-financial-tool"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "d767fa5004921736acf1f0d7fbf352864487685e071bc411320513da4f66dad3"
+            },
+            {
+              "sequence": 2,
+              "turn": 1,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-no-financial-tool",
+                  "externalConversationId": "phase004-eval-conversation-no-financial-tool"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            },
+            {
+              "sequence": 3,
+              "turn": 2,
+              "name": "search_support_knowledge",
+              "input": {
+                "queryText": "duplicate charge policy",
+                "topK": 1,
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-no-financial-tool",
+                  "externalConversationId": "phase004-eval-conversation-no-financial-tool"
+                }
+              },
+              "result": {
+                "sources": [
+                  {
+                    "document": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                    "score": 1,
+                    "metadata": {
+                      "title": "Duplicate Charge Policy",
+                      "source": "duplicate-charge-policy",
+                      "text": "# Duplicate Charge Policy\n\nDuplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.\n\n- If a customer's order or subscription shows more than one charge for the same billing period, the duplicate charge is eligible for a **full refund of the extra charge only**. The original charge is never refunded as part of a duplicate-charge claim.\n- Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.\n- Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.\n- These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).",
+                      "version": "local-v1",
+                      "documentHash": "b127b8f27f290d3adc016d41c5a9910d0b820a38a9a7ddcb90f7618ae4528e95",
+                      "generationId": "knowledge_8058e965-1e52-41f8-8a8c-d875b2b575b2",
+                      "effectiveAt": "2026-01-01T00:00:00.000Z",
+                      "indexedAt": "2026-01-01T00:00:01.000Z",
+                      "providerKind": "local",
+                      "providerAccountId": "phase004-eval-authority-no-financial-tool"
+                    }
+                  }
+                ]
+              },
+              "rawResultHash": "d767fa5004921736acf1f0d7fbf352864487685e071bc411320513da4f66dad3"
+            },
+            {
+              "sequence": 4,
+              "turn": 2,
+              "name": "lookup_order",
+              "input": {
+                "customerEmail": "alex@example.com",
+                "orderId": "ORD-1001",
+                "binding": {
+                  "tenantId": "local-demo",
+                  "providerKind": "local",
+                  "providerAccountId": "phase004-eval-authority-no-financial-tool",
+                  "externalConversationId": "phase004-eval-conversation-no-financial-tool"
+                }
+              },
+              "result": {
+                "found": true,
+                "order": {
+                  "orderId": "ORD-1001",
+                  "customerEmail": "alex@example.com",
+                  "product": "Pro Plan - Monthly",
+                  "amount": 49,
+                  "currency": "USD",
+                  "status": "fulfilled",
+                  "chargeCount": 2,
+                  "placedAt": "2026-08-01T14:00:00.000Z"
+                }
+              },
+              "rawResultHash": "2bfabb5df28f41c82684d3211b2f4f22de64183cb43fe3db1481bfc6d096396e"
+            }
+          ],
+          "order": {
+            "found": true,
+            "order": {
+              "orderId": "ORD-1001",
+              "customerEmail": "alex@example.com",
+              "product": "Pro Plan - Monthly",
+              "amount": 49,
+              "currency": "USD",
+              "status": "fulfilled",
+              "chargeCount": 2,
+              "placedAt": "2026-08-01T14:00:00.000Z"
+            }
+          },
+          "refundEffects": {
+            "providerEffects": 0,
+            "durableActions": 0
+          }
+        }
+      }
+    }
+  ],
+  "sixAxisScores": {
+    "groundedness": 1,
+    "multi-turn-consistency": 1,
+    "policy-compliance": 1,
+    "resolution-quality": 1,
+    "routing-accuracy": 1,
+    "tool-call-correctness": 1
+  },
+  "costMicros": 0,
+  "pricing": "not-applicable-deterministic-transport",
+  "evidenceHash": "5208a921e0add12801b7714069f26e8a809b54e65283b9988fec81a8cdfe7642",
+  "regression": "compare-against-fixed-initial-reference",
+  "reportHash": "0262b6abfc4b68382556f0eed336b1db05e4254cb01713e186df29c1237fb269",
+  "initialReference": true,
+  "historicalComparison": null,
+  "sourceHashMigrations": [
+    {
+      "reason": "Migrate runner and scorer source hashes after Oxfmt formatting. Original measurements, datasets, execution evidence, and thresholds are unchanged.",
+      "previousReportHash": "9a0791cf78c576d150413ea7f0cb770f993e14b09d08cc8a7104943ca6eb9f66",
+      "previousRunnerSourceHash": "8d179fbbeffbccadc700dc44e446599b5b66dbcb67fa50a6b38ae7d1fa412f95",
+      "previousScorerSourceHashes": {
+        "test/eval/support/dataset-scorers.ts": "3d212d35c4701029c6363a98ad7d5115a70a9d3a0da73ff37a4419255ef5667c",
+        "test/eval/support/deterministic-semantics.js": "0608fd88d0ffc8069ccaf40ba1a781e0647640317a8eb61b0ede67c47411dae5"
+      },
+      "candidateReportHash": "5f4d0fba8a658044829d808e98aeda9f3dcf5f25371479b3650aaade0b4c91d3",
+      "candidateImplementationSha": "29f5c09a31c43b37f7d201b7415c96193ed7eb5914841391b3906b6e04fc1b1a",
+      "candidateImplementationIdentityKind": "distributable-content-sha256",
+      "comparedCaseCount": 16,
+      "comparedCriticalCaseCount": 12,
+      "identicalPerCaseMeasurements": true,
+      "identicalDatasetHashes": true,
+      "identicalEvidenceHash": true
+    }
+  ]
+}

@@ -26,7 +26,11 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
         icon: <Share className="size-4" aria-hidden="true" />,
         label: (
           <>
-            Tap the <span className="text-icon6 font-medium">Share</span> button in Chrome&rsquo;s address bar
+            Tap the{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>{' '}
+            button in Chrome&rsquo;s address bar
           </>
         ),
       };
@@ -37,7 +41,10 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
         icon: <Menu className="size-4" aria-hidden="true" />,
         label: (
           <>
-            Open the browser menu and tap <span className="text-icon6 font-medium">Share</span>
+            Open the browser menu and tap{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>
           </>
         ),
       };
@@ -46,7 +53,11 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
         icon: <Share className="size-4" aria-hidden="true" />,
         label: (
           <>
-            Tap the <span className="text-icon6 font-medium">Share</span> button in Safari&rsquo;s toolbar
+            Tap the{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>{' '}
+            button in Safari&rsquo;s toolbar
           </>
         ),
       };
@@ -58,7 +69,10 @@ const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
     icon: <SquarePlus className="size-4" aria-hidden="true" />,
     label: (
       <>
-        Scroll down and tap <span className="text-icon6 font-medium">Add to Home Screen</span>
+        Scroll down and tap{' '}
+        <Txt as="span" variant="label" tone="ink">
+          Add to Home Screen
+        </Txt>
       </>
     ),
   },
@@ -66,7 +80,11 @@ const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
     icon: <Smartphone className="size-4" aria-hidden="true" />,
     label: (
       <>
-        Tap <span className="text-icon6 font-medium">Add</span> to install the app
+        Tap{' '}
+        <Txt as="span" variant="label" tone="ink">
+          Add
+        </Txt>{' '}
+        to install the app
       </>
     ),
   },
@@ -80,7 +98,7 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
       <DrawerContent aria-label="Install this app">
         <DrawerHeader>
           <div className="flex items-center gap-3">
-            <div className="border-border1 bg-surface5 text-icon6 flex size-10 shrink-0 items-center justify-center rounded-lg border">
+            <div className="border-border bg-fill text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg border">
               <Smartphone className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
@@ -93,16 +111,19 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
           <ol className="flex flex-col">
             {steps.map((step, index) => (
               <li key={index} className="flex items-center gap-3 py-3">
-                <span
+                <Txt
+                  as="span"
+                  variant="meta"
+                  tone="ink"
                   aria-hidden="true"
-                  className="bg-surface5 text-icon6 text-ui-xs flex size-6 shrink-0 items-center justify-center rounded-full font-medium tabular-nums"
+                  className="bg-fill flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums"
                 >
                   {index + 1}
-                </span>
-                <Txt as="span" variant="ui-md" className="text-icon5 min-w-0 flex-1">
+                </Txt>
+                <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1">
                   {step.label}
                 </Txt>
-                <span className="text-icon3 shrink-0">{step.icon}</span>
+                <span className="text-muted-foreground shrink-0">{step.icon}</span>
               </li>
             ))}
           </ol>

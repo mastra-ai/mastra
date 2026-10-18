@@ -234,6 +234,16 @@ function packLocalCore(version: string, tempDir: string) {
     `@mastra/core@${version} is not available from npm; packing local ${relative(repoRoot, corePackageRoot)} because its version matches`,
   );
 
+  if (!existsSync(join(corePackageRoot, 'dist'))) {
+    console.info(`Local ${relative(repoRoot, corePackageRoot)} has no dist/; building it before packing`);
+
+    const build = runCommand('pnpm', ['turbo', 'build', '--filter', './packages/core'], repoRoot);
+
+    if (build.status !== 0) {
+      throw new Error(`Failed to build local @mastra/core@${version}${formatCommandFailure(build)}`);
+    }
+  }
+
   const pack = runCommand('npm', ['pack', corePackageRoot, '--pack-destination', tempDir, '--silent'], repoRoot);
 
   if (pack.status !== 0) {

@@ -48,6 +48,14 @@ function toJsValue(val: unknown): unknown {
   return val;
 }
 
+/** A query interrupted at its caller-supplied deadline. */
+export class DuckDBQueryTimeoutError extends Error {
+  constructor() {
+    super('DuckDB query exceeded its deadline');
+    this.name = 'DuckDBQueryTimeoutError';
+  }
+}
+
 /** Configuration for the DuckDB database connection. */
 export interface DuckDBStorageConfig {
   /** Path to the DuckDB file. Defaults to 'mastra.duckdb'. Use ':memory:' for ephemeral. */
@@ -158,8 +166,16 @@ export class DuckDBConnection extends MastraBase {
   /**
    * Execute a SQL query and return results as objects.
    */
-  async query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+  async query<T = Record<string, unknown>>(sql: string, params: unknown[] = [], timeoutMs?: number): Promise<T[]> {
     const connection = await this.getConnection();
+    let timedOut = false;
+    const timer =
+      timeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true;
+            connection.interrupt();
+          }, timeoutMs);
     try {
       if (params.length === 0) {
         const result = await connection.run(sql);
@@ -190,7 +206,11 @@ export class DuckDBConnection extends MastraBase {
         });
         return obj as T;
       });
+    } catch (error) {
+      if (timedOut) throw new DuckDBQueryTimeoutError();
+      throw error;
     } finally {
+      if (timer !== undefined) clearTimeout(timer);
       this.closeConnection(connection);
     }
   }
@@ -215,6 +235,37 @@ export class DuckDBConnection extends MastraBase {
     } finally {
       this.closeConnection(connection);
     }
+  }
+
+  /** Delete one bounded retention batch and return the number of rows removed. */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: string;
+    column: string;
+    cutoff: Date;
+    limit: number;
+  }): Promise<number> {
+    const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    if (!identifier.test(tableName) || !identifier.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+
+    const rows = await this.query(
+      `DELETE FROM ${tableName}
+       WHERE rowid IN (
+         SELECT rowid FROM ${tableName}
+         WHERE ${column} < ?
+         ORDER BY ${column}
+         LIMIT ?
+       )
+       RETURNING 1 AS deleted`,
+      [cutoff, limit],
+    );
+    return rows.length;
   }
 
   /** Execute parameterized statements atomically using a single DuckDB connection. */

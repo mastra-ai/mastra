@@ -1,7 +1,9 @@
-import type { BuilderModelPolicy } from '@mastra/client-js';
+import type { BuilderSettingsResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+
+type BuilderModelPolicy = NonNullable<BuilderSettingsResponse['modelPolicy']>;
 
 interface UseBuilderSettingsOptions {
   enabled?: boolean;

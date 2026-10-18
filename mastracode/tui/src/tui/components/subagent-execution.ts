@@ -14,6 +14,7 @@ import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { statusDot, toolBlock } from './surface.js';
 import type { IToolExecutionComponent } from './tool-execution-interface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
@@ -84,6 +85,8 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   private startTime = Date.now();
   private durationMs = 0;
   private finalResult?: string;
+  private backgroundTaskId?: string;
+  private cancelled = false;
   private expanded = false;
   private collapseOnComplete: boolean;
   private expandOnComplete: boolean;
@@ -167,16 +170,36 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.rebuild();
   }
 
-  finish(isError: boolean, durationMs: number, result?: string): void {
+  finish(isError: boolean, durationMs: number | undefined, result?: string): void {
+    if (this.cancelled) return;
+    if (durationMs !== undefined) {
+      this.durationMs = durationMs;
+    } else if (!this.done) {
+      this.durationMs = Date.now() - this.startTime;
+    }
     this.done = true;
     this.isError = isError;
-    this.durationMs = durationMs;
     this.finalResult = isDuplicateFinalResult(result, this.activity, this.lastTextSnapshot) ? undefined : result;
     if (this.expandOnComplete) {
       this.expanded = true;
     } else if (this.collapseOnComplete) {
       this.expanded = false;
     }
+    this.rebuild();
+  }
+
+  cancel(result = 'Background execution cancelled.'): void {
+    this.cancelled = true;
+    this.done = true;
+    this.isError = false;
+    this.durationMs = Date.now() - this.startTime;
+    this.finalResult = result;
+    this.expanded = false;
+    this.rebuild();
+  }
+
+  setBackgroundTaskId(taskId: string): void {
+    this.backgroundTaskId = taskId;
     this.rebuild();
   }
 
@@ -195,7 +218,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   updateResult(_result: unknown, _isPartial: boolean): void {}
 
   getChatSpacingKind(): ChatSpacingKind {
-    return 'normal-tool';
+    return 'full-tool';
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────
@@ -203,35 +226,42 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
-    const border = (char: string) =>
-      theme.bold(colorText(this.colors.border, char, (text: string) => theme.fg('accent', text)));
-    const maxLineWidth = Math.max(1, termWidth - 6 - BOX_INDENT * 2);
+    const width = Math.max(1, termWidth - BOX_INDENT * 2);
+    const maxLineWidth = Math.max(1, width - 3);
 
-    // ── Bottom border with info (always rendered) ──
+    // ── Title row (always rendered) ──
     const typeLabelText = this.forked ? 'fork' : this.agentType;
     const typeLabel = theme.bold(
       colorText(this.colors.agentType, typeLabelText, (text: string) => theme.fg('accent', text)),
     );
     const modelLabel = this.modelId ? theme.fg('muted', ` ${this.modelId}`) : '';
-    const statusIcon = this.done
-      ? this.isError
+    const statusIcon = this.backgroundTaskId
+      ? this.done
+        ? this.cancelled
+          ? theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`)
+          : this.isError
+            ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
+            : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`)
+        : theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`)
+      : this.done && this.isError
         ? colorText(this.colors.icon, ` ${this.icons.error}`, (text: string) => theme.fg('error', text))
-        : colorText(this.colors.icon, ` ${this.icons.success}`, (text: string) => theme.fg('success', text))
-      : colorText(this.colors.icon, ` ${this.icons.running}`, (text: string) => theme.fg('muted', text));
+        : ''; // The title's ● dot shows running / done; a failure also gets the error icon.
+    const dot = statusDot(this.done ? (this.isError ? 'error' : 'done') : 'running');
+    const output: string[] = [];
+    const emit = () => {
+      this.addChild(new Text(toolBlock(dot, footerText, output, width, 'uniform').join('\n'), BOX_INDENT, 0));
+      this.invalidate();
+      this.ui.requestRender();
+    };
     const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
     const footerText = `${theme.bold(colorText(this.colors.label, this.label, (text: string) => theme.fg('toolTitle', text)))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
 
-    // When collapse-on-complete is enabled, render only the single-line footer summary.
-    // Quiet mode does not enable this for subagents; it is kept for explicit callers/tests.
-    if (this.collapseOnComplete && this.done && !this.expanded) {
-      this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
-      this.invalidate();
-      this.ui.requestRender();
+    // Completed background work follows the ordinary tool display model: compact by default,
+    // with the authoritative result available through Ctrl+E expansion.
+    if ((this.collapseOnComplete || this.backgroundTaskId) && this.done && !this.expanded) {
+      emit();
       return;
     }
-
-    // ── Top border ──
-    this.addChild(new Text(border('╭──'), BOX_INDENT, 0));
 
     // ── Task description (capped when collapsed) ──
     const taskLines = this.task.split('\n');
@@ -254,18 +284,16 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     const taskTruncated = !this.expanded && wrappedTaskLines.length > maxTaskLines + 1;
     const displayTaskLines = taskTruncated ? wrappedTaskLines.slice(0, maxTaskLines) : wrappedTaskLines;
 
-    const taskContent = displayTaskLines.map(line => `${border('│')} ${line}`).join('\n');
-    this.addChild(new Text(taskContent, BOX_INDENT, 0));
+    output.push(...displayTaskLines);
 
     if (taskTruncated) {
-      const moreText = theme.fg('muted', `... ${wrappedTaskLines.length - maxTaskLines} more lines (ctrl+e to expand)`);
-      this.addChild(new Text(`${border('│')} ${moreText}`, BOX_INDENT, 0));
+      output.push(theme.fg('muted', `... ${wrappedTaskLines.length - maxTaskLines} more lines (ctrl+e to expand)`));
     }
 
     // ── Activity lines (assistant text and tool calls — capped rolling window) ──
     if (this.activity.length > 0) {
       // Separator between task and activity
-      this.addChild(new Text(`${border('│')} ${theme.fg('muted', '───')}`, BOX_INDENT, 0));
+      output.push(theme.fg('muted', '───'));
 
       const activityLines = this.activity.flatMap(item =>
         formatActivityLine(item, maxLineWidth, this.icons, this.colors.icon),
@@ -286,34 +314,21 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
           'muted',
           `  ... ${hiddenCount} more above${this.done ? ' (ctrl+e to expand)' : ''}`,
         );
-        this.addChild(new Text(`${border('│')} ${hiddenText}`, BOX_INDENT, 0));
+        output.push(hiddenText);
       }
 
-      const activityContent = displayLines.map(line => `${border('│')} ${line}`).join('\n');
-      this.addChild(new Text(activityContent, BOX_INDENT, 0));
+      output.push(...displayLines);
     }
 
     // ── Final result (shown after completion, only when expanded) ──
     if (this.done && this.finalResult && this.expanded) {
-      this.addChild(new Text(`${border('│')} ${theme.fg('muted', '───')}`, BOX_INDENT, 0));
-      const resultLines = this.finalResult!.split('\n');
-
-      const resultContent = resultLines
-        .map(line => {
-          const truncatedLine = line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line;
-          return `${border('│')} ${theme.fg('muted', truncatedLine)}`;
-        })
-        .join('\n');
-      if (resultContent.trim()) {
-        this.addChild(new Text(resultContent, BOX_INDENT, 0));
+      output.push(theme.fg('muted', '───'));
+      for (const line of this.finalResult!.split('\n')) {
+        output.push(theme.fg('muted', line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line));
       }
     }
 
-    // ── Bottom border ──
-    this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
-
-    this.invalidate();
-    this.ui.requestRender();
+    emit();
   }
 }
 

@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -92,8 +93,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       }
 
-      // Parse request context from query params (GET)
-      if (req.method === 'GET') {
+      // Parse request context from query params.
+      if (req.method === 'GET' || req.method === 'POST') {
         try {
           const encodedRequestContext = req.query.requestContext;
           if (typeof encodedRequestContext === 'string') {
@@ -271,13 +272,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         file.on('end', () => {
-          if (!limitExceeded) {
+          if (!limitExceeded && isSafeObjectKey(fieldname)) {
             result[fieldname] = Buffer.concat(chunks);
           }
         });
       });
 
       busboy.on('field', (fieldname: string, value: string) => {
+        if (!isSafeObjectKey(fieldname)) {
+          return;
+        }
         // Try to parse JSON strings (like 'options')
         try {
           result[fieldname] = JSON.parse(value);
@@ -593,10 +597,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           await this.sendResponse(route, res, result, req, prefix);
         } catch (error) {
           const httpStatus =
-            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+            error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
           const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
           if (!isClientError) {
-            this.mastra.getLogger()?.error('Error calling handler', {
+            // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+            const logLevel = httpStatus === 501 ? 'warn' : 'error';
+            this.mastra.getLogger()?.[logLevel]('Error calling handler', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
               path: route.path,
               method: route.method,

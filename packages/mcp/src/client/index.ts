@@ -3,7 +3,12 @@ export type {
   LogMessage,
   LogHandler,
   MastraMCPServerDefinition,
-  ElicitationHandler,
+  MCPClientCapabilities,
+  MCPClientInfo,
+  MCPClientProtocolVersion,
+  MCPInputRequest,
+  MCPInputRequestHandler,
+  MCPServerImplementation,
   ProgressHandler,
   InternalMastraMCPClientOptions,
   RequireToolApproval,
@@ -13,6 +18,7 @@ export type {
   SerializableMCPToolDefinition,
   SerializableMCPToolCatalog,
 } from './types';
+export { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 export * from './client';
 export * from './configuration';
 export type { MCPDiscoveryErrorDetails } from './error-utils';

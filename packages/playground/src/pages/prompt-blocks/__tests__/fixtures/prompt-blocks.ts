@@ -47,3 +47,11 @@ export const fewPromptBlocks: ListStoredPromptBlocksResponse = {
   perPage: 50,
   hasMore: false,
 };
+
+export const noPromptBlocks: ListStoredPromptBlocksResponse = {
+  promptBlocks: [],
+  total: 0,
+  page: 0,
+  perPage: 50,
+  hasMore: false,
+};

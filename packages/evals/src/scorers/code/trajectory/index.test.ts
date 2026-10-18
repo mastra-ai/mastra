@@ -1195,3 +1195,93 @@ describe('createTrajectoryScorerCode', () => {
     });
   });
 });
+
+describe('trace-derived trajectories', () => {
+  // Shape produced by extractTrajectoryFromTrace: tool calls nest under model_generation,
+  // with processor_run steps beside and between them.
+  const traceTrajectory: Trajectory = {
+    steps: [
+      { stepType: 'processor_run', name: 'input-processor', processorId: 'p' },
+      {
+        stepType: 'model_generation',
+        name: 'llm',
+        children: [
+          { stepType: 'tool_call', name: 'searchCorpus' },
+          { stepType: 'processor_run', name: 'step-processor', processorId: 'p' },
+          { stepType: 'tool_call', name: 'lookupSource' },
+        ],
+      },
+    ],
+  };
+
+  test('accuracy scorer scores a correct run 1', async () => {
+    const scorer = createTrajectoryAccuracyScorerCode({
+      expectedTrajectory: [{ name: 'searchCorpus' }, { name: 'lookupSource' }],
+      comparisonOptions: { ordering: 'strict' },
+    });
+    const result = await scorer.run(createTrajectoryTestRun({ trajectory: traceTrajectory }));
+    expect(result.score).toBe(1);
+    expect(result.preprocessStepResult?.actualStepNames).toEqual(['searchCorpus', 'lookupSource']);
+  });
+
+  test('unified scorer scores a correct run 1 and counts tool-level steps', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: { steps: [{ name: 'searchCorpus' }, { name: 'lookupSource' }], ordering: 'strict', maxSteps: 2 },
+    });
+    const result = await scorer.run(createTrajectoryTestRun({ trajectory: traceTrajectory }));
+    expect(result.preprocessStepResult?.accuracy?.score).toBe(1);
+    expect(result.preprocessStepResult?.efficiency?.totalSteps).toBe(2);
+    expect(result.score).toBe(1);
+  });
+
+  test('nested expectations find sub-agents nested under model_generation', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        steps: [
+          {
+            name: 'researcher',
+            stepType: 'agent_run',
+            children: { steps: [{ name: 'searchCorpus' }], ordering: 'strict' },
+          },
+        ],
+      },
+    });
+    const result = await scorer.run(
+      createTrajectoryTestRun({
+        trajectory: {
+          steps: [
+            {
+              stepType: 'model_generation',
+              name: 'llm',
+              children: [
+                {
+                  stepType: 'agent_run',
+                  name: 'researcher',
+                  children: [
+                    {
+                      stepType: 'model_generation',
+                      name: 'llm',
+                      children: [{ stepType: 'tool_call', name: 'searchCorpus' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.preprocessStepResult?.nested?.[0]?.accuracy?.score).toBe(1);
+    expect(result.score).toBe(1);
+  });
+  test('nested expectations without stepType still match a container step by name', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        steps: [{ name: 'llm', children: { steps: [{ name: 'searchCorpus' }, { name: 'lookupSource' }] } }],
+      },
+    });
+    const result = await scorer.run(createTrajectoryTestRun({ trajectory: traceTrajectory }));
+    expect(result.preprocessStepResult?.nested?.[0]?.stepName).toBe('llm');
+    expect(result.preprocessStepResult?.nested?.[0]?.accuracy?.score).toBe(1);
+  });
+});

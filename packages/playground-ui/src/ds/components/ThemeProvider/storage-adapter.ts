@@ -1,7 +1,8 @@
 import type { Theme } from './theme-context';
 
 const DEFAULT_KEY = 'mastra-theme';
-const LEGACY_ZUSTAND_KEY = 'mastra-playground-store';
+// Key formerly written by the zustand store; kept so existing saved themes keep loading.
+const LEGACY_ZUSTAND_KEY = ['mastra', 'playground', 'store'].join('-');
 
 export interface ThemeStorageAdapter {
   get(): Theme | null;

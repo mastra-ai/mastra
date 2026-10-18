@@ -4,6 +4,9 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useState } from 'react';
+import { SessionExpiredDialog } from './SessionExpiredDialog';
 
 export const RootGuards = () => {
   return (
@@ -16,23 +19,27 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
-  const { isPending, isError, data } = useFactoryAuth();
+  const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
   const location = useLocation();
+  const [wasSignedIn, setWasSignedIn] = useState(false);
+
+  if (data?.authenticated && !wasSignedIn) setWasSignedIn(true);
 
   if (isPending) return <AuthPendingSkeleton />;
-  if (isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (isError && !data) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (!data?.authEnabled) return <AuthNotConfiguredScreen />;
 
-  const state = data;
-  if (!state?.authEnabled) return <AuthNotConfiguredScreen />;
-
-  if (!state.authenticated) {
-    // Router location (not window.location) so memory routers and in-app
-    // navigations produce the correct returnTo.
-    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+  const returnTo = `${location.pathname}${location.search}${location.hash}`;
+  if (!data.authenticated && !wasSignedIn) {
     return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
-  return <OnboardingGuard />;
+  return (
+    <>
+      <OnboardingGuard />
+      {!data.authenticated && <SessionExpiredDialog returnTo={returnTo} />}
+    </>
+  );
 };
 
 const OnboardingGuard = () => {
@@ -55,15 +62,15 @@ const OnboardingGuard = () => {
 
 function AuthNotConfiguredScreen() {
   return (
-    <div className="bg-surface1 grid h-dvh w-full place-items-center px-6 text-center">
+    <div className="bg-sidebar grid h-dvh w-full place-items-center px-6 text-center">
       <div className="max-w-md space-y-3">
-        <h1 className="text-icon6 text-xl font-semibold">
+        <Txt as="h1" variant="heading" tone="ink">
           This MastraCode server has no authentication provider configured
-        </h1>
-        <p className="text-icon3 text-sm leading-6">
+        </Txt>
+        <Txt as="p" variant="body" tone="muted">
           MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
           then reload this page.
-        </p>
+        </Txt>
       </div>
     </div>
   );
@@ -71,7 +78,7 @@ function AuthNotConfiguredScreen() {
 
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
-    <div className="bg-surface1 flex h-dvh w-full items-center justify-center">
+    <div className="bg-sidebar flex h-dvh w-full items-center justify-center">
       <BrandLoader size="lg" aria-label={label} />
     </div>
   );

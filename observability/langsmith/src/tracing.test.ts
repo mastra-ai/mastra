@@ -75,6 +75,8 @@ describe('TestLangSmithExporter', () => {
     mockClient = {
       createRun: vi.fn(),
       updateRun: vi.fn(),
+      flush: vi.fn().mockResolvedValue(undefined),
+      awaitPendingTraceBatches: vi.fn().mockResolvedValue(undefined),
     };
 
     MockClientClass = vi.mocked(Client);
@@ -806,6 +808,40 @@ describe('TestLangSmithExporter', () => {
         }),
       );
     });
+
+    it('should not patch on update, only once on end with the final output', async () => {
+      const span = createMockSpan({
+        id: 'update-then-end',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      span.output = { text: 'partial' };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: span,
+      });
+
+      expect(mockRunTree.patchRun).not.toHaveBeenCalled();
+      expect(mockRunTree.outputs).toEqual({ text: 'partial' });
+
+      span.endTime = new Date();
+      span.output = { text: 'final' };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: span,
+      });
+
+      expect(mockRunTree.patchRun).toHaveBeenCalledTimes(1);
+      expect(mockRunTree.outputs).toEqual({ text: 'final' });
+    });
   });
 
   describe('RunTree Ending', () => {
@@ -1130,6 +1166,163 @@ describe('TestLangSmithExporter', () => {
 
       // Should not throw
       await expect(disabledExporter.shutdown()).resolves.not.toThrow();
+    });
+  });
+
+  describe('Client flushing', () => {
+    function settled(promise: Promise<void>): () => boolean {
+      let done = false;
+      promise.then(
+        () => (done = true),
+        () => (done = true),
+      );
+      return () => done;
+    }
+
+    function held(fn: any): () => void {
+      let release!: () => void;
+      fn.mockReturnValue(
+        new Promise<void>(resolve => {
+          release = resolve;
+        }),
+      );
+      return release;
+    }
+
+    it('should wait for client.flush() in manual flush mode', async () => {
+      mockClient.manualFlushMode = true;
+      const release = held(mockClient.flush);
+
+      const flush = exporter.flush();
+      const isDone = settled(flush);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockClient.flush).toHaveBeenCalledTimes(1);
+      expect(mockClient.awaitPendingTraceBatches).not.toHaveBeenCalled();
+      expect(isDone()).toBe(false);
+
+      release();
+      await flush;
+    });
+
+    it.each(['flush', 'shutdown'] as const)(
+      'should run an overlapping manual %s after the earlier client.flush() finishes',
+      async method => {
+        mockClient.manualFlushMode = true;
+        let release!: () => void;
+        mockClient.flush.mockReturnValueOnce(
+          new Promise<void>(resolve => {
+            release = resolve;
+          }),
+        );
+
+        const first = exporter.flush();
+        const second = exporter[method]();
+        const isSecondDone = settled(second);
+        await vi.advanceTimersByTimeAsync(10);
+        // The second client.flush() must not start while the first upload is in flight
+        expect(mockClient.flush).toHaveBeenCalledTimes(1);
+        expect(isSecondDone()).toBe(false);
+
+        release();
+        await Promise.all([first, second]);
+        expect(mockClient.flush).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it('should still flush after an earlier manual flush failed', async () => {
+      mockClient.manualFlushMode = true;
+      mockClient.flush.mockRejectedValueOnce(new Error('upload failed'));
+
+      await expect(exporter.flush()).rejects.toThrow('upload failed');
+      await exporter.flush();
+      expect(mockClient.flush).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      { manualFlushMode: true, used: 'flush', unused: 'awaitPendingTraceBatches' },
+      { manualFlushMode: false, used: 'awaitPendingTraceBatches', unused: 'flush' },
+    ] as const)(
+      'should pick the client method from a real Client with manualFlushMode: $manualFlushMode',
+      async ({ manualFlushMode, used, unused }) => {
+        const { Client: RealClient } = await vi.importActual<typeof import('langsmith')>('langsmith');
+        const client = new RealClient({ apiKey: 'test-api-key', manualFlushMode });
+        const usedSpy = vi.spyOn(client, used).mockResolvedValue(undefined);
+        const unusedSpy = vi.spyOn(client, unused).mockResolvedValue(undefined);
+        const realExporter = new TestLangSmithExporter({ apiKey: 'test-api-key', client });
+
+        await realExporter.flush();
+
+        expect(usedSpy).toHaveBeenCalledTimes(1);
+        expect(unusedSpy).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should clear the run-id map when the final shutdown flush fails', async () => {
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: createMockSpan({
+          id: 'root-span',
+          name: 'root',
+          type: SpanType.AGENT_RUN,
+          isRoot: true,
+          attributes: {},
+        }),
+      });
+      mockClient.awaitPendingTraceBatches.mockRejectedValueOnce(new Error('upload failed'));
+      mockClient.createFeedback = vi.fn().mockResolvedValue(undefined);
+
+      await expect(exporter.shutdown()).rejects.toThrow('upload failed');
+
+      // A score for the old span must not find a stale LangSmith run id
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { spanId: 'root-span', traceId: 'trace-1', scorerId: 'accuracy', scorerName: 'Accuracy', score: 1 },
+      } as any);
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+    });
+
+    it('should wait for awaitPendingTraceBatches() in auto flush mode', async () => {
+      const release = held(mockClient.awaitPendingTraceBatches);
+
+      const flush = exporter.flush();
+      const isDone = settled(flush);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockClient.awaitPendingTraceBatches).toHaveBeenCalledTimes(1);
+      expect(mockClient.flush).not.toHaveBeenCalled();
+      expect(isDone()).toBe(false);
+
+      release();
+      await flush;
+    });
+
+    it('should send the aborts of open spans before shutdown resolves', async () => {
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: createMockSpan({
+          id: 'root-span',
+          name: 'root',
+          type: SpanType.AGENT_RUN,
+          isRoot: true,
+          attributes: {},
+        }),
+      });
+      const release = held(mockClient.awaitPendingTraceBatches);
+
+      const shutdown = exporter.shutdown();
+      const isDone = settled(shutdown);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockRunTree.error).toBe('Observability is shutting down.');
+      expect(mockRunTree.end).toHaveBeenCalledTimes(1);
+      expect(mockRunTree.patchRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.awaitPendingTraceBatches).toHaveBeenCalledTimes(1);
+      // The abort update must be queued on the client before the client is flushed
+      expect(mockClient.awaitPendingTraceBatches.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mockRunTree.patchRun.mock.invocationCallOrder[0],
+      );
+      expect(isDone()).toBe(false);
+
+      release();
+      await shutdown;
     });
   });
 

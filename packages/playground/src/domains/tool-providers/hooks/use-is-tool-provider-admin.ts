@@ -1,4 +1,4 @@
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 
 /**
  * Permissions the server-side `hasAdminBypass(requestContext, 'tool-providers')`

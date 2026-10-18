@@ -90,7 +90,9 @@ function createDeps(pubsub: unknown = {}): WorkerDeps {
  * event worker only dispatches to projects that already have a work item for
  * the incoming Linear issue's source key, so callers seed the expected links.
  */
-function stubWorkItems(links: Record<string, string[]> = {}): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'list'> {
+function stubWorkItems(
+  links: Record<string, string[]> = {},
+): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'list'> {
   return {
     list: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
       const sourceKeys = links[`${orgId}:${factoryProjectId}`] ?? [];
@@ -127,7 +129,12 @@ function createWorker(input: {
   // dispatch. Behavioral scoping tests override this to prove filtering.
   const defaultLinks: Record<string, string[]> = {};
   for (const project of projects) {
-    defaultLinks[`${project.orgId}:${project.id}`] = ['linear:ENG-1', 'linear:ENG-2', 'linear:ENG-42', 'linear:ENG-100'];
+    defaultLinks[`${project.orgId}:${project.id}`] = [
+      'linear:ENG-1',
+      'linear:ENG-2',
+      'linear:ENG-42',
+      'linear:ENG-100',
+    ];
   }
   return new PlatformLinearEventWorker({
     client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),

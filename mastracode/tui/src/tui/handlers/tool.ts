@@ -12,6 +12,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parseJsonRiver } from 'jsonriver';
 
 import { ensureAssistantRenderSegment } from '../assistant-render-registry.js';
+import { getBackgroundToolMetadata } from '../background-tool-result.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -21,7 +22,6 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
-import { showModalOverlay } from '../overlay.js';
 import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
@@ -51,12 +51,9 @@ export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
 }
 
-function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
-  if (!ctx.state.quietMode) return;
-
+function applyDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
   component.setCompactToolModeColor(getCurrentModeColor(ctx));
-  component.setQuietModeDisplay('quiet');
-  component.setQuietPreviewLineLimit(ctx.state.quietModeMaxToolPreviewLines);
+  component.setPreviewLineLimit(ctx.state.previewLines);
 }
 
 function reconcileToolBoundaries(ctx: EventHandlerContext): void {
@@ -121,6 +118,7 @@ class AsyncStringQueue implements AsyncIterable<string> {
 }
 
 interface ToolInputParserState {
+  text: string;
   queue: AsyncStringQueue;
   iterator: AsyncIterableIterator<unknown>;
   latestArgs?: JsonObject;
@@ -155,6 +153,7 @@ function getRenderableTasks(value: unknown): TaskItemInput[] {
 function createToolInputParser(toolCallId: string): ToolInputParserState {
   const queue = new AsyncStringQueue();
   const state: ToolInputParserState = {
+    text: '',
     queue,
     iterator: parseJsonRiver(queue) as AsyncIterableIterator<unknown>,
     closed: false,
@@ -226,7 +225,7 @@ export function createStaticSubagentComponent(
     renderConfig.modelId,
     {
       collapseOnComplete: false,
-      expandOnComplete: state.quietMode,
+      expandOnComplete: true,
       forked: renderConfig.forked,
       label: renderConfig.label,
       maxActivityLines: renderConfig.maxActivityLines,
@@ -267,7 +266,7 @@ function handleSubagentProgress(
       component.addToolEnd(progress.toolName, progress.result, progress.isError ?? false);
       break;
     case 'finish':
-      component.finish(progress.isError ?? false, progress.durationMs ?? 0, progress.result);
+      component.finish(progress.isError ?? false, progress.durationMs, progress.result);
       break;
   }
 
@@ -314,7 +313,10 @@ function ensureSubmitPlanComponent(
  * Extracts content from common tool return structures like { content: "...", isError: false }
  */
 function isToolResultError(result: unknown): boolean {
-  return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
+  if (typeof result !== 'object' || result === null) return false;
+  const record = result as Record<string, unknown>;
+  // Input validation failures come back as `{ error: true, message }` rather than an error result.
+  return record.isError === true || record.error === true;
 }
 
 export function formatToolResult(result: unknown): string {
@@ -366,41 +368,59 @@ export function handleToolApprovalRequired(
     state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
   };
 
+  // The card names the tool and its arguments itself: compact tool rows show a description instead of the
+  // command. An ask_user call has no tool row: its question preview is the row, so fill it with the final arguments.
+  const askPreview = toolName === 'ask_user' ? state.pendingAskUserComponents.get(toolCallId) : undefined;
+  askPreview?.updateArgs(args);
+  const showTarget = !askPreview;
+
   const dialog = new ToolApprovalDialogComponent({
     toolCallId,
     toolName,
     args,
     categoryLabel,
+    showTarget,
+    requestRender: () => state.ui.requestRender(),
     onAction: (action: ApprovalAction) => {
-      state.ui.hideOverlay();
+      removeApproval();
       state.pendingApprovalDismiss = null;
+      // Every response carries the call id of the dialog's own tool call, so it
+      // can only release that gate — never a different pending approval.
       if (action.type === 'approve') {
         firePermissionResult('approved');
-        state.session.respondToToolApproval({ decision: 'approve' });
+        state.session.respondToToolApproval({ decision: 'approve', toolCallId });
       } else if (action.type === 'always_allow_category') {
         firePermissionResult('approved');
-        state.session.respondToToolApproval({ decision: 'always_allow_category' });
+        state.session.respondToToolApproval({ decision: 'always_allow_category', toolCallId });
       } else if (action.type === 'yolo') {
         firePermissionResult('auto_approved');
         void state.session.state.set({ yolo: true } as any);
-        state.session.respondToToolApproval({ decision: 'approve' });
+        state.session.respondToToolApproval({ decision: 'approve', toolCallId });
       } else {
         firePermissionResult('declined');
-        state.session.respondToToolApproval({ decision: 'decline' });
+        state.session.respondToToolApproval({ decision: 'decline', toolCallId });
       }
     },
   });
 
-  // Set up dismissal to decline
-  state.pendingApprovalDismiss = declineContext => {
-    state.ui.hideOverlay();
-    state.pendingApprovalDismiss = null;
-    firePermissionResult('dismissed');
-    state.session.respondToToolApproval({ decision: 'decline', declineContext });
+  // The prompt lives inline in the chat; keys reach it through the editor (see activeInlineApproval).
+  const removeApproval = () => {
+    if (state.activeInlineApproval === dialog) state.activeInlineApproval = undefined;
+    state.chatContainer.removeChild(dialog);
+    state.ui.requestRender();
   };
 
-  // Show the dialog as an overlay
-  showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
+  // Set up dismissal to decline
+  state.pendingApprovalDismiss = declineContext => {
+    removeApproval();
+    state.pendingApprovalDismiss = null;
+    firePermissionResult('dismissed');
+    state.session.respondToToolApproval({ decision: 'decline', toolCallId, declineContext });
+  };
+
+  // Show the prompt inline, right under the pending tool call
+  ctx.addChildBeforeFollowUps(dialog);
+  state.activeInlineApproval = dialog;
   dialog.focused = true;
   flushRender(state);
 }
@@ -418,6 +438,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
   if (existingComponent) {
     // Component was created during input streaming — update with final args
+    existingComponent.setArgsStreaming?.(false);
     existingComponent.updateArgs(args);
     reconcileToolBoundaries(ctx);
   } else if (existingSubmitPlanComponent) {
@@ -452,7 +473,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       const component = new ToolExecutionComponentEnhanced(
         toolName,
         args,
-        { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+        { showImages: false, collapsedByDefault: !state.toolOutputExpanded, fullRender: true },
         state.ui,
       );
       component.setExpanded(state.toolOutputExpanded);
@@ -466,11 +487,11 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       args,
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
-    applyQuietDisplayForNewTool(ctx, component);
+    applyDisplayForNewTool(ctx, component);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
@@ -543,6 +564,22 @@ export function handleShellOutput(
 }
 
 /**
+ * Handle the sandbox's exit record for an execute_command call. It decides pass/fail even when the
+ * result text doesn't say, e.g. when the sandbox itself threw and the result is a bare `Error: …`.
+ */
+export function handleCommandExit(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  exitCode: number,
+  success: boolean,
+): void {
+  const component = ctx.state.pendingTools.get(toolCallId);
+  if (!component?.setCommandExit) return;
+  component.setCommandExit({ exitCode, success });
+  requestRender(ctx.state);
+}
+
+/**
  * Handle the start of streaming tool call input arguments.
  * Creates the tool component early so partial args can render as they arrive.
  */
@@ -585,13 +622,16 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     createPostToolAssistantComponent(ctx, toolCallId);
 
     flushRender(state);
+  } else if (toolName === 'subagent') {
+    createPostToolAssistantComponent(ctx, toolCallId);
+    flushRender(state);
   } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
     state.taskToolInsertIndex = state.chatContainer.children.length;
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, fullRender: true },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
@@ -611,11 +651,14 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, projectRoot: state.projectInfo?.rootPath },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
-    applyQuietDisplayForNewTool(ctx, component);
+    applyDisplayForNewTool(ctx, component);
+    // Its args are about to stream in; until they do it has none, so it must not render as if complete
+    // (a compact shell call would open a box for the project directory, then leave it).
+    component.setArgsStreaming(true);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
@@ -641,6 +684,7 @@ function applyParsedToolArgs(
 
   const component = state.pendingTools.get(toolCallId);
   if (component) {
+    component.setArgsStreaming?.(true);
     component.updateArgs(partialArgs, false);
     reconcileToolBoundaries(ctx);
     component.refresh?.();
@@ -744,6 +788,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
     void processToolInputParser(ctx, toolCallId, parser);
   }
 
+  parser.text += argsTextDelta;
   parser.queue.push(argsTextDelta);
 }
 
@@ -751,22 +796,50 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
  * Clean up the input buffer when tool input streaming ends.
  */
 export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
+  const parser = toolInputParsers.get(toolCallId);
+  if (parser) {
+    // The final event can arrive before the progressive parser's next microtask.
+    try {
+      const args: unknown = JSON.parse(parser.text);
+      if (isJsonObject(args)) parser.latestArgs = args;
+    } catch {
+      // Interrupted input keeps the last valid progressive object.
+    }
+  }
   flushLatestParsedToolArgs(ctx, toolCallId);
   closeToolInputParser(toolCallId);
+  const component = ctx.state.pendingTools.get(toolCallId);
+  if (!component?.setArgsStreaming) return;
+  component.setArgsStreaming(false);
+  // An undescribed compact shell call leaves its bare streaming line for a box, so re-measure spacing.
+  reconcileToolBoundaries(ctx);
 }
 
-export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
+export function handleToolEnd(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  result: unknown,
+  isError: boolean,
+  providerMetadata?: unknown,
+): void {
+  handleToolInputEnd(ctx, toolCallId);
   flushPendingShellOutput(ctx, toolCallId);
   const { state } = ctx;
+  const background = state.options?.backgroundToolsEnabled ? getBackgroundToolMetadata(providerMetadata) : undefined;
   // If this is a subagent tool, store the result in the SubagentExecutionComponent
   const subagentComponent = state.pendingSubagents.get(toolCallId);
   if (subagentComponent) {
     const resultText = formatToolResult(result);
     if (pluginSubagentToolCallIds.has(toolCallId)) {
-      subagentComponent.finish(isError, 0, resultText);
-      state.pendingSubagents.delete(toolCallId);
-      pluginSubagentToolCallIds.delete(toolCallId);
-      flushRender(state);
+      if (background) subagentComponent.setBackgroundTaskId(background.taskId);
+      if (background?.status === 'running' && !isError) {
+        flushRender(state);
+      } else {
+        subagentComponent.finish(isError, undefined, resultText);
+        state.pendingSubagents.delete(toolCallId);
+        pluginSubagentToolCallIds.delete(toolCallId);
+        flushRender(state);
+      }
     } else {
       // We'll need to wait for subagent_end to set this
       // Store it temporarily
@@ -793,15 +866,20 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       state.allToolComponents.push(component);
     }
 
+    const resultText = formatToolResult(result);
+    const isBackgroundPlaceholder = background?.status === 'running' && !effectiveIsError;
+    if (background) component.setBackgroundTaskId?.(background.taskId);
     const toolResult: ToolResult = {
-      content: [{ type: 'text', text: formatToolResult(result) }],
+      content: [{ type: 'text', text: resultText }],
       isError: effectiveIsError,
     };
-    component.updateResult(toolResult, false);
+    component.updateResult(toolResult, isBackgroundPlaceholder);
     reconcileToolBoundaries(ctx);
 
-    state.pendingTools.delete(toolCallId);
-    state.pendingTaskToolIds?.delete(toolCallId);
+    if (!isBackgroundPlaceholder) {
+      state.pendingTools.delete(toolCallId);
+      state.pendingTaskToolIds?.delete(toolCallId);
+    }
     flushRender(state);
   }
 }

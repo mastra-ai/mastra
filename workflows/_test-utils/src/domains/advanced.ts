@@ -334,7 +334,7 @@ export function createAdvancedTests({ createAgent }: DurableAgentTestContext) {
       expect(deserialized.toolChoice).toBe('required');
       expect(deserialized.requireToolApproval).toBe(true);
       expect(deserialized.toolCallConcurrency).toBe(3);
-      expect(deserialized.temperature).toBe(0.8);
+      expect(deserialized.modelSettings?.temperature).toBe(0.8);
     });
 
     it('should handle complex tool metadata serialization', async () => {

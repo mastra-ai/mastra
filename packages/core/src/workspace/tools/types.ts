@@ -194,6 +194,12 @@ export interface BackgroundProcessConfig {
 export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
   /** Configuration for background process callbacks and abort behavior. */
   backgroundProcesses?: BackgroundProcessConfig;
+  /**
+   * Require a short plain-language `description` of each command, listed before `command`
+   * in the tool schema. UIs can show it in place of the raw command. When unset, the tool
+   * schema has no `description` arg. Default: false.
+   */
+  requireDescription?: boolean;
 }
 
 /**

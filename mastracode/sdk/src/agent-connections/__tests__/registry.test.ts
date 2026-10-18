@@ -83,6 +83,32 @@ describe('AgentConnectionRegistry', () => {
     await expect(registry.listPeers(createContext())).resolves.toEqual([]);
   });
 
+  it('excludes advertisements this runtime published for threads it is not currently on', async () => {
+    // A session keeps every thread it loaded advertised. Those advertisements
+    // come back from discovery tagged as self-published, and only the current
+    // thread would otherwise match the context — so without the tag the rest of
+    // the session's own threads show up as peers a user could "connect" to.
+    const registry = new AgentConnectionRegistry({
+      listPeers: () => [
+        {
+          agentId: 'code-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-0',
+          label: 'This session, earlier thread',
+          selfAdvertised: true,
+        },
+        { agentId: 'code-agent', resourceId: 'resource-1', threadId: 'thread-2', label: 'Real peer' },
+      ],
+    });
+
+    const peers = await registry.discoverPeers({
+      ...createContext(),
+      agent: { agentId: 'code-agent', resourceId: 'resource-1', threadId: 'thread-1' },
+    });
+
+    expect(peers.map(peer => peer.id)).toEqual(['code-agent:resource-1:thread-2']);
+  });
+
   it('renders saved advertised peers as connected and saved absent peers as saved', async () => {
     const registry = new AgentConnectionRegistry({
       now: () => 10_000,

@@ -220,7 +220,7 @@ Use `messages` when you only need to read, map over, or lightly edit fields on t
 
 When memory is enabled, only what ends up in `messageList` after all processors finish is persisted to storage. Both return styles are equivalent for persistence:
 
-- When you mutate `messageList` directly (or return the same `MessageList` instance), recorded mutations are applied in place, so the saved conversation reflects your changes.
+- When you mutate `messageList` directly (or return the same `MessageList` instance), recorded mutations are applied in place. The saved conversation reflects your changes.
 - When you return a `MastraDBMessage[]` or `{ messages, systemMessages }`, Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
 
 Returning a different `MessageList` instance is an error. Always mutate the one passed to your processor.
@@ -622,6 +622,13 @@ processLLMRequest?(
     type: 'MessageList',
     description:
       'The message list the prompt was converted from, when the call path has one. Use it for provenance the converted prompt no longer carries, such as per-turn provider stamps.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'Workspace',
+    description:
+      "The workspace of this step, the one the agent's tools use. Undefined when the agent has no workspace.",
     isOptional: true,
   },
   {
@@ -1667,7 +1674,7 @@ abort('Blocked content detected', { retry: false, metadata: { category: 'pii' } 
 ```
 
 - `reason`: A human-readable explanation. Appears as `tripwire.payload.reason`.
-- `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. When `errorProcessors` are configured, `maxProcessorRetries` defaults to `10` for that call.
+- `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. The safety cap of `3` that applies when no cap is set covers only error-processor retries from `processAPIError`. It doesn't give abort retries a budget.
 - `metadata`: Optional structured data attached to the `tripwire` chunk for downstream consumers.
 
 The emitted `tripwire` chunk has the shape:

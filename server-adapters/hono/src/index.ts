@@ -10,7 +10,9 @@ import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
   checkRouteFGA,
+  getFGAProvider,
   getCustomHTTPExceptionResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -25,6 +27,7 @@ export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
 export { setupBrowserStream } from './browser-stream';
+export type { HonoBrowserStreamConfig } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -169,8 +172,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         }
       }
 
-      // Parse request context from query params (GET)
-      if (c.req.method === 'GET') {
+      // Parse request context from query params.
+      if (c.req.method === 'GET' || c.req.method === 'POST') {
         try {
           const encodedRequestContext = c.req.query('requestContext');
           if (encodedRequestContext) {
@@ -346,6 +349,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const result: Record<string, unknown> = {};
 
     for (const [key, value] of formData.entries()) {
+      if (!isSafeObjectKey(key)) {
+        continue;
+      }
       if (value instanceof File) {
         const arrayBuffer = await value.arrayBuffer();
         result[key] = Buffer.from(arrayBuffer);
@@ -653,10 +659,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           // already returned as structured HTTP responses below. Logging them as errors
           // produces noise for callers — skip the logger call for those cases.
           const httpStatus =
-            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+            error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
           const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
           if (!isClientError) {
-            this.mastra.getLogger()?.error('Error calling handler', {
+            // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+            const logLevel = httpStatus === 501 ? 'warn' : 'error';
+            this.mastra.getLogger()?.[logLevel]('Error calling handler', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
               path: route.path,
               method: route.method,
@@ -774,24 +782,26 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         // Check FGA authorization (EE feature)
         let bodyParams: Record<string, unknown> = {};
-        const contentType = c.req.header('content-type');
-        if (contentType?.includes('application/json')) {
-          try {
-            const body = (await pristineRequest.clone().json()) as unknown;
-            if (body && typeof body === 'object' && !Array.isArray(body)) {
-              bodyParams = body as Record<string, unknown>;
+        if (getFGAProvider(this.mastra, c.get('requestContext'))) {
+          const contentType = c.req.header('content-type');
+          if (contentType?.includes('application/json')) {
+            try {
+              const body = (await pristineRequest.clone().json()) as unknown;
+              if (body && typeof body === 'object' && !Array.isArray(body)) {
+                bodyParams = body as Record<string, unknown>;
+              }
+            } catch {
+              bodyParams = {};
             }
-          } catch {
-            bodyParams = {};
-          }
-        } else if (
-          contentType?.includes('application/x-www-form-urlencoded') ||
-          contentType?.includes('multipart/form-data')
-        ) {
-          try {
-            bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
-          } catch {
-            bodyParams = {};
+          } else if (
+            contentType?.includes('application/x-www-form-urlencoded') ||
+            contentType?.includes('multipart/form-data')
+          ) {
+            try {
+              bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
+            } catch {
+              bodyParams = {};
+            }
           }
         }
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {

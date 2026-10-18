@@ -7,9 +7,12 @@ const mocks = vi.hoisted(() => {
     })(),
   );
 
+  const countTruncated = vi.fn(async (_values: string[]) => ({ count: 0, maxLength: 0 }));
+
   return {
     embed,
-    getCachedModel: vi.fn(async () => ({ embed })),
+    countTruncated,
+    getCachedModel: vi.fn(async () => ({ embed, countTruncated })),
   };
 });
 
@@ -21,6 +24,7 @@ vi.mock('./model-cache.js', () => ({
 beforeEach(() => {
   mocks.embed.mockClear();
   mocks.getCachedModel.mockClear();
+  mocks.countTruncated.mockClear();
 });
 
 test('registers role specific multilingual e5 models on the v3 provider', async () => {
@@ -61,4 +65,36 @@ test('leaves bge model inputs unprefixed', async () => {
 
   expect(mocks.getCachedModel).toHaveBeenCalledWith('BGESmallENV15');
   expect(mocks.embed).toHaveBeenCalledWith(['hello']);
+});
+
+test('returns no warnings when every input fits the token window', async () => {
+  const { fastembed } = await import('./index.js');
+
+  const result = await fastembed.small.doEmbed({ values: ['hello', 'world'] });
+
+  expect(mocks.countTruncated).toHaveBeenCalledWith(['hello', 'world']);
+  expect(result.warnings).toEqual([]);
+});
+
+test('warns when inputs exceed the token window and are truncated', async () => {
+  mocks.countTruncated.mockResolvedValueOnce({ count: 1, maxLength: 512 });
+  const { fastembed } = await import('./index.js');
+
+  const result = await fastembed.base.doEmbed({ values: ['long text', 'short'] });
+
+  expect(result.embeddings).toHaveLength(2);
+  expect(result.warnings).toEqual([
+    {
+      type: 'other',
+      message: expect.stringContaining("1 of 2 inputs exceed the model's 512-token window and were truncated"),
+    },
+  ]);
+});
+
+test('counts truncation on the prefixed e5 inputs', async () => {
+  const { fastembed } = await import('./index.js');
+
+  await fastembed.multilingualE5LargePassage.doEmbed({ values: ['hello'] });
+
+  expect(mocks.countTruncated).toHaveBeenCalledWith(['passage: hello']);
 });

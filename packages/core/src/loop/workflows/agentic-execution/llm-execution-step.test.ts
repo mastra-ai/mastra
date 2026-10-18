@@ -40,6 +40,7 @@ type IterationData = {
   processorRetryCount?: number;
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  backgroundTaskPending?: boolean;
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {
@@ -1697,6 +1698,101 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(doStream).not.toHaveBeenCalled();
   });
 
+  describe('fallback logging severity', () => {
+    const failingStream = (name: string) =>
+      vi.fn(async () => {
+        throw new APICallError({
+          message: `${name} failed`,
+          url: `https://${name}.example.com/v1/messages`,
+          requestBodyValues: {},
+          statusCode: 503,
+          isRetryable: true,
+        });
+      });
+    const succeedingStream = () =>
+      vi.fn(async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'response-metadata', id: 'resp-1', modelId: 'ok-model', timestamp: new Date(0) },
+          { type: 'text-delta', textDelta: 'ok' },
+          { type: 'finish', finishReason: 'stop', usage: testUsage },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      }));
+    const makeModel = (modelId: string, doStream: any) => ({
+      id: modelId,
+      maxRetries: 0,
+      model: {
+        specificationVersion: 'v2' as const,
+        provider: 'mock-provider',
+        modelId,
+        supportedUrls: {},
+        doGenerate: vi.fn(),
+        doStream,
+      } as any,
+    });
+    const run = async (models: any[]) => {
+      const logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() };
+      const step = createLLMExecutionStep({
+        agentId: 'test-agent',
+        messageId: 'msg-0',
+        runId: 'test-run',
+        startTimestamp: Date.now(),
+        methodType: 'stream',
+        controller,
+        outputWriter: vi.fn(),
+        messageList,
+        models,
+        tools: {},
+        streamState: { serialize: vi.fn(), deserialize: vi.fn() },
+        _internal: { generateId: () => 'generated-id', threadId: 'thread-123', resourceId: 'resource-456' },
+        logger: logger as any,
+      } as unknown as OuterLLMRun<{}>);
+      const result = await step.execute(createExecuteParams(createIterationInput())).catch(e => e);
+      return { logger, result };
+    };
+
+    it('logs a single warning and no errors when a fallback model recovers', async () => {
+      const { logger } = await run([
+        makeModel('primary-model', failingStream('primary')),
+        makeModel('secondary-model', succeedingStream()),
+      ]);
+
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Model primary-model failed; falling back to secondary-model',
+        expect.objectContaining({ modelId: 'primary-model', nextModelId: 'secondary-model' }),
+      );
+    });
+
+    it('logs one warning per failover when recovering on the third model', async () => {
+      const { logger } = await run([
+        makeModel('a-model', failingStream('a')),
+        makeModel('b-model', failingStream('b')),
+        makeModel('c-model', succeedingStream()),
+      ]);
+
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('surfaces the final failure as an error without a failover warning for the last model', async () => {
+      const { logger, result } = await run([
+        makeModel('primary-model', failingStream('primary')),
+        makeModel('secondary-model', failingStream('secondary')),
+      ]);
+
+      expect(result.stepResult.reason).toBe('error');
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Model primary-model failed; falling back to secondary-model',
+        expect.anything(),
+      );
+    });
+  });
+
   it('preserves fallback model index when processAPIError requests a retry', async () => {
     const firstModelStream = vi.fn(async () => {
       throw new APICallError({
@@ -1823,6 +1919,131 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(firstModelStream).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves fallback model index when a successful fallback continues after a tool call', async () => {
+    const tools = {
+      echo: createTool({
+        id: 'echo',
+        description: 'Echo input text',
+        inputSchema: z.object({ text: z.string() }),
+        execute: vi.fn(async ({ text }) => ({ text })),
+      }),
+    };
+    const firstModelStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'primary failed',
+        url: 'https://primary.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 503,
+        isRetryable: true,
+      });
+    });
+    const secondModelStream = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'echo',
+            input: '{"text":"continue on fallback"}',
+          },
+          {
+            type: 'finish',
+            finishReason: 'tool-calls',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      })
+      .mockResolvedValueOnce({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'text-delta',
+            textDelta: 'Completed on fallback',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      });
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'primary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'primary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: firstModelStream,
+          } as any,
+        },
+        {
+          id: 'secondary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'secondary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: secondModelStream,
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const toolCallResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(toolCallResult.stepResult.reason).toBe('tool-calls');
+    expect(toolCallResult.stepResult.isContinued).toBe(true);
+    expect(toolCallResult.fallbackModelIndex).toBe(1);
+    expect(firstModelStream).toHaveBeenCalledTimes(1);
+    expect(secondModelStream).toHaveBeenCalledTimes(1);
+
+    const continuationInput = createIterationInput();
+    continuationInput.fallbackModelIndex = toolCallResult.fallbackModelIndex;
+    const completionResult = await llmExecutionStep.execute(createExecuteParams(continuationInput));
+
+    expect(completionResult.stepResult.reason).toBe('stop');
+    expect(completionResult.fallbackModelIndex).toBeUndefined();
+    expect(firstModelStream).toHaveBeenCalledTimes(1);
+    expect(secondModelStream).toHaveBeenCalledTimes(2);
+  });
+
   it('does not signal a processor retry when aborted during the retry delay', async () => {
     const abortController = new AbortController();
     const onAbort = vi.fn();
@@ -1888,14 +2109,19 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const result = await llmExecutionStep.execute(
+      createExecuteParams({ ...createIterationInput(), backgroundTaskPending: true }),
+    );
 
     expect(doStream).toHaveBeenCalledTimes(1);
     expect(onAbort).toHaveBeenCalledOnce();
     // Nothing streamed before the abort, so the partial text is an empty string
     // rather than undefined.
     expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
-    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(result).toMatchObject({
+      backgroundTaskPending: true,
+      stepResult: { reason: 'abort', isContinued: false },
+    });
   });
 
   it('hands onAbort the text streamed before the abort', async () => {
@@ -2263,8 +2489,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(result.stepResult.reason).toBe('retry');
     expect(result.messageId).toBe('rotated-response-id');
 
-    // The rotated id only splits the transcript if the failed response was
-    // sealed; without the boundary the retry merges back under `msg-0`.
+    // The failed attempt's partial response is rolled back, so the retry neither
+    // merges into it nor replays it to the model (#26081).
     messageList.add(
       {
         id: result.messageId,
@@ -2278,7 +2504,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       .db()
       .filter(message => message.role === 'assistant')
       .map(message => message.id);
-    expect(assistantIds).toEqual(['msg-0', 'rotated-response-id']);
+    expect(assistantIds).toEqual(['rotated-response-id']);
+    expect(JSON.stringify(messageList.get.all.db())).not.toContain('half a sentence');
   });
 
   it('passes the rotated response message id to processor custom data writers', async () => {
@@ -3161,5 +3388,436 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
       }),
     );
     expect(providerToolSpan.end).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe('per-step modelSettings precedence (call-time < per-model < processor)', () => {
+  let controller: ReadableStreamDefaultController;
+  let messageList: MessageList;
+  let bail: Mock;
+
+  const createIterationInput = (): IterationData => ({
+    messageId: 'msg-0',
+    messages: {
+      all: messageList.get.all.aiV5.model(),
+      user: messageList.get.input.aiV5.model(),
+      nonUser: messageList.get.response.aiV5.model(),
+    },
+    output: {
+      usage: testUsage,
+      steps: [],
+    },
+    metadata: {},
+    stepResult: {
+      reason: 'stop',
+      warnings: [],
+      isContinued: false,
+    },
+  });
+
+  const createExecuteParams = (
+    inputData: IterationData,
+  ): ExecuteFunctionParams<{}, IterationData, any, any, any, any> => ({
+    runId: 'test-run',
+    workflowId: 'test-workflow',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend: vi.fn(),
+    bail,
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'call-1',
+      name: 'noop',
+      runId: 'test-run',
+    }),
+    validateSchemas: false,
+    inputData,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  const finishingStream = () =>
+    vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-1',
+          modelId: 'mock-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+  const mockModel = (doStream: Mock, modelId = 'mock-model-id', provider = 'mock-provider') =>
+    ({
+      specificationVersion: 'v2' as const,
+      provider,
+      modelId,
+      supportedUrls: {},
+      doGenerate: vi.fn(),
+      doStream,
+    }) as any;
+
+  const baseRun = (overrides: Record<string, unknown>) =>
+    createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+      ...overrides,
+    } as unknown as OuterLLMRun<{}>);
+
+  beforeEach(() => {
+    controller = {
+      enqueue: vi.fn(),
+      desiredSize: 1,
+      close: vi.fn(),
+      error: vi.fn(),
+    } as unknown as ReadableStreamDefaultController;
+
+    messageList = new MessageList();
+    messageList.add({ role: 'user', content: 'hi' }, 'input');
+
+    bail = vi.fn(data => data);
+  });
+
+  it('lets an input processor override agent-level maxRetries on a single-model agent', async () => {
+    const doStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'rate limited',
+        url: 'https://example.com',
+        requestBodyValues: {},
+        statusCode: 429,
+        isRetryable: true,
+      });
+    });
+
+    const llmExecutionStep = baseRun({
+      // Agent-level maxRetries: sets maxRetriesConfigured on the single model entry.
+      models: [{ id: 'test-model', maxRetries: 2, maxRetriesConfigured: true, model: mockModel(doStream) }],
+      inputProcessors: [
+        {
+          id: 'no-retries',
+          processInputStep: vi.fn(async () => ({ modelSettings: { maxRetries: 0 } })),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput())).catch(() => {});
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+  }, 20000);
+
+  it('keeps the resolved maxRetries when a processor returns only a partial modelSettings', async () => {
+    const doStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'rate limited',
+        url: 'https://example.com',
+        requestBodyValues: {},
+        statusCode: 429,
+        isRetryable: true,
+      });
+    });
+
+    const llmExecutionStep = baseRun({
+      modelSettings: { timeout: { stepMs: 1234 } },
+      // Agent default: retries disabled.
+      models: [{ id: 'test-model', maxRetries: 0, model: mockModel(doStream) }],
+      inputProcessors: [
+        {
+          id: 'temperature-only',
+          processInputStep: vi.fn(async () => ({ modelSettings: { temperature: 0.1 } })),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput())).catch(() => {});
+
+    // A partial processor return must not resurrect the provider's default retries.
+    expect(doStream).toHaveBeenCalledTimes(1);
+  }, 20000);
+
+  it('does not inherit per-model modelSettings over a processor-provided value', async () => {
+    const doStream = finishingStream();
+
+    const llmExecutionStep = baseRun({
+      modelSettings: { temperature: 0.2 },
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          modelSettings: { temperature: 0.9 },
+          model: mockModel(doStream),
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'cold',
+          processInputStep: vi.fn(async () => ({ modelSettings: { temperature: 0.1 } })),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+    expect(doStream.mock.calls[0]?.[0]?.temperature).toBe(0.1);
+  });
+
+  it('keeps per-model modelSettings winning over call-time settings when no processor touches them', async () => {
+    const doStream = finishingStream();
+
+    const llmExecutionStep = baseRun({
+      modelSettings: { temperature: 0.2 },
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          modelSettings: { temperature: 0.9 },
+          model: mockModel(doStream),
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'noop',
+          processInputStep: vi.fn(async () => ({})),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+    expect(doStream.mock.calls[0]?.[0]?.temperature).toBe(0.9);
+  });
+
+  it('keeps resolved budgets when a processor returns an explicit undefined modelSettings', async () => {
+    const doStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'rate limited',
+        url: 'https://example.com',
+        requestBodyValues: {},
+        statusCode: 429,
+        isRetryable: true,
+      });
+    });
+
+    const llmExecutionStep = baseRun({
+      models: [{ id: 'test-model', maxRetries: 0, model: mockModel(doStream) }],
+      inputProcessors: [
+        {
+          id: 'clears-settings',
+          processInputStep: vi.fn(async () => ({ modelSettings: undefined })),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput())).catch(() => {});
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+  }, 20000);
+
+  it('keeps the resolved step timeout when a processor returns only a partial modelSettings', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const doStream = vi.fn(async (opts: any) => {
+      capturedSignal = opts.abortSignal;
+      return {
+        // Never finishes: only the step timeout budget can end this call.
+        stream: new ReadableStream({ start() {} }),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      };
+    });
+
+    const llmExecutionStep = baseRun({
+      modelSettings: { timeout: { stepMs: 50 } },
+      models: [{ id: 'test-model', maxRetries: 0, model: mockModel(doStream) }],
+      inputProcessors: [
+        {
+          id: 'temperature-only',
+          processInputStep: vi.fn(async () => ({ modelSettings: { temperature: 0.1 } })),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput())).catch(() => {});
+
+    expect(capturedSignal?.aborted).toBe(true);
+  }, 15000);
+
+  it('resolves per-model modelSettings separately for each fallback entry', async () => {
+    const primaryStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'boom',
+        url: 'https://example.com',
+        requestBodyValues: {},
+        statusCode: 500,
+        isRetryable: false,
+      });
+    });
+    const secondaryStream = finishingStream();
+
+    const llmExecutionStep = baseRun({
+      modelSettings: { temperature: 0.2 },
+      models: [
+        {
+          id: 'primary',
+          maxRetries: 0,
+          modelSettings: { temperature: 0.9 },
+          model: mockModel(primaryStream, 'primary-model', 'primary-provider'),
+        },
+        {
+          id: 'secondary',
+          maxRetries: 0,
+          modelSettings: { temperature: 0.3 },
+          model: mockModel(secondaryStream, 'secondary-model', 'secondary-provider'),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(primaryStream.mock.calls[0]?.[0]?.temperature).toBe(0.9);
+    // The fallback entry must get its own merge, not the primary's frozen settings.
+    expect(secondaryStream.mock.calls[0]?.[0]?.temperature).toBe(0.3);
+  });
+
+  it('reports the same modelSettings on the MODEL_INFERENCE span as it passes to the model', async () => {
+    const doStream = finishingStream();
+    const setInferenceContext = vi.fn();
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({})),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+      setInferenceContext,
+      startInference: vi.fn(),
+    };
+
+    const llmExecutionStep = baseRun({
+      modelSpanTracker: modelSpanTracker as any,
+      modelSettings: { temperature: 0.2 },
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          modelSettings: { temperature: 0.9 },
+          model: mockModel(doStream),
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'cold',
+          processInputStep: vi.fn(async () => ({ modelSettings: { temperature: 0.1 } })),
+        },
+      ],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(setInferenceContext).toHaveBeenCalledTimes(1);
+    expect((setInferenceContext.mock.calls[0]?.[0] as any)?.parameters?.temperature).toBe(0.1);
+    expect(doStream.mock.calls[0]?.[0]?.temperature).toBe(0.1);
+  });
+
+  it.each([
+    { sampled: true, expectedToolNames: ['lookup'] },
+    { sampled: false, expectedToolNames: undefined },
+  ])(
+    'serializes MODEL_INFERENCE tool definitions only for a sampled trace (sampled: $sampled)',
+    async ({ sampled, expectedToolNames }) => {
+      const doStream = finishingStream();
+      const setInferenceContext = vi.fn();
+      const modelSpanTracker = {
+        // An unsampled trace still gets a tracker, backed by a no-op span.
+        getTracingContext: vi.fn(() => ({ currentSpan: { isValid: sampled } })),
+        reportGenerationError: vi.fn(),
+        endGeneration: vi.fn(),
+        updateGeneration: vi.fn(),
+        wrapStream: vi.fn(<T>(stream: T) => stream),
+        startStep: vi.fn(),
+        setInferenceContext,
+        startInference: vi.fn(),
+      };
+
+      const llmExecutionStep = baseRun({
+        modelSpanTracker: modelSpanTracker as any,
+        tools: { lookup: { description: 'Look something up', inputSchema: z.object({ query: z.string() }) } },
+        models: [{ id: 'test-model', maxRetries: 0, model: mockModel(doStream) }],
+      });
+
+      await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+      const context = setInferenceContext.mock.calls[0]?.[0] as any;
+      expect(context?.tools?.map((tool: any) => tool.name)).toEqual(expectedToolNames);
+      // The provider still gets the tool either way.
+      expect(doStream.mock.calls[0]?.[0]?.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    },
+  );
+
+  it('records provider tools on MODEL_INFERENCE with the type a v3 model receives', async () => {
+    const doStream = finishingStream();
+    const setInferenceContext = vi.fn();
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({ currentSpan: { isValid: true } })),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+      setInferenceContext,
+      startInference: vi.fn(),
+    };
+
+    const llmExecutionStep = baseRun({
+      modelSpanTracker: modelSpanTracker as any,
+      tools: { search: { id: 'openai.web_search', type: 'provider-defined', args: {} } },
+      models: [{ id: 'test-model', maxRetries: 0, model: { ...mockModel(doStream), specificationVersion: 'v3' } }],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    const sentType = doStream.mock.calls[0]?.[0]?.tools?.[0]?.type;
+    expect(sentType).toBe('provider');
+    expect((setInferenceContext.mock.calls[0]?.[0] as any)?.tools?.[0]?.type).toBe(sentType);
   });
 });

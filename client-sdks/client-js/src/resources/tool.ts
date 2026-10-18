@@ -1,13 +1,16 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { Body, PathParams, RouteResponse } from '../route-types.generated.js';
 import type { GetToolResponse, ClientOptions } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
+type ToolId = PathParams<'GET /tools/:toolId'>['toolId'];
+
 export class Tool extends BaseResource {
   constructor(
     options: ClientOptions,
-    private toolId: string,
+    private toolId: ToolId,
   ) {
     super(options);
   }
@@ -26,14 +29,19 @@ export class Tool extends BaseResource {
    * @param params - Parameters required for tool execution
    * @returns Promise containing the tool execution results
    */
-  execute(params: { data: any; runId?: string; requestContext?: RequestContext | Record<string, any> }): Promise<any> {
+  execute(
+    params: Omit<Body<'POST /tools/:toolId/execute'>, 'requestContext'> & {
+      runId?: string;
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<RouteResponse<'POST /tools/:toolId/execute'>> {
     const url = new URLSearchParams();
 
     if (params.runId) {
       url.set('runId', params.runId);
     }
 
-    const body = {
+    const body: Body<'POST /tools/:toolId/execute'> = {
       data: params.data,
       requestContext: parseClientRequestContext(params.requestContext),
     };

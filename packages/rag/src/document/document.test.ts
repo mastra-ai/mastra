@@ -492,6 +492,58 @@ describe('MDocument', () => {
     });
   });
 
+  describe('addStartIndex', () => {
+    const text = Array.from({ length: 400 }, (_, i) => `word${i}`).join(' ');
+
+    const expectCorrectStartIndexes = (chunks: { text: string; metadata: Record<string, any> }[]) => {
+      expect(chunks.length).toBeGreaterThan(1);
+      let previous = -1;
+      for (const chunk of chunks) {
+        const startIndex = chunk.metadata.startIndex;
+        expect(startIndex).toBeGreaterThan(previous);
+        expect(text.slice(startIndex).startsWith(chunk.text)).toBe(true);
+        previous = startIndex;
+      }
+    };
+
+    it('reports the real start of every chunk with the token strategy and overlap', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'token', maxSize: 50, overlap: 10, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+      expect(chunks[1]!.metadata.startIndex).toBe(130);
+    });
+
+    it('reports the real start of every chunk with a token-counting lengthFunction', async () => {
+      const { getEncoding } = await import('js-tiktoken');
+      const encoding = getEncoding('cl100k_base');
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'recursive',
+        maxSize: 50,
+        overlap: 10,
+        addStartIndex: true,
+        lengthFunction: t => encoding.encode(t).length,
+      });
+
+      expectCorrectStartIndexes(chunks);
+    });
+
+    it('keeps correct start indexes with the default character length', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'recursive', maxSize: 200, overlap: 40, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+    });
+
+    it('keeps correct start indexes with the token strategy and no overlap', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'token', maxSize: 50, overlap: 0, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+    });
+  });
+
   describe('chunkRecursive', () => {
     it('chunkRecursive', async () => {
       const text =
@@ -2537,6 +2589,55 @@ describe('MDocument', () => {
       });
     });
 
+    it('should keep leading and trailing whitespace when stripWhitespace is false', async () => {
+      const text = '  hello world  ';
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'token',
+        maxSize: 100,
+        overlap: 0,
+        stripWhitespace: false,
+      });
+
+      const chunks = doc.getText();
+
+      expect(chunks).toEqual([text]);
+    });
+
+    it('should rejoin to the original text with stripWhitespace: false and no overlap', async () => {
+      const text = '  alpha beta\n\tgamma delta  ';
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'token',
+        maxSize: 2,
+        overlap: 0,
+        stripWhitespace: false,
+      });
+
+      const chunks = doc.getText();
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(text);
+    });
+
+    it('should strip whitespace by default', async () => {
+      const text = '  alpha beta\n\tgamma delta  ';
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'token',
+        maxSize: 2,
+        overlap: 0,
+      });
+
+      const chunks = doc.getText();
+
+      expect(chunks.every(chunk => chunk === chunk.trim())).toBe(true);
+      expect(chunks.join('')).not.toBe(text);
+    });
+
     describe('Error cases', () => {
       it('should throw error for invalid chunk maxSize and overlap', async () => {
         const text = '  This has whitespace   ';
@@ -4103,3 +4204,31 @@ function findCommonSubstring(str1: string, str2: string): string {
 
   return longest;
 }
+
+describe('MDocument.chunk tracing', () => {
+  it('records chunkSize and chunkOverlap on the chunk span', async () => {
+    const spans: any[] = [];
+    const span: any = {
+      createChildSpan: (opts: any) => {
+        spans.push(opts);
+        return span;
+      },
+      end: vi.fn(),
+      error: vi.fn(),
+      update: vi.fn(),
+    };
+    const doc = MDocument.fromText('Hello world. '.repeat(20));
+
+    await doc.chunk(
+      { strategy: 'recursive', maxSize: 50, overlap: 10 },
+      { observabilityContext: { tracingContext: { currentSpan: span } } as any },
+    );
+
+    expect(spans[0].attributes).toMatchObject({
+      action: 'chunk',
+      strategy: 'recursive',
+      chunkSize: 50,
+      chunkOverlap: 10,
+    });
+  });
+});

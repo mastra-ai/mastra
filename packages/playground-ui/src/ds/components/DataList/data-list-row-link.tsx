@@ -3,6 +3,7 @@ import type { CSSProperties, ComponentPropsWithoutRef, ReactNode } from 'react';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
 import { dataListRowInteractiveStyles, dataListRowStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
+import { useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -20,13 +21,16 @@ export const DataListRowLink = forwardRef<HTMLAnchorElement, DataListRowLinkProp
     ref,
   ) => {
     const isWrapped = useDataListRowWrapperContext();
+    // Standalone rows register with the root's fluid hover; wrapped ones let the wrapper do it.
+    const fluidRef = useFluidMenuItemRef(ref);
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
+    const cellsClass = hasColumnOverride ? undefined : 'data-list-cells';
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
     return (
       <Link
-        ref={ref}
+        ref={isWrapped ? ref : fluidRef}
         href={to}
-        className={cn(...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles), className)}
+        className={cn(...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles), cellsClass, className)}
         style={resolvedStyle}
         data-featured={featured || undefined}
         data-variant={variant ?? 'default'}

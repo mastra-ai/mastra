@@ -29,6 +29,7 @@ test-outputs/
 openapi-ts-error*
 
 .mastra
+.factory/
 .sandbox-profiles/
 *.db*
 *.duckdb
@@ -83,6 +84,8 @@ om-reflector-fixture.json
 !.mastracode/skills/
 !.mastracode/skills/*/
 !.mastracode/skills/*/SKILL.md
+!.mastracode/skills/*/references/
+!.mastracode/skills/*/references/**
 !.mastracode/shared/
 !.mastracode/shared/pr-review-context.md
 !.mastracode/shared/issue-debug-context.md

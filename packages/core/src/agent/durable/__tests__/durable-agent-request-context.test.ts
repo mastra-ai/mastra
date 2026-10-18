@@ -292,12 +292,14 @@ describe('DurableAgent RequestContext reserved keys', () => {
       // to scorers. The full RequestContext (which can hold live handles) is
       // not serialized — it stays on the run registry.
       //
-      // The snapshot is taken *before* preparation mutates the request context
-      // (e.g. adding MASTRA_VERSIONS_KEY / MastraMemory), so persisted
-      // customContext must reflect only caller-provided entries.
+      // The snapshot is taken *after* input processors run (so their writes
+      // reach the durable run, #23904), while framework-internal prep keys
+      // (MASTRA_VERSIONS_KEY / MastraMemory / auth token) are excluded by key,
+      // so persisted customContext still reflects only caller and processor
+      // entries.
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
-      expect(entries).toEqual({ userId: 'user-123' });
+      expect(entries).toEqual({ userId: 'user-123', mastra__scopes: [] });
     });
 
     it('should not persist a delegating agent memory instance from the reserved key', async () => {
@@ -324,7 +326,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
-      expect(entries).toEqual({ userId: 'user-123' });
+      expect(entries).toEqual({ userId: 'user-123', mastra__scopes: [] });
     });
 
     it('should not persist the framework-managed auth token into workflow input', async () => {
@@ -350,7 +352,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
-      expect(entries).toEqual({ userId: 'user-123' });
+      expect(entries).toEqual({ userId: 'user-123', mastra__scopes: [] });
     });
   });
 });

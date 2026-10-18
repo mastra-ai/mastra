@@ -55,8 +55,10 @@ async function runCodemods(codemods: string[], options: TransformOptions, versio
   }
 
   outro(`${versionLabel} codemods complete.`);
+
+  return { errors: allErrors };
 }
 
 export async function upgradeV1(options: TransformOptions) {
-  await runCodemods(v1Bundle, options, 'v1');
+  return runCodemods(v1Bundle, options, 'v1');
 }

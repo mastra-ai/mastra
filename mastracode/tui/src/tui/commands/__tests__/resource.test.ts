@@ -84,6 +84,7 @@ function createMockCtx(controller: ReturnType<typeof createMockAgentController>)
         allShellComponents: [] as any[],
         messageComponentsById: new Map<string, any>(),
         session: (controller as any).session,
+        local: { controller, session: (controller as any).session },
         ui: { requestRender: vi.fn() },
       },
       controller: controller as any,

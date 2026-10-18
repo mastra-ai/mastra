@@ -83,6 +83,94 @@ describe('QUERY_THREADS', () => {
     }
   });
 
+  it('returns 501 before calling an older store for root duration trace predicates', async () => {
+    const { mastra, observabilityStore } = createHarness(['thread-query']);
+    const error = await captureHttpException(
+      QUERY_THREADS.handler(
+        params(mastra, {
+          traces: {
+            timeRange: TIME_RANGE,
+            where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+          },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Root duration predicates are not supported by the configured observability store',
+    });
+    expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
+  });
+
+  it('returns 501 before calling an older store for context identifier predicates', async () => {
+    const requests = [
+      {
+        traces: { timeRange: TIME_RANGE, where: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 's-1' } } },
+      },
+      {
+        traces: { timeRange: TIME_RANGE },
+        where: { traces: { some: { spans: { some: { op: 'exists', path: 'runId' } } } } },
+      },
+    ];
+    for (const request of requests) {
+      const { mastra, observabilityStore } = createHarness(['thread-query']);
+      const error = await captureHttpException(QUERY_THREADS.handler(params(mastra, request)));
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Context identifier predicates are not supported by the configured observability store',
+      });
+      expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
+    }
+  });
+
+  it('returns 501 before calling an older store for root duration predicates in thread relations', async () => {
+    const { mastra, observabilityStore } = createHarness(['thread-query']);
+    const error = await captureHttpException(
+      QUERY_THREADS.handler(
+        params(mastra, {
+          traces: { timeRange: TIME_RANGE },
+          where: {
+            traces: {
+              some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+            },
+          },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Root duration predicates are not supported by the configured observability store',
+    });
+    expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
+  });
+
+  it('does not require the root duration capability for span duration predicates in thread relations', async () => {
+    const { mastra, observabilityStore } = createHarness(['thread-query']);
+
+    await QUERY_THREADS.handler(
+      params(mastra, {
+        traces: { timeRange: TIME_RANGE },
+        where: {
+          traces: {
+            some: {
+              spans: {
+                some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(observabilityStore.queryThreads).toHaveBeenCalledOnce();
+  });
+
   it('plans eligibility and thread predicates before using the request-available store', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
     observabilityStore.queryThreads.mockResolvedValue({
@@ -279,7 +367,7 @@ describe('QUERY_THREADS', () => {
     const body = await error.getResponse().json();
     expect(getDeclaredErrorSchema(504).parse(body)).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
     expect(JSON.stringify(body)).not.toContain('driver');
   });

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
@@ -45,6 +45,7 @@ function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV
 
 const OPENAI_WS_ALLOWLIST = new Set(['openai']);
 const OPENAI_API_HOST = 'api.openai.com';
+let cacheKeyHmacSecret: Buffer | undefined;
 
 type GatewayModelCache = {
   modelInstances: Map<string, GatewayLanguageModel>;
@@ -125,15 +126,19 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   readonly modelId: string;
   readonly provider: string;
   readonly gatewayId: string;
+  /** Full `provider/model` router ID, when the ID alone resolves this model's route. */
+  id?: string;
 
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGatewayInterface;
   private _supportedUrlsPromise: Promise<Record<string, RegExp[]>> | null = null;
   private readonly instanceGatewayCache = createGatewayModelCache();
+  private readonly hasCustomGateways: boolean;
   #lastStreamTransport: StreamTransport | undefined;
   #manager: GatewayManager;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGatewayInterface[]) {
+    this.hasCustomGateways = Boolean(customGateways?.length);
     // Normalize config to always have an 'id' field for routing
     let normalizedConfig: {
       id: `${string}/${string}`;
@@ -192,6 +197,17 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
     this.modelId = parsedConfig.id;
     this.config = parsedConfig;
+    // Only expose the ID when it alone can resolve the same route again: custom endpoints,
+    // credentials, headers, and gateways are not carried by the ID.
+    if (
+      !this.hasCustomGateways &&
+      !parsedConfig.url &&
+      !parsedConfig.apiKey &&
+      !parsedConfig.headers &&
+      !parsedConfig.api
+    ) {
+      this.id = parsedConfig.routerId;
+    }
 
     // Create a lazy PromiseLike for supportedUrls that resolves the underlying model's supportedUrls
     // This allows providers like Mistral to expose their native URL support (e.g., PDF URLs)
@@ -217,8 +233,20 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return this._supportedUrlsPromise;
     }
 
-    this._supportedUrlsPromise = this._fetchSupportedUrls();
-    return this._supportedUrlsPromise;
+    const supportedUrlsPromise = this._fetchSupportedUrls().catch(error => {
+      console.warn(
+        `[ModelRouter] Failed to resolve supportedUrls for "${this.config.routerId}". Retrying on next access.`,
+        error,
+      );
+
+      if (this._supportedUrlsPromise === supportedUrlsPromise) {
+        this._supportedUrlsPromise = null;
+      }
+
+      return {};
+    });
+    this._supportedUrlsPromise = supportedUrlsPromise;
+    return supportedUrlsPromise;
   }
 
   /**
@@ -226,35 +254,28 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
    * @internal
    */
   private async _fetchSupportedUrls(): Promise<Record<string, RegExp[]>> {
-    let apiKey: string;
-    try {
-      const resolved = this.#manager.resolveModelId(this.config.routerId);
-      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
-      apiKey = auth.apiKey ?? '';
-      const model = await this.resolveLanguageModel({
-        apiKey,
-        auth,
-        headers: mergeHeaders(this.config.headers, auth.headers),
-        ...resolved,
-      });
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
+    const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+    const model = await this.resolveLanguageModel({
+      apiKey: auth.apiKey ?? '',
+      auth,
+      headers: mergeHeaders(this.config.headers, auth.headers),
+      ...resolved,
+    });
 
-      // Get supportedUrls from the underlying model
-      const modelSupportedUrls = model.supportedUrls;
-      if (!modelSupportedUrls) {
-        return {};
-      }
-
-      // Handle both Promise and plain object supportedUrls
-      if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
-        const resolved = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
-        return resolved ?? {};
-      }
-
-      return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
-    } catch {
-      // If model resolution fails, return empty supportedUrls
+    // Get supportedUrls from the underlying model
+    const modelSupportedUrls = model.supportedUrls;
+    if (!modelSupportedUrls) {
       return {};
     }
+
+    // Handle both Promise and plain object supportedUrls
+    if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+      const resolved = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+      return resolved ?? {};
+    }
+
+    return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
   }
 
   /** @internal */
@@ -504,7 +525,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     authScopeKey: string;
     api: 'chat' | 'responses';
   }): string {
-    return createHash('sha256')
+    cacheKeyHmacSecret ??= Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32)));
+    return createHmac('sha256', cacheKeyHmacSecret)
       .update(
         JSON.stringify([
           gatewayId,

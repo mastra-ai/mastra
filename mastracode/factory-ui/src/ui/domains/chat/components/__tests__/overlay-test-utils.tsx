@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -25,7 +25,7 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 
-const OVERLAY_FACTORY_ID = 'p-overlay';
+export const OVERLAY_FACTORY_ID = 'p-overlay';
 const OVERLAY_PROJECT_REPOSITORY_ID = 'repo-overlay';
 const OVERLAY_SESSION_ID = 'session-overlay';
 
@@ -82,9 +82,7 @@ export function useOverlayControllerHandlers() {
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
@@ -92,7 +90,6 @@ export function useOverlayControllerHandlers() {
       const resourceId = resourceIdFromRequestBody(await request.json());
       return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-test' });
     }),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () =>
       HttpResponse.json({
         models: [
@@ -127,6 +124,10 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'medium' } }),
+    ),
   );
 }
 
@@ -149,11 +150,11 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="overlay-test">
+            <SidebarProvider storageKey="overlay-test">
               <ChatSessionProvider threadId="thread-test">
                 <OverlaysProvider>{children}</OverlaysProvider>
               </ChatSessionProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
         <Route path="*" element={<NavigatedPath />} />

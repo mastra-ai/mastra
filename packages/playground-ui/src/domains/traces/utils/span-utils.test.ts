@@ -1,94 +1,22 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
-import {
-  formatSpanDuration,
-  formatSpanDurationExact,
-  formatSpanTimestamp,
-  formatSpanTimestampExact,
-  getInputPreview,
-  getTokenLimitMessage,
-  isTokenLimitExceeded,
-} from './span-utils';
+import { getSpanDurationMs, getInputPreview, getTokenLimitMessage, isTokenLimitExceeded } from './span-utils';
 
 const START = new Date('2026-01-01T00:00:00.000Z');
 const at = (offsetMs: number) => new Date(START.getTime() + offsetMs);
 
-const TIMESTAMP = new Date('2026-01-05T14:03:07.250Z');
-const MIDNIGHT = new Date('2026-01-05T00:00:00.000Z');
-
-describe('formatSpanDuration', () => {
-  describe('when a span has valid start and end times', () => {
-    it('formats milliseconds and rounds seconds to one decimal place', () => {
-      expect(formatSpanDuration(START, at(425))).toBe('425ms');
-      expect(formatSpanDuration(START, at(1250))).toBe('1.3s');
-      expect(formatSpanDuration(START, at(46301))).toBe('46.3s');
-    });
-
-    it('switches to seconds at exactly one second', () => {
-      expect(formatSpanDuration(START, at(999))).toBe('999ms');
-      expect(formatSpanDuration(START, at(1000))).toBe('1.0s');
-    });
-
-    it('reports a zero-length span as 0ms', () => {
-      expect(formatSpanDuration(START, START)).toBe('0ms');
-    });
-
-    it('accepts ISO strings as well as Date objects', () => {
-      expect(formatSpanDuration('2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.425Z')).toBe('425ms');
-    });
+describe('getSpanDurationMs', () => {
+  it('returns the elapsed milliseconds for Date and ISO string inputs', () => {
+    expect(getSpanDurationMs(START, at(1250))).toBe(1250);
+    expect(getSpanDurationMs('2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.425Z')).toBe(425);
+    expect(getSpanDurationMs(START, START)).toBe(0);
   });
 
-  describe('when a span is running or has invalid timing', () => {
-    it('leaves the duration empty', () => {
-      expect(formatSpanDuration(START, undefined)).toBeUndefined();
-      expect(formatSpanDuration(START, null)).toBeUndefined();
-      expect(formatSpanDuration(undefined, START)).toBeUndefined();
-      expect(formatSpanDuration(null, START)).toBeUndefined();
-      expect(formatSpanDuration('not-a-date', START)).toBeUndefined();
-      expect(formatSpanDuration(START, 'not-a-date')).toBeUndefined();
-      expect(formatSpanDuration(new Date('not-a-date'), START)).toBeUndefined();
-      // End before start means the trace is inconsistent, not instantaneous.
-      expect(formatSpanDuration(at(1000), START)).toBeUndefined();
-    });
-  });
-});
-
-describe('formatSpanDurationExact', () => {
-  it('keeps every millisecond once the span passes one second', () => {
-    expect(formatSpanDurationExact(START, at(425))).toBe('425ms');
-    expect(formatSpanDurationExact(START, at(999))).toBe('999ms');
-    expect(formatSpanDurationExact(START, at(1000))).toBe('1s');
-    expect(formatSpanDurationExact(START, at(1250))).toBe('1.25s');
-    expect(formatSpanDurationExact(START, at(46301))).toBe('46.301s');
-  });
-
-  it('leaves the duration empty when the timing is unusable', () => {
-    expect(formatSpanDurationExact(START, undefined)).toBeUndefined();
-    expect(formatSpanDurationExact(at(1000), START)).toBeUndefined();
-  });
-});
-
-describe('formatSpanTimestamp', () => {
-  it('formats the 12-hour wall-clock time', () => {
-    expect(formatSpanTimestamp(TIMESTAMP)).toBe('2:03:07 PM');
-    expect(formatSpanTimestamp(MIDNIGHT)).toBe('12:00:00 AM');
-  });
-
-  it('leaves the timestamp empty instead of throwing', () => {
-    expect(formatSpanTimestamp(undefined)).toBeUndefined();
-    expect(formatSpanTimestamp(null)).toBeUndefined();
-    expect(formatSpanTimestamp('not-a-date')).toBeUndefined();
-  });
-});
-
-describe('formatSpanTimestampExact', () => {
-  it('formats the full date down to milliseconds', () => {
-    expect(formatSpanTimestampExact(TIMESTAMP)).toBe('Jan 5, 2026, 2:03:07.250 PM');
-  });
-
-  it('leaves the timestamp empty instead of throwing', () => {
-    expect(formatSpanTimestampExact(undefined)).toBeUndefined();
-    expect(formatSpanTimestampExact('not-a-date')).toBeUndefined();
+  it('returns undefined for missing, invalid or reversed timestamps', () => {
+    expect(getSpanDurationMs(START, undefined)).toBeUndefined();
+    expect(getSpanDurationMs(null, START)).toBeUndefined();
+    expect(getSpanDurationMs('not-a-date', START)).toBeUndefined();
+    expect(getSpanDurationMs(at(1000), START)).toBeUndefined();
   });
 });
 

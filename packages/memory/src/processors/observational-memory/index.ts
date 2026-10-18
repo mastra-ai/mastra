@@ -19,6 +19,8 @@ export {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTINUATION_HINT,
   OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_PROMPT_THREAD,
+  getObservationContextPrompt,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
 } from './constants';
 
@@ -136,3 +138,4 @@ export {
   combineObservationGroupRanges,
   type ObservationGroup,
 } from './observation-groups';
+export { AUTO_MODEL_BY_PROVIDER, resolveAutoModelId, type ResolveAutoModelIdOptions } from './auto-model';

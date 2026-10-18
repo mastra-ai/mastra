@@ -1,7 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
-import { getObservableMessages, stripThreadTags } from '../message-utils';
+import {
+  findLastCompletedObservationBoundary,
+  getObservableMessages,
+  getUnobservedParts,
+  stripThreadTags,
+} from '../message-utils';
 
 const THREAD_ID = 'thread-1';
 const RESOURCE_ID = 'resource-1';
@@ -78,5 +83,25 @@ describe('stripThreadTags', () => {
     // Generous budget — linear implementation finishes in a few ms;
     // a quadratic implementation would take multiple seconds.
     expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+describe('reflection markers on the live user message', () => {
+  it('does not treat a reflection end marker as an observation boundary, so the message stays observable', () => {
+    const message = createMessage('input-1', 'Keep me observable');
+    message.content.parts.push(
+      { type: 'data-om-observation-start', data: { operationType: 'reflection' } } as any,
+      { type: 'data-om-observation-end', data: { operationType: 'reflection' } } as any,
+      { type: 'data-om-observation-failed', data: { operationType: 'reflection' } } as any,
+    );
+
+    expect(findLastCompletedObservationBoundary(message)).toBe(-1);
+    expect(getUnobservedParts(message)).toContainEqual({ type: 'text', text: 'Keep me observable' });
+  });
+
+  it('still honours observation end markers as boundaries', () => {
+    const message = createMessage('input-1', 'Already observed');
+    message.content.parts.push({ type: 'data-om-observation-end', data: { operationType: 'observation' } } as any);
+    expect(findLastCompletedObservationBoundary(message)).toBe(1);
   });
 });

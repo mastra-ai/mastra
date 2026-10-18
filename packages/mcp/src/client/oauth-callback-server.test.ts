@@ -118,6 +118,19 @@ describe('createOAuthCallbackServer', () => {
     await expect(pending).resolves.toEqual({ code: 'auth-code-123', state: STATE });
   });
 
+  it('captures the RFC 9207 issuer from the callback request', async () => {
+    const server = await startCallbackServer();
+    const pending = server.waitForCode();
+
+    await fetch(`${server.url}?code=auth-code-123&state=${STATE}&iss=${encodeURIComponent('https://auth.example.com')}`);
+
+    await expect(pending).resolves.toEqual({
+      code: 'auth-code-123',
+      state: STATE,
+      iss: 'https://auth.example.com',
+    });
+  });
+
   it('ignores requests without a matching state so they cannot settle the flow', async () => {
     const server = await startCallbackServer();
     const pending = server.waitForCode();

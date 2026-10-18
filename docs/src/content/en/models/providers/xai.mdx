@@ -7,7 +7,7 @@ description: "Browse xAI model IDs, capabilities, context windows, and pricing. 
 
 # <img src="https://models.dev/logos/xai.svg" alt="xAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />xAI
 
-Access 12 xAI models through Mastra's model router. Authentication is handled automatically using the `XAI_API_KEY` environment variable.
+Access 13 xAI models through Mastra's model router. Authentication is handled automatically using the `XAI_API_KEY` environment variable.
 
 Learn more in the [xAI documentation](https://docs.x.ai/docs/models).
 
@@ -112,6 +112,18 @@ for await (const chunk of stream) {
     "outputCost": 6
   },
   {
+    "model": "xai/grok-4.7",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 500000,
+    "maxOutput": 500000,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
     "model": "xai/grok-build-0.1",
     "imageInput": true,
     "audioInput": false,
@@ -131,18 +143,6 @@ for await (const chunk of stream) {
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 16000,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "xai/grok-imagine-image-2.0",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 64000,
     "maxOutput": null,
     "inputCost": null,
     "outputCost": null
@@ -175,6 +175,18 @@ for await (const chunk of stream) {
     "model": "xai/grok-imagine-video-1.5",
     "imageInput": true,
     "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 1024,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "xai/grok-imagine-video-1.5-lite",
+    "imageInput": true,
+    "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
@@ -215,7 +227,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "xai/grok-imagine-video-1.5"
+      ? "xai/grok-imagine-video-1.5-lite"
       : "xai/grok-4.20-0309-non-reasoning";
   }
 });

@@ -7,7 +7,9 @@ export function createGoalReminderSignal(goal: GoalState) {
     attributes: { type: 'goal' },
     metadata: {
       goalId: goal.id,
-      maxTurns: goal.maxTurns,
+      // Must match the key the TUI reads (`goalMaxTurns`). It previously used
+      // `maxTurns`, so the reminder rendered without its attempt budget.
+      goalMaxTurns: goal.maxTurns,
       judgeModelId: goal.judgeModelId,
     },
   };

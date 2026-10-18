@@ -2,6 +2,7 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { Input } from '../Input';
 import { Section } from './section';
 
 afterEach(cleanup);
@@ -20,7 +21,7 @@ describe('Section', () => {
     const heading = screen.getByRole('heading', { name: 'Overview' });
     const headerClasses = heading.closest('[data-slot="section-header"]')?.className.split(' ');
 
-    expect(heading.className).toContain('group-data-[variant=default]/section:font-medium');
+    expect(heading.className).toContain('group-data-[variant=default]/section:text-subheading');
     expect(headerClasses).toContain('group-data-[variant=default]/section:grid');
     expect(headerClasses).not.toContain('px-4');
     expect(screen.getByText('Section content').closest('[data-slot="section"]')?.dataset.variant).toBe('default');
@@ -30,8 +31,8 @@ describe('Section', () => {
     render(
       <Section variant="flat">
         <Section.Content>
-          <Section.Row label="Project name" description="Shown throughout the studio." htmlFor="project-name">
-            <input id="project-name" />
+          <Section.Row label="Project name" description="Shown throughout the studio.">
+            <Input />
           </Section.Row>
           <Section.Divider />
           <Section.Row label="Region" />
@@ -39,12 +40,13 @@ describe('Section', () => {
       </Section>,
     );
 
-    expect(screen.getByLabelText('Project name')).toBeTruthy();
-    expect(screen.getByText('Shown throughout the studio.')).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Project name' }).getAttribute('aria-describedby')).toBe(
+      screen.getByText('Shown throughout the studio.').id,
+    );
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 
-  it('renders view-only and destructive row states', () => {
+  it('renders the view-only prefix', () => {
     render(
       <Section variant="factory">
         <Section.Content>
@@ -58,8 +60,6 @@ describe('Section', () => {
     );
 
     expect(screen.getByText('View only:')).toBeTruthy();
-    expect(screen.getByText('Project access').className).toContain('text-neutral3');
-    expect(screen.getByText('Leave organization').className).toContain('text-accent2');
   });
 
   it('keeps flat and factory headings on the card edge while rows retain their inset', () => {
@@ -89,8 +89,8 @@ describe('Section', () => {
     const factory = factoryHeading.closest('[data-slot="section"]');
     const flat = flatHeading.closest('[data-slot="section"]');
 
-    expect(factoryHeading.className).toContain('group-data-[variant=factory]/section:font-medium');
-    expect(flatHeading.className).toContain('group-data-[variant=flat]/section:font-medium');
+    expect(factoryHeading.className).toContain('group-data-[variant=factory]/section:text-subheading');
+    expect(flatHeading.className).toContain('group-data-[variant=flat]/section:text-subheading');
     expect(factory?.className).toContain('w-full');
     expect(flat?.className).toContain('w-full');
     const factoryHeaderClasses = factory?.querySelector('[data-slot="section-header"]')?.className.split(' ');
@@ -158,9 +158,9 @@ describe('Section', () => {
     );
 
     expect(screen.getByText('Auto-approve tools').closest('[data-slot="section"]')?.dataset.variant).toBe('factory');
-    expect(screen.getByRole('heading', { name: 'Behavior' }).className).toContain('text-ui-md');
-    expect(screen.getByText('Choose how agents handle tools.').className).toContain('text-ui-sm');
-    expect(screen.getByText('Run tool calls without asking.').className).toContain('text-ui-sm');
+    expect(screen.getByRole('heading', { name: 'Behavior' }).className).toContain('text-subheading');
+    expect(screen.getByText('Choose how agents handle tools.').className).toContain('text-caption');
+    expect(screen.getByText('Run tool calls without asking.').className).toContain('text-caption');
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 });

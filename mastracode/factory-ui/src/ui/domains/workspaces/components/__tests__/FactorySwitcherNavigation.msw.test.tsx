@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -25,9 +25,9 @@ function renderFactorySwitcher(initialEntry: string) {
       {
         path: '/factories/:factoryId/*',
         element: (
-          <MainSidebarProvider storageKey="factory-switcher-navigation" mobileBreakpoint={768}>
+          <SidebarProvider storageKey="factory-switcher-navigation" mobileBreakpoint={768}>
             <FactorySwitcher />
-          </MainSidebarProvider>
+          </SidebarProvider>
         ),
       },
     ],
@@ -82,12 +82,12 @@ describe('Factory switch navigation', () => {
         session: 'user',
         initialEntry: '/factories/factory-current/user/threads/user-thread?resourceId=user#messages',
       },
-    ])('opens the destination overview from a $session session', async ({ initialEntry }) => {
+    ])('opens the destination board landing from a $session session', async ({ initialEntry }) => {
       const { currentLocation } = renderFactorySwitcher(initialEntry);
 
       await switchToNextFactory();
 
-      expect(currentLocation()).toBe('/factories/factory-next/overview');
+      expect(currentLocation()).toBe('/factories/factory-next');
     });
   });
 });

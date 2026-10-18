@@ -121,34 +121,48 @@ test.describe('Workflow schedules', () => {
   });
 
   test.describe('when a workflow graph has one schedule', () => {
-    test('routes the Schedules link to the schedule detail page', async ({ page }) => {
+    test('opens the Schedules tab scoped to that workflow and reaches the schedule detail page', async ({ page }) => {
       await page.goto('/workflows/scheduledWorkflow/graph');
 
-      // scheduledWorkflow has exactly one schedule, so the header link goes straight
-      // to that schedule's detail page (smart routing: 1 schedule → detail page).
-      const scheduledHeaderLink = page.getByRole('link', { name: /Schedules/ });
-      await expect(scheduledHeaderLink).toBeVisible();
+      const schedulesTab = page.getByRole('tab', { name: /Schedules \(1\)/ });
+      await expect(schedulesTab).toBeVisible();
 
-      await scheduledHeaderLink.click();
-      await expect(page).toHaveURL(/\/workflows\/schedules\/[^/]+$/);
+      await schedulesTab.click();
+      await expect(page).toHaveURL(/\/workflows\/scheduledWorkflow\/schedules$/);
+      await expect(schedulesTab).toHaveAttribute('aria-selected', 'true');
+
+      // Only this workflow's schedule is listed, and it still leads to the detail page.
+      await expect(page.locator('text=multiScheduledWorkflow')).toHaveCount(0);
+      await page.getByRole('link', { name: /wf_scheduledWorkflow/ }).click();
+      await expect(page).toHaveURL(/\/workflows\/schedules\/wf_scheduledWorkflow$/);
     });
   });
 
   test.describe('when a workflow graph has multiple schedules', () => {
-    test('routes the Schedules link to the filtered schedules list', async ({ page }) => {
+    test('shows the schedule count in the Schedules tab and lists only that workflow', async ({ page }) => {
       await page.goto('/workflows/multiScheduledWorkflow/graph');
-      const multiHeaderLink = page.getByRole('link', { name: /Schedules/ });
-      await expect(multiHeaderLink).toBeVisible();
 
-      await multiHeaderLink.click();
-      await expect(page).toHaveURL(/\/workflows\/schedules\?workflowId=multiScheduledWorkflow$/);
+      const schedulesTab = page.getByRole('tab', { name: /Schedules \(2\)/ });
+      await expect(schedulesTab).toBeVisible();
+
+      await schedulesTab.click();
+      await expect(page).toHaveURL(/\/workflows\/multiScheduledWorkflow\/schedules$/);
+      await expect(page.locator('text=multiScheduledWorkflow').first()).toBeVisible();
+      await expect(page.locator('text=/^scheduledWorkflow$/')).toHaveCount(0);
     });
   });
 
   test.describe('when a workflow graph has no schedules', () => {
-    test('does not render the Schedules link', async ({ page }) => {
+    test('offers schedule setup guidance instead of navigation', async ({ page }) => {
       await page.goto('/workflows/complexWorkflow/graph');
-      await expect(page.getByRole('link', { name: /Schedules/ })).toHaveCount(0);
+
+      const schedulesButton = page.getByRole('button', { name: 'Schedules' });
+      await expect(schedulesButton).toBeDisabled();
+      await expect(page.getByRole('tab', { name: /^Schedules$/ })).toHaveCount(0);
+
+      await schedulesButton.hover();
+      await expect(page.getByRole('tooltip')).toContainText('Configure a schedule on this workflow');
+      await expect(page).toHaveURL(/\/workflows\/complexWorkflow\/graph$/);
     });
   });
 });

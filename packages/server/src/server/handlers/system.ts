@@ -4,11 +4,13 @@ import type { MastraPackage } from '../schemas/system';
 import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import { getObservabilityStorageCapabilities } from './observability-shared';
 
 const SOURCE_PROVIDER_CAPABILITIES_TIMEOUT_MS = 3000;
 
 // Default path of liveKitConnectionRoute() from @mastra/livekit — the exact route Studio posts to.
 const LIVEKIT_CONNECTION_DETAILS_PATH = '/voice/livekit/connection-details';
+const LIVEKIT_RECORDING_PATH = '/voice/livekit/recordings/:traceId';
 
 async function getSourceProviderCapabilities(
   getCapabilities: () => Promise<{
@@ -167,14 +169,8 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const storageType = storage?.name;
       const observabilityStorage = storage?.stores?.observability;
       const observabilityStorageType = observabilityStorage?.constructor.name;
-      const observabilityStorageFeatures = observabilityStorage?.getFeatures?.();
-      const observabilityStorageCapabilities = observabilityStorageFeatures?.some(
-        feature => feature === 'metrics' || feature === 'logs',
-      )
-        ? {
-            metrics: observabilityStorageFeatures.includes('metrics'),
-            logs: observabilityStorageFeatures.includes('logs'),
-          }
+      const observabilityStorageCapabilities = observabilityStorage
+        ? getObservabilityStorageCapabilities(observabilityStorage)
         : undefined;
       const observabilityRuntimeStrategy = observabilityStorage?.runtimeTracingStrategy;
       const observabilityEnabled = !!mastra.observability.getDefaultInstance();
@@ -187,12 +183,16 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
           .getServer()
           ?.apiRoutes?.some(route => route.method === 'POST' && route.path === LIVEKIT_CONNECTION_DETAILS_PATH) ??
         false;
+      const liveKitRecordingRouteEnabled = mastra
+        .getServer()
+        ?.apiRoutes?.some(route => route.method === 'GET' && route.path === LIVEKIT_RECORDING_PATH);
 
       return {
         packages,
         isDev: process.env.MASTRA_DEV === 'true',
         cmsEnabled: !!editor,
         liveKitConnectionRouteEnabled,
+        ...(liveKitRecordingRouteEnabled ? { liveKitRecordingRouteEnabled: true } : {}),
         editorSource,
         editorSourceCapabilities,
         observabilityEnabled,

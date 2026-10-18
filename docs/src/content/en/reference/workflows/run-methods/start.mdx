@@ -72,6 +72,13 @@ const result = await run.start({
       {
         parameters: [
           {
+            name: 'rootSpanName',
+            type: 'string',
+            isOptional: true,
+            description:
+              "Display name for the root span of this trace, replacing the default `workflow run: '<id>'` or `agent run: '<id>'` name. Use it to tell runs apart in trace lists.",
+          },
+          {
             name: 'metadata',
             type: 'Record<string, any>',
             isOptional: true,
@@ -110,6 +117,17 @@ const result = await run.start({
             isOptional: true,
             description:
               'Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.',
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
+            name: 'nestUnderParent',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
           },
         ],
       },

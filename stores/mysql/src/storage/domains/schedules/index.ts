@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   normalizeScheduleTarget,
   SchedulesStorage,
@@ -322,10 +321,11 @@ export class SchedulesMySQL extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const [result] = await this.pool.execute<ResultSetHeader>(
-      `UPDATE ${formatTableName(TABLE_SCHEDULES)} SET ${quoteIdentifier('next_fire_at', 'column name')} = ?, ${quoteIdentifier('last_fire_at', 'column name')} = ?, ${quoteIdentifier('last_run_id', 'column name')} = ?, ${quoteIdentifier('updated_at', 'column name')} = ? WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('next_fire_at', 'column name')} = ? AND ${quoteIdentifier('status', 'column name')} = ?`,
-      [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active'],
+      `UPDATE ${formatTableName(TABLE_SCHEDULES)} SET ${quoteIdentifier('next_fire_at', 'column name')} = ?, ${quoteIdentifier('last_fire_at', 'column name')} = ?, ${quoteIdentifier('last_run_id', 'column name')} = ?, ${quoteIdentifier('updated_at', 'column name')} = ?, ${quoteIdentifier('status', 'column name')} = COALESCE(?, ${quoteIdentifier('status', 'column name')}) WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('next_fire_at', 'column name')} = ? AND ${quoteIdentifier('status', 'column name')} = ?`,
+      [newNextFireAt, lastFireAt, lastRunId, Date.now(), newStatus ?? null, id, expectedNextFireAt, 'active'],
     );
     return result.affectedRows > 0;
   }
@@ -342,7 +342,7 @@ export class SchedulesMySQL extends SchedulesStorage {
   }
 
   async recordTrigger(trigger: ScheduleTrigger): Promise<void> {
-    const id = trigger.id ?? randomUUID();
+    const id = trigger.id ?? globalThis.crypto.randomUUID();
     await this.pool.execute(
       `INSERT INTO ${formatTableName(TABLE_SCHEDULE_TRIGGERS)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('schedule_id', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('scheduled_fire_at', 'column name')}, ${quoteIdentifier('actual_fire_at', 'column name')}, ${quoteIdentifier('outcome', 'column name')}, ${quoteIdentifier('error', 'column name')}, ${quoteIdentifier('trigger_kind', 'column name')}, ${quoteIdentifier('parent_trigger_id', 'column name')}, ${quoteIdentifier('metadata', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [

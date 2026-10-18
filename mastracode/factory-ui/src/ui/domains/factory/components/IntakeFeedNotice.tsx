@@ -3,6 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
 import type { IntakeFeed, IntakeSource } from '../boardCandidates';
+import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import { connectLinear, isLinearReauthError } from '../services/linear';
 
 /**
@@ -12,14 +13,17 @@ import { connectLinear, isLinearReauthError } from '../services/linear';
 export function IntakeFeedNotice({ source, feed }: { source?: IntakeSource; feed: IntakeFeed }) {
   const { baseUrl } = useApiConfig();
   if (!feed.error) return null;
+  const label = BOARD_SOURCE_OPTIONS.find(option => option.value === source?.split('-')[0])?.label;
 
   return source === 'linear' && isLinearReauthError(feed.error) ? (
     <LinearReauthNotice onConnect={() => connectLinear(baseUrl)} />
   ) : (
     // A page that failed is not stored, so only fetchNextPage requests it again.
     <FeedFailureNotice
-      message={feed.error.message}
-      onRetry={() => void (feed.isFetchNextPageError ? feed.fetchNextPage() : feed.refetch())}
+      message={label ? `${label}: ${feed.error.message}` : feed.error.message}
+      onRetry={() =>
+        void (feed.retryFailed ? feed.retryFailed() : feed.isFetchNextPageError ? feed.fetchNextPage() : feed.refetch())
+      }
     />
   );
 }
@@ -27,10 +31,10 @@ export function IntakeFeedNotice({ source, feed }: { source?: IntakeSource; feed
 function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
   return (
     <div className="flex flex-col items-start gap-2 p-1">
-      <Txt as="span" variant="ui-xs" className="text-icon3">
+      <Txt tone="muted" as="span" variant="meta">
         Linear authorization expired. Reconnect to keep syncing issues.
       </Txt>
-      <Button size="xs" onClick={onConnect}>
+      <Button size="sm" onClick={onConnect}>
         Connect Linear
       </Button>
     </div>
@@ -40,10 +44,10 @@ function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
 function FeedFailureNotice({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-start gap-2 p-1">
-      <Txt as="p" role="alert" variant="ui-xs" className="text-notice-destructive-fg m-0">
+      <Txt as="p" role="alert" variant="meta" className="text-destructive-foreground m-0">
         {message}
       </Txt>
-      <Button size="xs" onClick={onRetry}>
+      <Button size="sm" onClick={onRetry}>
         Retry
       </Button>
     </div>

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "source": "reference-auth",
+  "sourceEventId": "country-login",
+  "kind": "disallowed_country_login",
+  "occurredAt": "2026-09-01T12:01:00.000Z",
+  "tenantId": "org_reference",
+  "subjectId": "user_reference",
+  "sessionId": "session_country_reference",
+  "ip": "200.160.2.3",
+  "actor": { "id": "user_reference", "type": "user" },
+  "target": { "id": "session_country_reference", "type": "session" },
+  "changes": { "signal": "country-policy-mismatch" }
+}

@@ -1,8 +1,9 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ComposerAttachments } from '@mastra/playground-ui/components/Composer';
-import { X } from 'lucide-react';
+import { ImageEntry } from '@mastra/playground-ui/domains/chat/attachments/attachment-preview-dialog';
+import { ComposerAttachment } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentList } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-list';
+import { useState } from 'react';
 
-import type { PendingImage } from './useComposerImages';
+import type { PendingImage } from '../context/ComposerImagesContext';
 
 export function ComposerImageAttachments({
   images,
@@ -11,29 +12,26 @@ export function ComposerImageAttachments({
   images: PendingImage[];
   onRemove: (id: string) => void;
 }) {
+  const [previewId, setPreviewId] = useState<string>();
   if (images.length === 0) return null;
 
   return (
-    <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
+    <ComposerAttachmentList>
       {images.map(image => (
-        <div key={image.id} className="relative">
-          <img
+        <ComposerAttachment
+          key={image.id}
+          name={image.filename ?? 'image'}
+          onRemove={() => onRemove(image.id)}
+          onPreview={() => setPreviewId(image.id)}
+        >
+          <ImageEntry
             src={`data:${image.mediaType};base64,${image.data}`}
-            alt={image.filename ?? 'Attached image'}
-            className="border-border1 h-14 w-14 rounded-md border object-cover"
+            name={image.filename}
+            open={previewId === image.id}
+            onOpenChange={open => setPreviewId(open ? image.id : undefined)}
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-xs"
-            onClick={() => onRemove(image.id)}
-            className="bg-surface3 absolute -top-1 -right-1 rounded-full"
-            aria-label="Remove image"
-          >
-            <X size={10} />
-          </Button>
-        </div>
+        </ComposerAttachment>
       ))}
-    </ComposerAttachments>
+    </ComposerAttachmentList>
   );
 }

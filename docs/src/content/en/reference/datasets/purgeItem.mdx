@@ -7,6 +7,8 @@ packages:
 
 # dataset.purgeItem()
 
+**Added in:** `@mastra/core@1.65.0`
+
 Permanently scrubs a dataset item's content from every historical version, deletion tombstone, and linked experiment result. Use [`deleteItem()`](/reference/datasets/deleteItem) instead when you only need to remove an item from the current dataset version.
 
 ## Usage example
@@ -58,3 +60,9 @@ Purging is idempotent and can't be undone.
   },
 ]}
 />
+
+## Related
+
+- [dataset.deleteItem()](/reference/datasets/deleteItem)
+- [Client SDK datasets API](/reference/client-js/datasets#purgedatasetitem)
+- [Server routes](/reference/server/routes#purge-a-dataset-item)

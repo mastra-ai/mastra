@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
 import { extractProblemDetail, MastraConnectError } from './errors.js';
+import {
+  describePlatformCall,
+  endPlatformCallSpan,
+  errorPlatformCallSpan,
+  startPlatformCallSpan,
+} from './instrumentation.js';
 
 /**
  * Configuration for talking to the Mastra platform integrations service.
@@ -12,6 +18,12 @@ export interface ConnectClientOptions {
   accessToken?: string;
   /** Organization id. Falls back to MASTRA_ORG_ID; the x-organization-id header is omitted when absent. */
   orgId?: string;
+  /**
+   * Project id, sent as the x-mastra-project-id header so the platform can
+   * attribute proxy activity to this project. Falls back to MASTRA_PROJECT_ID;
+   * the header is omitted when absent.
+   */
+  projectId?: string;
   /**
    * Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL,
    * then the regional default from MASTRA_PLATFORM_REGION ('us' | 'eu'),
@@ -78,6 +90,10 @@ export function resolveClient(options?: ConnectClientOptions): ResolvedClient {
   if (orgId) {
     headers['x-organization-id'] = orgId;
   }
+  const projectId = options?.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
+  if (projectId) {
+    headers['x-mastra-project-id'] = projectId;
+  }
 
   return { baseUrl, headers, fetch: options?.fetch ?? globalThis.fetch, accessToken };
 }
@@ -87,17 +103,24 @@ function redact(message: string, accessToken: string): string {
 }
 
 async function platformFetch(client: ResolvedClient, path: string, init?: RequestInit): Promise<Response> {
+  // Single choke point for outbound connect HTTP (platform API + vendor
+  // proxy), so one span here covers every external call this package makes.
+  const span = startPlatformCallSpan(describePlatformCall(init?.method ?? 'GET', path));
   try {
-    return await client.fetch(`${client.baseUrl}${path}`, {
+    const response = await client.fetch(`${client.baseUrl}${path}`, {
       ...init,
       headers: { ...client.headers, ...(init?.headers as Record<string, string> | undefined) },
     });
+    endPlatformCallSpan(span, response.status);
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message.includes(client.accessToken)) {
       const redacted = new Error(redact(error.message, client.accessToken));
       redacted.name = error.name;
+      errorPlatformCallSpan(span, redacted);
       throw redacted;
     }
+    errorPlatformCallSpan(span, error);
     throw error;
   }
 }
@@ -140,6 +163,39 @@ async function throwPlatformError(response: Response, context: string): Promise<
   );
 }
 
+/** Builds a locked MCP transport that can only call one Platform connection endpoint. */
+export function platformMcpTransport(client: ResolvedClient, connectionId: string) {
+  const url = new URL(`${client.baseUrl}/v2/connections/${encodeURIComponent(connectionId)}/mcp`);
+  return {
+    url,
+    allowedHosts: [url.host],
+    fetch: async (input: string | URL, init?: RequestInit): Promise<Response> => {
+      const requested = new URL(String(input));
+      if (requested.href !== url.href) {
+        throw new MastraConnectError(
+          'invalid_options',
+          `MCP transport refused an unexpected Platform URL for connection ${connectionId}.`,
+        );
+      }
+      const headers = new Headers(client.headers);
+      new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+      // The platform token always wins over transport-provided headers. Platform
+      // strips it before Nango injects the provider credential upstream.
+      headers.set('authorization', `Bearer ${client.accessToken}`);
+      try {
+        return await client.fetch(url, { ...init, headers, redirect: 'manual' });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes(client.accessToken)) {
+          const redacted = new Error(redact(error.message, client.accessToken));
+          redacted.name = error.name;
+          throw redacted;
+        }
+        throw error;
+      }
+    },
+  };
+}
+
 // —— response schemas (mirroring the platform's http-schemas) ——
 
 export const connectionSchema = z.object({
@@ -161,9 +217,47 @@ const connectionListSchema = z.object({
   connections: z.array(connectionSchema),
 });
 
+export const integrationCatalogEntrySchema = z.object({
+  id: z.string(),
+  capabilities: z.object({
+    mcp: z.boolean().optional(),
+  }),
+});
+
+export type IntegrationCatalogEntry = z.infer<typeof integrationCatalogEntrySchema>;
+
+const integrationCatalogResponseSchema = z.object({
+  integrations: z.array(integrationCatalogEntrySchema),
+});
+
+/**
+ * Secondary access token minted by the vendor alongside the primary oauth2
+ * credential (e.g. `devPortalAccessToken` on Microsoft Teams connections).
+ * Keyed by the vendor's connection-config field name. Treat this like any
+ * other bearer credential — it authenticates second-audience API calls
+ * (Teams Dev Portal, etc.) and must not be logged or forwarded to code that
+ * shouldn't hold connection secrets.
+ */
+export const secondaryAccessTokenSchema = z.object({
+  accessToken: z.string(),
+  expiresAt: z.string().nullable(),
+});
+
+export type SecondaryAccessToken = z.infer<typeof secondaryAccessTokenSchema>;
+
 export const credentialSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('oauth2'), accessToken: z.string(), expiresAt: z.string().nullable() }),
+  z.object({
+    type: z.literal('oauth2'),
+    accessToken: z.string(),
+    expiresAt: z.string().nullable(),
+    secondaryAccessTokens: z.record(z.string(), secondaryAccessTokenSchema).optional(),
+  }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
+  z.object({
+    type: z.literal('two_step'),
+    token: z.string(),
+    expiresAt: z.string().nullable(),
+  }),
 ]);
 
 export type ConnectionCredential = z.infer<typeof credentialSchema>;
@@ -192,6 +286,18 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
     );
   }
   return parsed.data.connections;
+}
+
+export async function listIntegrations(client: ResolvedClient): Promise<IntegrationCatalogEntry[]> {
+  const response = await platformFetch(client, '/v2/integrations');
+  if (!response.ok) {
+    await throwPlatformError(response, 'listing integrations');
+  }
+  const parsed = integrationCatalogResponseSchema.safeParse(await parsePlatformJson(response, 'listing integrations'));
+  if (!parsed.success) {
+    throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
+  }
+  return parsed.data.integrations;
 }
 
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
@@ -236,6 +342,13 @@ export interface ProxyRequestOptions {
   headers?: Record<string, string>;
   baseUrlOverride?: string;
   body?: unknown;
+  /**
+   * How to decode the response body. Defaults to JSON parsing (with a raw
+   * text fallback when JSON parsing fails). Set to `'arraybuffer'` for
+   * providers that return binary payloads (file exports, downloaded assets):
+   * the response body is returned as an ArrayBuffer and never parsed.
+   */
+  responseType?: 'arraybuffer';
 }
 
 /**
@@ -298,11 +411,26 @@ function assertValidBaseUrlOverride(baseUrlOverride: string): void {
   }
 }
 
+export interface ProxyResponse {
+  data: unknown;
+  status: number;
+  headers: Record<string, string>;
+}
+
 export async function proxyRequest(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
 ): Promise<unknown> {
+  return (await proxyRequestWithResponse(client, connectionId, options)).data;
+}
+
+/** Preserves HTTP metadata for tools with status-dependent provider contracts. */
+export async function proxyRequestWithResponse(
+  client: ResolvedClient,
+  connectionId: string,
+  options: ProxyRequestOptions,
+): Promise<ProxyResponse> {
   const cleanPath = options.path.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
@@ -322,13 +450,30 @@ export async function proxyRequest(
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
-  const headers: Record<string, string> = { ...options.headers };
+  // The platform authenticates proxy requests with the project token and
+  // injects the provider credential upstream (same invariant as the MCP
+  // transport). A caller-supplied authorization header would merge with the
+  // platform bearer under a different casing and corrupt platform auth, so it
+  // is dropped here rather than forwarded.
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    const lower = name.toLowerCase();
+    if (lower === 'authorization' || lower === 'proxy-authorization') continue;
+    headers[name] = value;
+  }
   if (options.baseUrlOverride !== undefined) {
     assertValidBaseUrlOverride(options.baseUrlOverride);
     headers['base-url-override'] = options.baseUrlOverride;
   }
   const init: RequestInit = { method: options.method, headers };
-  if (options.body !== undefined) {
+  if (typeof options.body === 'string') {
+    // Pre-encoded payloads (multipart, form-encoded) go out unchanged with
+    // the caller's content type; only JSON encoding is applied automatically.
+    if (!Object.keys(headers).some(name => name.toLowerCase() === 'content-type')) {
+      headers['content-type'] = 'text/plain';
+    }
+    init.body = options.body;
+  } else if (options.body !== undefined) {
     headers['content-type'] = 'application/json';
     init.body = JSON.stringify(options.body);
   }
@@ -370,12 +515,16 @@ export async function proxyRequest(
     );
   }
 
-  if (response.status === 204) return null;
+  const metadata = { status: response.status, headers: Object.fromEntries(response.headers.entries()) };
+  if (response.status === 204) return { ...metadata, data: null };
+  if (options.responseType === 'arraybuffer') {
+    return { ...metadata, data: await response.arrayBuffer() };
+  }
   const text = await response.text();
-  if (!text) return null;
+  if (!text) return { ...metadata, data: null };
   try {
-    return JSON.parse(text);
+    return { ...metadata, data: JSON.parse(text) };
   } catch {
-    return text;
+    return { ...metadata, data: text };
   }
 }

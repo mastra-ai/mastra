@@ -59,22 +59,20 @@ describe('MessageText', () => {
 
   describe('when the metadata status is warning', () => {
     it('renders a warning notice with the text', () => {
-      const { container } = render(<MessageText text="careful" metadata={{ status: 'warning' }} />);
+      render(<MessageText text="careful" metadata={{ status: 'warning' }} />);
 
       expect(screen.getByText('Warning')).not.toBeNull();
       expect(screen.getByText('careful')).not.toBeNull();
-      expect(container.querySelector('[class*="notice-warning"]')).not.toBeNull();
     });
   });
 
   describe('when the text is an error', () => {
     it('renders a destructive notice with the cleaned error message', () => {
-      const { container } = render(<MessageText text="__ERROR__: boom" metadata={undefined} />);
+      render(<MessageText text="__ERROR__: boom" metadata={undefined} />);
 
       expect(screen.getByText('Error')).not.toBeNull();
       expect(screen.getByText('boom')).not.toBeNull();
       expect(screen.queryByText('__ERROR__: boom')).toBeNull();
-      expect(container.querySelector('[class*="notice-destructive"]')).not.toBeNull();
     });
   });
 

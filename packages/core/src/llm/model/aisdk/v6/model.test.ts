@@ -86,6 +86,20 @@ describe('AISDKV6LanguageModel', () => {
     expect(passedOptions.temperature).toBe(0.2);
   });
 
+  describe('supportsStructuredOutputs', () => {
+    it('exposes the wrapped model capability', () => {
+      const wrapped = new AISDKV6LanguageModel(Object.assign(createMockV3Model(), { supportsStructuredOutputs: true }));
+      expect(wrapped.supportsStructuredOutputs).toBe(true);
+    });
+
+    it('leaves the capability undefined when the wrapped model does not declare it', () => {
+      const model = createMockV3Model() as unknown as Record<string, unknown>;
+      delete model.supportsStructuredOutputs;
+      const wrapped = new AISDKV6LanguageModel(model as any);
+      expect(wrapped.supportsStructuredOutputs).toBeUndefined();
+    });
+  });
+
   describe('serializeForSpan', () => {
     it('returns only identity fields', () => {
       const wrapped = new AISDKV6LanguageModel(createMockV3Model());

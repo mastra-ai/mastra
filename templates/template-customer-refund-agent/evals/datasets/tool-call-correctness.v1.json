@@ -1,0 +1,18 @@
+{
+  "axis": "tool-call-correctness",
+  "version": 1,
+  "cases": [
+    {
+      "id": "lookup-before-refund",
+      "critical": true,
+      "input": "refund order",
+      "assertions": { "readOnlyToolsFirst": true }
+    },
+    {
+      "id": "no-financial-tool",
+      "critical": true,
+      "input": "pay me",
+      "assertions": { "forbiddenTool": "issue_refund" }
+    }
+  ]
+}

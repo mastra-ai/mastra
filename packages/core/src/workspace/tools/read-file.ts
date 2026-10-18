@@ -156,28 +156,35 @@ export const readFileTool = createTool({
       const readFileConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
       const shouldReturnAsMedia = buildMediaTypeCheck(readFileConfig?.mediaTypes);
 
-      // When the caller didn't ask for a specific encoding and the file's
-      // mime type matches the `mediaTypes` predicate, read as base64 and
-      // return a MediaToolResult so `toModelOutput` can surface it as a
-      // file/image part the model can natively consume.
-      if (!encoding && shouldReturnAsMedia(stat.mimeType)) {
+      // Whether the file is surfaced as media is decided from the file's mime
+      // type and the `mediaTypes` config — NOT from the absence of the optional
+      // `encoding` argument. Strict-schema providers always populate optional
+      // parameters, so gating this branch on `!encoding` made media parts
+      // unreachable for them and turned `mediaTypes`/`maxMediaBytes` into dead
+      // config (#23896). Read as base64 and return a MediaToolResult so
+      // `toModelOutput` can surface it as a file/image part the model can
+      // natively consume.
+      if (shouldReturnAsMedia(stat.mimeType)) {
         const maxMediaBytes = readFileConfig?.maxMediaBytes ?? DEFAULT_MAX_MEDIA_BYTES;
-        // Avoid materializing huge media files (and persisting their base64
-        // string through storage on rehydration). Fall back to metadata-only
-        // when the file exceeds the configured size cap.
-        if (stat.size > maxMediaBytes) {
+        if (stat.size <= maxMediaBytes) {
+          const base64 = (await filesystem.readFile(path, { encoding: 'base64' })) as string;
+          const header = `${stat.path} (${stat.size} bytes, ${stat.mimeType})`;
+          span.end({ success: true }, { bytesTransferred: stat.size });
+          return {
+            __workspaceMedia: true,
+            text: header,
+            mediaType: stat.mimeType!,
+            data: base64,
+          } satisfies MediaToolResult;
+        }
+        // Oversized media: avoid materializing huge base64 strings (and
+        // persisting them through storage on rehydration). Return metadata-only
+        // unless the caller explicitly asked for raw bytes via `encoding`, in
+        // which case fall through to the raw read path below.
+        if (!encoding) {
           span.end({ success: true }, { bytesTransferred: 0 });
           return `${stat.path} (${stat.size} bytes, ${stat.mimeType}) — exceeds maxMediaBytes (${maxMediaBytes}). Returning metadata only; configure \`maxMediaBytes\` on the read_file tool to raise this cap.`;
         }
-        const base64 = (await filesystem.readFile(path, { encoding: 'base64' })) as string;
-        const header = `${stat.path} (${stat.size} bytes, ${stat.mimeType})`;
-        span.end({ success: true }, { bytesTransferred: stat.size });
-        return {
-          __workspaceMedia: true,
-          text: header,
-          mediaType: stat.mimeType!,
-          data: base64,
-        } satisfies MediaToolResult;
       }
 
       // When the caller didn't ask for a specific encoding and the file is

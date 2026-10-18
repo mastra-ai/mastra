@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
+import pMap from 'p-map';
 import { describe, expect, it } from 'vitest';
 import { interopDefault } from './interop';
-import { pMap } from './p-map';
 import { slugify } from './slugify';
 
 const requireFromHere = createRequire(import.meta.url);

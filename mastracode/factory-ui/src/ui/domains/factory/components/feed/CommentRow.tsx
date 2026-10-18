@@ -23,6 +23,7 @@ import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { WorkItemComment } from '../../services/commentsWire';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 // A hand-picked passage is quoted as picked; quoting a whole comment gets more
 // room, since the reader has no highlight to tell them what mattered.
@@ -61,7 +62,7 @@ function RowAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       tooltip={label}
       aria-label={label}
       onClick={onClick}
@@ -111,12 +112,21 @@ function CommentRowEditor({
 }
 
 function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<HTMLElement> }) {
-  if (comment.deletedAt !== undefined) return <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>;
+  if (comment.deletedAt !== undefined)
+    return (
+      <Txt variant="caption" tone="faint" className="m-0 italic">
+        Comment deleted
+      </Txt>
+    );
 
   return (
     <CommentItemBody ref={ref}>
       <MarkdownRenderer>{comment.body}</MarkdownRenderer>
-      {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
+      {comment.editedAt ? (
+        <Txt as="span" variant="meta" tone="faint" className="ml-1">
+          (edited)
+        </Txt>
+      ) : null}
     </CommentItemBody>
   );
 }

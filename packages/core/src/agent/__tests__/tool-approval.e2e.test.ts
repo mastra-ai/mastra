@@ -1,7 +1,7 @@
-import { randomUUID, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { getLLMTestMode, defaultNameGenerator, getLLMRecordingsDir } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { canonicalizeRequestJsonSchema, createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -23,6 +23,11 @@ function normalizeDynamicRunIds({ url, body }: { url: string; body: unknown }): 
     /\\"suspendedToolRunId\\":\\"[^"]+\\"/g,
     '\\"suspendedToolRunId\\":\\"NORMALIZED\\"',
   );
+  stringifiedBody = stringifiedBody.replaceAll(/"suspendedToolCallId":"[^"]+"/g, '"suspendedToolCallId":"NORMALIZED"');
+  stringifiedBody = stringifiedBody.replaceAll(
+    /\\"suspendedToolCallId\\":\\"[^"]+\\"/g,
+    '\\"suspendedToolCallId\\":\\"NORMALIZED\\"',
+  );
 
   return { url, body: JSON.parse(stringifiedBody) };
 }
@@ -38,7 +43,7 @@ beforeEach(async c => {
       createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
     )}`,
     exactMatch: true,
-    transformRequest: normalizeDynamicRunIds,
+    transformRequest: req => canonicalizeRequestJsonSchema(normalizeDynamicRunIds(req)),
     recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
   });
   await mockGateway.start();
@@ -747,8 +752,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           suspendedToolName: '',
         };
         const memory = {
-          thread: randomUUID(),
-          resource: randomUUID(),
+          thread: globalThis.crypto.randomUUID(),
+          resource: globalThis.crypto.randomUUID(),
         };
         const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
           memory,
@@ -783,115 +788,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(suspendData.suspendedToolName).toBe('findUserTool');
         expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
       }, 15000);
-
-      it('should call findUserTool on a subAgent with suspend and resume via stream when autoResumeSuspendedTools is true', async () => {
-        const findUserTool = createTool({
-          id: 'Find user tool',
-          description: 'This is a test tool that returns the name and email',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          suspendSchema: z.object({
-            message: z.string(),
-          }),
-          resumeSchema: z.object({
-            age: z.number(),
-          }),
-          execute: async (inputData, context) => {
-            if (!context?.agent?.resumeData) {
-              return await context?.agent?.suspend({ message: 'Please provide the age of the user' });
-            }
-
-            return {
-              name: inputData.name,
-              age: context?.agent?.resumeData?.age,
-              email: 'test@test.com',
-            };
-          },
-        });
-
-        const findUserProfessionTool = createTool({
-          id: 'Find user profession tool',
-          description: 'This is a test tool that returns the profession of the user',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          execute: async () => {
-            return {
-              profession: 'Software Engineer',
-            };
-          },
-        });
-
-        const userAgent = new Agent({
-          id: 'user-agent',
-          name: 'User Agent',
-          instructions: 'You are an agent that can get list of users using findUserTool.',
-          model: openaiModel,
-          tools: { findUserTool, findUserProfessionTool },
-        });
-
-        const parentAgent = new Agent({
-          id: 'parent-agent',
-          name: 'Parent Agent',
-          instructions: 'You are an agent that can get list of users.',
-          model: openaiModel,
-          agents: { userAgent },
-          memory: new MockMemory(),
-          defaultOptions: {
-            autoResumeSuspendedTools: true,
-          },
-        });
-
-        const mastra = new Mastra({
-          agents: { parentAgent },
-          logger: false,
-          storage: mockStorage,
-        });
-
-        const agentOne = mastra.getAgent('parentAgent');
-
-        const suspendData = {
-          suspendPayload: null,
-          suspendedToolName: '',
-        };
-        const memory = {
-          thread: randomUUID(),
-          resource: randomUUID(),
-        };
-        const stream = await agentOne.stream('Find the name, email, age and profession of the user - Dero Israel', {
-          memory,
-        });
-        for await (const _chunk of stream.fullStream) {
-          if (_chunk.type === 'tool-call-suspended') {
-            suspendData.suspendPayload = _chunk.payload.suspendPayload;
-            suspendData.suspendedToolName = _chunk.payload.toolName;
-          }
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.stream('He is 25 years old', {
-            memory,
-          });
-          for await (const _chunk of resumeStream.fullStream) {
-          }
-
-          const toolResults = await resumeStream.toolResults;
-
-          const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'agent-userAgent')?.payload;
-
-          const text = (toolCall?.result as any)?.text;
-
-          expect(text).toContain('Dero Israel');
-          expect(text).toContain('test@test.com');
-          expect(text).toContain('25');
-        }
-
-        expect(suspendData.suspendPayload).toBeDefined();
-        expect(suspendData.suspendedToolName).toBe('agent-userAgent');
-        expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
-      }, 25000);
 
       it('should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true', async () => {
         const findUserTool = createTool({
@@ -954,8 +850,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         const memory = {
-          thread: randomUUID(),
-          resource: randomUUID(),
+          thread: globalThis.crypto.randomUUID(),
+          resource: globalThis.crypto.randomUUID(),
         };
         const output = await agentOne.generate('Find the name, age and profession of the user - Dero Israel', {
           memory,

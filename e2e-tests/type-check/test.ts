@@ -50,6 +50,18 @@ async function main() {
         pnpm_config_registry: providedContext.registry,
       },
     });
+
+    const mcpResult = spawnSync('pnpm', ['vitest', 'run', '--config', 'vitest.mcp.config.ts'], {
+      cwd: fixturePath,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        pnpm_config_registry: providedContext.registry,
+      },
+    });
+    if (mcpResult.error) throw mcpResult.error;
+    if (mcpResult.signal) throw new Error(`MCP type checks terminated by ${mcpResult.signal}`);
+    if (mcpResult.status !== 0) process.exitCode = mcpResult.status ?? 1;
   } finally {
     await teardown();
   }

@@ -46,6 +46,9 @@ type S3DistanceMetric = 'cosine' | 'euclidean';
 type MastraMetric = NonNullable<CreateIndexParams['metric']>;
 type SupportedMastraMetric = Exclude<MastraMetric, 'dotproduct'>;
 
+/** Maximum number of keys accepted by a single S3 Vectors DeleteVectors request. */
+const DELETE_VECTORS_BATCH_SIZE = 500;
+
 /**
  * Vector store backed by Amazon S3 Vectors.
  *
@@ -510,17 +513,68 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
-    throw new MastraError({
-      id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for S3Vectors vector store',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: {
-        indexName,
-        ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
-      },
-    });
+    if (ids && filter) {
+      throw new MastraError({
+        id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
+        text: 'Cannot specify both ids and filter - they are mutually exclusive',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (filter) {
+      throw new MastraError({
+        id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'UNSUPPORTED_FILTER'),
+        text: 'Deleting by metadata filter is not supported for S3Vectors vector store - delete by ids instead',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        details: { indexName, filter: JSON.stringify(filter) },
+      });
+    }
+
+    if (!ids) {
+      throw new MastraError({
+        id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'NO_TARGET'),
+        text: 'Either filter or ids must be provided',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (ids.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'EMPTY_IDS'),
+        text: 'Cannot delete with empty ids array',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    indexName = normalizeIndexName(indexName);
+    try {
+      for (let i = 0; i < ids.length; i += DELETE_VECTORS_BATCH_SIZE) {
+        await this.client.send(
+          new DeleteVectorsCommand({
+            ...this.bucketParams(),
+            indexName,
+            keys: ids.slice(i, i + DELETE_VECTORS_BATCH_SIZE),
+          }),
+        );
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, idsCount: ids.length },
+        },
+        error,
+      );
+    }
   }
 
   // -------- internal helpers --------

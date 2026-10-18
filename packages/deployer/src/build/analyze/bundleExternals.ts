@@ -7,15 +7,15 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import { getPackageInfo } from 'local-pkg';
 import * as resolve from 'resolve.exports';
 import { rollup } from 'rollup';
 import type { OutputChunk, OutputAsset, Plugin } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { getPackageRootPath } from '../package-info';
+import { getPackageRootPath, getPackageInfo } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
+import { moduleAlias } from '../plugins/module-alias';
 import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
@@ -140,16 +140,20 @@ async function getInputPlugins(
     transpilePackages,
     workspaceMap,
     bundlerOptions,
+    projectRoot,
     rootDir,
     externals,
     platform,
+    alias,
   }: {
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { noBundling: boolean };
+    projectRoot: string;
     rootDir: string;
     externals: string[];
     platform: BundlerPlatform;
+    alias: Record<string, string>;
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -173,9 +177,10 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
-    tsConfigPaths(),
+    moduleAlias(alias, path.join(rootDir, 'package.json'), platform),
+    tsConfigPaths({ cwd: projectRoot }),
     protocolExternalResolver(),
-    subpathExternalsResolver(externals),
+    subpathExternalsResolver(externals, workspaceMap),
     transpilePackagesMap.size
       ? esbuild({
           format: 'esm',
@@ -239,7 +244,13 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.noBundling ? null : nodeResolve(getNodeResolveOptions(platform)),
+    bundlerOptions.noBundling
+      ? null
+      : nodeResolve({
+          ...getNodeResolveOptions(platform),
+          rootDir: projectRoot,
+          modulePaths: [path.join(rootDir, 'node_modules')],
+        }),
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
@@ -295,14 +306,17 @@ async function buildExternalDependencies(
     externals,
     packagesToTranspile,
     workspaceMap,
+    projectRoot,
     rootDir,
     outputDir,
     bundlerOptions,
     platform,
+    alias,
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    projectRoot: string;
     rootDir: string;
     outputDir: string;
     bundlerOptions: {
@@ -310,6 +324,7 @@ async function buildExternalDependencies(
       externalsPreset: boolean;
     };
     platform: BundlerPlatform;
+    alias: Record<string, string>;
   },
 ) {
   /**
@@ -327,10 +342,15 @@ async function buildExternalDependencies(
     bundlerOptions: {
       noBundling,
     },
+    projectRoot,
     rootDir,
     externals,
     platform,
+    alias,
   });
+
+  const aliasSources = new Set(Object.keys(alias));
+  const rollupExternals = externals.filter(external => !aliasSources.has(external));
 
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
@@ -341,7 +361,7 @@ async function buildExternalDependencies(
       },
       {} as Record<string, string>,
     ),
-    external: externals,
+    external: rollupExternals,
     treeshake: noBundling ? false : 'safest',
     plugins,
   });
@@ -377,21 +397,7 @@ async function buildExternalDependencies(
           }
         }
 
-        if (importedFromPackages.size > 1) {
-          throw new MastraBaseError({
-            id: 'DEPLOYER_BUNDLE_EXTERNALS_SHARED_CHUNK',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              chunkName: chunkInfo.name,
-              packages: JSON.stringify(Array.from(importedFromPackages)),
-            },
-            text: `Please open an issue. We found a shared chunk "${
-              chunkInfo.name
-            }" used by multiple workspace packages: ${Array.from(importedFromPackages).join(', ')}.`,
-          });
-        }
-
+        // A chunk spanning multiple workspace packages has no single owning cache dir, so it falls through to the output dir.
         if (importedFromPackages.size === 1) {
           const [pkgName] = importedFromPackages;
           const workspaceLocation = workspaceMap.get(pkgName!)!.location;
@@ -467,6 +473,7 @@ export async function bundleExternals(
     bundlerOptions: NormalizedExternals & {
       isDev?: boolean;
       transpilePackages?: string[];
+      alias?: Record<string, string>;
     };
     projectRoot?: string;
     workspaceRoot?: string;
@@ -481,7 +488,7 @@ export async function bundleExternals(
     bundlerOptions,
     platform = 'node',
   } = options;
-  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false } = bundlerOptions;
+  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false, alias = {} } = bundlerOptions;
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
@@ -516,6 +523,7 @@ export async function bundleExternals(
     externals: mergedExternals,
     packagesToTranspile,
     workspaceMap,
+    projectRoot,
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {
@@ -523,6 +531,7 @@ export async function bundleExternals(
       externalsPreset,
     },
     platform,
+    alias,
   });
 
   const moduleResolveMap = new Map<string, Map<string, string>>();

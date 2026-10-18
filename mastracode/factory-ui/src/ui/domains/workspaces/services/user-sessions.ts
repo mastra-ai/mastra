@@ -1,12 +1,13 @@
 /**
  * Browser-side helpers for factory user sessions — the conversations listed in
- * the sidebar. Their routes are mounted inside the server's GitHub integration
- * (`/web/github/projects/:id/sessions`, `/web/user-sessions/*`), but nothing
- * here is GitHub-specific.
+ * the sidebar. Listing is per Factory; creation goes through a repository link,
+ * which resolves its source-control provider; individual-session routes resolve
+ * the provider from the durable session row.
  */
-import { postRepositoryGitOp, readJsonOrThrow } from './http';
+import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/';
+export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 
 export interface FactoryUserSessionOwner {
   id: string;
@@ -38,12 +39,13 @@ function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload):
   return { ...session, title: title ?? undefined };
 }
 
+/** Every session of the Factory the viewer can see, across all of its repositories and providers. */
 export async function listUserSessions(
   baseUrl: string,
-  projectRepositoryId: string,
+  factoryId: string,
   signal?: AbortSignal,
 ): Promise<FactoryUserSession[]> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryId)}/sessions`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
     signal,
@@ -61,7 +63,7 @@ export async function createUserSession(
   projectRepositoryId: string,
   options: CreateUserSessionOptions,
 ): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSessionPayload }>(
+  const result = await postSourceControlRepositoryOp<{ session: FactoryUserSessionPayload }>(
     baseUrl,
     projectRepositoryId,
     'sessions',

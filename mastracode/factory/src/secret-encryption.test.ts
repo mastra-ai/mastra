@@ -23,6 +23,28 @@ describe('createFactorySecretEncryption', () => {
     await expect(encryption.decrypt(legacy)).resolves.toEqual({ value: legacy, needsReencryption: true });
   });
 
+  it('decodes values written by the plaintext encryptor and marks them for encryption', async () => {
+    const plaintext = createPlaintextFactorySecretEncryption();
+    const encryption = createFactorySecretEncryption({ primary: { id: 'current', key: key(1) } });
+
+    for (const value of [{ type: 'api_key', key: 'sk-fake' }, 'sk-custom-key']) {
+      const decrypted = await encryption.decrypt(await plaintext.encrypt(value));
+      expect(decrypted).toEqual({ value, needsReencryption: true });
+
+      const migrated = await encryption.encrypt(decrypted.value);
+      await expect(encryption.decrypt(migrated)).resolves.toEqual({ value, needsReencryption: false });
+    }
+  });
+
+  it('keeps raw pre-encryption secret strings unchanged', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'current', key: key(1) } });
+
+    await expect(encryption.decrypt('sk-ant-raw-legacy')).resolves.toEqual({
+      value: 'sk-ant-raw-legacy',
+      needsReencryption: true,
+    });
+  });
+
   it('decrypts previous keys and marks them for rotation', async () => {
     const oldEncryption = createFactorySecretEncryption({ primary: { id: 'old', key: key(1) } });
     const encryption = createFactorySecretEncryption({

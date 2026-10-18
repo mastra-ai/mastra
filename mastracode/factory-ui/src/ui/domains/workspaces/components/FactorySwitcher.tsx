@@ -1,6 +1,6 @@
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from 'lucide-react';
@@ -17,7 +17,7 @@ export function FactorySwitcher() {
   const factories = factoriesQuery.data ?? [];
   const activeFactory = activeFactoryQuery.data;
   const navigate = useNavigate();
-  const { setOpenMobile } = useMainSidebar();
+  const { setOpenMobile } = useSidebar();
 
   const createFactoryFrom = factoryId ?? factories[0]?.id;
   const openCreateFactory = () => {
@@ -37,11 +37,11 @@ export function FactorySwitcher() {
           'mt-1 w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0',
         )}
       >
-        <FactoryIcon size={16} className="text-icon3 shrink-0" />
-        <Txt as="span" variant="ui-sm" className="text-icon6 min-w-0 flex-1 truncate">
+        <FactoryIcon size={16} className="text-muted-foreground shrink-0" />
+        <Txt tone="ink" as="span" variant="caption" className="min-w-0 flex-1 truncate">
           {activeFactory?.name ?? 'Select a factory…'}
         </Txt>
-        <ChevronsUpDown size={13} className="text-icon3 shrink-0" />
+        <ChevronsUpDown size={13} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (

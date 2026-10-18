@@ -1,4 +1,4 @@
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi } from 'vitest';
 import { createWorkflowTool } from '../create-workflow';
 
@@ -49,11 +49,18 @@ describe('create-workflow tool surfaces sub-agent failures', () => {
   it('forwards the caller requestContext to the workflow-builder agent', async () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', { session: { modelId: 'mock-model' } });
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'parent-thread');
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'parent-resource');
     const stream = vi.fn().mockResolvedValue(makeStreamingAgent([], '').stream());
 
     await expect(invoke(makeMastraStub({ stream }), requestContext)).rejects.toThrow(/never called save-workflow/);
 
-    expect(stream).toHaveBeenCalledWith('do a thing', { requestContext });
+    const builderContext = stream.mock.calls[0]![1].requestContext as RequestContext;
+    expect(builderContext.get('controller')).toEqual({ session: { modelId: 'mock-model' } });
+    // Reserved memory keys would bind the builder to the parent run's thread and deadlock.
+    expect(builderContext.has(MASTRA_THREAD_ID_KEY)).toBe(false);
+    expect(builderContext.has(MASTRA_RESOURCE_ID_KEY)).toBe(false);
+    expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
   });
 
   it('cancels and releases the stream reader when reading fails', async () => {

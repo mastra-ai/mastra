@@ -279,7 +279,7 @@ describe('Span.endTree', () => {
 
     root.endTree();
 
-    expect(event.endTime).toBeUndefined();
+    expect(event.endTime).toEqual(event.startTime);
     expect(endedIds()).toEqual([event.id, root.id]);
   });
 

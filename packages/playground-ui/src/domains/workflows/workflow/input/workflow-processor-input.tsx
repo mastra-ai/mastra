@@ -1,0 +1,129 @@
+import { useState } from 'react';
+import type { WorkflowInputDataProps } from '../workflow-input-data';
+import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './processor-input';
+import type { ProcessorDraft } from './processor-input';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Textarea } from '@/ds/components/Textarea';
+import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
+
+const PROCESSOR_PHASES = [
+  { value: 'input', label: 'Input - Process input messages before LLM' },
+  { value: 'inputStep', label: 'Input Step - Process at each agentic loop step' },
+  { value: 'outputStream', label: 'Output Stream - Process streaming chunks' },
+  { value: 'outputResult', label: 'Output Result - Process complete output' },
+  { value: 'outputStep', label: 'Output Step - Process after each LLM response' },
+];
+
+type WorkflowProcessorInputProps = Omit<WorkflowInputDataProps, 'defaultValues'> & {
+  value: ProcessorDraft;
+  onChange: (draft: ProcessorDraft) => void;
+};
+
+type ProcessorErrors = { phase: string[]; message: string[] };
+
+const NO_ERRORS: ProcessorErrors = { phase: [], message: [] };
+
+function ErrorLines({ errors }: { errors: string[] }) {
+  return (
+    <span className="space-y-1">
+      {errors.map(error => (
+        <span key={error} className="block">
+          {error}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export const WorkflowProcessorInput = ({
+  schema,
+  value,
+  onChange,
+  isSubmitLoading,
+  submitButtonLabel,
+  onSubmit,
+  children,
+  submitActions,
+  leftActions,
+  submitButtonIcon,
+  submitButtonVariant,
+  submitButtonFullWidth,
+}: WorkflowProcessorInputProps) => {
+  const [errors, setErrors] = useState<ProcessorErrors>(NO_ERRORS);
+
+  const handleSubmit = () => {
+    setErrors(NO_ERRORS);
+
+    const result = schema.safeParse(value);
+    if (!result.success) {
+      const nextErrors: ProcessorErrors = { phase: [], message: [] };
+      for (const issue of result.error.issues) {
+        const fieldErrors = issue.path[0] === 'phase' ? nextErrors.phase : nextErrors.message;
+        fieldErrors.push(`${issue.path.join('.')}: ${issue.message}`);
+      }
+      setErrors(nextErrors);
+      return;
+    }
+    onSubmit(result.data);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Field invalid={errors.phase.length > 0}>
+        <FieldLabel>Phase</FieldLabel>
+        <Select
+          value={value.phase}
+          onValueChange={phase => {
+            setErrors(NO_ERRORS);
+            onChange(withPhaseRole({ ...value, phase }));
+          }}
+          disabled={isSubmitLoading}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select phase" />
+          </SelectTrigger>
+          <SelectContent>
+            {PROCESSOR_PHASES.map(phaseOption => (
+              <SelectItem key={phaseOption.value} value={phaseOption.value}>
+                {phaseOption.value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
+        </FieldDescription>
+        <FieldError>{errors.phase.length > 0 && <ErrorLines errors={errors.phase} />}</FieldError>
+      </Field>
+
+      <Field invalid={errors.message.length > 0}>
+        <FieldLabel>Test Message</FieldLabel>
+        <Textarea
+          value={getProcessorMessage(value)}
+          onChange={event => {
+            setErrors(NO_ERRORS);
+            onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
+          }}
+          placeholder="Enter a test message..."
+          rows={4}
+          disabled={isSubmitLoading}
+        />
+        <FieldError>{errors.message.length > 0 && <ErrorLines errors={errors.message} />}</FieldError>
+      </Field>
+
+      {children}
+
+      <FormSubmitRow
+        isSubmitLoading={isSubmitLoading}
+        submitButtonLabel={submitButtonLabel}
+        submitActions={submitActions}
+        leftActions={leftActions}
+        submitButtonIcon={submitButtonIcon}
+        submitButtonVariant={submitButtonVariant}
+        submitButtonFullWidth={submitButtonFullWidth}
+        onSubmit={handleSubmit}
+      />
+    </div>
+  );
+};

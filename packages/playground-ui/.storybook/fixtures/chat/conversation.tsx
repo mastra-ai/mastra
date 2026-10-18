@@ -4,7 +4,7 @@ import { ConversationComposer } from './composer';
 import type { Scenario } from './data';
 import { ConversationResponse } from './response';
 import { useStoryConversation } from './use-conversation';
-import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
+import { MessageAttachments } from '@/domains/chat/attachments/message-attachments';
 import { UserTextPartRenderer } from '@/domains/chat/messages/renderers/user-text-part-renderer';
 import type { TaskListItem } from '@/ds/components/ai/task-list';
 import { TaskList } from '@/ds/components/ai/task-list';
@@ -12,6 +12,7 @@ import { Avatar } from '@/ds/components/Avatar';
 import { Button } from '@/ds/components/Button';
 import { ChatShell } from '@/ds/components/ChatShell';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { Message } from '@/ds/components/Message';
 import { MessageScrollerItem } from '@/ds/components/MessageScroller';
 import { ThreadRail } from '@/ds/components/ThreadRail';
 import { TooltipProvider } from '@/ds/components/Tooltip';
@@ -28,7 +29,7 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
       <ChatShell className="h-dvh" scroller={{ autoScroll: true, defaultScrollPosition: 'end' }}>
         <ChatShell.Bar>
           <ChatShell.Column className="flex-row items-center justify-between gap-3 py-3">
-            <Txt as="h1" variant="header-xs">
+            <Txt as="h1" variant="body">
               Composer review
             </Txt>
             <Button size="sm" variant="ghost" onClick={onReset}>
@@ -64,20 +65,21 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
                       className="ml-auto flex max-w-[85%] min-w-0 flex-col items-end gap-2"
                     >
                       <div className="flex items-center gap-2">
-                        <Txt variant="ui-sm">You</Txt>
+                        <Txt variant="caption">You</Txt>
                         <Avatar name="You" size="sm" />
                       </div>
-                      {turn.prompt && <UserTextPartRenderer part={{ type: 'text', text: turn.prompt }} />}
-                      <div className="flex max-w-full flex-wrap justify-end gap-2">
-                        {turn.files.map((file, fileIndex) => (
-                          <UserFilePartRenderer key={`${file.filename}-${fileIndex}`} part={file} />
-                        ))}
-                      </div>
+                      <Message
+                        from="user"
+                        className="max-w-full"
+                        attachments={turn.files.length > 0 && <MessageAttachments parts={turn.files} />}
+                      >
+                        {turn.prompt && <UserTextPartRenderer part={{ type: 'text', text: turn.prompt }} />}
+                      </Message>
                     </MessageScrollerItem>
                     <MessageScrollerItem messageId={`${turn.id}-reply`} className="flex min-w-0 flex-col gap-3">
                       <div className="flex items-center gap-2">
                         <Avatar name="Assistant" size="sm" />
-                        <Txt variant="ui-sm">Assistant</Txt>
+                        <Txt variant="caption">Assistant</Txt>
                       </div>
                       <ConversationResponse turn={turn} transitionTurn={transitionTurn} />
                     </MessageScrollerItem>

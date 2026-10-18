@@ -36,6 +36,9 @@ import { Agent as ValueAgent, type Tool } from '@mastra/core';
 // Type-only imports
 import type { Agent as TypeOnlyAgent, Workflow as TypeOnlyWorkflow } from '@mastra/core';
 
+// Legacy and renamed message types should use the agent subpath
+import type { MastraMessageV2, MastraDBMessage as CurrentMessage } from '@mastra/core';
+
 // Should not affect other packages
 import { Mastra as MastraOther } from 'some-other-package';
 import { Agent as AgentOther } from 'another-package';

@@ -13,9 +13,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  alpha-version:
+  # Alphas publish straight from main with no release PR, so they get the same full suite
+  # the release PR runs. Prebuild is reused rather than duplicated here.
+  test:
+    name: Full test suite
     if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
-    runs-on: starsling-ubuntu-24.04
+    uses: ./.github/workflows/prebuild.yml
+    permissions:
+      actions: read
+      contents: read
+    secrets: inherit
+
+  notify-test-failure:
+    name: Notify Slack of test failure
+    needs: test
+    if: ${{ always() && needs.test.result == 'failure' }}
+    runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Slack action
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Post to Slack
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          text: ':rotating_light: Alpha publish blocked: the full test suite failed on main at <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View the run> and re-run failed jobs to publish.'
+
+  alpha-version:
+    needs: test
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
+    runs-on: starsling-ubuntu-26.04
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -39,6 +72,9 @@ jobs:
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
+          # Partial clone: changelogs need commits and trees, not every historical
+          # file version. Cuts the full-history fetch from minutes to seconds.
+          filter: blob:none
           persist-credentials: true
 
       - name: Setup pnpm and Node.js

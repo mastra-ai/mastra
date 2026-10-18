@@ -253,23 +253,44 @@ const addIssueLabels = vi.fn(
 const removeIssueLabel = vi.fn(
   async (_installationId: number, _repoFullName: string, _issueNumber: number, _label: string) => {},
 );
-const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
-  pullRequests: [
-    {
-      number: 34,
-      title: 'Add factory pages',
-      url: 'https://github.com/octo/hello/pull/34',
-      author: 'grace',
-      assignees: ['ada'],
-      requestedReviewers: ['octocat'],
-      baseBranch: 'main',
-      headBranch: 'feat/factory',
-      createdAt: '2026-07-03T00:00:00Z',
-      updatedAt: '2026-07-04T00:00:00Z',
-    },
-  ],
-  nextPage: null as number | null,
-}));
+interface ListedPullRequestFixture {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  assignees: string[];
+  requestedReviewers: string[];
+  labels?: string[];
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface OpenPullRequestPage {
+  pullRequests: ListedPullRequestFixture[];
+  nextPage: number | null;
+}
+
+const pullRequest34: ListedPullRequestFixture = {
+  number: 34,
+  title: 'Add factory pages',
+  url: 'https://github.com/octo/hello/pull/34',
+  author: 'grace',
+  assignees: ['ada'],
+  requestedReviewers: ['octocat'],
+  baseBranch: 'main',
+  headBranch: 'feat/factory',
+  createdAt: '2026-07-03T00:00:00Z',
+  updatedAt: '2026-07-04T00:00:00Z',
+};
+
+const listRepoOpenPullRequests = vi.fn(
+  async (_installationId: number, _repoFullName: string, _page: number): Promise<OpenPullRequestPage> => ({
+    pullRequests: [pullRequest34],
+    nextPage: null,
+  }),
+);
 const getIssueDetail = vi.fn(
   async (_installationId: number, _repoFullName: string, issueId: string): Promise<Record<string, unknown> | null> =>
     issueId === '12'
@@ -509,6 +530,20 @@ vi.mock('./sandbox', () => {
   };
 });
 
+const filesystemCaptureMock = vi.hoisted(() => ({ waitError: null as Error | null }));
+vi.mock('../../session/filesystem-capture.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../session/filesystem-capture.js')>();
+  return {
+    ...actual,
+    waitForPendingFilesystemCapture: vi.fn(
+      async (...args: Parameters<typeof actual.waitForPendingFilesystemCapture>) => {
+        if (filesystemCaptureMock.waitError) throw filesystemCaptureMock.waitError;
+        return actual.waitForPendingFilesystemCapture(...args);
+      },
+    ),
+  };
+});
+
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
@@ -540,7 +575,7 @@ const testAuth: RouteAuth = {
   isOrganizationAdmin: async () => true,
 };
 
-import { buildGithubRoutes } from './routes.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -638,6 +673,7 @@ function buildApp(
     users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
+    ingestFactoryEvent?: Parameters<typeof buildGithubRoutes>[0]['ingestFactoryEvent'];
   } = {},
 ) {
   const app = new Hono();
@@ -836,11 +872,18 @@ describe('webhook route', () => {
       pullRequestNumber: 34,
       sessionId: 'session-1',
       ownerId: 'owner-1',
+      // Delivery builds the run's request context from the subscription, which
+      // needs the subscribing user: a webhook carries no signed-in identity, and
+      // tenant credential resolution fails closed without one.
+      subscribedByUserId: 'owner-1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
       sessionScope: '/worktrees/a',
       source: 'explicit-tool',
       status: 'open',
+      // Delivery runs the woken session as the subscribing user; a row without
+      // one is a failed delivery, not a silent unauthenticated run.
+      subscribedByUserId: 'u1',
     });
 
     const res = await buildApp(null, { controller }).request(
@@ -861,7 +904,13 @@ describe('webhook route', () => {
         priority: 'high',
         dedupeKey: 'delivery-1:session-1:thread-1',
       }),
+      // Delivery hands the run a primed request context. A webhook carries no
+      // signed-in user, so the subscription's own identity is what lets the
+      // session resolve credentials instead of failing closed.
+      expect.objectContaining({ requestContext: expect.anything() }),
     );
+    const runContext = sendNotificationSignal.mock.calls[0]![1].requestContext;
+    expect(runContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
   });
 
   it('rejects invalid signatures without logging', async () => {
@@ -1566,6 +1615,130 @@ describe('prs route', () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
   });
+
+  it('hands each listed pull request to Factory with its author and labels', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockResolvedValueOnce({
+      pullRequests: [{ ...pullRequest34, labels: ['bug'] }],
+      nextPage: null,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(200);
+    const listedPullRequestPayload = expect.objectContaining({
+      user: { login: 'grace' },
+      labels: [{ name: 'bug' }],
+    });
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ pull_request: listedPullRequestPayload }) }),
+    );
+  });
+
+  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+      `/web/github/projects/p1/${resource}`,
+    );
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
+    warn.mockRestore();
+  });
+});
+
+describe('linked repository backlog import', () => {
+  const deliveryIds = (ingest: ReturnType<typeof vi.fn>) =>
+    ingest.mock.calls.map(([event]) => (event as { deliveryId: string }).deliveryId);
+
+  it('ingests every page of open issues and pull requests for the linked repository', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({
+      issues: [
+        {
+          number: 12,
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          author: 'ada',
+          assignee: 'grace',
+          labels: ['bug'],
+          comments: 3,
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+      nextPage: 2,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent,
+    });
+
+    expect(listRepoOpenIssues.mock.calls.map(call => call.slice(0, 3))).toEqual([
+      [7, 'octo/hello', 1],
+      [7, 'octo/hello', 2],
+    ]);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+    expect(deliveryIds(ingestFactoryEvent)).toEqual([
+      'poll:99:issue:12:2026-07-01T00:00:00Z',
+      'poll:99:issue:12:2026-07-01T00:00:00Z',
+      'poll:99:pull-request:34:2026-07-03T00:00:00Z',
+    ]);
+  });
+
+  it('stops paging after five pages', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockImplementation(async (_i, _r, page) => ({ issues: [], nextPage: page + 1 }));
+    listRepoOpenPullRequests.mockImplementation(async (_i, _r, page) => ({ pullRequests: [], nextPage: page + 1 }));
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent: vi.fn(async () => undefined),
+    });
+
+    expect(listRepoOpenIssues).toHaveBeenCalledTimes(5);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(5);
+  });
+
+  it('makes no GitHub calls for a repository this integration cannot resolve', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'other-org',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent,
+    });
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'missing',
+      ingestFactoryEvent,
+    });
+
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+    expect(ingestFactoryEvent).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when Factory rules are not configured', async () => {
+    seedMaterializedProject();
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent: undefined,
+    });
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
 });
 
 describe('pr detail route', () => {
@@ -2164,6 +2337,9 @@ describe('Factory session routes', () => {
     expect(named.resourceId).toBe(sessionId);
     // Naming runs as the session's owner, so it bills their model credentials.
     expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toEqual({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
     // A closed session has no live state, so the owner's stored observer model
     // is what keeps a manual rename on the model that names threads on its own.
     expect(named.model({ requestContext: named.requestContext }).modelId).toContain('claude-haiku-4-5');
@@ -2184,7 +2360,9 @@ describe('Factory session routes', () => {
 
     expect(response.status).toBe(200);
     // No stored model to override with, so naming runs on the memory's own title model.
-    expect(controller.generateThreadTitle.mock.calls[0][0].model).toBeUndefined();
+    const named = controller.generateThreadTitle.mock.calls[0][0];
+    expect(named.model).toBeUndefined();
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toBeNull();
     expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
   });
 
@@ -2304,6 +2482,31 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
     await vi.waitFor(() => expect(live.destroy).toHaveBeenCalledTimes(1));
     error.mockRestore();
+  });
+
+  it('still tears down the controller session when draining the filesystem capture fails', async () => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    filesystemCaptureMock.waitError = new Error('drain failed');
+    try {
+      const controller = { deleteSession: vi.fn(async () => {}) } as any;
+      const app = buildApp({ workosId: 'u1' }, { controller });
+      const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+      const sessionId = (await created.json()).session.sessionId;
+
+      const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+      expect(deleted.status).toBe(200);
+      expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
+      expect(tables.sessions).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith(
+        '[GitHub Sessions] Failed to drain filesystem capture before delete',
+        expect.objectContaining({ sessionId }),
+      );
+    } finally {
+      filesystemCaptureMock.waitError = null;
+      warn.mockRestore();
+    }
   });
 
   it('destroys the deleted session sandbox held by this process instead of pooling it', async () => {

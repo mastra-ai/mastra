@@ -1,6 +1,6 @@
 import { MastraError, ErrorCategory, ErrorDomain } from '@mastra/core/error';
 import { MastraCompositeStore } from '@mastra/core/storage';
-import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions, RetentionConfig } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
 import type { Pool, PoolOptions } from 'mysql2/promise';
 
@@ -74,6 +74,7 @@ export type MySQLStoreConfig = (
 ) & {
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
+  retention?: RetentionConfig;
 };
 
 function validateConfig(config: MySQLStoreConfig): void {
@@ -199,7 +200,12 @@ export class MySQLStore extends MastraCompositeStore {
   stores: StorageDomains;
 
   constructor(config: MySQLStoreConfig & { id?: string; disableInit?: boolean }) {
-    super({ id: config.id ?? 'mysql', name: 'MySQLStore', disableInit: config.disableInit });
+    super({
+      id: config.id ?? 'mysql',
+      name: 'MySQLStore',
+      disableInit: config.disableInit,
+      retention: config.retention,
+    });
     validateConfig(config);
     const { pool, database } = createMySQLPool(config);
     this.pool = pool;

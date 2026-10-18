@@ -11,9 +11,11 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * completed task, wasting tokens and potentially overwriting a good answer.
  */
 describeForAllEngines('AIMock loop scenario: isTaskComplete early stop', engine => {
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
-  it('stops after a single model request when the scorer passes immediately', async () => {
+  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  itFailsOnInngest('stops after a single model request when the scorer passes immediately', async () => {
     let scorerCalls = 0;
     const immediatePassScorer = {
       id: 'immediate-pass',

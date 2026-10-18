@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,6 +102,35 @@ describe('FilesystemDB', () => {
     it('returns empty object for non-existent file', async () => {
       const data = await db.readDomain('nonexistent.json');
       expect(data).toEqual({});
+    });
+  });
+
+  describe('listDomainFiles', () => {
+    it('returns only matching-extension regular files and skips subdirectories', async () => {
+      const domainDir = join(dir, 'domainfiles');
+      mkdirSync(domainDir, { recursive: true });
+      writeFileSync(join(domainDir, 'a.json'), '{}');
+      writeFileSync(join(domainDir, 'b.json'), '{}');
+      writeFileSync(join(domainDir, 'c.txt'), 'nope');
+      // a directory whose name matches the extension must be ignored
+      mkdirSync(join(domainDir, 'nested.json'), { recursive: true });
+
+      const files = db.listDomainFiles('domainfiles').sort();
+      expect(files).toEqual(['domainfiles/a.json', 'domainfiles/b.json']);
+    });
+  });
+
+  describe('dateReviver fast-path', () => {
+    it('revives ISO datetime strings to Date and leaves non-date strings unchanged', async () => {
+      const iso = '2024-01-02T03:04:05.000Z';
+      await db.set('revive.json', 'key1', { at: iso, name: 'hello', year: '2024' });
+      db.invalidateCache('revive.json');
+
+      const result = await db.get<{ at: Date; name: string; year: string }>('revive.json', 'key1');
+      expect(result?.at).toBeInstanceOf(Date);
+      expect((result?.at as Date).toISOString()).toBe(iso);
+      expect(result?.name).toBe('hello');
+      expect(result?.year).toBe('2024');
     });
   });
 });

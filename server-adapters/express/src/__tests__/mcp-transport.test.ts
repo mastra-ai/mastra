@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
-import { createMCPTransportTestSuite } from '@internal/server-adapter-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
+import { createMCPTransportTestSuite } from '@mastra/server-adapters-test-suite';
 import express from 'express';
 import { describe } from 'vitest';
 import { MastraServer } from '../index';

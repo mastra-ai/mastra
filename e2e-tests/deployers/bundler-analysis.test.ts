@@ -14,6 +14,7 @@ const timeout = 5 * 60 * 1000;
  */
 describe.for([['pnpm'] as const])(`%s bundler analysis`, ([pkgManager]) => {
   let fixturePath: string;
+  let env: typeof process.env;
 
   beforeAll(
     async () => {
@@ -108,11 +109,16 @@ export const mastra = new Mastra({
 
       // Install dependencies
       const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
+      env = {
+        ...process.env,
+        PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0',
+        pnpm_config_minimum_release_age: '0',
+      };
 
       console.log('Installing dependencies...');
       installWithRetry(pkgManager, installArgs, {
         cwd: fixturePath,
-        env: process.env,
+        env,
       });
     },
     10 * 60 * 1000,
@@ -133,7 +139,7 @@ export const mastra = new Mastra({
       const result = spawnSync(pkgManager, ['build'], {
         cwd: fixturePath,
         stdio: 'inherit',
-        env: process.env,
+        env,
       });
 
       // Check if build succeeded

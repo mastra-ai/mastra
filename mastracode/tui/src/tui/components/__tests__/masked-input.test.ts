@@ -73,4 +73,16 @@ describe('MaskedInput', () => {
 
     expect(onSubmit).toHaveBeenCalledWith('postgres://user:pass@example.test/db');
   });
+
+  it('renders plain text when unmasked, and masks again when re-enabled', () => {
+    const input = new MaskedInput();
+    input.setValue('account name');
+
+    input.setMasked(false);
+    expect(input.render(40).join('\n')).toContain('account name');
+
+    input.setMasked(true);
+    expect(input.render(40).join('\n')).toContain('************');
+    expect(input.getValue()).toBe('account name');
+  });
 });
