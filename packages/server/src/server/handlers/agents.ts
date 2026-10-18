@@ -2036,6 +2036,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     threadId,
     ifActive,
     ifIdle,
+    tracingOptions,
   }) => {
     try {
       const idleStreamOptions = ifIdle?.streamOptions as
@@ -2058,12 +2059,17 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
-      const ifIdleWithContext = {
-        ifIdle: {
-          ...(ifIdle ?? {}),
-          streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
-        },
-      };
+      // The server context travels as the sender context, so an idle wake without explicit
+      // stream options still runs through the agent's `wakeOptions` hook.
+      const senderContext = { requestContext: serverRequestContext, ...(tracingOptions ? { tracingOptions } : {}) };
+      const ifIdleWithContext = ifIdle
+        ? {
+            ifIdle: {
+              ...ifIdle,
+              ...(normalizedIdleStreamOptions ? { streamOptions: normalizedIdleStreamOptions } : {}),
+            },
+          }
+        : {};
 
       if (effectiveThreadId && effectiveResourceId) {
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
@@ -2085,6 +2091,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
+          ...senderContext,
         });
         // `accepted` resolves once the runtime decides how to route the signal; it only
         // rejects on a setup/misconfig failure (e.g. no model), which `handleError` maps
@@ -2106,6 +2113,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(ifActive ? { ifActive } : {}),
+        ...senderContext,
         ...ifIdleWithContext,
       });
       // `accepted` carries the authoritative `runId` for `wake`/`deliver` (a run exists).
@@ -2131,6 +2139,7 @@ async function handleAgentMessageRoute({
   threadId,
   ifActive,
   ifIdle,
+  tracingOptions,
   methodName,
   invoke,
 }: {
@@ -2142,6 +2151,7 @@ async function handleAgentMessageRoute({
   threadId?: string;
   ifActive?: { behavior?: 'deliver' | 'persist' | 'discard' };
   ifIdle?: { behavior?: 'wake' | 'persist' | 'discard'; streamOptions?: Record<string, unknown> };
+  tracingOptions?: SendAgentSignalOptions['tracingOptions'];
   methodName: 'sendMessage' | 'queueMessage' | 'queueSignal';
   invoke: (agent: Agent, target: SendAgentSignalOptions) => SendAgentSignalResult;
 }) {
@@ -2162,12 +2172,12 @@ async function handleAgentMessageRoute({
   ensureDefaultVersionStatus(serverRequestContext, versionOptions);
   const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
   const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
-  const ifIdleWithContext = {
-    ifIdle: {
-      ...(ifIdle ?? {}),
-      streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
-    },
-  };
+  // The server context travels as the sender context, so an idle wake without explicit
+  // stream options still runs through the agent's `wakeOptions` hook.
+  const senderContext = { requestContext: serverRequestContext, ...(tracingOptions ? { tracingOptions } : {}) };
+  const ifIdleWithContext = ifIdle
+    ? { ifIdle: { ...ifIdle, ...(normalizedIdleStreamOptions ? { streamOptions: normalizedIdleStreamOptions } : {}) } }
+    : {};
 
   if (effectiveThreadId && effectiveResourceId) {
     const memory = await agent.getMemory({ requestContext: serverRequestContext });
@@ -2187,6 +2197,7 @@ async function handleAgentMessageRoute({
       ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
+      ...senderContext,
     } as SendAgentSignalOptions);
     const settled = await result.accepted;
     const settledRunId: string = settled && 'runId' in settled ? settled.runId : runId;
@@ -2203,6 +2214,7 @@ async function handleAgentMessageRoute({
     resourceId: effectiveResourceId,
     threadId: effectiveThreadId,
     ...(ifActive ? { ifActive } : {}),
+    ...senderContext,
     ...ifIdleWithContext,
   } as SendAgentSignalOptions);
   const settled = await result.accepted;

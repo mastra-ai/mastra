@@ -839,9 +839,10 @@ interface AgentConfigBase<
   /**
    * Stream options for a run started by a signal that wakes an idle thread
    * (notifications, schedules, peer messages, `sendSignal`). Called only when a
-   * signal actually starts a run. Explicit `ifIdle.streamOptions` fields take
-   * precedence over the returned fields; the returned `requestContext` takes
-   * precedence over the sender's `requestContext`.
+   * signal actually starts a run. When the sender passes `ifIdle.streamOptions`,
+   * the hook is not called and those options are used as-is; the sender's
+   * `requestContext` and tracing fill only what they leave out. Otherwise the
+   * returned `requestContext` takes precedence over the sender's `requestContext`.
    *
    * @experimental Agent signals are experimental and may change in a future release.
    */
