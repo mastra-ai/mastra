@@ -233,6 +233,7 @@ function createTransientFailingObserverModel(onAttempt: () => void) {
   };
 }
 
+// Hand-rolled model: aimock is not wired into packages/memory for the Observer, so empty and whitespace-only Observer replies are scripted directly.
 function createEmptyObserverModel(texts: string | readonly string[], onAttempt: () => void) {
   const outputs = typeof texts === 'string' ? [texts] : texts;
   let call = 0;
@@ -512,6 +513,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
             enabled: true,
             scope,
             observation: {
+              // Mock model, not aimock: aimock is not wired into packages/memory for the Observer (see createEmptyObserverModel).
               model: createEmptyObserverModel(observerTexts, () => attempts++) as any,
               messageTokens: 20,
               bufferTokens: false,
