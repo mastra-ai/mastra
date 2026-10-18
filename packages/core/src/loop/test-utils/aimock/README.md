@@ -143,6 +143,9 @@ baseURL })`) so its own loop turns also hit the mock; match the delegated prompt
   `tools` as the discovered `tools/*` map. Requires a static `instructions` string. This is an alias
   for opting a single scenario into the file-routing path; most scenarios get fs coverage for free via
   the `'fs'` engine variant below.
+- `callInstructions` / `system` — per-call `instructions` override and per-call appended `system`
+  message (the agent-level `instructions` option stays the constructor default).
+- `onChunk` is forwarded on every engine, durable and evented included.
 
 ### Engine / agent variants (`describeForAllEngines`)
 
@@ -162,6 +165,23 @@ file-routing path automatically. The `'fs'` variant threads `agents` (subagents)
 scenarios run on `'fs'` too. Scenarios whose inputs the file-routing model cannot represent —
 dynamic-function `instructions`, `sharedAgent`, `workflows`-as-tool, or durable resume/suspension — opt out
 with `{ skip: ['fs'] }` (alongside any engines they already skip).
+
+### Cross-engine parity (`*.parity.test.ts`)
+
+Scenarios assert each engine on its own. When the contract is "every engine behaves like the plain
+`Agent`", use the parity runner in `parity.ts` instead: `expectEngineParity(scenario)` (or the
+`describeParityScenario(name, scenario, { then })` wrapper) runs one scripted case on `plain`,
+`durable` and `evented` — built through the same `wrapForEngine` as scenarios — and diffs text,
+finishReason, usage, tool calls/results, normalised chunk types/payloads and the model call
+options against plain. Expected engine divergences are declared in `differences` with a ticket
+reason; `staleKnownDifferences` fails once a declared difference is fixed.
+
+Parity cases script an in-process recording model (`createRecordingModel`, `textOnlyTape`,
+`toolCallTape`) rather than AIMock HTTP fixtures, because they need to throw arbitrary errors
+mid-stream and compare exact `LanguageModelV2CallOptions`. They live in
+`scenarios/*.parity.test.ts`, which the unit project runs but the Inngest `*.scenario.test.ts`
+glob does not. Harness self-tests live in `parity.test.ts`; shared abort fixtures in
+`abort-parity-support.ts`.
 
 ### Error-state scenarios
 

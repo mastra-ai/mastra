@@ -6,7 +6,7 @@
  * COR-1415 difference. Keeping one copy means the two cases cannot drift apart — and when plain
  * stops finalising the aborted step, one deletion here retires the difference for both.
  *
- * `parity-harness.ts` stays frozen; this module only holds fixtures the ports own.
+ * `parity.ts` stays generic; this module only holds fixtures the ports own.
  */
 
 import type { CapturedRequest, EngineDifference } from './parity';
