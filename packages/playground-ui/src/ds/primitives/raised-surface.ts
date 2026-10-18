@@ -12,9 +12,10 @@
  * never clipped, has to separate from arbitrary content beneath it, and so
  * carries the long falloff.
  *
- * Both tokens carry the rim as well as the elevation (the rim is `--border`
- * itself, plus a top inset highlight in dark), so neither draws a border of its
- * own: adding `border` on top doubles the edge.
+ * Both recipes carry a `--surface-rim` inset edge, a top highlight in dark,
+ * and elevation drops. Adding a CSS border on that same edge doubles it.
+ * Content dividers use `--border`; frame headers use `border-surface-rim`
+ * and stay inside the inset pixel reserved by MainCard.
  *
  * Radius is deliberately absent — it belongs to the family (`rounded-xl` for a
  * popup, `rounded-studio-frame` for the app frame).
@@ -47,8 +48,14 @@ export const dialogSurfaceStyle = 'bg-dialog shadow-overlay ' + fieldsOnDialog;
 export const frameSurfaceStyle = 'bg-background shadow-raised ' + fieldsOnPage;
 
 /**
+ * The frame's fill without its elevation, for a frame that is raised only at
+ * some breakpoints: `MainCard` is flat page content below `lg`.
+ */
+export const frameFillStyle = 'bg-background ' + fieldsOnPage;
+
+/**
  * Interaction states for a surface that already carries an opaque fill. The
- * `state-layer` utility in `src/index.css` holds the reasoning and the measured
+ * `state-layer` utility in `components.css` holds the reasoning and the measured
  * numbers: the rung has to be layered, never swapped into `background-color`.
  */
 export const surfaceStateLayerStyle = 'state-layer';

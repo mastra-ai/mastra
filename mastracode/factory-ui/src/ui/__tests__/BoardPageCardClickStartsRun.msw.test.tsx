@@ -213,9 +213,7 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, configured: false })),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
@@ -296,13 +294,12 @@ describe('Board card buttons move the card', () => {
       workItems: [{ ...linearWorkItem, stages: ['intake'] }],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
     const user = userEvent.setup();
-    const search = within(dialog).getByRole('textbox', { name: 'Search repositories' });
+    const search = within(dialog).getByRole('searchbox', { name: 'Search repositories' });
     expect(within(dialog).getByRole('button', { name: /acme\/app/ })).toBeVisible();
     expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
 
@@ -339,11 +336,10 @@ describe('Board card buttons move the card', () => {
     });
     renderWorkBoard();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Linear' }));
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.type(within(dialog).getByRole('textbox', { name: 'Search repositories' }), 'not-linked');
+    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'not-linked');
     expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument());
@@ -352,7 +348,7 @@ describe('Board card buttons move the card', () => {
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
     const reopened = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(within(reopened).getByRole('textbox', { name: 'Search repositories' })).toHaveValue('');
+    expect(within(reopened).getByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
     expect(within(reopened).getByRole('button', { name: /acme\/app/ })).toBeVisible();
     expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
     expect(patches).toHaveLength(0);
@@ -383,13 +379,12 @@ describe('Board card buttons move the card', () => {
       ],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('Fix intake sync', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
     const user = userEvent.setup();
-    await user.type(within(dialog).getByRole('textbox', { name: 'Search repositories' }), 'OTHER');
+    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'OTHER');
     await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
     expect(created).toHaveLength(0);
     expect(transitions).toHaveLength(0);
@@ -412,7 +407,6 @@ describe('Board card buttons move the card', () => {
       ],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 

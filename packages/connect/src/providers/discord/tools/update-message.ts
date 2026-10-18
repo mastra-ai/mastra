@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const updateMessageInputSchema = z.object({
   channel_id: z.string().describe('The ID of the channel containing the message. Example: "1504383343142240278"'),
@@ -64,22 +65,7 @@ export function updateMessageTool(proxy: PlatformProxy) {
     outputSchema: updateMessageOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof updateMessageOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata();
-
-      const MetadataSchema = z.object({
-        botToken: z.string(),
-      });
-
-      const parsedMetadata = MetadataSchema.safeParse(metadata);
-
-      if (!parsedMetadata.success) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata.',
-        });
-      }
-
-      const botToken = parsedMetadata.data.botToken;
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/message#edit-message
       const response = await platformProxy.patch({

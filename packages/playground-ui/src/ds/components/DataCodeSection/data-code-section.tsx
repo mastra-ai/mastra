@@ -1,6 +1,6 @@
 import { Chunk } from '@codemirror/merge';
 import { Text } from '@codemirror/state';
-import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon } from 'lucide-react';
+import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -8,7 +8,7 @@ import { Code } from '@/ds/components/Code/code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -133,20 +133,27 @@ export function DataCodeSection({
         <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
           {actions}
-          {!usePlainTextView && (
-            <SearchFieldBlock
-              name="code-section-search"
-              label="Search code"
-              labelIsHidden
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onReset={() => setSearchQuery('')}
-              size="sm"
-              isMinimized={searchMinimized}
-              onMinimizedChange={setSearchMinimized}
-            />
-          )}
+          {!usePlainTextView &&
+            (searchMinimized ? (
+              <Button
+                size="sm"
+                aria-label="Search code"
+                tooltip="Search code"
+                onClick={() => setSearchMinimized(false)}
+              >
+                <SearchIcon />
+              </Button>
+            ) : (
+              <SearchInput
+                label="Search code"
+                placeholder="Search..."
+                size="sm"
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+                onClose={() => setSearchMinimized(true)}
+                autoFocus
+              />
+            ))}
           <ButtonsGroup size="sm">
             <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
@@ -194,15 +201,12 @@ export function DataCodeSection({
               </DialogTitle>
               <div className="flex shrink-0 items-center gap-2">
                 {!expandedMultiline && (
-                  <SearchFieldBlock
-                    name="expanded-code-search"
+                  <SearchInput
                     label="Search code"
-                    labelIsHidden
                     placeholder="Search..."
-                    value={expandedSearchQuery}
-                    onChange={e => setExpandedSearchQuery(e.target.value)}
-                    onReset={() => setExpandedSearchQuery('')}
                     size="sm"
+                    value={expandedSearchQuery}
+                    onValueChange={setExpandedSearchQuery}
                   />
                 )}
                 <ButtonsGroup size="sm">

@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
@@ -36,13 +36,12 @@ export function RepositoryPickerDialog({
         <DialogHeader>
           <DialogTitle>Choose a repository</DialogTitle>
           <DialogDescription>Choose a linked repository for this task.</DialogDescription>
-          <ListSearch
+          <SearchInput
             label="Search repositories"
             placeholder="Search…"
             size="sm"
-            onSearch={setQuery}
-            debounceMs={0}
-            shortcutDisabled
+            value={query}
+            onValueChange={setQuery}
           />
         </DialogHeader>
         <DialogBody>

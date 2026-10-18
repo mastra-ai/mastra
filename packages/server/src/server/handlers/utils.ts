@@ -1,9 +1,25 @@
+import type { Mastra } from '@mastra/core';
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
+import type { Workflow } from '@mastra/core/workflows';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
+
+/**
+ * Resolves a workflow by id or registration key from the set Mastra exposes
+ * publicly. Unlike `mastra.getWorkflowById`, this excludes hidden internal
+ * workflows (e.g. a durable agent's backing loop), which must never be
+ * runnable through HTTP routes.
+ */
+export function getPublicWorkflowById(mastra: Mastra, workflowId: string): Workflow | undefined {
+  const workflows = mastra.listWorkflows();
+  return (
+    Object.values(workflows).find(workflow => workflow.id === workflowId) ??
+    (Object.hasOwn(workflows, workflowId) ? workflows[workflowId] : undefined)
+  );
+}
 
 // Validation helper
 export function validateBody(body: Record<string, unknown>) {
@@ -30,6 +46,32 @@ export function sanitizeBody(body: Record<string, unknown>, disallowedKeys: stri
       delete body[key];
     }
   }
+}
+
+const CREDENTIAL_HEADER_NAMES = new Set([
+  'authorization',
+  'proxy-authorization',
+  'x-api-key',
+  'api-key',
+  'x-goog-api-key',
+  'cookie',
+]);
+
+/**
+ * Removes credential-bearing headers from client-supplied `modelSettings.headers`
+ * so a caller's own auth (e.g. the app's bearer token) can never override the
+ * provider credential configured on the server. Non-credential headers are kept.
+ */
+export function stripClientCredentialHeaders(body: Record<string, unknown>) {
+  const modelSettings = body.modelSettings;
+  if (!modelSettings || typeof modelSettings !== 'object') return;
+  const headers = (modelSettings as { headers?: unknown }).headers;
+  if (!headers || typeof headers !== 'object') return;
+
+  const kept = Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !CREDENTIAL_HEADER_NAMES.has(name.toLowerCase())),
+  );
+  body.modelSettings = { ...modelSettings, headers: kept };
 }
 
 export function parsePerPage(
@@ -192,14 +234,40 @@ export async function enforceThreadAccess({
 }
 
 /**
- * Validates that a workflow run belongs to the specified resourceId.
- * Throws 403 if the run exists but belongs to a different resource.
+ * Validates that a caller may act on a workflow run.
+ *
+ * Without `server.auth.mapUserToResourceId` there is no tenancy model, and only a mismatch
+ * between two present resource ids is denied. With a mapper, a resource-scoped caller may only
+ * act on runs it owns (an owner-less run is not its run). An unscoped caller is a
+ * privileged/service context (see getContextResourceId), but that privilege is only granted when
+ * an FGA provider authorizes the route; otherwise it is refused rather than granted implicitly,
+ * as on the thread-transfer route.
  */
 export async function validateRunOwnership(
   run: { resourceId?: string | null } | null | undefined,
   effectiveResourceId: string | undefined,
+  mastra?: { getServer?: () => { auth?: unknown; fga?: unknown } | undefined },
 ): Promise<void> {
-  if (run && effectiveResourceId && run.resourceId && run.resourceId !== effectiveResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+  if (!run) return;
+  const server = mastra?.getServer?.();
+  const tenancy =
+    typeof (server?.auth as { mapUserToResourceId?: unknown } | undefined)?.mapUserToResourceId === 'function';
+  if (!tenancy) {
+    if (effectiveResourceId && run.resourceId && run.resourceId !== effectiveResourceId) {
+      throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+    }
+    return;
+  }
+  if (effectiveResourceId) {
+    if (run.resourceId !== effectiveResourceId) {
+      throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+    }
+    return;
+  }
+  if (!server?.fga) {
+    throw new HTTPException(403, {
+      message:
+        'Access denied: unscoped workflow run access requires explicit authorization. Configure an FGA provider to authorize privileged run access.',
+    });
   }
 }

@@ -33,9 +33,12 @@ let isRestarting = false;
 let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
+// How long a stopping server gets to drain and run Mastra's shutdown (including its final
+// usage telemetry report) before it is killed, on both hot reload and Ctrl-C.
+const SERVER_SHUTDOWN_TIMEOUT_MS = 5000;
 const environmentState = createEnvironmentState();
 
-function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+function waitForProcessExit(child: ChildProcess, timeoutMs = SERVER_SHUTDOWN_TIMEOUT_MS): Promise<void> {
   if (child.exitCode !== null) {
     return Promise.resolve();
   }
@@ -393,7 +396,7 @@ async function rebundleAndRestart(
               resolve();
             }
           }
-        }, 5000);
+        }, SERVER_SHUTDOWN_TIMEOUT_MS);
       });
       if (currentServerProcess === serverProcess) {
         currentServerProcess = undefined;
@@ -496,6 +499,12 @@ export async function dev({
 
   environmentState.sync(loadedEnv);
 
+  // Empty the output directory before extracting server options. Extraction
+  // imports a generated config from `.mastra/output`, so leftovers from a
+  // previous `mastra build` (e.g. packed workspace deps under node_modules)
+  // would otherwise shadow the project's own dependencies.
+  await bundler.prepare(dotMastraPath);
+
   const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
@@ -548,12 +557,6 @@ export async function dev({
     peerDepMismatches,
     factory,
   };
-
-  await bundler.prepare(dotMastraPath);
-
-  // Re-assert the lock after prepare() emptied the directory.
-  // The bundler preserves the lock, but this ensures the data is current.
-  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
   // empties the output directory so the wrapper is not wiped before the watcher
@@ -615,7 +618,12 @@ export async function dev({
     if (isShuttingDown) return;
     isShuttingDown = true;
 
-    const forceExit = setTimeout(() => process.exit(0), 3000);
+    // Leave the server its full shutdown window: exiting first would let execa's cleanup
+    // signal it again, which force-quits it.
+    const forceExit = setTimeout(() => {
+      releaseDevLock(dotMastraPath);
+      process.exit(0);
+    }, SERVER_SHUTDOWN_TIMEOUT_MS + 1000);
     forceExit.unref();
 
     devLogger.shutdown();

@@ -23,13 +23,14 @@ import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { InlineCode } from '@/ds/components/InlineCode/inline-code';
 import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
 
 function SpanTextRenderer({ value }: { value: string }) {
   return <SpanPayloadMarkdown>{value}</SpanPayloadMarkdown>;
 }
 
 function SpanInterruptedRenderer({ value }: { value: InterruptedSpanOutput }) {
-  const title = value.status === 'suspended' ? 'Suspended' : 'Aborted';
+  const title = { suspended: 'Suspended', aborted: 'Aborted', interrupted: 'Interrupted' }[value.status];
   const hasTarget = value.toolName !== undefined || value.toolCallId !== undefined;
   return (
     <div data-slot="span-interrupted" data-status={value.status} className="flex flex-col gap-3">
@@ -65,9 +66,9 @@ function SpanAgentRunResultRenderer({ value }: { value: AgentRunResult }) {
         <Notice variant="destructive" title="Tripwire">
           {value.tripwire.reason && <Notice.Message>{value.tripwire.reason}</Notice.Message>}
           {value.tripwire.processorId && (
-            <div className="text-caption">
+            <Txt as="p" variant="caption">
               Processor <InlineCode>{value.tripwire.processorId}</InlineCode>
-            </div>
+            </Txt>
           )}
         </Notice>
       )}

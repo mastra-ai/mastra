@@ -1,14 +1,14 @@
 /**
  * One-line transcript notice for persisted `data-mastracode-account-switch`
- * parts: account rotations, pool exhaustion, and starting-on-account notices.
+ * parts: account rotations and pool exhaustion.
  * Modeled on OMMarkerComponent (single themed Text row). The copy comes from
  * the SDK's shared formatter so live `info`-event lines and history-reloaded
  * part lines read identically.
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { accountSwitchNoticeText, packFallbackNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { AccountSwitchPartData, PackFallbackPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { accountSwitchNoticeText, modelFallbackNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { AccountSwitchPartData, ModelFallbackPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
 
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -33,7 +33,11 @@ export class AccountSwitchNoticeComponent extends Container {
   }
 }
 
-export type PackFallbackNoticeData = PackFallbackPartData;
+export type PackFallbackNoticeData = ModelFallbackPartData;
+
+export function packFallbackNoticeText(data: PackFallbackNoticeData): string {
+  return modelFallbackNoticeText(data).replace('Switched model route:', 'Switched model pack:');
+}
 
 export class PackFallbackNoticeComponent extends Container {
   private textChild: Text;

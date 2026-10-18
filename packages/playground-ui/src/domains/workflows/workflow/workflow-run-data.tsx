@@ -1,9 +1,10 @@
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
-import { ArrowDownToLine, ArrowUpFromLine, Braces, ChevronRight, Database } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Braces, Database } from 'lucide-react';
 import { useState } from 'react';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Txt } from '@/ds/components/Txt';
 
@@ -34,11 +35,11 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
   const tab = selectedTab ?? (hasOutput ? 'output' : 'input');
 
   return (
-    <Collapsible className="border-t border-border/50" data-testid="workflow-run-data">
+    <Collapsible className="border-t border-border" data-testid="workflow-run-data">
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-caption text-muted-foreground">
         <Database aria-hidden className="size-3.5 text-muted-foreground" />
         <span>Run data</span>
-        <ChevronRight aria-hidden className="ml-auto size-4 text-muted-foreground" />
+        <DisclosureChevron direction="right" className="ml-auto size-4 text-muted-foreground" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <Tabs defaultTab={tab} value={tab} onValueChange={setSelectedTab} className="min-w-0 px-5 pb-4">

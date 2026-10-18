@@ -55,9 +55,9 @@ export function FlowCard({
         as="span"
         variant="meta"
         tone="muted"
-        font="mono"
+
         aria-hidden="true"
-        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2 tracking-[0.18em]"
+        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2"
       >
         SIGNALS
       </Txt>
@@ -67,13 +67,11 @@ export function FlowCard({
           reorderDisabled={reorderDisabled}
           onOrderChange={handleHeaderOrderChange}
         />
-        <div
-          aria-label="Themes"
-          className="flex items-center gap-2 py-1 font-mono text-meta tracking-[0.18em] text-muted-foreground"
-          role="separator"
-        >
+        <div aria-label="Themes" role="separator" className="flex items-center gap-2 py-1">
           <span aria-hidden="true" className="h-px w-5 bg-border" />
-          THEMES
+          <Txt tone="muted" as="span" variant="meta" className="block">
+            THEMES
+          </Txt>
           <span aria-hidden="true" className="h-px flex-1 bg-border" />
         </div>
         <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">

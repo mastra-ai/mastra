@@ -4,9 +4,12 @@ export type SettingsSection =
   | 'factory'
   | 'connections'
   | 'repositories'
+  | 'environment'
   | 'intake'
   | 'models'
+  | 'personal-models'
   | 'memory'
+  | 'factory-memory'
   | 'skills'
   | 'behavior';
 
@@ -16,9 +19,12 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   factory: 'Manage Factory',
   connections: 'Connections',
   repositories: 'Repositories',
+  environment: 'Environment',
   intake: 'Work Intake',
-  models: 'Models',
-  memory: 'Memory',
+  models: 'Factory models',
+  'personal-models': 'Your models',
+  memory: 'Your memory',
+  'factory-memory': 'Factory memory',
   skills: 'Skills',
   behavior: 'Behavior',
 };

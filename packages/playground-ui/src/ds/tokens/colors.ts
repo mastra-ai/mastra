@@ -3,6 +3,7 @@ export const Colors = {
   'chart-blue-deep': 'var(--chart-blue-deep)',
   'chart-amber': 'var(--chart-amber)',
   'chart-green': 'var(--chart-green)',
+  'chart-cyan': 'var(--chart-cyan)',
   'chart-purple': 'var(--chart-purple)',
   'chart-orange': 'var(--chart-orange)',
   'chart-pink': 'var(--chart-pink)',
@@ -13,6 +14,12 @@ export const Colors = {
   'chart-sequential-4': 'var(--chart-sequential-4)',
   'chart-sequential-5': 'var(--chart-sequential-5)',
   'chart-sequential-pale': 'var(--chart-sequential-pale)',
+  'chart-share-1': 'var(--chart-share-1)',
+  'chart-share-2': 'var(--chart-share-2)',
+  'chart-share-3': 'var(--chart-share-3)',
+  'chart-share-4': 'var(--chart-share-4)',
+  'chart-share-5': 'var(--chart-share-5)',
+  'chart-share-rest': 'var(--chart-share-rest)',
   'span-agent': 'var(--span-agent)',
   'span-workflow': 'var(--span-workflow)',
   'span-model': 'var(--span-model)',
@@ -328,6 +335,7 @@ export const Colors = {
 };
 
 export const BorderColors = {
+  'surface-rim': 'var(--surface-rim)',
   border: 'var(--border)',
   'border-strong': 'var(--border-strong)',
   'border-hover': 'var(--border-hover)',

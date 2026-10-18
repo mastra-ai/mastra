@@ -1,4 +1,3 @@
-import { formatDataStreamPart } from '@ai-sdk/ui-utils';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { ToolsInput } from '@mastra/core/agent';
 import { getErrorFromUnknown } from '@mastra/core/error';
@@ -6,6 +5,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraClient } from '../client';
+import { formatDataStreamPart } from '../utils/ai-sdk-v4';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -724,6 +724,168 @@ describe('Agent client-side tools', () => {
       ]),
     );
     expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['approveToolCall', 'approve-tool-call'],
+    ['declineToolCall', 'decline-tool-call'],
+  ] as const)(
+    '%s: does not error on a tool-result whose tool-call was emitted in an earlier stream',
+    async (method, route) => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const chunks = [
+        { type: 'tool-result', payload: { toolCallId: 'suspended-call', toolName: 'approvalTool', result: 'ok' } },
+        { type: 'step-start', payload: { messageId: 'm2' } },
+        { type: 'text-delta', payload: { text: 'Done' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 1 } } },
+      ];
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(chunks));
+
+      const resp = await agent[method]({ runId: 'run-1', toolCallId: 'suspended-call' });
+      let received = 0;
+      await resp.processDataStream({
+        onChunk: async () => {
+          received++;
+        },
+      });
+
+      expect((global.fetch as any).mock.calls[0][0]).toBe(`http://localhost:4111/api/agents/agent-1/${route}`);
+      expect(received).toBe(chunks.length);
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    },
+  );
+
+  it('resumeStream: executes a client tool called after the resumed tool-result', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const firstCycle = [
+      { type: 'tool-result', payload: { toolCallId: 'suspended-call', toolName: 'approvalTool', result: 'ok' } },
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      { type: 'tool-call', payload: { toolCallId: 'call_2', toolName: 'weatherTool', args: { location: 'NYC' } } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.resumeStream({ approved: true }, {
+      runId: 'run-1',
+      memory: { thread: 'thread-1', resource: 'user-1' },
+      clientTools: { weatherTool },
+    } as any);
+
+    let lastChunk: any = null;
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        lastChunk = chunk;
+      },
+    });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('stream: skips a tool-result whose toolCallId does not match any earlier tool-call', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      { type: 'tool-call', payload: { toolCallId: 'call_2', toolName: 'weatherTool', args: { location: 'NYC' } } },
+      { type: 'tool-result', payload: { toolCallId: 'unrelated-call', toolName: 'approvalTool', result: 'ok' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('streamLegacy: skips tool results with no matching tool call and still runs the client tool', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const finish = (finishReason: 'tool-calls' | 'stop') => [
+      formatDataStreamPart('finish_step', {
+        finishReason,
+        usage: { promptTokens: 1, completionTokens: 1 },
+        isContinued: false,
+      }),
+      formatDataStreamPart('finish_message', { finishReason, usage: { promptTokens: 1, completionTokens: 1 } }),
+    ];
+    const firstCycle = legacyStreamResponse([
+      // No tool call seen yet in this stream (e.g. a resumed call)
+      formatDataStreamPart('tool_result', { toolCallId: 'suspended-call', result: 'ok' }),
+      formatDataStreamPart('start_step', { messageId: 'm1' }),
+      formatDataStreamPart('tool_call', { toolCallId: 'call_1', toolName: 'checkpointTool', args: {} }),
+      // Tool calls exist, but none has this ID
+      formatDataStreamPart('tool_result', { toolCallId: 'unrelated-call', result: 'ok' }),
+      ...finish('tool-calls'),
+    ]);
+    const secondCycle = legacyStreamResponse([
+      formatDataStreamPart('start_step', { messageId: 'm2' }),
+      formatDataStreamPart('text', 'done'),
+      ...finish('stop'),
+    ]);
+    (global.fetch as any).mockResolvedValueOnce(firstCycle).mockResolvedValueOnce(secondCycle);
+
+    const executeCheckpoint = vi.fn(async () => ({ success: true }));
+    const checkpointTool = createTool({
+      id: 'checkpointTool',
+      description: 'Checkpoint the draft',
+      inputSchema: z.object({}),
+      execute: executeCheckpoint,
+    });
+
+    const resp = await agent.streamLegacy({
+      messages: [{ role: 'user', content: 'build' }],
+      clientTools: { checkpointTool },
+    });
+    await resp.processDataStream({});
+
+    expect(executeCheckpoint).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('stream: receives chunks from both initial and recursive requests', async () => {

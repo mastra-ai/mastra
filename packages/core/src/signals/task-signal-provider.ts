@@ -37,8 +37,6 @@ import { SignalProvider } from './signal-provider';
  * The Agent automatically merges the tools into its toolset and registers the
  * processor on its input-processor chain (which propagates the Mastra instance
  * so the processor can resolve the TaskStore).
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export class TaskSignalProvider extends SignalProvider<'task-signals'> {
   readonly id = 'task-signals';

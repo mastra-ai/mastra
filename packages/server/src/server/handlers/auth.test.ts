@@ -14,6 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import {
   GET_AUTH_CAPABILITIES_ROUTE,
+  GET_CURRENT_USER_ROUTE,
   GET_PERMISSION_PATTERNS_ROUTE,
   GET_ROLE_PERMISSIONS_ROUTE,
   GET_SSO_LOGIN_ROUTE,
@@ -560,5 +561,45 @@ describe('POST /auth/logout — provider capability contract', () => {
     expect(response.status).toBe(200);
     expect(destroySession).not.toHaveBeenCalled();
     expect(response.headers.get('Set-Cookie')).toBe('session=; Max-Age=0');
+  });
+});
+
+describe('GET /auth/me — forwards a renewed session cookie', () => {
+  function providerWithPending(consume: (req: Request) => Record<string, string> | undefined) {
+    return {
+      name: 'renewing',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getCurrentUser: vi.fn(async () => ({ id: 'user-1', email: 'a@b.com' })),
+      consumePendingResponseHeaders: vi.fn(consume),
+      isSimpleAuth: true,
+    } as unknown as MastraAuthProvider;
+  }
+
+  it('attaches pending provider headers as __refreshHeaders', async () => {
+    const request = new Request('http://localhost:4111/api/auth/me');
+    const auth = providerWithPending(req => (req === request ? { 'Set-Cookie': 'wos-session=v2; Path=/' } : undefined));
+
+    const result = (await GET_CURRENT_USER_ROUTE.handler({
+      mastra: createMastraWithAuth(auth),
+      request,
+    } as any)) as any;
+
+    expect(result.id).toBe('user-1');
+    expect(result.__refreshHeaders).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
+  });
+
+  it('still returns the user when the hook throws', async () => {
+    const auth = providerWithPending(() => {
+      throw new Error('boom');
+    });
+
+    const result = (await GET_CURRENT_USER_ROUTE.handler({
+      mastra: createMastraWithAuth(auth),
+      request: new Request('http://localhost:4111/api/auth/me'),
+    } as any)) as any;
+
+    expect(result.id).toBe('user-1');
+    expect(result.__refreshHeaders).toBeUndefined();
   });
 });

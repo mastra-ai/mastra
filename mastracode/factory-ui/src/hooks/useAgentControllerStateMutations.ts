@@ -1,3 +1,4 @@
+import type { AgentControllerThinkingLevel } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
@@ -35,18 +36,9 @@ export function useSetAgentControllerStateMutation({
   });
 }
 
-export function useSwitchAgentControllerModeMutation(args: AgentControllerMutationArgs) {
-  const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient(args);
-
-  return useMutation({
-    mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
-    // returning the invalidation keeps isPending true until the refetched state carries the new mode
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-      }),
-  });
+interface ModelSwitch {
+  modelId: string;
+  thinkingLevel?: AgentControllerThinkingLevel;
 }
 
 export function useSwitchAgentControllerModelMutation(args: AgentControllerMutationArgs) {
@@ -54,10 +46,17 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
-    mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
+    mutationFn: ({ modelId, thinkingLevel }: ModelSwitch) =>
+      requireAgentControllerSession(session).switchModel(modelId, { thinkingLevel }),
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-      }),
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerSettings(args.agentControllerId, args.resourceId, args.scope),
+          exact: true,
+        }),
+      ]),
   });
 }

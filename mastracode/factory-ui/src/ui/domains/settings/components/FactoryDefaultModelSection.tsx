@@ -1,6 +1,9 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { MouseEvent } from 'react';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
@@ -11,8 +14,8 @@ import {
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
 } from '../../../../hooks/useFactoryDefaultModel';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
+import { FactoryThinkingControl } from './FactoryThinkingControl';
 import { ModelCombobox } from './ModelCombobox';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
@@ -33,7 +36,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   if (!factoryId) return null;
 
   const defaultModelId = projectQuery.data?.defaultModelId ?? '';
-  const error = applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error;
+  const errorText = (applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error)?.message;
   const applyResult = applyToSessions.data;
 
   const saveDefaultModel = (value: string) => {
@@ -60,37 +63,41 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   return (
     <>
       <SettingsRow
-        label="Factory default model"
+        label="Model and thinking"
         description={
           <>
             <span>
-              Factory runs (triage, board work items) start on this model and use the Factory observational-memory
-              settings below — your personal defaults don&apos;t apply to them.
+              {projectQuery.data?.modelScope === 'hybrid'
+                ? "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead."
+                : "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them."}
             </span>
-            {error && (
+            {errorText && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">
-                {error instanceof Error ? error.message : String(error)}
+                {errorText}
               </Txt>
             )}
             <SharedCredentialNotice modelId={defaultModelId || undefined} />
           </>
         }
       >
-        <div className="flex w-full max-w-72 flex-col gap-2">
+        <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex items-center gap-2">
             {setDefaultModel.isPending && (
               <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
             )}
-            <label className="min-w-0 flex-1">
-              <span className="sr-only">Factory default model</span>
+            <ButtonsGroup size="sm" aria-label="Model and thinking">
               <ModelCombobox
                 models={models}
                 value={defaultModelId}
-                placeholder="Select a model"
-                disabled={projectQuery.isPending || setDefaultModel.isPending}
                 onValueChange={saveDefaultModel}
+                placeholder="Select a model"
+                aria-label="Factory default model"
+                variant="ghost"
+                size="sm"
+                disabled={projectQuery.isPending || setDefaultModel.isPending}
               />
-            </label>
+              <FactoryThinkingControl factoryId={factoryId} />
+            </ButtonsGroup>
           </div>
           {applyResult && (
             <Txt variant="meta">
@@ -110,7 +117,9 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
       <AlertDialog open={!!confirmModelId} onOpenChange={setDialogOpen}>
         <AlertDialog.Content>
           <AlertDialog.Header>
-            <AlertDialog.Title>Also switch running sessions to {confirmModelId}?</AlertDialog.Title>
+            <AlertDialog.Title>
+              Also switch running sessions to {confirmModelId ? formatModelName(confirmModelId) : ''}?
+            </AlertDialog.Title>
             <AlertDialog.Description>
               New Factory runs will use this model. Running work and review sessions keep their current model unless you
               switch them. Switched sessions keep their work and pick up the new model on their next step.

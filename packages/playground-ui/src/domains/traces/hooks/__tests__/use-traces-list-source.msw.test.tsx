@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraReactProvider } from '@mastra/react';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
@@ -126,6 +125,47 @@ describe('useTracesListSource', () => {
         await result.current.refetch();
       });
       expect(requests.post).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('when a fixed window fails while auto refresh is on', () => {
+    function failingHandlers(status: number) {
+      const post = vi.fn();
+      server.use(
+        http.post(`${OBSERVABILITY_URL}/traces/query`, () => {
+          post();
+          return HttpResponse.json({ message: 'The trace query is invalid' }, { status });
+        }),
+      );
+      return post;
+    }
+
+    it('stops polling once the server rejects the request', async () => {
+      const post = failingHandlers(422);
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] });
+      const { result } = renderHook(() => useTracesListSource({ query, rolling: false }), { wrapper });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(result.current.error).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(post).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBeTruthy();
+    });
+
+    it('keeps polling through a server failure', async () => {
+      const post = failingHandlers(500);
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] });
+      renderHook(() => useTracesListSource({ query, rolling: false }), { wrapper });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(post.mock.calls.length).toBeGreaterThan(1);
     });
   });
 

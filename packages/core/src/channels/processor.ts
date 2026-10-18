@@ -25,9 +25,10 @@ export class ChatChannelProcessor {
     const lines = [`You are communicating via ${ctx.platform}.`];
 
     // Tell the LLM its own identity so it can recognise self-mentions in raw message text
-    if (ctx.botUserName || ctx.botMention) {
+    if (ctx.botUserName || ctx.botDisplayName || ctx.botMention) {
       const parts: string[] = [];
       if (ctx.botUserName) parts.push(`"${ctx.botUserName}"`);
+      if (ctx.botDisplayName && ctx.botDisplayName !== ctx.botUserName) parts.push(`"${ctx.botDisplayName}"`);
       if (ctx.botMention) parts.push(ctx.botMention);
       lines.push(
         `Your identity on this platform is ${parts.join(' / ')}. Messages containing these references are directed at you.`,

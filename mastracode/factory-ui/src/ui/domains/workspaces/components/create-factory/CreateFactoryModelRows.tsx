@@ -7,7 +7,7 @@ import { RefreshCw } from 'lucide-react';
 import type { ProviderInfo } from '../../../../../api/types';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { SharedCredentialNotice } from '../../../settings/components/SharedCredentialNotice';
-import { providerDisplayName } from '../../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { useProviderModels } from '../../hooks/useProviderModels';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';

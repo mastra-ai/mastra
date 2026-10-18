@@ -10,8 +10,6 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 import { platformFilesystemProvider, platformSandboxProvider } from '@mastra/platform-workspace';
-import { RedisServerCache } from '@mastra/redis';
-import Redis from 'ioredis';
 import { agent, hasConnectEnv } from './agents/agent';
 import { startScheduleTool, stopScheduleTool } from './tools/schedule-tools';
 import { seedWelcomeThread } from './welcome';
@@ -22,12 +20,22 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL is not set. Provide a Postgres connection string.');
 }
 
-const redisUrl = process.env.REDIS_URL;
-if (!redisUrl) {
-  throw new Error('REDIS_URL is not set. Redis backs the event cache so streams survive client disconnects.');
-}
+// Channel providers derive OAuth redirect and webhook URLs from the server
+// config, and the bind address of a deployed container (e.g. 0.0.0.0:3000)
+// is not publicly reachable. MASTRA_SERVER_URL carries the server's public
+// URL — Mastra Cloud injects it on every deploy; set it yourself on other
+// hosts. Once channel providers read the variable directly, this block can
+// be removed.
+const serverUrl = process.env.MASTRA_SERVER_URL ? new URL(process.env.MASTRA_SERVER_URL) : undefined;
 
 export const mastra = new Mastra({
+  ...(serverUrl && {
+    server: {
+      studioProtocol: serverUrl.protocol === 'https:' ? ('https' as const) : ('http' as const),
+      studioHost: serverUrl.hostname,
+      studioPort: serverUrl.port ? Number(serverUrl.port) : serverUrl.protocol === 'https:' ? 443 : 80,
+    },
+  }),
   agents: { agent },
   tools: { startScheduleTool, stopScheduleTool },
   workflows: { activityDigestWorkflow },
@@ -39,9 +47,6 @@ export const mastra = new Mastra({
     id: 'mastra-storage',
     connectionString: databaseUrl,
   }),
-  // Redis-backed event cache: agent runs record their chunks here so late
-  // subscribers and reconnecting clients can replay missed events.
-  cache: new RedisServerCache({ client: new Redis(redisUrl) }),
   // Studio editing: agent overrides and workflow definitions persist as files
   // under ./mastra/editor (source: 'code'), the workflow builder authors
   // workflows from Studio, and the platform workspace providers let Studio

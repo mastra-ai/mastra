@@ -26,9 +26,10 @@ export interface SemanticRecallOptions {
   vector: MastraVector;
 
   /**
-   * Embedder for generating query embeddings
+   * Embedder for generating query embeddings. Optional only when `vector` is self-embedding,
+   * where the store takes text and produces the vectors itself.
    */
-  embedder: MastraEmbeddingModel<string>;
+  embedder?: MastraEmbeddingModel<string>;
 
   /**
    * Number of most similar messages to retrieve
@@ -119,7 +120,7 @@ export class SemanticRecall implements Processor {
 
   private storage: MemoryStorage;
   private vector: MastraVector;
-  private embedder: MastraEmbeddingModel<string>;
+  private embedder?: MastraEmbeddingModel<string>;
   private topK: number;
   private messageRange: { before: number; after: number };
   private scope: 'thread' | 'resource';
@@ -134,6 +135,14 @@ export class SemanticRecall implements Processor {
   // Cache for index dimension validation (per-process)
   // Prevents redundant API calls when index already validated
   private indexValidationCache = new Map<string, { dimension: number }>();
+
+  /**
+   * True when the store embeds text itself, so this processor sends it text. False for every
+   * store that expects the caller to supply vectors.
+   */
+  private get isSelfEmbedding(): boolean {
+    return !this.embedder && this.vector.isSelfEmbedding;
+  }
 
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
@@ -394,8 +403,11 @@ export class SemanticRecall implements Processor {
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
 
-    // Generate embeddings for the query
-    const { embeddings, dimension } = await this.embedMessageContent(query, indexName);
+    // On a self-embedding store there is nothing to embed and no dimension to validate:
+    // the query text goes to the database as text.
+    const { embeddings, dimension } = this.isSelfEmbedding
+      ? { embeddings: [], dimension: undefined }
+      : await this.embedMessageContent(query, indexName);
     await this.ensureVectorIndex(indexName, dimension);
 
     // Perform vector search for each embedding
@@ -405,15 +417,23 @@ export class SemanticRecall implements Processor {
       metadata?: Record<string, any>;
     }> = [];
 
-    for (const embedding of embeddings) {
-      const results = await this.vector.query({
-        indexName,
-        queryVector: embedding,
-        topK: this.topK,
-        filter: this.scope === 'resource' && resourceId ? { resource_id: resourceId } : { thread_id: threadId },
-      });
-
+    const filter = this.scope === 'resource' && resourceId ? { resource_id: resourceId } : { thread_id: threadId };
+    if (this.isSelfEmbedding) {
+      // `queryText` is not on the shared QueryVectorParams; only self-embedding stores accept
+      // it, and they are the only ones reached here.
+      const results = await this.vector.query({ indexName, queryText: query, topK: this.topK, filter } as never);
       vectorResults.push(...results);
+    } else {
+      for (const embedding of embeddings) {
+        const results = await this.vector.query({
+          indexName,
+          queryVector: embedding,
+          topK: this.topK,
+          filter,
+        });
+
+        vectorResults.push(...results);
+      }
     }
     // Filter by threshold if specified
     const filteredResults =
@@ -474,6 +494,11 @@ export class SemanticRecall implements Processor {
     // Note: embedderOptions may contain providerOptions for controlling embedding behavior
     // (e.g., outputDimensionality for Google models). The user is responsible for providing
     // options compatible with their embedder's SDK version.
+    if (!this.embedder) {
+      throw new Error(
+        'SemanticRecall was asked to embed text but has no embedder, and its vector store does not embed server-side.',
+      );
+    }
     const result = await this.embedder.doEmbed({
       values: [content],
       ...(this.embedderOptions as any),
@@ -494,7 +519,7 @@ export class SemanticRecall implements Processor {
    * Get default index name based on embedder model
    */
   private getDefaultIndexName(): string {
-    const model = this.embedder.modelId || 'default';
+    const model = this.embedder?.modelId || (this.vector.isSelfEmbedding ? 'server' : 'default');
     // Sanitize model ID to create valid SQL identifier:
     // - Replace hyphens, periods, and other special chars with underscores
     // - Ensure it starts with a letter or underscore
@@ -508,7 +533,16 @@ export class SemanticRecall implements Processor {
    * Ensure vector index exists with correct dimensions
    * Uses in-memory cache to avoid redundant validation calls
    */
-  private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
+  private async ensureVectorIndex(indexName: string, dimension?: number): Promise<void> {
+    if (dimension === undefined) {
+      // A self-embedding store derives the dimension from its own model, so there is nothing
+      // to pass or to validate. Creating the index is left to the store's own configuration.
+      if (this.indexValidationCache.has(indexName)) return;
+      await this.vector.createIndex({ indexName } as never);
+      this.indexValidationCache.set(indexName, { dimension: 0 });
+      return;
+    }
+
     // Check cache first - if already validated in this process, skip
     const cached = this.indexValidationCache.get(indexName);
     if (cached?.dimension === dimension) {
@@ -541,7 +575,8 @@ export class SemanticRecall implements Processor {
   ): Promise<MessageList | MastraDBMessage[]> {
     const { messages, messageList, requestContext } = args;
 
-    if (!this.vector || !this.embedder || !this.storage) {
+    // An embedder is only required when this processor has to produce the vectors itself.
+    if (!this.vector || !this.storage || (!this.embedder && !this.isSelfEmbedding)) {
       // Return messageList if available to signal no transformation occurred
       return messageList || messages;
     }
@@ -568,6 +603,7 @@ export class SemanticRecall implements Processor {
 
       // Collect all embeddings first
       const vectors: number[][] = [];
+      const documents: string[] = [];
       const ids: string[] = [];
       const metadataList: Record<string, any>[] = [];
       let vectorDimension = 0;
@@ -614,19 +650,24 @@ export class SemanticRecall implements Processor {
         }
 
         try {
-          // Create embedding for the message
-          const { embeddings, dimension } = await this.embedMessageContent(textContent, indexName);
+          if (this.isSelfEmbedding) {
+            documents.push(textContent);
+          } else {
+            // Create embedding for the message
+            const { embeddings, dimension } = await this.embedMessageContent(textContent, indexName);
 
-          if (embeddings.length === 0) {
-            continue;
+            if (embeddings.length === 0) {
+              continue;
+            }
+
+            const embedding = embeddings[0];
+            if (!embedding) {
+              continue;
+            }
+
+            vectors.push(embedding);
+            vectorDimension = dimension;
           }
-
-          const embedding = embeddings[0];
-          if (!embedding) {
-            continue;
-          }
-
-          vectors.push(embedding);
           ids.push(message.id);
           metadataList.push({
             message_id: message.id,
@@ -636,15 +677,21 @@ export class SemanticRecall implements Processor {
             content: textContent,
             created_at: message.createdAt.toISOString(),
           });
-          vectorDimension = dimension;
         } catch (error) {
           // Log error but don't fail the entire operation
           this.logger?.error(`[SemanticRecall] Error creating embedding for message ${message.id}:`, { error });
         }
       }
 
-      // If we have embeddings, ensure index exists and upsert them
-      if (vectors.length > 0) {
+      if (this.isSelfEmbedding) {
+        // The store embeds these itself, so it receives the text. `documents` is not on the
+        // shared UpsertVectorParams; only self-embedding stores accept it.
+        if (documents.length > 0) {
+          await this.ensureVectorIndex(indexName);
+          await this.vector.upsert({ indexName, documents, ids, metadata: metadataList } as never);
+        }
+      } else if (vectors.length > 0) {
+        // If we have embeddings, ensure index exists and upsert them
         await this.ensureVectorIndex(indexName, vectorDimension);
         await this.vector.upsert({
           indexName,

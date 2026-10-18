@@ -114,6 +114,35 @@ describe('observeAgentGitAction', () => {
     });
   });
 
+  it('attributes the pull request to its environment repository, case-insensitively', async () => {
+    const resolveRepositorySlugs = vi.fn(async () => ['mastra-ai/mastra-website', 'Mastra-AI/Mastra']);
+    await observeAgentGitAction({
+      audit,
+      toolContext: toolCall('gh pr create --fill', { output: `${PR_URL}\n` }),
+      resolveRepositorySlugs,
+    });
+
+    expect(resolveRepositorySlugs).toHaveBeenCalledWith('resource-1');
+    expect(recorded[0]).toMatchObject({
+      action: 'factory.agent.pr_opened',
+      metadata: { url: PR_URL, repository: 'Mastra-AI/Mastra' },
+    });
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('still audits a pull request outside the environment, without a repository and with one warning', async () => {
+    const url = 'https://github.com/other/repo/pull/5';
+    await observeAgentGitAction({
+      audit,
+      toolContext: toolCall('gh pr create --fill', { output: `${url}\n` }),
+      resolveRepositorySlugs: async () => ['mastra-ai/mastra'],
+    });
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].metadata).toEqual({ url });
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('not in this Factory'), { url });
+  });
+
   it('ignores a pull request preview that opened nothing', async () => {
     await observe(toolCall('gh pr create --dry-run --fill', { output: 'Would have created a pull request:\ntitle' }));
     expect(recorded).toHaveLength(0);

@@ -471,6 +471,203 @@ describe('om-tools', () => {
       expect(highResult.messages).toContain('"query": "test query"');
     });
 
+    it('PR #25961 consumer proof: recall null falls back to raw result', async () => {
+      const rawSentinel = 'PR25961_NULL_RAW_RESULT_SENTINEL';
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-null-model-output',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    toolCallId: 'tc-null-model-output',
+                    toolName: 'backgroundTask',
+                    state: 'result',
+                    args: {},
+                    result: { answer: rawSentinel },
+                  },
+                  providerMetadata: { mastra: { modelOutput: null } },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'high',
+        partType: 'tool-result',
+      });
+
+      expect(result.messages, 'PR25961_RECALL_NULL_RAW_FALLBACK').toContain(rawSentinel);
+    });
+
+    it('PR #25961 consumer proof: recall undefined falls back to raw result', async () => {
+      const rawSentinel = 'PR25961_UNDEFINED_RAW_RESULT_SENTINEL';
+      const message = {
+        id: 'msg-undefined-model-output',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'tc-undefined-model-output',
+                toolName: 'legacyTool',
+                state: 'result',
+                args: {},
+                result: { answer: rawSentinel },
+              },
+              providerMetadata: { mastra: { modelOutput: undefined } },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T10:05:00Z'),
+      } as unknown as MastraDBMessage;
+      const recallSpy = vi.spyOn(memory, 'recall').mockResolvedValue({ messages: [message] } as any);
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'high',
+        partType: 'tool-result',
+      });
+      recallSpy.mockRestore();
+
+      expect(result.messages, 'PR25961_RECALL_UNDEFINED_RAW_FALLBACK').toContain(rawSentinel);
+    });
+
+    it('PR #25961 consumer proof: recall falsy stored outputs remain authoritative', async () => {
+      const rawSentinel = 'PR25961_FALSY_RAW_RESULT_SENTINEL';
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-zero-model-output',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    toolCallId: 'tc-zero-model-output',
+                    toolName: 'zeroOutput',
+                    state: 'result',
+                    args: {},
+                    result: { answer: rawSentinel },
+                  },
+                  providerMetadata: { mastra: { modelOutput: 0 } },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+          {
+            id: 'msg-false-model-output',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    toolCallId: 'tc-false-model-output',
+                    toolName: 'falseOutput',
+                    state: 'result',
+                    args: {},
+                    result: { answer: rawSentinel },
+                  },
+                  providerMetadata: { mastra: { modelOutput: false } },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:06:00Z'),
+          },
+          {
+            id: 'msg-empty-model-output',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    toolCallId: 'tc-empty-model-output',
+                    toolName: 'emptyOutput',
+                    state: 'result',
+                    args: {},
+                    result: { answer: rawSentinel },
+                  },
+                  providerMetadata: { mastra: { modelOutput: '' } },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:07:00Z'),
+          },
+        ],
+      });
+
+      const zeroResult = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'high',
+        partType: 'tool-result',
+      });
+      expect(zeroResult.messages).toContain('[Tool Result: zeroOutput]\n0');
+      expect(zeroResult.messages).not.toContain(rawSentinel);
+
+      const falseResult = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-zero-model-output',
+        limit: 1,
+        detail: 'high',
+        partType: 'tool-result',
+      });
+      expect(falseResult.messages).toContain('[Tool Result: falseOutput]\nfalse');
+      expect(falseResult.messages).not.toContain(rawSentinel);
+
+      const emptyResult = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-false-model-output',
+        limit: 1,
+        detail: 'high',
+        partType: 'tool-result',
+      });
+      expect(emptyResult.messages).toContain('[Tool Result: emptyOutput]');
+      expect(emptyResult.messages).not.toContain(rawSentinel);
+    });
+
     it('should filter recallMessages by partType', async () => {
       await memory.saveMessages({
         messages: [
@@ -2966,9 +3163,10 @@ describe('om-tools', () => {
 
       expect(result.count).toBe(2);
       expect(result.results).toContain('### Current thread memory');
-      expect(result.results).toContain('### Older memory from another thread');
+      expect(result.results).toContain('### Memory from another thread');
       expect(result.results).toContain('This result came from the current thread.');
-      expect(result.results).toContain('This result came from an older memory generation in another thread.');
+      expect(result.results).toContain('This result came from another thread.');
+      expect(result.results).not.toContain('older memory generation');
       expect(result.results).toContain('- thread: thread-a (Setup Help)');
       expect(result.results).toContain('- thread: thread-b (Search Docs)');
       expect(result.results).toContain('- source: raw messages from ID msg-1 through ID msg-3');
@@ -3095,7 +3293,7 @@ describe('om-tools', () => {
       expect(result.results).not.toContain('Filtered Out');
     });
 
-    it('should apply a final token cap to the assembled markdown output', async () => {
+    it('should cap observation text without cutting result metadata', async () => {
       const memory = makeMockMemory({
         searchResults: [
           {
@@ -3657,7 +3855,7 @@ describe('om-tools', () => {
 
       const recall = memory.listTools().recall;
       const schema = getInputJSONSchema(recall);
-      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search']);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search', 'observations']);
       expect(recall.description).toContain('mode="search"');
     });
   });

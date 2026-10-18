@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ChannelDialog } from '../publish-channel-dialogs';
+import { discordPlatform, slackPlatform, unconfiguredDiscordPlatform } from './fixtures/channel-platforms';
 import { server } from '@/test/msw-server';
 
 const toastSuccessMock = vi.fn();
@@ -47,6 +48,18 @@ const installRadixDomShims = () => {
   }
 };
 
+type TabStub = { opener: Window | null; location: { href: string }; close: ReturnType<typeof vi.fn> };
+
+/**
+ * jsdom has no window.open; stub it with a navigable tab handle shaped like the
+ * one the connect action pre-opens on click and navigates once the request resolves.
+ */
+const stubOpenTab = (): TabStub => {
+  const tab: TabStub = { opener: window, location: { href: 'about:blank' }, close: vi.fn() };
+  vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window);
+  return tab;
+};
+
 describe('ChannelDialog (default platform)', () => {
   beforeAll(() => {
     installRadixDomShims();
@@ -57,7 +70,7 @@ describe('ChannelDialog (default platform)', () => {
     vi.restoreAllMocks();
   });
 
-  it('handles oauth result by redirecting to authorizationUrl', async () => {
+  it('handles oauth result by opening the authorization URL in a new tab and closing the dialog', async () => {
     server.use(
       http.post('*/api/channels/discord/connect', () =>
         HttpResponse.json({
@@ -68,17 +81,50 @@ describe('ChannelDialog (default platform)', () => {
       ),
     );
 
-    // Stub window.location.href assignment.
-    const originalHref = window.location.href;
+    // New tab (not a same-tab redirect) keeps this studio tab alive so the
+    // installations query refetches on focus-return after the OAuth flow.
+    const tab = stubOpenTab();
+    const onOpenChange = vi.fn();
+
+    render(
+      <Wrapper>
+        <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={onOpenChange} />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
+    // The tab opens synchronously on click (while user activation is live),
+    // then navigates once the connect request resolves.
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
+    await waitFor(() => {
+      expect(tab.location.href).toBe('https://oauth.example.com/authorize?id=abc');
+    });
+    expect(tab.opener).toBeNull();
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to navigating this tab when the popup blocker eats every window.open', async () => {
+    server.use(
+      http.post('*/api/channels/discord/connect', () =>
+        HttpResponse.json({
+          type: 'oauth',
+          authorizationUrl: 'https://oauth.example.com/authorize?id=abc',
+          installationId: 'inst-1',
+        }),
+      ),
+    );
+
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const originalLocation = window.location;
     const hrefSetter = vi.fn();
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: new Proxy(window.location, {
+      value: new Proxy(originalLocation, {
         set(_target, prop, value) {
-          if (prop === 'href') {
-            hrefSetter(value);
-            return true;
-          }
+          if (prop === 'href') hrefSetter(value);
           return true;
         },
         get(target, prop) {
@@ -88,30 +134,28 @@ describe('ChannelDialog (default platform)', () => {
       }),
     });
 
-    render(
-      <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          open
-          onOpenChange={() => {}}
-        />
-      </Wrapper>,
-    );
+    try {
+      render(
+        <Wrapper>
+          <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={() => {}} />
+        </Wrapper>,
+      );
 
-    fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
-    await waitFor(() => {
-      expect(hrefSetter).toHaveBeenCalledWith('https://oauth.example.com/authorize?id=abc');
-    });
-
-    // Restore so other tests are unaffected.
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { href: originalHref },
-    });
+      fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
+      // Pre-open on click is blocked, the fresh attempt on resolve is blocked —
+      // the connect POST already created the pending install, so the flow must
+      // not dead-end: it navigates the current tab instead of toasting.
+      await waitFor(() => {
+        expect(hrefSetter).toHaveBeenCalledWith('https://oauth.example.com/authorize?id=abc');
+      });
+      expect(openSpy).toHaveBeenCalledTimes(2);
+      expect(toastErrorMock).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+    }
   });
 
-  it('handles deep_link result by calling window.open and surfacing a popup-blocked toast', async () => {
+  it('handles deep_link result by navigating the pre-opened tab to the deep link', async () => {
     server.use(
       http.post('*/api/channels/discord/connect', () =>
         HttpResponse.json({
@@ -122,45 +166,37 @@ describe('ChannelDialog (default platform)', () => {
       ),
     );
 
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const tab = stubOpenTab();
     const onOpenChange = vi.fn();
 
     render(
       <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          open
-          onOpenChange={onOpenChange}
-        />
+        <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={onOpenChange} />
       </Wrapper>,
     );
 
     fireEvent.click(screen.getByTestId('publish-channel-dialog-discord-connect'));
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
     await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith('tg://example', '_blank', 'noopener,noreferrer');
+      expect(tab.location.href).toBe('tg://example');
     });
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
   });
 
-  it('handles immediate result by closing the dialog', async () => {
+  it('handles immediate result by closing the dialog and the unused pre-opened tab', async () => {
     server.use(
       http.post('*/api/channels/discord/connect', () =>
         HttpResponse.json({ type: 'immediate', installationId: 'inst-3' }),
       ),
     );
 
+    const tab = stubOpenTab();
     const onOpenChange = vi.fn();
     render(
       <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
-          agentId="agent-1"
-          open
-          onOpenChange={onOpenChange}
-        />
+        <ChannelDialog platform={discordPlatform} agentId="agent-1" open onOpenChange={onOpenChange} />
       </Wrapper>,
     );
 
@@ -168,13 +204,15 @@ describe('ChannelDialog (default platform)', () => {
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
+    expect(tab.close).toHaveBeenCalled();
+    expect(tab.location.href).toBe('about:blank'); // never navigated
   });
 
   it('switches to the disconnect-confirm view in-place when the Disconnect action is clicked', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          platform={discordPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-9',
@@ -202,12 +240,7 @@ describe('ChannelDialog (default platform)', () => {
   it('shows a "Not configured" notice and no Connect button when the platform is not configured', () => {
     render(
       <Wrapper>
-        <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: false }}
-          agentId="agent-1"
-          open
-          onOpenChange={() => {}}
-        />
+        <ChannelDialog platform={unconfiguredDiscordPlatform} agentId="agent-1" open onOpenChange={() => {}} />
       </Wrapper>,
     );
 
@@ -232,7 +265,7 @@ describe('ChannelDialog (slack platform)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'slack', name: 'Slack', isConfigured: true }}
+          platform={slackPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-pending',
@@ -279,7 +312,7 @@ describe('ChannelDialog (disconnect view)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          platform={discordPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-9',
@@ -311,7 +344,7 @@ describe('ChannelDialog (disconnect view)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'slack', name: 'Slack', isConfigured: true }}
+          platform={slackPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-1',
@@ -353,7 +386,7 @@ describe('ChannelDialog (disconnect view)', () => {
     render(
       <Wrapper>
         <ChannelDialog
-          platform={{ id: 'discord', name: 'Discord', isConfigured: true }}
+          platform={discordPlatform}
           agentId="agent-1"
           installation={{
             id: 'inst-9',

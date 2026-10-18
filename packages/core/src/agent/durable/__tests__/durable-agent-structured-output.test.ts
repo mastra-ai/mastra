@@ -300,6 +300,40 @@ describe('DurableAgent structured output', () => {
       cleanup();
     });
 
+    it('should preserve structured output when observing a completed run', async () => {
+      const expectedOutput = {
+        answer: 'ok',
+        n: 2,
+      };
+      const baseAgent = new Agent({
+        id: 'observe-structured-output-agent',
+        name: 'Observe Structured Output Agent',
+        instructions: 'Return the requested structured output',
+        model: createChunkedStructuredOutputModel(expectedOutput) as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const producer = await durableAgent.stream('Return the answer', {
+        structuredOutput: {
+          schema: z.object({
+            answer: z.string(),
+            n: z.number(),
+          }),
+        },
+      });
+      const producerOutput = await producer.output.getFullOutput();
+
+      const observer = await durableAgent.observe(producer.runId, { offset: 0 });
+      const observerOutput = await observer.output.getFullOutput();
+
+      expect(producerOutput.object).toEqual(expectedOutput);
+      expect(observerOutput.text).toBe(producerOutput.text);
+      expect(observerOutput.finishReason).toBe('stop');
+      expect(observerOutput.object).toEqual(producerOutput.object);
+
+      observer.cleanup();
+    });
+
     it('should handle complex nested object schemas in stream', async () => {
       const expectedOutput = {
         user: {
@@ -697,7 +731,7 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
     expect((result.workflowInput as any).options.structuredOutput.instructions).toBe(INSTRUCTIONS);
   });
 
-  it('does not serialize instructions when a separate structuring model is configured', async () => {
+  it('serializes structuring-agent instructions when a separate structuring model is configured', async () => {
     const baseAgent = new Agent({
       id: 'durable-instructions-structuring-model',
       name: 'Durable Instructions Structuring Model',
@@ -715,10 +749,11 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
       },
     });
 
-    // The durable path has no separate structuring pass, so it treats every config as direct
-    // injection. Structuring-agent instructions must not leak into the injected prompt as the
-    // sole output guidance; the generated schema instruction is used instead.
-    expect((result.workflowInput as any).options.structuredOutput.instructions).toBeUndefined();
+    // The finish step runs a separate structuring pass (#26431), which needs these
+    // instructions; the main model is not asked for JSON, so they are never injected there.
+    const so = (result.workflowInput as any).options.structuredOutput;
+    expect(so.hasStructuringModel).toBe(true);
+    expect(so.instructions).toBe(INSTRUCTIONS);
   });
 
   it('injects compact instructions instead of the schema dump on a durable run (system mode)', async () => {

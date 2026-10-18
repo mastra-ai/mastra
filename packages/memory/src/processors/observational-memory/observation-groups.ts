@@ -291,7 +291,10 @@ export function combineObservationGroupRanges(groups: ObservationGroup[]): strin
   return `${first.start.label}:${last.end.label}`;
 }
 
-export function renderObservationGroupsForReflection(observations: string): string | null {
+export function renderObservationGroupsForReflection(
+  observations: string,
+  options?: { includeReflectionKind?: boolean },
+): string | null {
   const groups = parseObservationGroups(observations);
   if (groups.length === 0) {
     return null;
@@ -300,7 +303,8 @@ export function renderObservationGroupsForReflection(observations: string): stri
   const result = replaceObservationGroupTags(observations, tag => {
     const attributes = parseObservationGroupAttributes(tag.attributeString);
     if (!attributes.id || !attributes.range) return tag.content.trim();
-    return `## Group \`${attributes.id}\`\n_range: \`${attributes.range}\`_\n\n${tag.content.trim()}`;
+    const kind = options?.includeReflectionKind && attributes.kind === 'reflection' ? '\n_kind: reflection_' : '';
+    return `## Group \`${attributes.id}\`${kind}\n_range: \`${attributes.range}\`_\n\n${tag.content.trim()}`;
   });
 
   return result.replace(/\n{3,}/g, '\n\n').trim();
