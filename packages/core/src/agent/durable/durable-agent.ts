@@ -1202,6 +1202,7 @@ export class DurableAgent<
       this.#assertRecoveryActive();
       executionFence.throwIfLost();
       registryEntry.messageList = messageList;
+      registryEntry.emittedResponseMessageFingerprints = undefined;
       this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
       globalRunRegistry.set(runId, registryEntry);
 
@@ -3487,6 +3488,8 @@ export class DurableAgent<
       if (!reg) continue;
       reg.executionFence = executionFence;
       reg.resumeToolCallId = resolvedOptions.toolCallId;
+      // The resumed segment streams to a new output that has seen no response messages yet.
+      reg.emittedResponseMessageFingerprints = undefined;
     }
 
     // Install a fresh abort controller for the resumed segment. The original

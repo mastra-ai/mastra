@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { convertMessages, coreContentToString } from '../../agent/message-list';
-import type { MessageList, MastraDBMessage } from '../../agent/message-list';
+import type { AIV5ResponseMessage, MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -556,6 +556,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #finishCallbackSent = false;
   #emitter = new EventEmitter();
   #bufferedSteps: LLMStepResult<OUTPUT>[] = [];
+  /** The run's response messages so far, rebuilt from durable step-finish deltas (#27475). */
+  #durableResponseMessages: AIV5ResponseMessage[] = [];
   #bufferedReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
   /**
    * Per-step counterpart of `#bufferedReasoningDetails`. Reset on `step-finish`
@@ -1310,7 +1312,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  messages: (chunk.payload as any)?._durableResponseMessages ?? chunk.payload.messages?.nonUser ?? [],
+                  messages: self.#readDurableResponseMessages(chunk.payload) ?? chunk.payload.messages?.nonUser ?? [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
@@ -2696,6 +2698,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * (`#usageCount`), in-flight per-step state (`#bufferedByStep`), structured
    * output, and the MessageList are intentionally untouched.
    */
+  /**
+   * Durable step-finish chunks carry only the response messages that changed since the
+   * previous chunk, starting at index `_durableResponseMessagesFrom` (absent from older
+   * producers, which sent the whole list). Splices them onto the messages seen so far and
+   * returns a copy, so each step keeps its own snapshot.
+   */
+  #readDurableResponseMessages(payload: unknown): AIV5ResponseMessage[] | undefined {
+    const { _durableResponseMessages: delta, _durableResponseMessagesFrom: from = 0 } = (payload ?? {}) as {
+      _durableResponseMessages?: AIV5ResponseMessage[];
+      _durableResponseMessagesFrom?: number;
+    };
+    if (!Array.isArray(delta)) return undefined;
+    // A gap means earlier chunks were never seen (e.g. observing from the latest offset): keep what arrived.
+    this.#durableResponseMessages =
+      from <= this.#durableResponseMessages.length ? this.#durableResponseMessages.slice(0, from).concat(delta) : delta;
+    return [...this.#durableResponseMessages];
+  }
+
   #truncateRunBuffers() {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;

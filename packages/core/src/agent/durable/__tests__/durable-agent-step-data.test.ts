@@ -2,6 +2,8 @@
  * #26780: DurableAgent callbacks and results must carry the same step data as the
  * regular Agent — step response messages and model id in onStepFinish, output.steps
  * and onFinish — and a per-call `model` must be the model that runs.
+ *
+ * #27475: those step messages must not be resent in full on every step-finish chunk.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -352,4 +354,214 @@ describe('DurableAgent step data (#26780)', () => {
     expect(response.modelId).toBe('response-model');
     expect(response.messages.some((m: any) => m.role === 'tool')).toBe(true);
   });
+});
+
+/** Model that calls `shot` `toolSteps` times, then answers with text. */
+function shotsThenTextModel(toolSteps: number) {
+  let calls = 0;
+  return new MockLanguageModelV2({
+    modelId: 'shot-model',
+    doStream: async () => {
+      calls++;
+      const parts =
+        calls <= toolSteps
+          ? [
+              { type: 'text-start', id: `t${calls}` },
+              { type: 'text-delta', id: `t${calls}`, delta: `step ${calls}` },
+              { type: 'text-end', id: `t${calls}` },
+              {
+                type: 'tool-call',
+                toolCallId: `call-${calls}`,
+                toolName: 'shot',
+                input: `{"q":${calls}}`,
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]
+          : [
+              { type: 'text-start', id: 'end' },
+              { type: 'text-delta', id: 'end', delta: 'done' },
+              { type: 'text-end', id: 'end' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ];
+      return {
+        stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...parts] as any),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  });
+}
+
+const SHOT_BYTES = 100_000;
+const shot = createTool({
+  id: 'shot',
+  description: 'returns a large payload',
+  inputSchema: z.object({ q: z.number() }),
+  execute: async ({ q }) => ({ q, image: 'x'.repeat(SHOT_BYTES) }),
+});
+
+/** Payloads of the step-finish chunks published to pubsub. */
+function captureStepFinishPayloads(pubsub: EventEmitterPubSub) {
+  const payloads: any[] = [];
+  const publish = pubsub.publish.bind(pubsub);
+  vi.spyOn(pubsub, 'publish').mockImplementation(async (topic: string, event: any) => {
+    const chunk = event?.data;
+    if (chunk?.type === 'step-finish' && chunk.payload && '_durableResponseMessages' in chunk.payload) {
+      payloads.push(structuredClone(chunk.payload));
+    }
+    return publish(topic, event);
+  });
+  return payloads;
+}
+
+const toolResultIds = (messages: any[]) =>
+  messages.flatMap(m =>
+    m.role === 'tool' && Array.isArray(m.content)
+      ? m.content.filter((p: any) => p.type === 'tool-result').map((p: any) => p.toolCallId)
+      : [],
+  );
+
+describe('DurableAgent step-finish payload size (#27475)', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await pubsub.close();
+  });
+
+  async function runShots(toolSteps: number) {
+    const payloads = captureStepFinishPayloads(pubsub);
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-finish-size',
+        name: 'Step Finish Size',
+        instructions: 'Test',
+        model: shotsThenTextModel(toolSteps) as LanguageModelV2,
+        tools: { shot },
+      }),
+      pubsub,
+    });
+    const stepEvents: any[] = [];
+    const { output, cleanup } = await durableAgent.stream('go', {
+      maxSteps: toolSteps + 2,
+      onStepFinish: (e: any) => void stepEvents.push(e),
+    });
+    await output.consumeStream();
+    const steps = await output.steps;
+    const response: any = await output.response;
+    cleanup();
+    return { payloads, stepEvents, steps, response };
+  }
+
+  it('sends each tool output once instead of on every later step', async () => {
+    const { payloads } = await runShots(10);
+
+    expect(payloads).toHaveLength(11);
+    for (const payload of payloads) {
+      // One 100KB tool result per step at most, not the 1MB the run accumulates.
+      expect(JSON.stringify(payload._durableResponseMessages).length).toBeLessThan(2.5 * SHOT_BYTES);
+    }
+    const sent = payloads.reduce((n, p) => n + JSON.stringify(p._durableResponseMessages).length, 0);
+    expect(sent).toBeLessThan(15 * SHOT_BYTES);
+  }, 30000);
+
+  it('still reports the cumulative response messages on every step', async () => {
+    const { stepEvents, steps, response } = await runShots(4);
+
+    expect(stepEvents).toHaveLength(5);
+    expect(steps).toHaveLength(5);
+    stepEvents.forEach((event, i) => {
+      const messages = event.response.messages;
+      // Each step sees every tool result so far, each exactly once.
+      expect(toolResultIds(messages)).toEqual(Array.from({ length: Math.min(i + 1, 4) }, (_, n) => `call-${n + 1}`));
+      expect(steps[i]!.response.messages).toEqual(messages);
+    });
+    // Earlier steps keep their own snapshot when later chunks update the tail.
+    expect(toolResultIds(steps[0]!.response.messages!)).toEqual(['call-1']);
+    expect(steps[4]!.response.messages).toEqual(response.messages);
+    expect(JSON.stringify(steps[4]!.response.messages)).toContain('done');
+  }, 30000);
+
+  it('sends the full history on the first step-finish of a resumed segment', async () => {
+    // A free tool step completes (and is sent) before the gated call suspends the run.
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      modelId: 'resume-model',
+      doStream: async () => {
+        calls++;
+        const toolName = calls === 1 ? 'free' : 'gated';
+        const parts =
+          calls <= 2
+            ? [
+                {
+                  type: 'tool-call',
+                  toolCallId: `call-${toolName}`,
+                  toolName,
+                  input: '{"q":1}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'done' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ];
+        return {
+          stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...parts] as any),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+    const tool = (id: string, requireApproval: boolean) =>
+      createTool({
+        id,
+        description: id,
+        inputSchema: z.object({ q: z.number() }),
+        requireApproval,
+        execute: async () => ({ ok: true }),
+      });
+    const memory = { thread: 'step-finish-size-resume', resource: 'r' };
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-finish-size-resume',
+        name: 'Step Finish Size Resume',
+        instructions: 'Test',
+        model: model as LanguageModelV2,
+        memory: new MockMemory(),
+        tools: { free: tool('free', false), gated: tool('gated', true) },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
+
+    const payloads = captureStepFinishPayloads(pubsub);
+    const stream = await durableAgent.stream('go', { memory, maxSteps: 5 });
+    for await (const chunk of stream.fullStream) if (chunk.type === 'tool-call-approval') break;
+    const firstSegmentChunks = payloads.length;
+    expect(firstSegmentChunks).toBeGreaterThan(0);
+
+    const resumed: any = await durableAgent.approveToolCall({ runId: stream.runId, toolCallId: 'call-gated', memory });
+    for await (const _ of resumed.fullStream);
+    const steps = await resumed.steps;
+
+    expect(payloads.length).toBeGreaterThan(firstSegmentChunks);
+    expect(payloads[firstSegmentChunks]._durableResponseMessagesFrom).toBe(0);
+    const last = steps.at(-1).response.messages;
+    expect(toolResultIds(last)).toEqual(['call-free', 'call-gated']);
+    expect(JSON.stringify(last)).toContain('done');
+  }, 30000);
 });
