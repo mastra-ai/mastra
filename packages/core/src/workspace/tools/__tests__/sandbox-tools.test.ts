@@ -527,7 +527,9 @@ describe('get_process_output tool', () => {
 
         const result = await getProcessOutputTool.execute!({ pid, wait: true }, { workspace } as any);
 
-        expect(result).toBe('started\n\n\nExit code: 0');
+        expect(result).toBe(
+          'started\n\n\nThe command exited, but a process it started is still running and holding its output open. Call kill_process to stop it.\nExit code: 0',
+        );
       } finally {
         await workspace.destroy();
         await fs.rm(dir, { recursive: true, force: true });

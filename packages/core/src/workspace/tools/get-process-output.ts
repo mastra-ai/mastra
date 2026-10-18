@@ -12,6 +12,9 @@ const MAX_WAIT_MS = 10 * 60_000;
 
 const STILL_RUNNING_NOTE = `Still running after waiting ${MAX_WAIT_MS / 60_000} minutes. Call get_process_output again to keep waiting, or kill_process to stop it.`;
 
+const LEFT_BEHIND_NOTE =
+  'The command exited, but a process it started is still running and holding its output open. Call kill_process to stop it.';
+
 const ABORTED_PROCESS_NOTE =
   'Process aborted: the run that started or was waiting on this process was cancelled (by the user or system), so it was killed before it finished.';
 
@@ -74,8 +77,9 @@ Use this after starting a background command with execute_command (background: t
       // handle kills the process on abort, mirroring the spawn-time
       // `abortSignal` convention.
       let waitedOut = false;
+      let result: Awaited<ReturnType<typeof handle.wait>> | undefined;
       if (shouldWait && handle.exitCode === undefined) {
-        const result = await handle
+        result = await handle
           .wait({
             abortSignal: context?.abortSignal,
             maxWaitMs: MAX_WAIT_MS,
@@ -117,7 +121,10 @@ Use this after starting a background command with execute_command (background: t
         }
       }
 
-      const running = handle.exitCode === undefined;
+      // wait() can settle when the command exits while a process it left behind
+      // still holds its output; the handle then reports no exit code yet.
+      const exitCode = handle.exitCode ?? result?.exitCode;
+      const running = exitCode === undefined;
 
       const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.maxOutputTokens;
       const stdout = noteDroppedOutput(
@@ -151,14 +158,15 @@ Use this after starting a background command with execute_command (background: t
         // The exit code of an aborted process is a provider-specific kill code, so say why it stopped.
         const terminalLines = [
           ...(handle.killedByAbort ? [ABORTED_PROCESS_NOTE] : []),
-          `Exit code: ${handle.exitCode}`,
+          ...(handle.exitCode === undefined ? [LEFT_BEHIND_NOTE] : []),
+          `Exit code: ${exitCode}`,
         ];
         parts.push(...(parts.length > 0 ? [''] : []), ...terminalLines);
       } else if (waitedOut) {
         parts.push('', STILL_RUNNING_NOTE);
       }
 
-      span.end({ success: true }, { exitCode: handle.exitCode });
+      span.end({ success: true }, { exitCode });
       return parts.join('\n');
     } catch (err) {
       span.error(err);

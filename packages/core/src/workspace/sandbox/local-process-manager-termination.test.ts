@@ -162,11 +162,46 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after th
     strayPids.push(childPid);
     expect(result).toMatchObject({ exitCode: 0, success: true });
     expect(result.executionTimeMs).toBeLessThan(5_000);
-    expect(handle.exitCode).toBe(0);
     // Output the child wrote while the exit drained is kept.
     expect(result.stdout).toContain('started');
     expect(result.stdout).toContain('LATE');
+    // The child still holds the output, so the handle still counts as running.
     expect(isAlive(childPid)).toBe(true);
+    expect(handle.exitCode).toBeUndefined();
+  });
+
+  async function leaveChildBehind() {
+    const handle = await sandbox.processes.spawn('sleep 30 & echo "CHILD $!"; echo started');
+    await handle.wait();
+    const childPid = Number(/CHILD (\d+)/.exec(handle.stdout)?.[1]);
+    strayPids.push(childPid);
+    expect(isAlive(childPid)).toBe(true);
+    return { handle, childPid };
+  }
+
+  it('still kills the child a command left behind after wait() has returned', async () => {
+    const { handle, childPid } = await leaveChildBehind();
+
+    expect(await sandbox.processes.kill(handle.pid)).toBe(true);
+
+    expect(await waitForExit(childPid)).toBe(true);
+    await vi.waitFor(() => expect(handle.exitCode).toBeDefined());
+  });
+
+  it('still stops the child a command left behind when the sandbox stops', async () => {
+    const { childPid } = await leaveChildBehind();
+
+    await sandbox.stop();
+
+    expect(await waitForExit(childPid)).toBe(true);
+  });
+
+  it('keeps listing a command whose child still holds its output after its output is read', async () => {
+    const { handle } = await leaveChildBehind();
+
+    await sandbox.processes.get(handle.pid);
+
+    expect((await sandbox.processes.list()).map(p => p.pid)).toContain(handle.pid);
   });
 
   it('settles when the shell is killed while a `timeout` child in its own process group holds stdout', async () => {
@@ -181,7 +216,8 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after th
     const result = await handle.wait();
 
     expect(result).toMatchObject({ exitCode: 128, killed: true });
-    expect(handle.exitCode).toBe(128);
+    // Without settling on the exit, wait() lasts until `timeout 60` ends its child.
+    expect(result.executionTimeMs).toBeLessThan(5_000);
   });
 
   it('keeps waiting on a process that is still running, up to maxWaitMs', async () => {
