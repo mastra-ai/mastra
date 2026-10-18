@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeNextFire, computeNextFireAt, validateCron } from './cron';
+import { computeInitialFire, computeNextFire, computeNextFireAt, validateCron, validateScheduleTiming } from './cron';
 
 describe('validateCron', () => {
   it('accepts valid 5-part patterns', () => {
@@ -92,7 +92,46 @@ describe('computeNextFireAt', () => {
   });
 });
 
-describe('computeNextFire', () => {
+describe('validateScheduleTiming', () => {
+  it('requires exactly one of cron or runAt', () => {
+    expect(() => validateScheduleTiming({})).toThrow(/exactly one/);
+    expect(() => validateScheduleTiming({ cron: '* * * * *', runAt: Date.now() + 1000 })).toThrow(/exactly one/);
+    expect(() => validateScheduleTiming({ runAt: new Date(Date.now() + 1000) })).not.toThrow();
+  });
+
+  it('only allows a future endAt together with cron', () => {
+    expect(() => validateScheduleTiming({ runAt: Date.now() + 1000, endAt: Date.now() + 2000 })).toThrow(
+      /only allowed/,
+    );
+    expect(() => validateScheduleTiming({ cron: '* * * * *', endAt: Date.now() - 1000 })).toThrow(/future/);
+    expect(() => validateScheduleTiming({ cron: '* * * * *', endAt: Date.now() + 60_000 })).not.toThrow();
+  });
+
+  it('rejects invalid dates', () => {
+    expect(() => validateScheduleTiming({ runAt: new Date('nope') })).toThrow(/runAt/);
+    expect(() => validateScheduleTiming({ runAt: Date.now() - 1000 })).toThrow(/future/);
+  });
+});
+
+describe('computeInitialFire / computeNextFire', () => {
+  it('fires a one-off at runAt and completes it on claim', () => {
+    const runAt = Date.now() + 10_000;
+    expect(computeInitialFire({ runAt })).toEqual({ nextFireAt: runAt, completed: false });
+    expect(computeNextFire({ cron: '', runAt, nextFireAt: runAt }, runAt)).toEqual({
+      nextFireAt: runAt,
+      completed: true,
+    });
+  });
+
+  it('completes a bounded cron once the next occurrence passes endAt', () => {
+    const now = Date.UTC(2030, 0, 1, 0, 0, 0);
+    const endAt = now + 90_000;
+    const first = computeNextFire({ cron: '* * * * *', endAt, nextFireAt: now }, now);
+    expect(first.completed).toBe(false);
+    const second = computeNextFire({ cron: '* * * * *', endAt, nextFireAt: first.nextFireAt }, first.nextFireAt);
+    expect(second.completed).toBe(true);
+  });
+
   it('completes a cron with no future occurrence without advancing nextFireAt', () => {
     const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
     expect(

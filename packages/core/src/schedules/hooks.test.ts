@@ -314,4 +314,19 @@ describe('AgentScheduleWorker — lifecycle hooks', () => {
       expect.objectContaining({ trigger: expect.objectContaining({ kind: 'manual' }) }),
     );
   });
+
+  it('trigger info carries kind=once for a scheduled fire of a one-off schedule', async () => {
+    const prepare = vi.fn(() => undefined);
+    const agent = makeAgent({ hooks: { prepare } });
+    const mastra = makeMastra({ agent });
+
+    await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }), { oneOff: true });
+    await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }), {
+      oneOff: true,
+      triggerKind: 'manual',
+    });
+    await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+
+    expect(prepare.mock.calls.map(([arg]: any) => arg.trigger.kind)).toEqual(['once', 'manual', 'cron']);
+  });
 });
