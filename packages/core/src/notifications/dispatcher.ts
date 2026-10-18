@@ -309,14 +309,16 @@ export async function dispatchDueNotifications({
   // deliver: `limit` bounds the records a pass delivers or fails, not the ones
   // it leaves.
   const seen = new Set<string>();
+  // Notification ids are unique per thread, not across threads.
+  const key = (record: NotificationRecord) => `${record.threadId}\0${record.id}`;
   const acted = () => result.delivered.length + result.failed.length;
   let left = 0;
   while (acted() < limit) {
     const actedBefore = acted();
     const pageSize = left + limit - actedBefore;
     const page = await storage.listDueNotifications({ now, limit: pageSize, ...(resourceId ? { resourceId } : {}) });
-    const due = page.filter(record => !seen.has(record.id));
-    for (const record of due) seen.add(record.id);
+    const due = page.filter(record => !seen.has(key(record)));
+    for (const record of due) seen.add(key(record));
     await dispatchRecords({ mastra, storage, now, due, result });
     const leftThisPage = due.length - (acted() - actedBefore);
     left += leftThisPage;
