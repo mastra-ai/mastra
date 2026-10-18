@@ -1035,7 +1035,8 @@ export class ObservationalMemory {
     const resolved = {
       ...tiered,
       model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
-        ResolvedInvocationModel | 'auto',
+        | ResolvedInvocationModel
+        | 'auto',
     };
     if (resolved.model !== 'auto') {
       return resolved as InvocationModelResolution<ResolvedInvocationModel>;
@@ -2135,7 +2136,8 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      { thread?: { id: string }; resourceId?: string } | undefined;
+      | { thread?: { id: string }; resourceId?: string }
+      | undefined;
 
     if (memoryContext?.thread?.id) {
       return {
