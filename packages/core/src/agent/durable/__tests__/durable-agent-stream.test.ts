@@ -44,26 +44,6 @@ function createTextStreamModel(text: string, _options?: { delay?: number }) {
   });
 }
 
-function createMultiChunkStreamModel(chunks: string[]) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        { type: 'text-start', id: 'text-1' },
-        ...chunks.map(chunk => ({ type: 'text-delta' as const, id: 'text-1', delta: chunk })),
-        { type: 'text-end', id: 'text-1' },
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: chunks.length * 5, totalTokens: 10 + chunks.length * 5 },
-        },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-    }),
-  });
-}
-
 function _createToolCallModel(toolName: string, args: Record<string, unknown>) {
   return new MockLanguageModelV2({
     doStream: async () => ({
@@ -381,37 +361,6 @@ describe('DurableAgent streaming execution', () => {
       cleanup();
     });
 
-    it('should stream text response and invoke onChunk callback', async () => {
-      const mockModel = createTextStreamModel('Hello, world!');
-      const chunks: any[] = [];
-
-      const baseAgent = new Agent({
-        id: 'stream-test-agent',
-        name: 'Stream Test Agent',
-        instructions: 'You are a helpful assistant',
-        model: mockModel as LanguageModelV2,
-      });
-
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { output, runId, cleanup } = await durableAgent.stream('Say hello', {
-        onChunk: chunk => {
-          chunks.push(chunk);
-        },
-      });
-
-      expect(runId).toBeDefined();
-      expect(output).toBeDefined();
-
-      // Drain the stream to deterministically wait for all chunks (and onChunk
-      // callbacks) instead of relying on a wall-clock timeout.
-      await output.consumeStream();
-
-      expect(chunks.length).toBeGreaterThan(0);
-
-      cleanup();
-    });
-
     it('should continue durable and evented streams after a tool-call step when maxSteps allows it', async () => {
       const finalText = 'tool returned hello';
       const echoTool = createTool({
@@ -483,32 +432,6 @@ describe('DurableAgent streaming execution', () => {
 
         cleanup();
       }
-    });
-
-    it('should stream multiple text chunks', async () => {
-      const mockModel = createMultiChunkStreamModel(['Hello', ', ', 'world', '!']);
-      const chunks: any[] = [];
-
-      const baseAgent = new Agent({
-        id: 'multi-chunk-agent',
-        name: 'Multi Chunk Agent',
-        instructions: 'You are a helpful assistant',
-        model: mockModel as LanguageModelV2,
-      });
-
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { output, cleanup } = await durableAgent.stream('Say hello in parts', {
-        onChunk: chunk => {
-          chunks.push(chunk);
-        },
-      });
-
-      await output.consumeStream();
-
-      expect(chunks.length).toBeGreaterThan(0);
-
-      cleanup();
     });
 
     it('should return runId and allow cleanup', async () => {

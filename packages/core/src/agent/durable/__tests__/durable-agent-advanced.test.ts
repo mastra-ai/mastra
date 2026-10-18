@@ -610,46 +610,6 @@ describe('DurableAgent workflow state serialization', () => {
     expect(serialized.systemMessage).toBe('Additional system note');
   });
 
-  it('uses per-call instructions override in place of the agent default', async () => {
-    const mockModel = createTextModel('Hello');
-    const baseAgent = new Agent({
-      id: 'instructions-override-agent',
-      name: 'Instructions Override Agent',
-      instructions: 'DEFAULT_INSTRUCTIONS',
-      model: mockModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const result = await durableAgent.prepare('Test', {
-      instructions: 'OVERRIDDEN_INSTRUCTIONS',
-    });
-
-    const serializedSystem = JSON.stringify(result.workflowInput.messageListState);
-
-    expect(serializedSystem).toContain('OVERRIDDEN_INSTRUCTIONS');
-    expect(serializedSystem).not.toContain('DEFAULT_INSTRUCTIONS');
-  });
-
-  it('appends per-call system message in addition to the agent instructions', async () => {
-    const mockModel = createTextModel('Hello');
-    const baseAgent = new Agent({
-      id: 'system-message-agent',
-      name: 'System Message Agent',
-      instructions: 'DEFAULT_INSTRUCTIONS',
-      model: mockModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const result = await durableAgent.prepare('Test', {
-      system: 'EXTRA_SYSTEM_NOTE',
-    });
-
-    const serializedSystem = JSON.stringify(result.workflowInput.messageListState);
-
-    expect(serializedSystem).toContain('DEFAULT_INSTRUCTIONS');
-    expect(serializedSystem).toContain('EXTRA_SYSTEM_NOTE');
-  });
-
   it('should handle complex tool metadata serialization', async () => {
     const mockModel = createTextModel('Hello');
 

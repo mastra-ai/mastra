@@ -1,5 +1,5 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
-import type { AgentConfig, ToolsInput } from '../../../agent';
+import type { AgentConfig, AgentExecutionOptions, ToolsInput } from '../../../agent';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { RequestContext } from '../../../request-context';
@@ -237,6 +237,13 @@ export interface RunLoopScenarioOptions {
    * chunks collected from `fullStream`.
    */
   onChunk?: (chunk: ChunkType) => Promise<void> | void;
+  /**
+   * Per-call `instructions` passed to `stream()`, overriding the agent's
+   * constructor `instructions` for this call only.
+   */
+  callInstructions?: AgentExecutionOptions<unknown>['instructions'];
+  /** Per-call `system` passed to `stream()`, appended to the agent's instructions. */
+  system?: AgentExecutionOptions<unknown>['system'];
   /**
    * Callback fired after each execution step (including intermediate tool-call steps).
    * Forwarded to `agent.stream({ onStepFinish })`. Useful for asserting step-level
