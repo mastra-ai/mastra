@@ -45,6 +45,7 @@ import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { ExecutionFence } from './execution-fence';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -141,6 +142,12 @@ export interface SerializableDurableState {
   savePerStep?: boolean;
   /** Whether observational memory is enabled (suppresses savePerStep) */
   observationalMemory?: boolean;
+  /**
+   * Whether the agent's memory is a fixed instance. Only then may the stored
+   * transcript reference recalled messages instead of copying them: function or
+   * inherited memory can resolve to another store when the run resumes.
+   */
+  fixedMemory?: boolean;
 }
 
 /**
@@ -158,8 +165,8 @@ export interface SerializableStructuredOutput {
   /** Model config for a dedicated structuring model (if different from the main model) */
   structuringModelConfig?: SerializableModelConfig;
   /**
-   * Whether the caller set `structuredOutput.model`. The durable path has no structuring
-   * pass yet, so the finish step must not derive the object from the main model's text.
+   * Whether the caller set `structuredOutput.model`. The main model then answers in plain
+   * text and the finish step runs a separate structuring pass, like Agent.
    */
   hasStructuringModel?: boolean;
   /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
@@ -381,6 +388,7 @@ export interface DurableLLMStepOutput {
     reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
+    signalPreempted?: boolean;
     logprobs?: LanguageModelV1LogProbs;
     totalUsage?: LanguageModelUsage;
     headers?: Record<string, string>;
@@ -412,6 +420,8 @@ export interface DurableLLMStepOutput {
   stepFinishPayload?: unknown;
   /** Deferred step-finish chunk carried until continuation policy resolves. */
   deferredStepFinishChunk?: unknown;
+  /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
+  completionStartTime?: Date;
 }
 
 /**
@@ -432,6 +442,8 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
+  completionStartTime?: Date;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -443,6 +455,8 @@ export interface DurableToolCallInput {
   hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
+  /** Model usage of the step that produced this call, reported on its suspension chunk */
+  stepUsage?: LanguageModelUsage;
 }
 
 /**
@@ -555,6 +569,8 @@ export interface DurableAgenticExecutionOutput {
   delegationBailed?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
+  /** When this iteration's inference streamed its first chunk */
+  completionStartTime?: Date;
 }
 
 /**
@@ -588,7 +604,8 @@ export type AgentStreamEventType =
   | 'error'
   | 'suspended'
   | 'abort'
-  | 'iteration-complete';
+  | 'iteration-complete'
+  | 'ownership-claimed';
 
 /**
  * Event emitted via pubsub for agent streaming
@@ -602,6 +619,8 @@ export interface AgentStreamEvent<T = unknown> {
   data: T;
   /** Epoch ms at which a `chunk` event's chunk was produced. */
   producedAt?: number;
+  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
+  generation?: number;
   /**
    * The `chunk` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
@@ -640,10 +659,13 @@ export interface AgentFinishEventData {
  */
 export interface AgentErrorEventData {
   error: {
+    /** Stable error id (e.g. `AGENT_RESUME_ALREADY_CLAIMED`) when the source was a `MastraError`. */
+    id?: string;
     name: string;
     message: string;
     stack?: string;
   };
+  delivery?: 'reject';
 }
 
 /**
@@ -737,6 +759,13 @@ export interface RunRegistryEntry {
    * `tools` when seeding a step (issue #22933).
    */
   baseTools?: Record<string, CoreTool>;
+  /**
+   * The tools built for the request that started (or last resumed) the run.
+   * A warm resume rebuilds these with the resuming call's request context and
+   * swaps out only entries that still hold one of them, so processor-added or
+   * replaced tools are kept (#25960).
+   */
+  requestTools?: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
@@ -793,6 +822,8 @@ export interface RunRegistryEntry {
   /** Exported forms of the resume spans, read by the workflow steps (same process). */
   resumeAgentSpanData?: unknown;
   resumeModelSpanData?: unknown;
+  /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
+  resumeCompletionStartTime?: Date;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from
@@ -864,6 +895,10 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /** Owner-queue notifications, in-process only like the drain closure. */
+  subscribePendingSignals?: (listener: () => void) => () => void;
+  /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
+  stopStepSignalListener?: () => void;
   /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step
@@ -939,6 +974,26 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Execution lease claimed by the `stream()` / `generate()` / `resume()` /
+   * `recover()` call currently driving this run in this process. Settled when
+   * that execution segment ends.
+   */
+  executionFence?: ExecutionFence;
+  /**
+   * Tool call resumed by the `resume()` currently driving this run in this
+   * process. Its in-flight marker is cleared when the segment suspends again.
+   * @internal
+   */
+  resumeToolCallId?: string;
+  /**
+   * Set while an engine that persists the suspended snapshot before returning
+   * is executing. The tool-call step queues suspension chunks/events here so
+   * they are published only after the snapshot is saved; otherwise a crash in
+   * between leaves a client holding a question that `resume()` rejects (#26435).
+   * @internal
+   */
+  pendingSuspensionEvents?: Array<() => Promise<void>>;
   /**
    * Mastra instance that owns this in-process run. Used during shutdown to
    * wait only for executions that may still need this instance's storage.

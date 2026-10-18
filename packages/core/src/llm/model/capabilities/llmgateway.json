@@ -21,13 +21,11 @@
     "custom",
     "deepseek-v3.2",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "ernie-4.5-vl-424b-a47b",
     "fugu-max",
     "fugu-ultra",
     "fugu-ultra-v2.0",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview",
@@ -36,6 +34,7 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
+    "gemini-4-argon",
     "gemini-pro-latest",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -117,6 +116,7 @@
     "muse-spark-1.2-contributor",
     "muse-spark-1.3",
     "muse-spark-1.3-contributor",
+    "muse-wonder-1.0",
     "o1",
     "o3",
     "o4-mini",
@@ -124,7 +124,6 @@
     "qwen3-vl-235b-a22b-instruct",
     "qwen3-vl-235b-a22b-thinking",
     "qwen3-vl-30b-a3b-instruct",
-    "qwen3-vl-flash",
     "qwen3.5-122b-a10b",
     "qwen3.5-27b",
     "qwen3.5-35b-a3b",
@@ -150,7 +149,6 @@
   ],
   "temperature": [
     "Qwen3.8-27B",
-    "atria-dawn-preview",
     "auto",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
@@ -166,14 +164,12 @@
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "devstral-2512",
     "ernie-4.5-vl-424b-a47b",
     "fugu-max",
     "fugu-ultra",
     "fugu-ultra-v2.0",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview",
@@ -281,11 +277,10 @@
     "muse-spark-1.2-contributor",
     "muse-spark-1.3",
     "muse-spark-1.3-contributor",
+    "muse-wonder-1.0",
     "nemotron-3-ultra-550b",
-    "qwen-coder-plus",
     "qwen-flash",
     "qwen-max",
-    "qwen-omni-turbo",
     "qwen-plus",
     "qwen-plus-latest",
     "qwen3-235b-a22b-fp8",
@@ -296,14 +291,12 @@
     "qwen3-coder-480b-a35b-instruct",
     "qwen3-coder-flash",
     "qwen3-coder-next",
-    "qwen3-coder-plus",
     "qwen3-max",
     "qwen3-next-80b-a3b-instruct",
     "qwen3-next-80b-a3b-thinking",
     "qwen3-vl-235b-a22b-instruct",
     "qwen3-vl-235b-a22b-thinking",
     "qwen3-vl-30b-a3b-instruct",
-    "qwen3-vl-flash",
     "qwen3-vl-plus",
     "qwen3.5-122b-a10b",
     "qwen3.5-27b",
@@ -311,7 +304,6 @@
     "qwen3.5-9b",
     "qwen3.6-35b-a3b",
     "qwen3.6-flash",
-    "qwen3.6-max-preview",
     "qwen3.6-plus",
     "qwen3.7-flash",
     "qwen3.7-max",
@@ -343,9 +335,6 @@
     "deepseek-v4.1-flash",
     "fugu-max",
     "fugu-ultra-v2.0",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview",
@@ -354,6 +343,7 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
+    "gemini-4-argon",
     "gemini-pro-latest",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -427,11 +417,11 @@
     "muse-spark-1.2-contributor",
     "muse-spark-1.3",
     "muse-spark-1.3-contributor",
+    "muse-wonder-1.0",
     "o1",
     "o3",
     "o3-mini",
     "o4-mini",
-    "qwen-coder-plus",
     "qwen-plus-latest",
     "qwen3-235b-a22b-fp8",
     "qwen3-235b-a22b-instruct-2507",
@@ -440,7 +430,6 @@
     "qwen3-vl-235b-a22b-instruct",
     "qwen3-vl-235b-a22b-thinking",
     "qwen3-vl-30b-a3b-instruct",
-    "qwen3-vl-flash",
     "qwen3.5-122b-a10b",
     "qwen3.5-27b",
     "qwen3.5-35b-a3b",
@@ -938,32 +927,10 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
     "qwen3.6-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-2.5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 24576
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "nemotron-3-ultra-550b": [
@@ -1220,6 +1187,12 @@
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "claude-sonnet-4-6": [
       {
         "type": "budget_tokens",
@@ -1264,12 +1237,6 @@
     "deepseek-v3.2": [
       {
         "type": "toggle"
-      }
-    ],
-    "atria-dawn-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "hy4-preview": [
@@ -1332,10 +1299,22 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
     "gpt-5.6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["high"]
       }
     ],
     "minimax-m2": [

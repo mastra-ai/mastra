@@ -52,12 +52,7 @@ vi.mock('../components/surface.js', () => ({
 }));
 
 vi.mock('../components/task-progress.js', () => ({
-  TaskProgressComponent: class {
-    quietMode: boolean | undefined;
-    setQuietMode(value: boolean) {
-      this.quietMode = value;
-    }
-  },
+  TaskProgressComponent: class {},
 }));
 
 vi.mock('../components/idle-counter.js', () => ({
@@ -119,7 +114,6 @@ function createState(modeCount = 2) {
       editorContainer: { type: 'editor-container', addChild: vi.fn(child => editorChildren.push(child)) },
       editor,
       footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)), render: vi.fn(() => []) },
-      quietMode: true,
     } as any,
     uiChildren,
     editorChildren,
@@ -129,6 +123,24 @@ function createState(modeCount = 2) {
 }
 
 describe('buildLayout startup header', () => {
+  it('shows the Factory project, repository, and branch instead of local project info in Factory mode', () => {
+    const { state } = createState();
+    state.factory = {
+      projectName: 'mastra',
+      repositorySlug: 'mastra-ai/mastra',
+      branch: 'user/session-1',
+      url: 'https://f',
+    };
+
+    buildLayout(state, vi.fn());
+
+    expect(headerOptionsMock).toHaveBeenLastCalledWith({
+      version: '1.2.3',
+      appName: 'Acme Code',
+      info: ['Factory: mastra', 'Repository: mastra-ai/mastra', 'Branch: user/session-1', 'URL: https://f'],
+    });
+  });
+
   it('renders the header, startup hints, containers, Working row, footer, and editor focus in order', () => {
     const refreshModelAuthStatus = vi.fn();
     const { state, uiChildren, editorChildren, footerChildren, editor } = createState();
@@ -152,7 +164,6 @@ describe('buildLayout startup header', () => {
     expect(uiChildren[7]).toBe(state.globalBackgroundNoticeContainer);
     expect(uiChildren[8]).toBe(state.editorContainer);
     expect(uiChildren[9]).toBe(state.footer);
-    expect(state.taskProgress.quietMode).toBe(true);
     expect(editorChildren).toEqual([state.idleCounter, editor]);
     expect(footerChildren).toEqual([state.statusLine, state.memoryStatusLine]);
     expect(updateStatusLine).toHaveBeenCalledWith(state);

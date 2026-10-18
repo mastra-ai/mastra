@@ -52,17 +52,17 @@ function getRawParts(message: MastraDBMessage): MessagePart[] {
 }
 
 /**
- * Quiet mode keeps "Thinking..." out of the chat and shows it in the status line above the input
+ * "Thinking..." stays out of the chat and shows in the status line above the input
  * while the streaming message's latest content is reasoning.
  */
-function syncQuietThinkingStatus(ctx: EventHandlerContext, message?: MastraDBMessage): void {
+function syncThinkingStatus(ctx: EventHandlerContext, message?: MastraDBMessage): void {
   const { state } = ctx;
   const latest = message
     ? getRawParts(message).findLast(
         part => part.type === 'text' || part.type === 'reasoning' || part.type === 'tool-invocation',
       )
     : undefined;
-  const thinking = state.quietMode && state.hideThinkingBlock && latest?.type === 'reasoning';
+  const thinking = state.hideThinkingBlock && latest?.type === 'reasoning';
   if (!state.idleCounter || state.idleCounter.isThinking() === thinking) return;
   state.idleCounter.setThinking(thinking);
   // Redraw the Working row now so its label swaps without waiting for the next tick.
@@ -154,7 +154,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: MastraDBMe
   }
 
   if (message.role === 'assistant') {
-    syncQuietThinkingStatus(ctx, message);
+    syncThinkingStatus(ctx, message);
     // Clear tool component references when starting a new assistant message
     state.lastAskUserComponent = undefined;
     state.lastSubmitPlanComponent = undefined;
@@ -181,7 +181,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   }
 
   if (message.role !== 'assistant') return;
-  syncQuietThinkingStatus(ctx, message);
+  syncThinkingStatus(ctx, message);
 
   const renderParts = getAssistantRenderParts(message);
   const toolParts = renderParts.filter((part): part is ToolRenderPart => part.kind === 'tool');
@@ -230,11 +230,8 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
         state.ui,
       );
       component.setExpanded(state.toolOutputExpanded);
-      if (state.quietMode) {
-        component.setCompactToolModeColor(getCurrentModeColor(ctx));
-        component.setQuietModeDisplay('quiet');
-        component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
-      }
+      component.setCompactToolModeColor(getCurrentModeColor(ctx));
+      component.setPreviewLineLimit(state.previewLines);
       ctx.addChildBeforeFollowUps(component);
       state.pendingTools.set(tool.toolCallId, component);
       state.allToolComponents.push(component);
@@ -264,7 +261,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
 export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMessage): void {
   const { state } = ctx;
   if (message.role === 'signal' || message.role === 'user') return;
-  syncQuietThinkingStatus(ctx);
+  syncThinkingStatus(ctx);
 
   if (state.streamingComponent && message.role === 'assistant') {
     state.streamingMessage = message;

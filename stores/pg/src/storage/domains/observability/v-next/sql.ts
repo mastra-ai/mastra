@@ -35,7 +35,24 @@ import {
  */
 function encodeJsonb(value: unknown): string | null {
   if (value === null || value === undefined) return null;
+  if (value instanceof EncodedJsonb) return value.json;
   return toPgJson(value);
+}
+
+/**
+ * A jsonb value the caller already serialized with `toPgJson`, so `buildInsert`
+ * sends it as is instead of serializing it again. Span writes serialize their
+ * payloads up front because the stored previews are built from that same text.
+ */
+export class EncodedJsonb {
+  constructor(readonly json: string) {}
+}
+
+/** Serialize a value for a jsonb column once, for callers that also need the text. */
+export function encodeJsonbValue(value: unknown): EncodedJsonb | null {
+  if (value === null || value === undefined) return null;
+  const json = toPgJson(value);
+  return json === undefined ? null : new EncodedJsonb(json);
 }
 
 /**

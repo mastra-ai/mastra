@@ -4,7 +4,7 @@ import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
-import { resolveCurrentState } from '../helpers';
+import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
 import type { ProcessorArgs } from '.';
@@ -369,7 +369,7 @@ export async function processWorkflowForEach(
           ...currentResult,
           output: updatedOutput,
         } as any,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
       });
 
       // Check if inner step is a nested workflow
@@ -439,7 +439,7 @@ export async function processWorkflowForEach(
       runId,
       stepId,
       result: currentResult,
-      requestContext,
+      requestContext: withoutAuthToken(requestContext),
     });
     stepResults[stepId] = currentResult;
   }
@@ -465,7 +465,7 @@ export async function processWorkflowForEach(
         runId,
         stepId,
         result: { ...currentResult, output: updatedOutput } as any,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
       });
 
       const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
@@ -546,7 +546,7 @@ export async function processWorkflowForEach(
         runId,
         stepId: getEntryId(step.step),
         result,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
       });
       stepResults[getEntryId(step.step)] = result as StepResult<any, any, any, any>;
     }
@@ -599,7 +599,7 @@ export async function processWorkflowForEach(
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
       } as any,
-      requestContext,
+      requestContext: withoutAuthToken(requestContext),
     });
 
     // Check if inner step is a nested workflow - only then extract individual items
@@ -656,7 +656,7 @@ export async function processWorkflowForEach(
       startedAt: Date.now(),
       payload: (prevResult as any)?.output,
     } as any,
-    requestContext,
+    requestContext: withoutAuthToken(requestContext),
   });
 
   // For nested workflows, extract individual item since they receive prevResult directly

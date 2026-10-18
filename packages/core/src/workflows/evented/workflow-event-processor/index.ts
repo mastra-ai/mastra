@@ -9,6 +9,7 @@ import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
+import { coverNestedRun } from '../../../storage/run-fencing';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -32,12 +33,12 @@ import {
   omitPriorCompletionFields,
   validateStepResumeData,
 } from '../../utils';
-import { resolveCurrentState } from '../helpers';
+import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
-import { getNestedWorkflow, getStepId, isExecutableStep } from './utils';
+import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
 export type ProcessorArgs = {
   activeStepsPath: Record<string, number[]>;
@@ -410,6 +411,69 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  /**
+   * Applies the workflow's `pruneSnapshot` hook to a single completed step
+   * result before it is written by `updateWorkflowResults`, so the prune rides
+   * the same atomic merge write instead of a second full-row read-modify-write.
+   *
+   * The merge write bypasses the prune hook, so a completed step would keep its
+   * full `payload`/`output` — for the durable loop, the whole iteration state
+   * (`accumulatedSteps`/`messageListState`) — and the stored row (which every
+   * merge re-reads and re-serializes) grows with each step until the process
+   * OOMs (COR-1431). Returns `storedResult` unchanged when the workflow has no
+   * `pruneSnapshot` option. The hook needs the surrounding run context
+   * (`activeStepsPath`, `activePaths`, `serializedStepGraph`) to decide what a
+   * restart still reads, so it is invoked with a complete running snapshot built
+   * from the in-flight run state.
+   *
+   * Live execution keeps the FULL result (the caller stores `storedResult` in
+   * its in-memory `stepResults`); only the persisted record is pruned, matching
+   * the default engine, which treats its in-memory `stepResults` as truth.
+   */
+  private pruneStepResultForPersist({
+    workflow,
+    runId,
+    state,
+    stepId,
+    storedResult,
+    stepResults,
+    executionPath,
+    activeStepsPath,
+  }: {
+    workflow: Workflow | undefined;
+    runId: string;
+    state: Record<string, any> | undefined;
+    stepId: string;
+    storedResult: StepResult<any, any, any, any>;
+    stepResults: Record<string, StepResult<any, any, any, any>> | undefined;
+    executionPath: number[];
+    activeStepsPath: Record<string, number[]>;
+  }): StepResult<any, any, any, any> {
+    const pruneSnapshot = workflow?.options?.pruneSnapshot;
+    if (!pruneSnapshot) return storedResult;
+    try {
+      const snapshot: WorkflowRunState = {
+        runId,
+        status: 'running',
+        value: state ?? {},
+        context: { ...(stepResults ?? {}), [stepId]: storedResult } as WorkflowRunState['context'],
+        serializedStepGraph: workflow?.serializedStepGraph ?? [],
+        activePaths: executionPath,
+        activeStepsPath,
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      };
+      const pruned = pruneSnapshot({ snapshot, workflowStatus: 'running' });
+      return (pruned?.context?.[stepId] as StepResult<any, any, any, any>) ?? storedResult;
+    } catch (error) {
+      // Pruning is a size optimization — never fail the step over it.
+      this.mastra.getLogger()?.warn?.(`Failed to prune step result for step ${stepId}: ${error}`);
+      return storedResult;
+    }
+  }
+
   __registerMastra(mastra: Mastra) {
     super.__registerMastra(mastra);
     this.stepExecutor.__registerMastra(mastra);
@@ -677,6 +741,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Track parent-child relationship if this is a nested workflow
     if (parentWorkflow?.runId) {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
+      coverNestedRun(parentWorkflow.runId, runId);
     }
     // Preserve resourceId from an existing snapshot if present (resume /
     // timeTravel / restart keep their original attribution); otherwise fall
@@ -740,7 +805,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
             metadata: { ...(existing?.metadata ?? {}), nestedRunId: runId },
           },
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
       }
     }
@@ -810,22 +875,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (finalStatus !== 'paused') {
-      // The run reached a terminal state its workflow opted not to persist
-      // (e.g. the durable agentic loop, the internal `executionWorkflow`
-      // inside `agentic-loop`, or the notification dispatcher). A row may
-      // still exist from an earlier phase — 'pending' at nested-run start,
-      // 'suspended' before a resume, or the 'running' record every run writes
-      // at start — and without the terminal update it would leak forever as a
-      // stale record byte-identical to a genuinely orphaned run, polluting
-      // `listActiveRuns()` / `recoverActiveRuns()` (issue #22209). Terminal
-      // runs can't be resumed, so drop the row entirely. Best-effort: a storage
-      // failure here must not abort run completion.
-      try {
-        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
-      } catch (e) {
-        this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
-      }
     }
 
     if (perStep) {
@@ -855,11 +904,18 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.end',
       runId,
-      data: { ...args, prevResult: normalizedPrevResult, workflow: undefined },
+      data: {
+        ...args,
+        prevResult: normalizedPrevResult,
+        workflow: undefined,
+        deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
+      },
     });
   }
 
-  protected async processWorkflowEnd(args: ProcessorArgs) {
+  protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
+    // Keep cleanup intent local to this serialized handoff, not downstream notifications.
+    const { deleteSnapshotAfterEnd, ...finishArgs } = args;
     const {
       resumeSteps,
       prevResult,
@@ -970,8 +1026,19 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.end',
       runId,
-      data: { ...args, workflow: undefined, state: finalState },
+      data: { ...finishArgs, workflow: undefined, state: finalState },
     });
+
+    if (deleteSnapshotAfterEnd === true) {
+      // Declined terminal snapshots must not outlive completed runs (#22209),
+      // but remain recoverable until parent/loop and finish publications succeed.
+      try {
+        const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      } catch (e) {
+        this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
+      }
+    }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
     // now that all events for this run have been processed.
@@ -1115,7 +1182,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'failed',
       }) ?? true;
 
-    if (shouldPersist) {
+    const ownershipLost = workflow?.options?.isOwnershipLostError?.((prevResult as any)?.error);
+    if (ownershipLost) {
+      // Another execution may be driving the run from its stored snapshot:
+      // neither mark that row failed nor delete it.
+    } else if (shouldPersist) {
       await workflowsStore?.updateWorkflowState({
         workflowName: workflowId,
         runId,
@@ -1126,16 +1197,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else {
-      // Mirrors endWorkflow: a run whose workflow opted out of persisting the
-      // terminal 'failed' status would otherwise leak its earlier-phase
-      // ('running'/'pending'/'suspended') snapshot row forever (issue #22209).
-      // Best-effort: a storage failure here must not abort run completion.
-      try {
-        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
-      } catch (e) {
-        this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
-      }
     }
 
     // handle nested workflow
@@ -1170,6 +1231,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
+
+    if (!ownershipLost && !shouldPersist) {
+      // As with successful runs, cleanup must wait for every terminal publication.
+      try {
+        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      } catch (e) {
+        this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
+      }
+    }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
     // now that all events for this run have been processed.
@@ -1569,7 +1639,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             startedAt: Date.now(),
             status: 'running',
           } as any,
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
       } else if ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId && step.type !== 'foreach') {
         // Foreach is excluded on purpose: its resume fans out one step.run per
@@ -1608,7 +1678,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
               ...(resumedNestedPaths ? { resumedNestedPaths } : {}),
             },
-            requestContext,
+            requestContext: withoutAuthToken(requestContext),
           });
         }
       }
@@ -1985,6 +2055,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       } else {
         const nestedRunId = globalThis.crypto.randomUUID();
+        coverNestedRun(runId, nestedRunId);
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({
             stepResults: {},
@@ -2120,6 +2191,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         stepId: leafId,
         executionPath,
+        parentWorkflow: toStepExecutionParentWorkflow(parentWorkflow),
         stepResults,
         state: currentState,
         requestContext: Object.fromEntries(rc.entries()),
@@ -2193,6 +2265,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (stepResult.status === 'bailed') {
       // @ts-expect-error - bailed status not in type
       stepResult.status = 'success';
+      const updatedState = (stepResult as any).__state ?? currentState;
 
       await this.endWorkflow({
         workflow,
@@ -2205,13 +2278,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: {
           ...stepResults,
           [leafId]: stepResult,
+          __state: updatedState,
         },
         prevResult: stepResult,
         activeStepsPath,
         requestContext,
         actor,
         perStep,
-        state: currentState,
+        state: updatedState,
         outputOptions,
       });
       return;
@@ -2479,9 +2553,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           stepId: '__state',
           result: currentState as any,
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
-        const suspendTracingContext = this.resolveSuspendTracingContext(runId);
+        const suspendTracingContext = workflow.__getResumeTracingContext() ?? this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
           workflowName: workflowId,
           runId,
@@ -2527,7 +2601,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       stepId: '__state',
       result: currentState as any,
-      requestContext,
+      requestContext: withoutAuthToken(requestContext),
     });
     const cleanedStepResults: Record<string, any> = { ...stepResults, __state: currentState };
     for (const [key, res] of Object.entries(cleanedStepResults)) {
@@ -2635,6 +2709,32 @@ export class WorkflowEventProcessor extends EventProcessor {
     // entries (their own id) and loop/foreach bodies (the wrapped step's id).
     const stepId = getStepIds(step)[0]!;
 
+    // This execution no longer owns the run, and another may be driving it from
+    // the stored snapshot: fail without merging the step result into that row.
+    if (prevResult.status === 'failed' && workflow.options?.isOwnershipLostError?.(prevResult.error)) {
+      await this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.fail',
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          parentWorkflow,
+          stepResults: { ...stepResults, [stepId]: prevResult, __state: currentState },
+          timeTravel,
+          restart,
+          prevResult,
+          activeStepsPath,
+          requestContext,
+          actor,
+          state: currentState,
+          outputOptions,
+        },
+      });
+      return;
+    }
+
     // Cache workflows store to avoid redundant async calls
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
@@ -2670,7 +2770,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
             stepId: getEntryId(step.step),
             result: bailedResult as any,
-            requestContext,
+            requestContext: withoutAuthToken(requestContext),
           });
 
           // End workflow with bail result
@@ -2694,7 +2794,13 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // For foreach, store the full suspended result so its resume state is preserved.
         // Completed iterations keep the public output array shape.
-        const iterationResult = prevResult.status === 'suspended' ? prevResult : (prevResult as any).output;
+        // A failed iteration has no output; keep its slot empty so later siblings can't treat the foreach as complete.
+        const iterationResult =
+          prevResult.status === 'suspended'
+            ? prevResult
+            : prevResult.status === 'failed'
+              ? null
+              : (prevResult as any).output;
         const existingSuspendPayload = existingStepResult?.suspendPayload as any;
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
@@ -2718,6 +2824,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           newResult = {
             ...existingStepResult, // Preserve step-level properties
             ...prevResult, // Get iteration timing info
+            // An iteration that finishes after a sibling failed must not mark the foreach successful.
+            ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
             output: currentResult,
             payload: originalPayload,
             suspendPayload,
@@ -2741,7 +2849,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         stepId: getEntryId(step.step),
         result: newResult,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
         state: currentState,
       });
 
@@ -2798,6 +2906,30 @@ export class WorkflowEventProcessor extends EventProcessor {
               },
             },
           });
+        }
+
+        if (prevResult.status === 'failed') {
+          await this.mastra.pubsub.publish('workflows', {
+            type: 'workflow.fail',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath: [executionPath[0]!],
+              resumeSteps,
+              parentWorkflow,
+              stepResults,
+              timeTravel,
+              restart,
+              prevResult,
+              activeStepsPath,
+              requestContext,
+              actor,
+              state: currentState,
+              outputOptions,
+            },
+          });
+          return;
         }
 
         if (pendingCount > 0) {
@@ -2889,7 +3021,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
             stepId: getEntryId(step.step),
             result: foreachSuspendResult as any,
-            requestContext,
+            requestContext: withoutAuthToken(requestContext),
           });
 
           // Check shouldPersistSnapshot option - default to true if not specified
@@ -2906,10 +3038,11 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               stepId: '__state',
               result: currentState as any,
-              requestContext,
+              requestContext: withoutAuthToken(requestContext),
             });
 
-            const suspendTracingContext = this.resolveSuspendTracingContext(runId);
+            const suspendTracingContext =
+              workflow.__getResumeTracingContext() ?? this.resolveSuspendTracingContext(runId);
             await workflowsStore?.updateWorkflowState({
               workflowName: workflowId,
               runId,
@@ -3005,6 +3138,24 @@ export class WorkflowEventProcessor extends EventProcessor {
       // surfaced to users.
       const storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
 
+      // This merge write bypasses the workflow's `pruneSnapshot` hook, so prune
+      // the completed step's result here and persist it in the same atomic
+      // write (COR-1431): a separate post-merge full-row write could erase a
+      // concurrent step's result. Parallel branches are pruned once instead, by
+      // `aggregateBranchResults`.
+      const persistedResult = isParallelBranch
+        ? storedResult
+        : this.pruneStepResultForPersist({
+            workflow,
+            runId,
+            state: currentState,
+            stepId,
+            storedResult,
+            stepResults,
+            executionPath,
+            activeStepsPath,
+          });
+
       // Record the workflow state in the same write as a sequential step's result, so a
       // restart after this point resumes with the state this step produced. Branches of a
       // parallel/conditional entry skip it: their full state would clobber sibling updates;
@@ -3013,8 +3164,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         stepId,
-        result: storedResult,
-        requestContext,
+        result: persistedResult,
+        requestContext: withoutAuthToken(requestContext),
         ...(isParallelBranch ? {} : { state: currentState }),
       });
 
@@ -3024,10 +3175,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       // snapshot), it returns `{}`. In both cases the event payload is the
       // source of truth — merge prevResult into the inline stepResults instead
       // of treating it as a hard early-return.
+      // Storage holds the pruned record; keep the full one in memory so live
+      // steps downstream see the same result the default engine keeps.
       if (!newStepResults || Object.keys(newStepResults).length === 0) {
         stepResults = { ...(stepResults ?? {}), [stepId]: storedResult };
       } else {
-        stepResults = newStepResults;
+        stepResults = { ...newStepResults, [stepId]: storedResult };
       }
     }
 
@@ -3131,10 +3284,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           stepId: '__state',
           result: currentState as any,
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
 
-        const suspendTracingContext = this.resolveSuspendTracingContext(runId);
+        const suspendTracingContext = workflow.__getResumeTracingContext() ?? this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
           workflowName: workflowId,
           runId,

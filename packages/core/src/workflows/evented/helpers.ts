@@ -3,6 +3,20 @@
  */
 
 import { TripWire } from '../../agent/trip-wire';
+import { MASTRA_AUTH_TOKEN_KEY } from '../../request-context';
+
+/**
+ * Returns a copy of a serialized request context without the framework-managed
+ * bearer token. The token must never be persisted in durable snapshots (it is
+ * only valid for the live request), matching DefaultExecutionEngine.serializeRequestContext.
+ */
+export function withoutAuthToken<T extends Record<string, any> | undefined>(requestContext: T): T {
+  if (!requestContext || !(MASTRA_AUTH_TOKEN_KEY in requestContext)) {
+    return requestContext;
+  }
+  const { [MASTRA_AUTH_TOKEN_KEY]: _authToken, ...rest } = requestContext;
+  return rest as T;
+}
 
 /**
  * Interface for tripwire chunks in the stream.

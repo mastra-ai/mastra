@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { withMessageAuthor } from '../../agent-controller/message-author';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
@@ -24,6 +25,7 @@ import {
   createMessageSignal,
   createSignal,
   dataPartToSignal,
+  getMessageAuthor,
   mastraDBMessageToSignal,
   resolveDeliveryAttributes,
   signalToDataPartFormat,
@@ -765,6 +767,37 @@ describe('Agent signals', () => {
     const rehydrated = mastraDBMessageToSignal(db);
     expect(rehydrated.providerOptions).toEqual(providerOptions);
     expect(rehydrated.toLLMMessage()).toMatchObject({ providerOptions });
+  });
+
+  it('round-trips message author without replacing provider metadata', () => {
+    const providerOptions = {
+      mastra: { traceId: 'trace-1' },
+      openai: { reasoningEffort: 'high' },
+    };
+    const author = { id: 'user-1', name: 'Ada', avatarUrl: 'https://example.com/ada.png' };
+    const authorProviderOptions = withMessageAuthor(providerOptions, author);
+    const signal = createSignal({
+      type: 'user-message',
+      contents: 'hello',
+      author,
+      providerOptions: authorProviderOptions,
+    });
+
+    const db = signal.toDBMessage();
+    expect(getMessageAuthor(db)).toEqual(author);
+    expect(db.content.providerMetadata).toEqual({
+      mastra: { traceId: 'trace-1', author },
+      openai: { reasoningEffort: 'high' },
+    });
+
+    const rehydrated = mastraDBMessageToSignal(db);
+    expect(rehydrated.author).toEqual(author);
+    expect(rehydrated.providerOptions).toEqual(authorProviderOptions);
+    expect(getMessageAuthor(rehydrated.toDBMessage())).toEqual(author);
+
+    delete (db.content.metadata!.signal as Record<string, unknown>).author;
+    expect(getMessageAuthor(db)).toEqual(author);
+    expect(mastraDBMessageToSignal(db).author).toEqual(author);
   });
 
   it('omits providerOptions on LLM / DB output when not provided', () => {
@@ -8589,6 +8622,155 @@ describe('Agent signals', () => {
     ).toEqual({ cancelledSignalIds: [] });
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
+
+    subscription.unsubscribe();
+  });
+
+  it('queues a typed queueSignal until the active run completes', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        streamCount += 1;
+        prompts.push(prompt);
+        const responseText = streamCount === 1 ? 'first response' : 'skill response';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `queue-signal-${streamCount}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (streamCount === 1) {
+                await firstFinished;
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({ id: 'queue-signal-agent', name: 'Queue Signal Agent', instructions: 'Test', model });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'queue-signal-thread',
+      resourceId: 'queue-signal-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'queue-signal-thread', resource: 'queue-signal-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    const result = agent.queueSignal(
+      { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage the card.' },
+      {
+        resourceId: 'queue-signal-user',
+        threadId: 'queue-signal-thread',
+        ifIdle: { attributes: { delivery: 'queued' } },
+      },
+    );
+
+    expect(result.signal).toMatchObject({
+      type: 'reactive',
+      tagName: 'skill',
+      attributes: { name: 'factory-triage', delivery: 'queued' },
+    });
+    const settled = await result.accepted;
+    const queuedRunId = 'runId' in settled ? settled.runId : undefined;
+    expect(settled.action).toBe('deliver');
+    expect(queuedRunId).not.toBe(stream.runId);
+    await vi.waitFor(() => expect(streamCount).toBe(1));
+    await nextTick();
+    expect(streamCount).toBe(1);
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('first response');
+    await firstRun;
+    const secondRun = await readNextRunWithParts(iterator);
+    expect(secondRun.value.runId).toBe(queuedRunId);
+    expect(secondRun.value.text).toBe('skill response');
+    expect(streamCount).toBe(2);
+    expect(JSON.stringify(prompts[0])).not.toContain('Triage the card.');
+    expect(JSON.stringify(prompts[1])).toContain(
+      '<skill delivery=\\"queued\\" name=\\"factory-triage\\">Triage the card.</skill>',
+    );
+
+    subscription.unsubscribe();
+  });
+
+  it('cancels a queued typed signal before it runs', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        const isFirst = prompts.length === 1;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'response' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (isFirst) await firstFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({ id: 'cancel-signal-agent', name: 'Cancel Signal Agent', instructions: 'Test', model });
+    const subscription = await agent.subscribeToThread({ threadId: 'cancel-signal-thread', resourceId: 'cancel-user' });
+
+    const stream = await agent.stream('Hello', { memory: { thread: 'cancel-signal-thread', resource: 'cancel-user' } });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    const result = agent.queueSignal(
+      { type: 'reactive', tagName: 'skill', contents: 'Cancelled skill' },
+      { resourceId: 'cancel-user', threadId: 'cancel-signal-thread' },
+    );
+    await result.accepted;
+
+    expect(
+      agent.cancelQueuedMessages({
+        resourceId: 'cancel-user',
+        threadId: 'cancel-signal-thread',
+        signalIds: [result.signal.id],
+      }),
+    ).toEqual({ cancelledSignalIds: [result.signal.id] });
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('response');
+    await nextTick();
+    await nextTick();
+    expect(prompts).toHaveLength(1);
 
     subscription.unsubscribe();
   });

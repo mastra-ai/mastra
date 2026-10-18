@@ -423,7 +423,9 @@ export class MastraCodeAcpAgent implements Agent {
           if (turn.cancelled || this.disposed) return { stopReason: 'cancelled' };
           await entry.session.sendMessage({ content: expanded });
           const reason = await completion;
-          if (reason === 'error' && !state.cancelled && !state.stopReason) {
+          // An abort with a recorded error and no client cancel is an internal failure, not a cancel.
+          const failed = reason === 'error' || (reason === 'aborted' && state.error !== undefined);
+          if (failed && !state.cancelled && !turn.cancelled && !state.stopReason) {
             throw RequestError.internalError(undefined, state.error?.message ?? 'Mastra Code turn failed');
           }
           return {

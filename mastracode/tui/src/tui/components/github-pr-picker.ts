@@ -1,7 +1,7 @@
 import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { theme } from '../theme.js';
+import { displayModeColor, getContrastText, mastra, theme } from '../theme.js';
 
 export interface GithubPRPickerItem {
   owner?: string;
@@ -166,8 +166,9 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   private renderViewTabs(): void {
     const tabs = (['mine', 'search'] as PRView[]).map(view => {
       const tabText = `${VIEW_LABELS[view]} (${this.getViewPullRequests(view).length})`;
+      const active = displayModeColor(mastra.purple);
       return view === this.currentView
-        ? chalk.bgHex('#7f45e0').white.bold(` ${tabText} `)
+        ? chalk.bgHex(active).hex(getContrastText(active)).bold(` ${tabText} `)
         : theme.fg('muted', ` ${tabText} `);
     });
     this.viewTabs.setText(tabs.join(''));

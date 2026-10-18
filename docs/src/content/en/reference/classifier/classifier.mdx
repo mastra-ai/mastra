@@ -56,9 +56,11 @@ const result = await classifier.decide({
   },
 })
 
-result.answers.route.choice // 'billing' | 'support'
-result.answers.urgent.probability // P(true), from 0 to 1
+result.answers.route.choice // 'billing' | 'support' | undefined
+result.answers.urgent.probability // P(true), from 0 to 1, or undefined
 ```
+
+A field is `undefined` only when the decision model refused the question. See [refused questions](#refused-questions).
 
 The decision model receives every question with the same `state`. When a question omits `instructions`, its question name is used instead.
 
@@ -201,6 +203,28 @@ const answer = {
 }
 ```
 
+### Refused questions
+
+A decision model can refuse any question, for example when a safety policy prevents it from answering. A refused question returns a `RefusalAnswer` instead of a choice, score, or boolean answer. The other questions in the same call keep their answers.
+
+```typescript
+const answer = {
+  type: 'refusal',
+}
+```
+
+A refusal has no `choice`, `score`, or `probability`. Equality checks such as `answers.route.choice === 'billing'` evaluate to `false`. Check `type` before you read a numeric field, and decide how your application handles the refusal:
+
+```typescript
+const urgent = result.answers.urgent
+
+if (urgent.type === 'refusal') {
+  // Route to a human, block the input, or apply a default.
+} else if (urgent.probability > 0.8) {
+  // Escalate.
+}
+```
+
 ## Designing questions
 
 These rules keep a question answerable from the state:
@@ -208,7 +232,7 @@ These rules keep a question answerable from the state:
 - Ask for one judgment. A question that moves when either of two fields changes can't be routed on.
 - Keep criteria exclusive. `strong: 'A good fit'` and `partial: 'Maybe a fit'` leak probability between them.
 - Give a score enough levels to represent intermediate values.
-- Add an escape level when the list isn't closed. Three teams and no `other` forces every input into a team.
+- Add an escape level when the list isn't closed. Without an `other` level, the classifier must assign every input to one of the listed teams.
 - Put fields in `state`, not in `instructions`. One changed field then moves one answer.
 
 To check a question, change one field of the state and confirm one answer moves.
@@ -281,7 +305,7 @@ const result = await classifier.decide({
   },
 })
 
-result.answers.tone.choice // 'empathetic' | 'neutral'
+result.answers.tone.choice // 'empathetic' | 'neutral' | undefined
 ```
 
 ## Return value
@@ -360,15 +384,15 @@ Input validation includes:
 - Every question type must be supported by the decision model.
 - `maxRetries` must be a non-negative integer.
 
-Provider responses must contain exactly one matching answer for each question. The classifier also rejects invalid choices, out-of-range scores or probabilities, incomplete probability distributions, non-finite token counts, malformed warnings, and invalid response timestamps.
+Provider responses must contain exactly one answer for each question. Each answer must match the question type or be a refusal. The classifier also rejects invalid choices, out-of-range scores or probabilities, incomplete probability distributions, non-finite token counts, malformed warnings, and invalid response timestamps.
 
 Only retryable AI SDK `APICallError` failures are retried. Other errors reject immediately. When all retries fail, `decide()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
 
 ## Observability
 
-When an active Mastra span exists, `decide()` creates a `CLASSIFIER_EVALUATION` child span. It records the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage.
+When an active Mastra span exists, `decide()` creates a `CLASSIFIER_EVALUATION` child span. The span input holds the evaluated `state` and the questions. The span output holds the answers, including probabilities. Span attributes record the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage. The token usage also produces [token and cost metrics](/reference/observability/metrics/automatic-metrics#token-usage-metrics).
 
-The span doesn't include the evaluated state, question instructions, criteria, answers, probabilities, provider response body, or generated text.
+To keep the state and answers out of exported traces, set `hideInput` and `hideOutput` in the `tracingOptions` of the agent or workflow run that calls the classifier. See [hiding sensitive input/output](/docs/observability/tracing/overview#hiding-sensitive-inputoutput).
 
 ## Customize provider responses
 

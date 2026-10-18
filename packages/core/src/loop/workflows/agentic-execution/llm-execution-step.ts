@@ -115,6 +115,7 @@ import {
   isEagerlyExecutableToolCall,
 } from './eager-tool-execution';
 import type { EagerToolBailout, EagerToolExecutionCoordinator } from './eager-tool-execution';
+import { getToolResultInvocationState } from './provider-tool-result-state';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
@@ -230,7 +231,7 @@ function readToolResultFromMessageList(messageList: MessageList, toolCallId: str
       if (
         part?.type === 'tool-invocation' &&
         part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation?.state === 'result'
+        (part.toolInvocation?.state === 'result' || part.toolInvocation?.state === 'output-error')
       ) {
         return part.toolInvocation.result;
       }
@@ -1081,11 +1082,10 @@ async function processOutputStream<OUTPUT = undefined>({
           messageList.updateToolInvocation({
             type: 'tool-invocation',
             toolInvocation: {
-              state: 'result',
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
               args: chunk.payload.args,
-              result: chunk.payload.result,
+              ...getToolResultInvocationState(chunk.payload),
             },
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferredProviderExecuted,
@@ -1267,7 +1267,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   eagerCoordinator?: EagerToolExecutionCoordinator;
   eagerToolCallStep?: { execute: (context: any) => Promise<unknown> };
 }) {
-  const initialUntaggedSystemMessages = messageList.getSystemMessages();
+  // Captured on the first step execution rather than here: a resumed run
+  // restores its saved message list (including processor-added untagged system
+  // messages, #24844) after this closure is built.
+  let initialUntaggedSystemMessages: ReturnType<MessageList['getSystemMessages']> | undefined;
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
@@ -1514,7 +1517,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // response when a tool call is followed by text, and nothing stored tells them apart.
       // Undefined on the first iteration, and on any iteration with no open assistant message to
       // append to — both roll the message back whole, which is what the rejection means there.
-      const openedBoundary = currentIteration > 1 ? messageList.openStepBoundary() : undefined;
+      // A resumed stream restarts `currentIteration`, so earlier steps also open a boundary.
+      const openedBoundary =
+        currentIteration > 1 || (inputData.output?.steps?.length ?? 0) > 0 ? messageList.openStepBoundary() : undefined;
       const iterationBoundary = openedBoundary?.boundary;
       if (openedBoundary?.appended) appendedStepBoundary = iterationBoundary;
       let transcriptStep: TranscriptStep = {
@@ -1572,9 +1577,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
         // Reset the mutable untagged bucket before each step execution. Tagged
         // processor-owned buckets remain on messageList and are assembled later.
-        if (initialUntaggedSystemMessages) {
-          messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
-        }
+        initialUntaggedSystemMessages ??= messageList.getSystemMessages();
+        messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
 
         // Per-model modelSettings shallow-merge on top of call-time modelSettings,
         // resolved once here so that input processors see (and can override) the
@@ -1810,6 +1814,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         : undefined,
                       memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
                       agentName: agentId,
+                      agentId,
                       requestContext: requestContext || new RequestContext(),
                       outputWriter,
                       workspace: currentStep.workspace,
@@ -2040,7 +2045,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // tools / availableTools / toolChoice reflect any per-step mutations.
           // availableTools is derived from the serialized definitions so the
           // two can't disagree. Skipped when tracing is off or the trace was
-          // not sampled (a no-op span still hands out a tracker).
+          // not sampled (a no-op span still hands out a tracker). The prompt is
+          // passed at creation so MODEL_INFERENCE records what this call sent.
           const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
             ? getToolDefinitionsForTracing({
                 tools: currentStep.tools,
@@ -2058,7 +2064,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
-          modelSpanTracker?.startInference?.();
+          modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentStep.messageId });
           const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({
@@ -2112,6 +2118,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
                       startedAt: inferenceStartedAt,
+                      modelId: currentStep.model.modelId,
+                      provider: currentStep.model.provider,
                     },
                   };
                 },
@@ -2157,7 +2165,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // per-chunk processor pass; the deferred-error branch below runs
             // processors on the error once recovery has been ruled out.
             deferErrorChunks: true,
-            tracingContext,
+            // Stream processors run per step, so their spans belong under the step span.
+            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             processorStates,
             requestContext,
             abortSignal: options?.abortSignal,
@@ -2913,6 +2922,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
         cleanupProviderToolSpans(true);
+        // The failed attempt already streamed its partial output into the messageList.
+        // Roll it back to this iteration's boundary, as a retrying tripwire does, so the
+        // retry prompt and the recovered response do not carry the failed prefix (#26081).
+        // The attempt streamed under `transcriptStep.messageId`; processAPIError may have
+        // rotated `currentMessageId` (and `outputStream.messageId`) since. Anything an
+        // earlier discard committed under that id goes back to the carry buffer and is
+        // written again by the discard below.
+        eagerCoordinator?.recarryCommittedWork(transcriptStep.messageId);
+        messageList.rollbackToStepBoundary(transcriptStep.messageId, iterationBoundary);
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
         await discardAttemptEagerWork();
@@ -3172,8 +3190,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'error' &&
         finishReason !== 'length' &&
         finishReason !== 'content-filter';
-      const shouldContinue =
-        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+      // A non-terminal finish reason only re-enters the loop when the step produced tool calls
+      // (matching the durable engine). Without tool calls (e.g. openai-compatible reports 'other'
+      // when the stream omits finish_reason) re-sending the same request would duplicate the
+      // answer until maxSteps. See: https://github.com/mastra-ai/mastra/issues/26811
+      const hasToolCallContinuation = toolCalls.length > 0 && !TERMINAL_FINISH_REASONS.includes(finishReason);
+      const shouldContinue = shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || hasToolCallContinuation));
 
       // Fail abandoned provider calls before creating snapshots so persisted history
       // cannot retain pending calls after a terminal error. Only target this step's IDs.

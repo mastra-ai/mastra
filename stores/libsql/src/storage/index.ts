@@ -2,9 +2,12 @@ import { createClient } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { gateIfLocalFile } from '../shared/file-transaction-gate';
+import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client } from './db/client';
+import { isTransientNetworkError } from './db/utils';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -31,6 +34,9 @@ import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
 // Export domain classes for direct use with MastraStorage composition
+const REMOTE_INIT_CONCURRENCY = 5;
+const REMOTE_INIT_MAX_ATTEMPTS = 3;
+
 export {
   AgentsLibSQL,
   BackgroundTasksLibSQL,
@@ -234,7 +240,18 @@ export class LibSQLStore extends MastraCompositeStore {
         // contention is handled server-side. See libsql-client-ts#288/#345.
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
-      this.client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
+      this.client = isSingleConnectionDatabase(config)
+        ? gateSingleConnectionClient(client)
+        : this.isLocalDb
+          ? gateIfLocalFile(
+              resetConnectionsAfterBusy(client, {
+                afterReset: () => this.applyLocalPragmas(client),
+                maxWaitMs: this.connectionTimeoutMs,
+              }),
+              config.url,
+              { maxWaitMs: this.connectionTimeoutMs },
+            )
+          : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;
@@ -244,6 +261,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     const domainConfig = {
       client: this.client,
+      embeddedReplica: 'url' in config && !!config.syncUrl,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     };
@@ -304,7 +322,7 @@ export class LibSQLStore extends MastraCompositeStore {
     };
   }
 
-  private async applyLocalPragmas(): Promise<void> {
+  private async applyLocalPragmas(client: Client = this.client): Promise<void> {
     const pragmas = [
       ['journal_mode=WAL', 'PRAGMA journal_mode=WAL;'],
       // Keep in sync with the connection-level `timeout` passed to createClient
@@ -318,7 +336,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     for (const [label, sql] of pragmas) {
       try {
-        await this.client.execute(sql);
+        await client.execute(sql);
         this.logger.debug(`LibSQLStore: PRAGMA ${label} set.`);
       } catch (err) {
         this.logger.warn(`LibSQLStore: Failed to set PRAGMA ${label}.`, err);
@@ -340,8 +358,47 @@ export class LibSQLStore extends MastraCompositeStore {
     return true;
   }
 
+  private async initStoreWithRetry(store: { init(): Promise<void> }): Promise<void> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await store.init();
+        return;
+      } catch (error) {
+        if (attempt >= REMOTE_INIT_MAX_ATTEMPTS || !isTransientNetworkError(error)) {
+          throw error;
+        }
+        const backoff = this.initialBackoffMs * 2 ** (attempt - 1);
+        this.logger.warn(
+          `LibSQLStore: Transient network error during domain init, retrying in ${backoff}ms (attempt ${attempt}/${REMOTE_INIT_MAX_ATTEMPTS}).`,
+          error,
+        );
+        await new Promise(resolve => setTimeout(resolve, backoff));
+      }
+    }
+  }
+
+  // Remote inits are bounded below the libsql client's default concurrency (20) and
+  // retried on transient network failures so one `fetch failed` doesn't fail startup.
   private async initDomainsInParallel(): Promise<boolean> {
-    await Promise.all(this.getStoresToInit().map(store => store.init()));
+    const stores = this.getStoresToInit();
+    let next = 0;
+    let failed = false;
+    const worker = async () => {
+      while (!failed && next < stores.length) {
+        try {
+          await this.initStoreWithRetry(stores[next++]!);
+        } catch (error) {
+          failed = true;
+          throw error;
+        }
+      }
+    };
+    // Wait for in-flight inits to settle so a retried init() never overlaps with them.
+    const results = await Promise.allSettled(
+      Array.from({ length: Math.min(REMOTE_INIT_CONCURRENCY, stores.length) }, worker),
+    );
+    const rejected = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (rejected) throw rejected.reason;
     return true;
   }
 
@@ -355,7 +412,10 @@ export class LibSQLStore extends MastraCompositeStore {
           return;
         }
 
-        this.hasInitialized = this.initDomainsInParallel();
+        this.hasInitialized = this.initDomainsInParallel().catch(error => {
+          this.hasInitialized = null;
+          throw error;
+        });
         await this.hasInitialized;
         return;
       }
@@ -371,7 +431,10 @@ export class LibSQLStore extends MastraCompositeStore {
         return;
       }
 
-      this.hasInitialized = this.initDomainsSequentially();
+      this.hasInitialized = this.initDomainsSequentially().catch(error => {
+        this.hasInitialized = null;
+        throw error;
+      });
       await this.hasInitialized;
       return;
     }
