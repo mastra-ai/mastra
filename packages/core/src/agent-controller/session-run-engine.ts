@@ -1439,16 +1439,8 @@ export class SessionRunEngine {
             operationType,
             error,
           });
-
-          if (
-            !Object.hasOwn(payload, 'failurePolicy') ||
-            !Object.hasOwn(payload, 'failureKind') ||
-            payload.failurePolicy !== 'continue' ||
-            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
-          ) {
-            this.abortForOmFailure({ operationType, stage: 'buffering', error });
-            return { message: state.currentMessage };
-          }
+          // Buffering is background work: memory keeps the failed input pending and the
+          // synchronous threshold observation enforces failurePolicy, so the turn continues.
         }
         break;
       }
