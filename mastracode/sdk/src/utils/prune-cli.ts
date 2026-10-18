@@ -18,7 +18,7 @@
 import path from 'node:path';
 
 import type { MastraVector } from '@mastra/core/vector';
-import { LibSQLVector } from '@mastra/libsql';
+import type { LibSQLVector } from '@mastra/libsql';
 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
@@ -119,7 +119,7 @@ async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: bool
     if (vacuum && localDbFiles.length > 0) {
       vector = await createVectorStore(storageConfig, backend);
     }
-    const libsqlVector = vector instanceof LibSQLVector ? vector : undefined;
+    const libsqlVector = isLibSQLVector(vector) ? vector : undefined;
 
     const maintenance = createStorageMaintenance({
       storage,
@@ -139,12 +139,22 @@ async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: bool
     // open handles. Best effort — the original failure is what matters.
     try {
       await storage.close?.();
-      if (vector instanceof LibSQLVector) await vector.close();
+      if (isLibSQLVector(vector)) await vector.close();
     } catch {
       // ignore cleanup errors
     }
     return 1;
   }
+}
+
+/**
+ * Class-name check instead of instanceof: @mastra/libsql is lazy-loaded by the
+ * storage factory, and importing it here just for a type guard would put the
+ * native driver back on the cold-start path.
+ */
+function isLibSQLVector(vector: MastraVector | undefined): vector is LibSQLVector {
+    return vector?.constructor.name === 'LibSQLVector';
+
 }
 
 /** Credential-free URL: drops userinfo and the query string (e.g. ?authToken=). */
