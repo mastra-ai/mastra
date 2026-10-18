@@ -2006,9 +2006,8 @@ interface ApprovalGate {
   resolve: (resolution: ApprovalGateResolution) => void;
 }
 
-/** The run signal a tool-call answer armed itself, set only when it created the controller. */
+/** Set only when a tool-call answer created the run controller itself. */
 interface ArmedRun {
-  signal?: AbortSignal;
   /** {@link SessionRun.armCount} right after this answer armed the run. */
   armCount?: number;
 }
@@ -5861,14 +5860,13 @@ export class Session<TState = unknown> {
 
   /**
    * Arm the session run for an answer to a parked tool call. Records the
-   * signal in `armed` only when this call created the controller, so a failed
+   * arm count in `armed` only when this call created the controller, so a failed
    * start can disarm it without touching a run another caller armed.
    */
   #armRun(armed?: ArmedRun): AbortSignal {
     const wasRunning = this.run.isRunning();
     const signal = this.run.ensureAbortController().signal;
     if (!wasRunning && armed) {
-      armed.signal = signal;
       armed.armCount = this.run.armCount();
     }
     return signal;
@@ -5884,15 +5882,10 @@ export class Session<TState = unknown> {
     try {
       await answer(armed);
     } catch (error) {
-      // The thread subscription still reports the parked run as active, so
-      // only the run's own id tells whether the answer started a run. A
-      // message or signal that armed the same run meanwhile keeps it.
-      if (
-        armed.signal &&
-        this.run.getAbortSignal() === armed.signal &&
-        this.run.armCount() === armed.armCount &&
-        !this.run.getRunId()
-      ) {
+      // Anyone else holding the run armed it again: the subscription arms the
+      // run as it starts, and so does a message or signal joining it. Only a
+      // run nobody else armed is reset.
+      if (this.run.armCount() === armed.armCount) {
         this.run.reset();
       }
       throw error;

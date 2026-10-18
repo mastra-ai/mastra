@@ -481,7 +481,9 @@ describe('AgentController: tool suspension and resumption', () => {
 });
 
 describe('AgentController: tool resume that fails before its run starts', () => {
-  async function suspendedSession(id: string) {
+  // MastraLanguageModelV2Mock: these cases need the resumed model call held open
+  // on demand, which the aimock loop harness cannot do.
+  async function suspendedSession(id: string, { gate }: { gate?: Promise<void> } = {}) {
     const confirmTool = createTool({
       id: 'confirm-action',
       description: 'Confirms an action with the user',
@@ -499,7 +501,11 @@ describe('AgentController: tool resume that fails before its run starts', () => 
       name: id,
       instructions: 'You confirm actions.',
       model: new MastraLanguageModelV2Mock({
-        doStream: async () => ({ stream: ++callCount === 1 ? createToolCallStream() : createTextStream() }),
+        doStream: async () => {
+          if (++callCount === 1) return { stream: createToolCallStream() };
+          await gate;
+          return { stream: createTextStream() };
+        },
       }),
       tools: { confirmAction: confirmTool },
     });
@@ -524,6 +530,12 @@ describe('AgentController: tool resume that fails before its run starts', () => 
     return { session, events, agent: registeredAgent };
   }
 
+  function holdModel() {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    return { gate, release };
+  }
+
   it('leaves the session idle with the tool call still parked, so a retry resumes it', async () => {
     const { session, events, agent } = await suspendedSession('test-agent-failed-resume');
     vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('resume dispatch failed'));
@@ -544,29 +556,67 @@ describe('AgentController: tool resume that fails before its run starts', () => 
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 
-  it('keeps a run another caller armed when the resume fails to start', async () => {
-    const { session, agent } = await suspendedSession('test-agent-failed-resume-armed');
+  it('keeps the run the resume started when the answer rejects after it started', async () => {
+    const model = holdModel();
+    const { session, events, agent } = await suspendedSession('test-agent-resume-started', model);
+    const resume = agent.sendStreamResume.bind(agent);
+    let startedRunId: string | null = null;
+    vi.spyOn(agent, 'sendStreamResume').mockImplementationOnce(async (...args) => {
+      await resume(...args);
+      await vi.waitFor(() => expect(session.run.getRunId()).not.toBeNull());
+      startedRunId = session.run.getRunId();
+      throw new Error('resume acknowledgement lost');
+    });
+    events.length = 0;
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(events.some((e: any) => e.type === 'error')).toBe(true);
+    expect(session.run.isRunning()).toBe(true);
+    expect(session.run.getRunId()).toBe(startedRunId);
+
+    model.release();
+    await vi.waitFor(() => expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete'));
+    expect(session.run.isRunning()).toBe(false);
+  });
+
+  it('keeps a run a message armed when a resume fails to start', async () => {
+    const { session, events, agent } = await suspendedSession('test-agent-failed-resume-armed');
+    const sent = session.sendMessage({ content: 'What is the status?' });
+    await vi.waitFor(() => expect(session.run.isRunning()).toBe(true));
+    const messageSignal = session.run.getAbortSignal();
     vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('resume dispatch failed'));
-    const armedSignal = session.run.ensureAbortController().signal;
 
     await session.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     expect(session.run.isRunning()).toBe(true);
-    expect(session.run.getAbortSignal()).toBe(armedSignal);
+    expect(session.run.getAbortSignal()).toBe(messageSignal);
+
+    await sent;
+    events.length = 0;
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await vi.waitFor(() => expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete'));
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 
-  it('keeps the run when another caller arms it while the resume is failing', async () => {
-    const { session, agent } = await suspendedSession('test-agent-failed-resume-joined');
-    let joinedSignal: AbortSignal | undefined;
+  it('keeps the run when a message arms it while the resume is failing', async () => {
+    const { session, events, agent } = await suspendedSession('test-agent-failed-resume-joined');
+    let sent: Promise<void> | undefined;
     vi.spyOn(agent, 'sendStreamResume').mockImplementationOnce(async () => {
-      joinedSignal = session.run.ensureAbortController().signal;
+      const armCount = session.run.armCount();
+      sent = session.sendMessage({ content: 'What is the status?' });
+      await vi.waitFor(() => expect(session.run.armCount()).toBeGreaterThan(armCount));
       throw new Error('resume dispatch failed');
     });
 
     await session.respondToToolSuspension({ resumeData: { confirmed: true } });
 
-    expect(joinedSignal).toBeDefined();
     expect(session.run.isRunning()).toBe(true);
-    expect(session.run.getAbortSignal()).toBe(joinedSignal);
+
+    await sent;
+    events.length = 0;
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await vi.waitFor(() => expect(events.find((e: any) => e.type === 'agent_end')?.reason).toBe('complete'));
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 });

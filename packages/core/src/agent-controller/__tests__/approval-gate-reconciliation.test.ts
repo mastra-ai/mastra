@@ -125,6 +125,26 @@ describe('approval gate reconciliation', () => {
     await vi.waitFor(() => expect(env.executed).toEqual(['lookup']));
   }, 30_000);
 
+  it('keeps the parked run bound when a failed approve re-arms the gate, then ends idle', async () => {
+    const env = await parked();
+    const runId = env.session.run.getRunId();
+    const signal = env.session.run.getAbortSignal();
+    vi.spyOn(env.session.machinery, 'buildToolsets').mockRejectedValueOnce(new Error('toolsets unavailable'));
+
+    env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'approve' });
+    await vi.waitFor(() => expect(env.approvalPrompts()).toBe(2));
+    expect(env.session.approval.isArmed({ toolCallId: 'call-1' })).toBe(true);
+    expect(env.session.run.isRunning()).toBe(true);
+    expect(env.session.run.getRunId()).toBe(runId);
+    expect(env.session.run.getAbortSignal()).toBe(signal);
+
+    env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'approve' });
+    await env.sent;
+    expect(env.executed).toEqual(['lookup']);
+    expect(env.session.run.isRunning()).toBe(false);
+    expect(env.session.run.getRunId()).toBeNull();
+  }, 30_000);
+
   it('does not re-arm when a dispatched resume fails and the run is no longer parked', async () => {
     const env = await parked();
     const agent = env.session.machinery.getAgent();
