@@ -10,12 +10,15 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
+import { InMemoryServerCache } from '../../../cache/inmemory';
+import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { AGENT_STREAM_TOPIC } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
@@ -563,5 +566,54 @@ describe('DurableAgent step-finish payload size (#27475)', () => {
     const last = steps.at(-1).response.messages;
     expect(toolResultIds(last)).toEqual(['call-free', 'call-gated']);
     expect(JSON.stringify(last)).toContain('done');
+  }, 30000);
+
+  it('gives an observer that joins after the first step the messages from its first step-finish on', async () => {
+    const cachingPubsub = new CachingPubSub(pubsub, new InMemoryServerCache());
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-finish-size-observe',
+        name: 'Step Finish Size Observe',
+        instructions: 'Test',
+        model: shotsThenTextModel(3) as LanguageModelV2,
+        tools: { shot },
+      }),
+      pubsub: cachingPubsub,
+      cleanupTimeoutMs: 60_000,
+    });
+    new Mastra({
+      agents: { durableAgent },
+      storage: new InMemoryStore(),
+      logger: false,
+      pubsub: cachingPubsub,
+    });
+
+    const source = await durableAgent.stream('go', { maxSteps: 5 });
+    await source.output.consumeStream();
+    const history = await cachingPubsub.getHistory(AGENT_STREAM_TOPIC(source.runId), 0);
+    const stepFinishOffsets = history.flatMap((event: any, i) => (event?.data?.type === 'step-finish' ? [i] : []));
+    expect(stepFinishOffsets).toHaveLength(4);
+
+    // Join at the second step-finish, so the first step's delta (call-1) is never received.
+    const stepEvents: any[] = [];
+    const observed = await durableAgent.observe(source.runId, {
+      offset: stepFinishOffsets[1],
+      onStepFinish: (e: any) => void stepEvents.push(e),
+    });
+    await observed.output.consumeStream();
+    const steps = await observed.output.steps;
+    const response: any = await observed.output.response;
+    source.cleanup();
+
+    // The output keeps splicing later deltas onto the first one it received, instead of
+    // reporting each step's delta alone. Messages from before that chunk are not included.
+    expect(stepEvents.map(e => toolResultIds(e.response.messages))).toEqual([
+      ['call-2'],
+      ['call-2', 'call-3'],
+      ['call-2', 'call-3'],
+    ]);
+    expect(steps.map(step => step.response.messages)).toEqual(stepEvents.map(e => e.response.messages));
+    expect(JSON.stringify(steps.at(-1)!.response.messages)).toContain('done');
+    expect(response.messages).toEqual(steps.at(-1)!.response.messages);
   }, 30000);
 });

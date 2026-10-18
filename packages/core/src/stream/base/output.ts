@@ -558,6 +558,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #bufferedSteps: LLMStepResult<OUTPUT>[] = [];
   /** The run's response messages so far, rebuilt from durable step-finish deltas (#27475). */
   #durableResponseMessages: AIV5ResponseMessage[] = [];
+  /** Index in the run's response messages where `#durableResponseMessages` starts. */
+  #durableResponseMessagesFrom = 0;
   #bufferedReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
   /**
    * Per-step counterpart of `#bufferedReasoningDetails`. Reset on `step-finish`
@@ -2690,15 +2692,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   /**
-   * Drops all run-lifetime accumulators. Called at goal-evaluation boundaries,
-   * where every completed step has already been persisted to the MessageList.
-   * After truncation, run-end results (`text`, `steps`, `toolCalls`, …,
-   * `getFullOutput()`) cover only the segment after the last evaluation —
-   * for goal runs that segment is the completion answer. Token usage
-   * (`#usageCount`), in-flight per-step state (`#bufferedByStep`), structured
-   * output, and the MessageList are intentionally untouched.
-   */
-  /**
    * Durable step-finish chunks carry only the response messages that changed since the
    * previous chunk, starting at index `_durableResponseMessagesFrom` (absent from older
    * producers, which sent the whole list). Splices them onto the messages seen so far and
@@ -2710,12 +2703,28 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       _durableResponseMessagesFrom?: number;
     };
     if (!Array.isArray(delta)) return undefined;
-    // A gap means earlier chunks were never seen (e.g. observing from the latest offset): keep what arrived.
-    this.#durableResponseMessages =
-      from <= this.#durableResponseMessages.length ? this.#durableResponseMessages.slice(0, from).concat(delta) : delta;
+    const base = this.#durableResponseMessagesFrom;
+    const held = this.#durableResponseMessages;
+    if (from < base || from > base + held.length) {
+      // Earlier chunks were never seen (e.g. `observe()` from a later offset): hold what arrived and keep
+      // splicing onto it, so the messages cover the run from the first step-finish this output received.
+      this.#durableResponseMessagesFrom = from;
+      this.#durableResponseMessages = delta;
+    } else {
+      this.#durableResponseMessages = held.slice(0, from - base).concat(delta);
+    }
     return [...this.#durableResponseMessages];
   }
 
+  /**
+   * Drops all run-lifetime accumulators. Called at goal-evaluation boundaries,
+   * where every completed step has already been persisted to the MessageList.
+   * After truncation, run-end results (`text`, `steps`, `toolCalls`, …,
+   * `getFullOutput()`) cover only the segment after the last evaluation —
+   * for goal runs that segment is the completion answer. Token usage
+   * (`#usageCount`), in-flight per-step state (`#bufferedByStep`), structured
+   * output, and the MessageList are intentionally untouched.
+   */
   #truncateRunBuffers() {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
