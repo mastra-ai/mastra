@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/registry.js';
 import type { LiveBoardRegistry } from '../boards/registry.js';
@@ -165,6 +165,16 @@ describe('BoardRoutes', () => {
     expect((await call('DELETE', path)).status).toBe(204);
     expect(registry.has(boardId)).toBe(false);
     expect(await seed.phaseSkills.list({ orgId: 'org1', factoryProjectId: projectId })).toEqual([]);
+  });
+
+  it('uninstalls a deleted board even when clearing its kickoffs fails', async () => {
+    const boardId = await createBoard();
+    vi.spyOn(seed.phaseSkills, 'clearBoard').mockRejectedValueOnce(new Error('storage down'));
+
+    const response = await call('DELETE', `/web/factory/projects/${projectId}/boards/${boardId}`);
+    expect(response.status).toBe(500);
+    expect(await seed.storedBoards.get({ orgId: 'org1', factoryProjectId: projectId, boardId })).toBeNull();
+    expect(registry.has(boardId)).toBe(false);
   });
 
   it("keeps another Factory's board out of reach", async () => {

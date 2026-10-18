@@ -145,8 +145,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
             );
           }
           await this.deps.storedBoards.delete({ ...project, boardId });
-          await this.deps.phaseSkills.clearBoard({ ...project, boardId });
           this.deps.boards.uninstall(boardId);
+          await this.deps.phaseSkills.clearBoard({ ...project, boardId });
           return context.body(null, 204);
         },
       }),
