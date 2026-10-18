@@ -13,6 +13,8 @@ import {
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
+import { createTerminalStageCleanup } from './terminal-cleanup.js';
+import type { TerminalStageCleanupArgs } from './terminal-cleanup.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
@@ -3987,7 +3989,7 @@ describe('FactoryDecisionDispatcher', () => {
         workItemId,
         revokedAt: new Date(),
       });
-      await storage.supersedeTerminalDecisionsForWorkItem({
+      await storage.supersedeDecisionsForWorkItem({
         orgId: 'org-1',
         factoryProjectId: PROJECT_ID,
         workItemId,
@@ -4050,7 +4052,7 @@ describe('FactoryDecisionDispatcher', () => {
 
       const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
       const stale = decisions.find(d => d.idempotencyKey === 'stale-triage');
-      expect(stale?.status).toBe('succeeded');
+      expect(stale?.status).toBe('superseded');
       const calls = session.sendSignal.mock.calls.map(([signal]) => JSON.stringify(signal));
       expect(calls.some(call => call.includes('understand-issue'))).toBe(false);
     });
@@ -4082,6 +4084,76 @@ describe('FactoryDecisionDispatcher', () => {
       const after = await storage.listDeferredDecisions('org-1', PROJECT_ID);
       expect(after.find(d => d.idempotencyKey === 'stale-triage')?.status).toBe('superseded');
       expect(after.find(d => d.idempotencyKey === 'close-out-triage')?.status).toBe('proposed');
+    });
+
+    it('retires older seats but leaves the close-out seat when cleanup runs after it is minted', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const boards = closeOutBoards();
+      let cleanupArgs: TerminalStageCleanupArgs | undefined;
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards,
+        // Capture the cleanup request; it runs below, after the dispatcher wins the race.
+        onTerminalStage: ({ orgId, factoryProjectId, workItemId, revision, stageEnteredAt }) => {
+          cleanupArgs = {
+            orgId,
+            factoryProjectId,
+            workItemId,
+            revision,
+            ...(stageEnteredAt ? { stageEnteredAt } : {}),
+          };
+        },
+      });
+      const item = await createItem(storage);
+      const review = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'review',
+        session: { sessionId: 'session-review', branch: 'factory/issue-1-review', threadId: 'thread-review' },
+        resourceId: 'resource-review',
+        kickoffKey: 'review-kickoff',
+        kickoffMessage: null,
+      });
+      await new Promise(resolve => setTimeout(resolve, 5));
+      await moveTo(transitionService, storage, item.id, 'done');
+      if (!cleanupArgs) throw new Error('Expected the terminal transition to request cleanup');
+
+      const { controller } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        prepareBinding: prepareTriageBinding(storage, item.id),
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))!.revision).toBeGreaterThan(cleanupArgs.revision!);
+
+      const abortSession = vi.fn(async () => {});
+      const releaseSandboxes = vi.fn(async () => {});
+      await createTerminalStageCleanup({ workItems: storage, abortSession, releaseSandboxes })(cleanupArgs);
+
+      const bindings = await storage.listRunBindings('org-1', PROJECT_ID, item.id);
+      expect(bindings.map(b => [b.role, b.status])).toEqual([
+        ['review', 'revoked'],
+        ['triage', 'active'],
+      ]);
+      expect(abortSession.mock.calls.map(([binding]) => binding.id)).toEqual([review.binding.id]);
+      expect(releaseSandboxes).toHaveBeenCalledWith(expect.objectContaining({ preserveSessionIds: ['session-1'] }));
     });
   });
 
@@ -5988,14 +6060,12 @@ describe('custom-board deferred targets', () => {
 
   it('materializes its declared initial phase and dispatches its lifecycle-produced custom transition once', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const queued = vi.fn(
-      (): FactoryCommitDecision => ({
-        type: 'transition',
-        idempotencyKey: 'begin-release',
-        board: 'release',
-        stage: 'shipping',
-      }),
-    );
+    const queued = vi.fn((): FactoryCommitDecision => ({
+      type: 'transition',
+      idempotencyKey: 'begin-release',
+      board: 'release',
+      stage: 'shipping',
+    }));
     const shipping = vi.fn();
     const board = defineBoard({
       id: 'release',
@@ -6351,13 +6421,11 @@ describe('custom-board deferred targets', () => {
   it('does not mistake a committed linked initial entry for a completed destination after uninstall', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
-    const entered = vi.fn(
-      (): FactoryCommitDecision => ({
-        type: 'notify',
-        idempotencyKey: 'initial-effect',
-        title: 'Initial entry committed',
-      }),
-    );
+    const entered = vi.fn((): FactoryCommitDecision => ({
+      type: 'notify',
+      idempotencyKey: 'initial-effect',
+      title: 'Initial entry committed',
+    }));
     const destination = vi.fn();
     const boards = createBoardRegistry({
       includeDefaultBoards: false,

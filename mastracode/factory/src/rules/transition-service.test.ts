@@ -5,6 +5,7 @@ import type { BoardDefinition } from '../boards/define-board.js';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
+import { currentStageEnteredAt } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -1079,6 +1080,7 @@ describe('FactoryTransitionService', () => {
       workItemId: item.id,
       stage: 'done',
       revision: expect.any(Number),
+      stageEnteredAt: currentStageEnteredAt((await storage.get({ orgId: 'org-1', id: item.id }))!),
       actor: { type: 'human', id: 'user-1' },
     });
   });

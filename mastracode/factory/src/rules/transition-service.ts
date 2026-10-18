@@ -3,7 +3,7 @@ import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import { isAgentActor } from '../storage/domains/work-items/base.js';
+import { currentStageEnteredAt, isAgentActor } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -83,6 +83,8 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     stage: FactoryRuleStage;
     revision: number;
+    /** When the card entered this terminal stage; cleanup retires only seats created before it. */
+    stageEnteredAt: Date | null;
     /** The actor that committed this terminal transition. Lets cleanup leave
      * the seat that drove its own transition (an agent tool call) untouched. */
     actor: FactoryRuleActor;
@@ -674,6 +676,7 @@ export class FactoryTransitionService {
             workItemId: request.workItemId,
             stage: result.stage,
             revision: result.revision,
+            stageEnteredAt: committed.item ? currentStageEnteredAt(committed.item) : null,
             actor: request.actor,
           }),
         );

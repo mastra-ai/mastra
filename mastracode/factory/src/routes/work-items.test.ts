@@ -1517,7 +1517,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       kinds: { 'automation-proposed': { open: 1, unread: 1 } },
     });
 
-    await seed.workItems.supersedeTerminalDecisionsForWorkItem({
+    await seed.workItems.supersedeDecisionsForWorkItem({
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
