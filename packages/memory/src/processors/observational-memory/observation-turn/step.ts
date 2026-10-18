@@ -466,11 +466,6 @@ export class ObservationStep {
     return this._context;
   }
 
-  /**
-   * Run the full threshold observation pipeline:
-   * waitForBuffering → re-check → activate buffered chunks → reflect → observe
-   * (sync fallback at blockAfter when async buffering is enabled)
-   */
   /** Ids of already-drained messages that now hold parts the model has not been sent. */
   private changedSinceDrain(messageList: MessageList): string[] {
     return messageList.get.all
@@ -482,6 +477,11 @@ export class ObservationStep {
       .map(msg => msg.id);
   }
 
+  /**
+   * Run the full threshold observation pipeline:
+   * waitForBuffering → re-check → activate buffered chunks → reflect → observe
+   * (sync fallback at blockAfter when async buffering is enabled)
+   */
   private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
     succeeded: boolean;
     record: any;
