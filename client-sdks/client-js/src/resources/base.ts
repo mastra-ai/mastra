@@ -1,6 +1,6 @@
 import type { RequestOptions, ClientOptions } from '../types';
 import { MastraClientError } from '../types';
-import { isTerminalHttpError, mergeAbortSignals, normalizeRoutePath } from '../utils';
+import { isTerminalHttpError, isTraceQueryTimeoutError, mergeAbortSignals, normalizeRoutePath } from '../utils';
 
 export class BaseResource {
   readonly options: ClientOptions;
@@ -100,8 +100,9 @@ export class BaseResource {
           throw error;
         }
 
-        // Don't retry 4xx client errors or 501 Not Implemented - they won't resolve with retries
-        if (isTerminalHttpError(error)) {
+        // Don't retry 4xx client errors, 501 Not Implemented, or trace query execution
+        // timeouts - they won't resolve with retries
+        if (isTerminalHttpError(error) || isTraceQueryTimeoutError(error)) {
           throw error;
         }
 

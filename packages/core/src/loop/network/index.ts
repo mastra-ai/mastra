@@ -27,7 +27,7 @@ import { createWorkflow } from '../../workflows/create';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
-import { runBeforeApprovalHook } from '../workflows/agentic-execution/tool-approval-verdict';
+import { runBeforeApprovalChecks } from '../workflows/agentic-execution/tool-approval-verdict';
 import { pruneAgentLoopSnapshot } from '../workflows/prune-snapshot';
 
 /**
@@ -1638,7 +1638,7 @@ export async function createNetworkLoop({
         }
         const rejection = resumeData
           ? undefined
-          : await runBeforeApprovalHook({
+          : await runBeforeApprovalChecks({
               tool,
               input: inputDataToUse,
               context: { toolCallId, toolName: toolId, requestContext },

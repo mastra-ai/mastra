@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { MCPServerIcon } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
@@ -62,12 +63,22 @@ function makeServer(journal: { writes: number; rounds: string[] }) {
   });
 }
 
-/** A 2025-era Streamable HTTP server: it only understands the legacy handshake and the shared verbs. */
-async function legacyServer() {
+/**
+ * A 2025-era Streamable HTTP server: it only understands the legacy handshake and the shared verbs.
+ * With `pushStream`, a GET opens the standalone SSE stream legacy servers push notifications on.
+ */
+async function legacyServer({ pushStream = false }: { pushStream?: boolean } = {}) {
   const methods: string[] = [];
   const httpMethods: string[] = [];
+  const streams: ServerResponse[] = [];
   const httpServer = createServer(async (req, res) => {
     httpMethods.push(req.method ?? '');
+    if (req.method === 'GET' && pushStream) {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+      res.flushHeaders();
+      streams.push(res);
+      return;
+    }
     if (req.method !== 'POST') {
       res.writeHead(405).end();
       return;
@@ -115,6 +126,11 @@ async function legacyServer() {
     url,
     methods,
     httpMethods,
+    /** Pushes a notification on every open standalone SSE stream and returns how many streams were open. */
+    notify: (method: string) => {
+      for (const stream of streams) stream.write(`data: ${JSON.stringify({ jsonrpc: '2.0', method })}\n\n`);
+      return streams.length;
+    },
     close: async () => {
       httpServer.closeAllConnections();
       await new Promise<void>(resolve => httpServer.close(() => resolve()));
@@ -492,6 +508,72 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
     );
     expect(legacy.methods).not.toContain('resources/subscribe');
     expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('registers list-changed handlers without opening subscriptions/listen', async () => {
+    client = new InternalMastraMCPClient({ name: 'list-changed', server: { url: legacy.url } });
+    await client.connect();
+
+    await expect(client.setToolListChangedNotificationHandler(() => {})).resolves.toBeUndefined();
+    await expect(client.setPromptListChangedNotificationHandler(() => {})).resolves.toBeUndefined();
+    await expect(client.setResourceListChangedNotificationHandler(() => {})).resolves.toBeUndefined();
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+    expect(legacy.methods).not.toContain('resources/subscribe');
+  });
+
+  it('reconnects with list-changed interest without failing to restore subscriptions/listen', async () => {
+    const errors: LogMessage[] = [];
+    client = new InternalMastraMCPClient({
+      name: 'list-changed-reconnect',
+      server: {
+        url: legacy.url,
+        logger: message => {
+          if (message.level === 'error') errors.push(message);
+        },
+      },
+    });
+    await client.connect();
+    await client.setToolListChangedNotificationHandler(() => {});
+    await client.disconnect();
+    await client.connect();
+
+    expect(errors.some(e => e.message.includes('Failed to restore subscriptions/listen after connecting'))).toBe(false);
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('still refuses resource subscriptions after a list-changed handler is registered', async () => {
+    client = new InternalMastraMCPClient({ name: 'mixed-interest', server: { url: legacy.url } });
+    await client.connect();
+    await client.setToolListChangedNotificationHandler(() => {});
+
+    await expect(client.subscribeResource('policy://public')).rejects.toThrow(
+      "subscriptions/listen needs MCP 2026-07-28, but server 'mixed-interest' negotiated 2025-11-25",
+    );
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('delivers list_changed pushed on the standalone SSE stream to the handler', async () => {
+    await legacy.close();
+    legacy = await legacyServer({ pushStream: true });
+    client = new InternalMastraMCPClient({ name: 'push', server: { url: legacy.url } });
+    await client.connect();
+    const changed = new Promise<void>(resolve => {
+      void client!.setToolListChangedNotificationHandler(resolve);
+    });
+
+    await vi.waitFor(() => expect(legacy.httpMethods).toContain('GET'));
+    await vi.waitFor(() => expect(legacy.notify('notifications/tools/list_changed')).toBeGreaterThan(0));
+    await changed;
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('resolves tools.onListChanged on MCPClient for a legacy server', async () => {
+    const mcpClient = new MCPClient({ id: 'legacy-on-list-changed', servers: { older: { url: legacy.url } } });
+    try {
+      await expect(mcpClient.tools.onListChanged('older', () => {})).resolves.toBeUndefined();
+    } finally {
+      await mcpClient.disconnect();
+    }
   });
 
   it("skips the probe when pinned to 'legacy'", async () => {

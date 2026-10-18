@@ -1699,61 +1699,69 @@ export function analyzeToolFailures(
   const { maxRetriesPerTool = 2 } = options;
   const patterns: ToolFailurePattern[] = [];
   let totalRetries = 0;
+  let totalToolCalls = 0;
 
-  const toolCallSteps = toToolLevelSteps(trajectory.steps).filter(
-    s => s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call',
-  );
+  // Walk every tool-level sibling list (top level first, then nested `children` lists). Tool calls
+  // under model_generation are hoisted into their parent list and processor_run steps are dropped,
+  // so trace-derived trajectories group retries the same way as message-derived ones.
+  const pending: TrajectoryStep[][] = [trajectory.steps];
+  while (pending.length > 0) {
+    const steps = toToolLevelSteps(pending.shift()!);
+    for (const step of steps) {
+      if (step.children?.length) pending.push(step.children);
+    }
 
-  if (toolCallSteps.length === 0) {
-    return { score: 1, patterns: [], totalRetries: 0, excessiveRetryTools: [] };
+    const toolCallSteps = steps.filter(s => s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call');
+    totalToolCalls += toolCallSteps.length;
+
+    // Group consecutive calls to the same tool as potential retry sequences
+    let i = 0;
+    while (i < toolCallSteps.length) {
+      const currentTool = toolCallSteps[i]!;
+      let retryCount = 0;
+      let j = i + 1;
+
+      // Count consecutive calls to the same tool
+      // (toolCallSteps is pre-filtered to tool_call/mcp_tool_call, so no stepType checks needed)
+      while (j < toolCallSteps.length && toolCallSteps[j]!.name === currentTool.name) {
+        const prevStep = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+        if (prevStep.success === false) {
+          retryCount++;
+        }
+        j++;
+      }
+
+      if (retryCount > 0) {
+        // Check if agent fell back to a different tool after retries
+        const nextDifferentTool = j < toolCallSteps.length ? toolCallSteps[j] : undefined;
+        const lastRetry = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+        const lastSuccess = lastRetry.success !== false;
+
+        patterns.push({
+          toolName: currentTool.name,
+          retryCount,
+          fellBackToAlternative: nextDifferentTool !== undefined && !lastSuccess,
+          alternativeTool: nextDifferentTool !== undefined && !lastSuccess ? nextDifferentTool.name : undefined,
+          eventuallySucceeded: lastSuccess,
+        });
+
+        totalRetries += retryCount;
+      }
+
+      i = j;
+    }
   }
 
-  // Group consecutive calls to the same tool as potential retry sequences
-  let i = 0;
-  while (i < toolCallSteps.length) {
-    const currentTool = toolCallSteps[i]!;
-    let retryCount = 0;
-    let j = i + 1;
-
-    // Count consecutive calls to the same tool
-    // (toolCallSteps is pre-filtered to tool_call/mcp_tool_call, so no stepType checks needed)
-    while (j < toolCallSteps.length && toolCallSteps[j]!.name === currentTool.name) {
-      const prevStep = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
-      if (prevStep.success === false) {
-        retryCount++;
-      }
-      j++;
-    }
-
-    if (retryCount > 0) {
-      // Check if agent fell back to a different tool after retries
-      const nextDifferentTool = j < toolCallSteps.length ? toolCallSteps[j] : undefined;
-      const lastRetry = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
-      const lastSuccess = lastRetry.success !== false;
-
-      patterns.push({
-        toolName: currentTool.name,
-        retryCount,
-        fellBackToAlternative: nextDifferentTool !== undefined && !lastSuccess,
-        alternativeTool: nextDifferentTool !== undefined && !lastSuccess ? nextDifferentTool.name : undefined,
-        eventuallySucceeded: lastSuccess,
-      });
-
-      totalRetries += retryCount;
-    }
-
-    i = j;
+  if (totalToolCalls === 0) {
+    return { score: 1, patterns: [], totalRetries: 0, excessiveRetryTools: [] };
   }
 
   // Score: penalize excessive retries
   const excessiveRetryTools = patterns.filter(p => p.retryCount > maxRetriesPerTool).map(p => p.toolName);
 
-  let score = 1;
-  if (toolCallSteps.length > 0) {
-    // Each retry beyond the threshold costs more
-    const excessRetries = patterns.reduce((sum, p) => sum + Math.max(0, p.retryCount - maxRetriesPerTool), 0);
-    score = Math.max(0, 1 - excessRetries * 0.2);
-  }
+  // Each retry beyond the threshold costs more
+  const excessRetries = patterns.reduce((sum, p) => sum + Math.max(0, p.retryCount - maxRetriesPerTool), 0);
+  const score = Math.max(0, 1 - excessRetries * 0.2);
 
   return {
     score: roundToTwoDecimals(Math.max(0, Math.min(1, score))),
