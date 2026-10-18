@@ -384,8 +384,15 @@ export class SkillsLibSQL extends SkillsStorage {
               details: { key },
             });
           }
-          metadataConditions.push(`json_extract(mv.metadata, '$.${key}') = ?`);
-          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
+          if (typeof value === 'string') {
+            metadataConditions.push(`json_extract(mv.metadata, '$.${key}') = ?`);
+            queryParams.push(value);
+          } else {
+            // Decode the filter value with SQLite's JSON semantics so booleans,
+            // numbers and nested values compare like the stored ones (true -> 1).
+            metadataConditions.push(`json_extract(mv.metadata, '$.${key}') = json_extract(?, '$')`);
+            queryParams.push(JSON.stringify(value));
+          }
         }
         conditions.push(
           `EXISTS (SELECT 1 FROM "${TABLE_SKILL_VERSIONS}" mv WHERE mv."skillId" = s_e.id AND mv.id = ${resolvedVersionId} AND ${metadataConditions.join(' AND ')})`,
