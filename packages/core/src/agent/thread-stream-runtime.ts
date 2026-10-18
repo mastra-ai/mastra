@@ -17,6 +17,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
+import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
@@ -141,22 +142,9 @@ function isStaleRequest(expiresAt: number | undefined): boolean {
   );
 }
 
-/**
- * Lease TTL for the cross-process thread lease acquired in the idle-wake
- * path. Kept short so a crashed owner process frees the thread quickly; a
- * background timer renews it while the run is still running. Overridable via
- * `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (production keeps the 15s default).
- */
-const AGENT_THREAD_LEASE_TTL_MS = readPositiveIntEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', 15_000);
-/**
- * Interval at which the owner process renews its lease. Defaults to TTL/3,
- * leaving room for two missed renewals (network blip, GC pause) before the
- * lease expires. Overridable via `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS`.
- */
-const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = readPositiveIntEnv(
-  'MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS',
-  Math.floor(AGENT_THREAD_LEASE_TTL_MS / 3),
-);
+/** Thread lease TTL and renew interval; shared with the durable execution lease. */
+const AGENT_THREAD_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
+const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 /**
  * TTL for a suspended run's warm in-memory state — the parked thread-run record
  * (swept by #sweepStaleSuspendedRecords). The Mastra internal-workflow registry
