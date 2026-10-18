@@ -287,6 +287,7 @@
     "deepinfra/microsoft/WizardLM-2-8x22B",
     "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
     "deepinfra/moonshotai/Kimi-K2-Instruct",
+    "deepinfra/nemotron-3-super-120b-a12b",
     "deepinfra/nemotron-3-ultra-550b-a55b",
     "deepinfra/nvidia/Llama-3.1-Nemotron-70B-Instruct",
     "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
@@ -547,6 +548,7 @@
     "deepinfra/meta-models/Muse-Glimmer-30B",
     "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
     "deepinfra/moonshotai/Kimi-K2.5",
+    "deepinfra/nemotron-3-super-120b-a12b",
     "deepinfra/nemotron-3-ultra-550b-a55b",
     "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
     "deepinfra/openai/gpt-oss-120b",
@@ -635,6 +637,7 @@
     "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
     "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
@@ -753,6 +756,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepinfra/nemotron-3-super-120b-a12b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
       }
     ],
     "deepinfra/nemotron-3-ultra-550b-a55b": [

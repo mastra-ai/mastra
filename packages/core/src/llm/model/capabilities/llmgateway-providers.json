@@ -120,6 +120,7 @@
     "deepinfra/qwen3-vl-30b-a3b-instruct",
     "deepinfra/qwen3.5-9b",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "entrim/deepseek-v4.1-flash",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4.1-flash",
@@ -129,10 +130,8 @@
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
-    "google-ai-studio/gemini-3.5-flash",
     "google-ai-studio/gemini-3.5-flash-lite",
     "google-ai-studio/gemini-3.6-flash",
-    "google-ai-studio/gemini-3.7-flash",
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
@@ -145,6 +144,7 @@
     "google-vertex/gemini-3.7-flash",
     "google-vertex/gemini-3.8-flash",
     "google-vertex/gemini-4-argon",
+    "inference.net/deepseek-v4.1-flash-1017",
     "inference.net/glm-5.3-flash",
     "luminal/deepseek-v4.1-flash",
     "meta-contributor/muse-spark-1.2-contributor",
@@ -383,6 +383,7 @@
     "deepinfra/qwen3.5-9b",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "embercloud/glm-4.5",
     "embercloud/glm-4.5-air",
     "embercloud/glm-4.7",
@@ -402,10 +403,8 @@
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
-    "google-ai-studio/gemini-3.5-flash",
     "google-ai-studio/gemini-3.5-flash-lite",
     "google-ai-studio/gemini-3.6-flash",
-    "google-ai-studio/gemini-3.7-flash",
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-pro-latest",
     "google-vertex/gemini-3-flash-preview",
@@ -418,6 +417,7 @@
     "google-vertex/gemini-3.8-flash",
     "groq/gpt-oss-120b",
     "groq/gpt-oss-20b",
+    "inference.net/deepseek-v4.1-flash-1017",
     "inference.net/glm-5.3",
     "inference.net/glm-5.3-flash",
     "inference.net/llama-3.2-11b-instruct",
@@ -690,10 +690,8 @@
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
     "google-ai-studio/gemini-3.1-pro-preview",
-    "google-ai-studio/gemini-3.5-flash",
     "google-ai-studio/gemini-3.5-flash-lite",
     "google-ai-studio/gemini-3.6-flash",
-    "google-ai-studio/gemini-3.7-flash",
     "google-ai-studio/gemini-3.8-flash",
     "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
@@ -706,6 +704,7 @@
     "google-vertex/gemini-3.7-flash",
     "google-vertex/gemini-3.8-flash",
     "google-vertex/gemini-4-argon",
+    "inference.net/deepseek-v4.1-flash-1017",
     "inference.net/glm-5.3",
     "inference.net/glm-5.3-flash",
     "meta-contributor/muse-spark-1.2-contributor",
@@ -1235,18 +1234,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "google-ai-studio/gemini-3.5-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "google-ai-studio/gemini-3-flash-preview": [
       {
         "type": "effort",
@@ -1403,6 +1390,12 @@
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "runpod/kimi-k3": [
@@ -2512,6 +2505,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "inference.net/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
     "azure-anthropic/claude-opus-5-5": [

@@ -14,7 +14,7 @@ import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
-import { runBeforeApprovalHook } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
+import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -952,7 +952,7 @@ export function createDurableToolCallStep() {
       const approvalGated = suspendedForApproval || (requiresApproval && isFreshCall);
 
       if (approvalGated && !approvalDecision && isFreshCall) {
-        const rejection = await runBeforeApprovalHook({
+        const rejection = await runBeforeApprovalChecks({
           tool,
           input: args,
           context: { toolCallId, toolName, requestContext: approvalRequestContext, workspace, actor },

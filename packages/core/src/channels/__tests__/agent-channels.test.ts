@@ -1273,6 +1273,50 @@ describe('AgentChannels', () => {
       expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
     });
 
+    it('runs on a Slack block-only message and passes the block text to the agent', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: true,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: '',
+        formatted: { type: 'root', children: [] },
+        raw: {
+          blocks: [
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: 'Deploy failed: <https://ci.example.com/runs/9|run 9>' },
+            },
+          ],
+        },
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(mockAgent.sendMessage.mock.calls[0])).toContain(
+        'Deploy failed: [run 9](https://ci.example.com/runs/9)',
+      );
+    });
+
     it('consumes the run stream when the signal outcome is `wake`', async () => {
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });
@@ -3254,6 +3298,38 @@ describe('thread history', () => {
     expect(serialized).not.toContain('[Thread context');
     expect(serialized).not.toContain('message 0');
     expect(serialized).toContain('hi there');
+  });
+
+  it('includes Slack layout-block text in history rows without repeating the fallback', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const alert = historyMessage(1, {
+      author: bot,
+      text: '❌ Lint — failure',
+      raw: {
+        blocks: [
+          { type: 'header', text: { type: 'plain_text', text: '❌ Lint — failure' } },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: 'Lint failed on `main`. <https://github.com/acme/web-app/actions/runs/1|View workflow run>',
+            },
+          },
+          { type: 'context', elements: [{ type: 'mrkdwn', text: 'Commit: `3f8b55a`' }] },
+        ],
+      },
+    });
+    await t.run(makeChatThread([historyMessage(0), alert, historyMessage(2)]));
+
+    expect(t.signals().map(s => s.contents)).toEqual([
+      'message 0',
+      [
+        '❌ Lint — failure',
+        'Lint failed on `main`. [View workflow run](https://github.com/acme/web-app/actions/runs/1)',
+        'Commit: `3f8b55a`',
+      ].join('\n\n'),
+      'message 2',
+    ]);
   });
 
   it('emits no gap and no separate root when the root falls inside the window', async () => {
