@@ -12,6 +12,7 @@ import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { DEFAULT_LLM_STREAM_BUFFER_SIZE, processBufferedTextStream } from './llm-stream-buffer';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 import { handleModelError } from './model-error-strategy';
@@ -84,8 +85,17 @@ export interface ModerationOptions extends LastMessageOnlyOption {
    * Number of previous chunks to include for context when moderating stream chunks.
    * If set to 1, includes the previous part. If set to 2, includes the two previous chunks, etc.
    * Default: 0 (no context window)
+   * Only applies when `bufferSize` is 0; buffered text is moderated as a whole.
    */
   chunkWindow?: number;
+
+  /**
+   * Character threshold for buffering streamed text before it is moderated (default: 200).
+   * Streamed text is held back and moderated once per sentence or once this many
+   * characters have accumulated, instead of once per text-delta.
+   * Set to 0 to moderate every text-delta individually (one moderation call per chunk).
+   */
+  bufferSize?: number;
 
   /**
    * Structured output options used for the moderation agent
@@ -128,6 +138,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private bufferSize: number;
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
@@ -154,6 +165,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.bufferSize = options.bufferSize ?? DEFAULT_LLM_STREAM_BUFFER_SIZE;
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
@@ -256,21 +268,43 @@ export class ModerationProcessor implements Processor<'moderation'> {
       streamParts: ChunkType[];
       state: Record<string, any>;
       abort: (reason?: string) => never;
+      writer?: unknown;
       requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null | undefined> {
-    try {
-      const { part, streamParts, abort, requestContext, ...rest } = args;
-      const observabilityContext = resolveObservabilityContext(rest);
+    const { part, streamParts, state, abort, writer, requestContext, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
 
-      // Only process text-delta chunks for moderation
-      if (part.type !== 'text-delta') {
-        return part;
-      }
-
+    if (this.bufferSize <= 0) {
+      if (part.type !== 'text-delta') return part;
       // Build context from chunks based on chunkWindow (streamParts includes the current part)
-      const contentToModerate = this.buildContextFromChunks(streamParts);
+      return this.moderateStreamPart(
+        part,
+        this.buildContextFromChunks(streamParts),
+        abort,
+        observabilityContext,
+        requestContext,
+      );
+    }
 
+    return processBufferedTextStream({
+      part,
+      state,
+      bufferSize: this.bufferSize,
+      writer,
+      check: textPart =>
+        this.moderateStreamPart(textPart, textPart.payload.text, abort, observabilityContext, requestContext),
+    });
+  }
+
+  private async moderateStreamPart(
+    part: ChunkType,
+    contentToModerate: string,
+    abort: (reason?: string) => never,
+    observabilityContext: ObservabilityContext,
+    requestContext?: RequestContext,
+  ): Promise<ChunkType | null> {
+    try {
       const moderationResult = await this.moderateContent(
         contentToModerate,
         true,
@@ -295,7 +329,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
       }
       // Log error but don't block the stream
       console.warn('[ModerationProcessor] Stream moderation failed:', error);
-      return args.part;
+      return part;
     }
   }
 

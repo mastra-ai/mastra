@@ -102,6 +102,14 @@ const processor = new SystemPromptScrubber({
             isOptional: true,
             default: "'[SYSTEM_PROMPT]'",
           },
+          {
+            name: 'bufferSize',
+            type: 'number',
+            description:
+              'Number of characters to buffer before checking streamed text. Buffered text is handled in one LLM call when it ends a sentence, reaches this size, or a non-text part arrives. Set to `0` to restore the previous behavior of one LLM call per text chunk.',
+            isOptional: true,
+            default: '200',
+          },
         ],
       },
     ],

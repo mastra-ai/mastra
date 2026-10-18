@@ -101,9 +101,17 @@ const processor = new ModerationProcessor({
             name: 'chunkWindow',
             type: 'number',
             description:
-              'Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.',
+              'Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc. Only applies when `bufferSize` is `0`.',
             isOptional: true,
             default: '0 (no context window)',
+          },
+          {
+            name: 'bufferSize',
+            type: 'number',
+            description:
+              'Number of characters to buffer before moderating streamed text. Buffered text is handled in one LLM call when it ends a sentence, reaches this size, or a non-text part arrives. Set to `0` to restore the previous behavior of one LLM call per text chunk.',
+            isOptional: true,
+            default: '200',
           },
           {
             name: 'providerOptions',

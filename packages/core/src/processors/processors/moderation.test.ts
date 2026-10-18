@@ -499,7 +499,7 @@ describe('ModerationProcessor', () => {
           throw new Error('provider failure');
         },
       });
-      const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
+      const moderator = new ModerationProcessor({ model, errorStrategy: 'strict', bufferSize: 0 });
       const tripwire = new TripWire('strict moderation failure');
       const abort = vi.fn(() => {
         throw tripwire;
@@ -639,6 +639,7 @@ describe('ModerationProcessor', () => {
         model,
         chunkWindow: 0, // No context window
         strategy: 'block',
+        bufferSize: 0,
       });
 
       const mockAbort = vi.fn().mockImplementation(() => {
@@ -672,6 +673,7 @@ describe('ModerationProcessor', () => {
         model,
         chunkWindow: 2, // Include 2 previous chunks
         strategy: 'block',
+        bufferSize: 0,
       });
 
       const mockAbort = vi.fn();
@@ -743,6 +745,7 @@ describe('ModerationProcessor', () => {
         model,
         chunkWindow: 0, // No context window
         strategy: 'block',
+        bufferSize: 0,
       });
 
       const mockAbort = vi.fn();
