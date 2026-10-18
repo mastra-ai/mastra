@@ -117,6 +117,7 @@ import type {
   WorkflowConfig,
   WorkflowEngineType,
   WorkflowOptions,
+  WorkflowStateTracingContext,
   WorkflowResult,
   WorkflowType,
   WorkflowRunState,
@@ -1863,6 +1864,23 @@ export class Workflow<
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
+
+  /**
+   * @internal For run-scoped agent loops only. Overrides the parent saved on
+   * suspension without changing live tracing. Ordinary workflows derive it
+   * from their execution span instead.
+   */
+  __setResumeTracingContext(context: WorkflowStateTracingContext | undefined): void {
+    this.executionEngine.options = { ...this.executionEngine.options, resumeTracingContext: context };
+  }
+
+  /**
+   * @internal Currently set by normal agent loops. Evented persistence also
+   * honors it for engine parity: changing engines must not change the saved parent.
+   */
+  __getResumeTracingContext(): WorkflowStateTracingContext | undefined {
+    return this.executionEngine.options.resumeTracingContext;
+  }
   protected executionGraph: ExecutionGraph;
   #options: Omit<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'> &
     Required<Pick<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'>>;
@@ -4908,18 +4926,21 @@ export class Run<
   }
 
   /**
-   * Atomically claims a suspended run for exactly one resume caller by flipping the persisted
-   * status from `suspended` to `running`.
+   * Atomically claims a run for exactly one caller by flipping the persisted status to `running`.
    *
-   * Throws `WORKFLOW_RESUME_ALREADY_CLAIMED` when another caller already claimed this
-   * suspension, so losing callers never enter the execution engine.
+   * `resume` claims a `suspended` run; `timeTravel` claims the run from whatever non-running
+   * status it was loaded in. Throws `WORKFLOW_RESUME_ALREADY_CLAIMED` or
+   * `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` when another caller already claimed the run, so losing
+   * callers never enter the execution engine.
    */
-  async #claimResume({
+  async #claimRun({
     workflowsStore,
     snapshot,
+    operation = 'resume',
   }: {
     workflowsStore: WorkflowsStorage | undefined;
     snapshot: WorkflowRunState;
+    operation?: 'resume' | 'timeTravel';
   }): Promise<void> {
     if (!workflowsStore) {
       return;
@@ -4933,6 +4954,8 @@ export class Run<
       stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
     });
 
+    const expectedStatus = operation === 'resume' ? 'suspended' : snapshot.status;
+
     if (!persistsRunningState) {
       // Workflows that acknowledged the trade-off (internal agent loops that
       // exclude `running` snapshots to avoid write amplification) opt out of
@@ -4941,7 +4964,7 @@ export class Run<
         this.#mastra
           ?.getLogger()
           ?.warn(
-            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated. Concurrent resumes may execute downstream steps more than once.`,
+            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated. Concurrent calls may execute downstream steps more than once.`,
           );
       }
       return;
@@ -4955,7 +4978,7 @@ export class Run<
       this.#mastra
         ?.getLogger()
         ?.warn(
-          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent resumes may execute downstream steps more than once.`,
+          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
         );
       return;
     }
@@ -4963,14 +4986,14 @@ export class Run<
     const claimed = await workflowsStore.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
-      opts: { status: 'running', expectedStatus: 'suspended' },
+      opts: { status: 'running', expectedStatus },
     });
 
     if (claimed) {
       return;
     }
 
-    // The compare-and-set found a status other than `suspended`. Re-read so the error names the
+    // The compare-and-set found a status other than the expected one. Re-read so the error names the
     // status the run actually landed in rather than guessing.
     const current = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -4979,6 +5002,24 @@ export class Run<
 
     if (!current) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
+    }
+
+    if (operation === 'timeTravel') {
+      throw new MastraError({
+        id: 'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text:
+          `This workflow run was already claimed by another caller. Workflow "${this.workflowId}" run "${this.runId}" ` +
+          `moved from "${snapshot.status}" to "${current.status}" before this time travel could claim it. ` +
+          `Only one timeTravel() call may run at a time; re-read the run state before time travelling again.`,
+        details: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          expectedStatus,
+          actualStatus: current.status ?? 'unknown',
+        },
+      });
     }
 
     throw new MastraError({
@@ -5216,7 +5257,7 @@ export class Run<
     // The compare-and-set is executed inside the store's own critical section, so exactly one
     // caller flips `suspended -> running` and every other caller loses and throws below.
     if (!params.claimedSnapshot) {
-      await this.#claimResume({ workflowsStore, snapshot });
+      await this.#claimRun({ workflowsStore, snapshot });
     }
 
     const releaseClaimIfUnused = async () => {
@@ -5293,7 +5334,7 @@ export class Run<
 
       const parentRun = await parentWorkflow.createRun({ runId: this.parentWorkflow.runId });
       try {
-        await parentRun.#claimResume({ workflowsStore, snapshot: parentSnapshot });
+        await parentRun.#claimRun({ workflowsStore, snapshot: parentSnapshot });
       } catch (error) {
         await releaseClaimIfUnused();
         throw error;
@@ -5601,7 +5642,13 @@ export class Run<
     }
 
     if (snapshot.status === 'running') {
-      throw new Error('This workflow run is still running, cannot time travel');
+      throw new MastraError({
+        id: 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run is still running, cannot time travel',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     let steps: string[];
@@ -5656,25 +5703,83 @@ export class Run<
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
-    const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      parentWorkflow: this.parentWorkflow,
-      resourceId: this.resourceId,
-      disableScorers: this.disableScorers,
-      graph: this.executionGraph,
-      timeTravel: timeTravelData,
-      serializedStepGraph: this.serializedStepGraph,
-      pubsub: this.pubsub,
-      retryConfig: this.retryConfig,
-      requestContext: requestContextToUse as RequestContext,
-      actor,
-      abortController: this.abortController,
-      outputWriter,
-      workflowSpan,
-      outputOptions,
-      perStep,
-    });
+    // Claim the run before entering the execution engine. The engine does not persist `running`
+    // until the target step actually starts, so without an atomic claim two concurrent
+    // timeTravel() callers can both pass the status check above and both run the target step.
+    // See https://github.com/mastra-ai/mastra/issues/27279.
+    try {
+      await this.#claimRun({ workflowsStore, snapshot, operation: 'timeTravel' });
+    } catch (error) {
+      workflowSpan?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
+
+    const releaseClaimIfUnused = async () => {
+      // Only roll the claim back when the engine never persisted anything: the snapshot is still
+      // `running` (our claim) and every step result and execution path is exactly as it was before
+      // the claim. An engine that already accepted the run (e.g. a publish that failed after
+      // delivery) writes its active paths before any step result, so those must match too.
+      // The reload and the release are not one atomic operation; closing that window fully needs
+      // a per-snapshot revision in every storage adapter.
+      try {
+        const current = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+        });
+        const claimedStepIds = Object.keys(snapshot.context);
+        const currentStepIds = Object.keys(current?.context ?? {});
+        const engineNeverStarted =
+          current?.status === 'running' &&
+          currentStepIds.length === claimedStepIds.length &&
+          claimedStepIds.every(stepId => current.context[stepId]?.status === snapshot.context[stepId]?.status) &&
+          JSON.stringify(current?.activePaths ?? []) === JSON.stringify(snapshot.activePaths ?? []) &&
+          JSON.stringify(current?.activeStepsPath ?? {}) === JSON.stringify(snapshot.activeStepsPath ?? {}) &&
+          JSON.stringify(current?.suspendedPaths ?? {}) === JSON.stringify(snapshot.suspendedPaths ?? {});
+
+        if (!engineNeverStarted) {
+          return;
+        }
+
+        await workflowsStore?.updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: snapshot.status, expectedStatus: 'running' },
+        });
+      } catch (releaseError) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] Failed to release time travel claim for run ${this.runId}`,
+            releaseError,
+          );
+      }
+    };
+
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    try {
+      result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        parentWorkflow: this.parentWorkflow,
+        resourceId: this.resourceId,
+        disableScorers: this.disableScorers,
+        graph: this.executionGraph,
+        timeTravel: timeTravelData,
+        serializedStepGraph: this.serializedStepGraph,
+        pubsub: this.pubsub,
+        retryConfig: this.retryConfig,
+        requestContext: requestContextToUse as RequestContext,
+        actor,
+        abortController: this.abortController,
+        outputWriter,
+        workflowSpan,
+        outputOptions,
+        perStep,
+      });
+    } catch (error) {
+      await releaseClaimIfUnused();
+      throw error;
+    }
 
     this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {

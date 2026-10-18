@@ -12,27 +12,33 @@ import { IntakeFeedNotice } from './IntakeFeedNotice';
 
 export function BoardStageCards({
   stage,
+  isInitialPhase,
   layout,
   kind,
   loading,
   taskCount,
   feed,
   intakeSource,
+  hasIntakeSource,
   filtersExcludeAll,
   alreadyMaterialized,
   composer,
+  emptyStateActions,
   children,
 }: {
   stage: { id: BoardStageId; label: string };
+  isInitialPhase: boolean;
   layout: BoardLayout;
   kind: BoardKind;
   loading: boolean;
   taskCount: number;
   feed?: IntakeFeed;
   intakeSource?: IntakeSource;
+  hasIntakeSource: boolean;
   filtersExcludeAll: boolean;
   alreadyMaterialized: number;
   composer?: ReactNode;
+  emptyStateActions?: ReactNode;
   children: ReactNode;
 }) {
   const showEmptyState = !loading && !composer && taskCount === 0 && !feed?.error;
@@ -46,11 +52,13 @@ export function BoardStageCards({
       {showEmptyState && (
         <BoardColumnEmptyState
           stage={stage.id}
+          isInitialPhase={isInitialPhase}
           kind={kind}
-          hasIntakeSource={intakeSource !== undefined}
+          hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={alreadyMaterialized}
           layout={layout}
+          actionSlot={emptyStateActions}
         />
       )}
       {feed && <IntakeFeedNotice source={intakeSource} feed={feed} />}

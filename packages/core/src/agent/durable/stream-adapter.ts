@@ -7,7 +7,7 @@ import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
-import { safeClose, safeEnqueue } from '../../stream/base';
+import { safeClose, safeEnqueue, safeError } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
 import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
@@ -25,7 +25,7 @@ import type {
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, shouldRejectStream } from './constants';
 import { currentRunFenceScope } from './run-fence-scope';
 import type {
   AgentStreamEvent,
@@ -272,6 +272,12 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * unsubscribe. Idempotent. Does not affect the run itself.
    */
   detach: () => void;
+  /**
+   * End only this reader's stream with `error` (rejecting or as an error
+   * chunk, like a published ERROR event) and unsubscribe. Nothing is published,
+   * so other readers of the run are unaffected.
+   */
+  fail: (error: Error) => Promise<void>;
   /** Wait for pubsub events already delivered to this adapter to finish processing. */
   waitForEventDelivery: () => Promise<void>;
   /** Promise that resolves when subscription is established */
@@ -438,9 +444,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       runDead = true;
     }
     // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
-    // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
-    // controller.error which MastraModelOutput swallows). Fire onError with
-    // `runDead` — observe() schedules registry + pubsub-topic cleanup only when
+    // mirroring the ordinary ERROR-event path (enqueue error chunk + safeClose).
+    // Fire onError with `runDead` — observe() schedules registry + pubsub-topic cleanup only when
     // isAlive confirmed the run is dead; a bare timeout just means this observer
     // stopped hearing from the run — then unsubscribe in finally.
     const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
@@ -474,6 +479,29 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
+
+  // Ends this reader's stream with an error, then fires onError once.
+  const deliverError = async (error: Error, delivery?: AgentErrorEventData['delivery']) => {
+    if (!controller || terminated) return;
+    if (delivery === 'reject') {
+      safeError(controller, error);
+    } else {
+      // Ordinary durable failures remain deferred error chunks so the stream
+      // closes normally even when no finish event follows.
+      safeEnqueue(controller, {
+        type: 'error',
+        payload: { error },
+      } as ChunkType<OUTPUT>);
+      safeClose(controller);
+    }
+    markTerminated();
+    try {
+      await onError?.({ error });
+    } catch (callbackError) {
+      logError(`[DurableAgentStream] onError callback error:`, callbackError);
+    }
+  };
+  let onChunkDelivery = Promise.resolve();
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -513,7 +541,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorCause = errPayload?.error ?? errPayload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
-          await onChunk?.(chunk as ChunkType<OUTPUT>);
+          const delivery = onChunkDelivery.then(() => onChunk?.(chunk as ChunkType<OUTPUT>));
+          onChunkDelivery = delivery.catch(() => {});
+          await delivery;
           break;
         }
 
@@ -533,6 +563,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
+          clearIdleTimer();
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
 
@@ -646,22 +679,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Enqueue an error chunk and close the stream normally (mirrors the
-          // regular agent's deferred-error-chunk pattern). Using
-          // controller.error() would error the base ReadableStream, which
-          // MastraModelOutput.consumeStream swallows — leaving fullStream
-          // hanging because no 'finish' event fires on the internal emitter.
-          safeEnqueue(controller, {
-            type: 'error',
-            payload: { error },
-          } as ChunkType<OUTPUT>);
-          safeClose(controller);
-          markTerminated();
-          try {
-            await onError?.({ error });
-          } catch (callbackError) {
-            logError(`[DurableAgentStream] onError callback error:`, callbackError);
-          }
+          await deliverError(error, data.delivery);
           break;
         }
 
@@ -760,7 +778,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const subscribedCallback: EventCallback = (event, ack, nack) => {
     const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
     inFlightDeliveries.add(delivery);
-    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    void delivery
+      .finally(() => {
+        inFlightDeliveries.delete(delivery);
+      })
+      .catch(() => {});
     return delivery;
   };
   const waitForEventDelivery = async () => {
@@ -876,10 +898,19 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     },
   });
 
+  // Fail only this reader, without publishing to the run's topic, which other
+  // executions and their followers share. Waits for events already delivered.
+  const fail = async (error: Error) => {
+    await waitForEventDelivery();
+    await deliverError(error, shouldRejectStream(error) ? 'reject' : undefined);
+    cleanup();
+  };
+
   return {
     output,
     cleanup,
     detach,
+    fail,
     waitForEventDelivery,
     ready,
   };
@@ -1015,7 +1046,13 @@ export async function emitFinishEvent(pubsub: PubSub, runId: string, data: Agent
 /**
  * Helper to emit an error event to pubsub
  */
-export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error, generation?: number): Promise<void> {
+export async function emitErrorEvent(
+  pubsub: PubSub,
+  runId: string,
+  error: Error,
+  generation?: number,
+  delivery?: AgentErrorEventData['delivery'],
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ERROR,
     runId,
@@ -1026,6 +1063,7 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
         message: error.message,
         // stack intentionally omitted — avoid leaking internals through external pubsub
       },
+      ...(delivery ? { delivery } : {}),
     },
     ...generationTag(runId, generation),
   });

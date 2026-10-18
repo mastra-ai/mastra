@@ -11,7 +11,7 @@ import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 import { stageToggle } from './boardLayoutQueries';
 
 describe('Factory board saved views', () => {
-  it('starts on All cards and offers layout controls for a custom view', async () => {
+  it('switches All cards between list and board and starts a new view with that layout', async () => {
     stubWorkBoard();
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
     renderWithProviders(<RouterProvider router={router} />);
@@ -19,15 +19,19 @@ describe('Factory board saved views', () => {
 
     const views = await screen.findByRole('group', { name: 'Board views' });
     expect(within(views).getByRole('button', { name: 'All cards' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'List' })).toBeChecked();
     expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     expect(screen.getByRole('combobox', { name: 'Add filter' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole('radio', { name: 'Board' }));
+    expect(await screen.findByRole('group', { name: 'Board columns' })).toBeInTheDocument();
+    expect(router.state.location.search).toBe('?layout=board');
+
     await user.click(screen.getByRole('button', { name: 'New view' }));
-    expect(await screen.findByRole('radio', { name: 'List' })).toBeChecked();
+    expect(await screen.findByRole('radio', { name: 'Board' })).toBeChecked();
   });
 
   it('saves filters, sort and layout as a view that survives a reload with its filter editor collapsed', async () => {

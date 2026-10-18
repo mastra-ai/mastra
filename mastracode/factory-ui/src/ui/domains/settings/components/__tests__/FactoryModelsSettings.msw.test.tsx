@@ -28,6 +28,6 @@ describe('FactoryModelsSettings', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials'),
     );
-    expect(screen.queryByRole('slider', { name: 'Thinking level' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
   });
 });

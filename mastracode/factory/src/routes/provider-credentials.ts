@@ -36,13 +36,14 @@ export { getCredentialProviderId as getAuthProviderId } from '@mastra/code-sdk/p
  * Providers that support a browser-driven OAuth sign-in flow, keyed by
  * *catalog* provider id (what the routes and settings UI use). All flows need
  * no inbound connection to the server: Anthropic uses paste-code PKCE, the
- * rest use RFC 8628-style device codes.
+ * rest use RFC 8628-style device codes. `subscription` names the plan the
+ * sign-in bills, as shown under a reply.
  */
-export const WEB_OAUTH_FLOW_KINDS: Readonly<Record<string, LoginSessionKind>> = {
-  anthropic: 'paste-code',
-  openai: 'device-code',
-  'github-copilot': 'device-code',
-  xai: 'device-code',
+export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKind; subscription: string }>> = {
+  anthropic: { flow: 'paste-code', subscription: 'Claude Pro/Max' },
+  openai: { flow: 'device-code', subscription: 'ChatGPT Plus/Pro' },
+  'github-copilot': { flow: 'device-code', subscription: 'GitHub Copilot' },
+  xai: { flow: 'device-code', subscription: 'SuperGrok/X Premium+' },
 };
 
 export type CredentialContext =

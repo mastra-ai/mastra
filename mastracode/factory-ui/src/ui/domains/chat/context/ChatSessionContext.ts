@@ -59,6 +59,8 @@ export interface ChatSessionContextApi {
    * /user/threads/*); its draft can pick a model before the session exists.
    */
   kind: 'factory' | 'user';
+  /** Who the stored session belongs to; absent where no session row backs the chat (supervisor, `?resourceId=` override). */
+  owner?: { id: string; name?: string };
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);
