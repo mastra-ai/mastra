@@ -977,6 +977,11 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
   __processToolResult?: boolean;
   /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
   __executeOutputStream?: ProcessorStepExecutor;
+  /**
+   * @internal End-of-stream counterpart of `__executeOutputStream`: releases the parts the
+   * chained processors still hold, each pushed through the processors after its holder.
+   */
+  __flushOutputStream?: (args: Parameters<ProcessorStepExecutor>[0]) => Promise<ChunkType[]>;
 };
 
 /**
