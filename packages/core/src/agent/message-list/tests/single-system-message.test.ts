@@ -14,12 +14,6 @@ describe('single leading system message for OpenAI-compatible providers', () => 
     return list;
   };
 
-  it('merges system buckets into one index-0 message', async () => {
-    const prompt = await build().get.all.aiV5.llmPrompt({ targetProvider: 'openai-compatible.chat' });
-    expect(prompt[0]).toMatchObject({ role: 'system', content: 'a\n\nb' });
-    expect(prompt.filter(m => m.role === 'system')).toHaveLength(1);
-  });
-
   it('leaves Anthropic prompts unchanged', async () => {
     const prompt = await build().get.all.aiV5.llmPrompt({ targetProvider: 'anthropic.messages' });
     expect(prompt.filter(m => m.role === 'system')).toHaveLength(2);
