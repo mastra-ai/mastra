@@ -113,6 +113,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     const text = await output.text;
     expect(text).toContain('finished');
   });
+
   it('lets per-execution beforeToolCall override the agent hook and short-circuit execute', async () => {
     const events: string[] = [];
 
@@ -159,5 +160,50 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     expect(events).toEqual(['run-hook']);
     // The short-circuited output is what the model sees as the tool result.
     expect(JSON.stringify(requests[1])).toContain('mocked');
+  });
+
+  it('lets per-execution afterToolCall override the agent hook and receive the tool output', async () => {
+    const events: string[] = [];
+
+    const tracedTool = createTool({
+      id: 'traced_tool',
+      description: 'A tool observed by afterToolCall hooks.',
+      inputSchema: z.object({ query: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+      execute: async ({ query }) => {
+        events.push('execute');
+        return { answer: `real:${query}` };
+      },
+    });
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Call the traced tool.',
+      tools: { traced_tool: tracedTool },
+      hooks: {
+        afterToolCall: () => {
+          events.push('agent-hook');
+        },
+      },
+      toolHooks: {
+        afterToolCall: ({ output: toolOutput }) => {
+          events.push(`run-hook:${(toolOutput as { answer: string }).answer}`);
+        },
+      },
+      stopWhen: stepCountIs(5),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_traced', name: 'traced_tool', arguments: { query: 'hi' } }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_traced', hasToolResult: true }, { content: 'Got real:hi.' });
+      },
+    });
+
+    expect(await output.text).toContain('real:hi');
+    expect(requests).toHaveLength(2);
+    // The tool executes, then only the run-level afterToolCall sees its output.
+    expect(events).toEqual(['execute', 'run-hook:real:hi']);
   });
 });
