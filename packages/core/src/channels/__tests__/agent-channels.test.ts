@@ -1941,6 +1941,31 @@ describe('AgentChannels', () => {
       );
     });
 
+    it('passes the per-message requestContext to both resolvers', async () => {
+      const resolveResourceId = vi.fn(async ({ requestContext }: any) => `tenant:${requestContext.get('tenantId')}`);
+      const resolveThreadId = vi.fn(async ({ requestContext }: any) => `thread:${requestContext.get('tenantId')}`);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      const requestContext = new RequestContext();
+      requestContext.set('tenantId', 't-1');
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, requestContext);
+
+      expect(resolveResourceId.mock.calls[0]![0].requestContext).toBe(requestContext);
+      expect(resolveThreadId.mock.calls[0]![0].requestContext).toBe(requestContext);
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const stored = await memoryStore.getThreadById({ threadId: 'thread:t-1' });
+      expect(stored).toMatchObject({ id: 'thread:t-1', resourceId: 'tenant:t-1' });
+    });
+
     it('returning defaultThreadId keeps the built-in random id', async () => {
       const resolveThreadId = vi.fn(async ({ defaultThreadId }: any) => defaultThreadId);
       const channels = new AgentChannels({
