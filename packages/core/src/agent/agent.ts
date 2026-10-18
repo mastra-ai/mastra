@@ -110,6 +110,7 @@ import { WorkspaceInstructionsProcessor } from '../processors/processors/workspa
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from '../processors/stability-defaults';
+import { isTrailingAssistantGuardContinuation } from '../processors/trailing-assistant-guard';
 import {
   RequestContext,
   MASTRA_INHERITED_MEMORY_KEY,
@@ -4355,12 +4356,14 @@ export class Agent<
    * Restrict UI messages to those that belong to the given thread. Memory can
    * load messages from other threads of the same resource into the message list
    * (resource-scoped recall); those must not influence the generated title.
+   * The TrailingAssistantGuard continuation is run context, not user input, so
+   * it is excluded too.
    */
   filterUiMessagesByThread<T extends { id: string }>(messageList: MessageList, threadId: string, uiMessages: T[]): T[] {
     const threadMessageIds = new Set(
       messageList.get.all
         .db()
-        .filter(m => !m.threadId || m.threadId === threadId)
+        .filter(m => (!m.threadId || m.threadId === threadId) && !isTrailingAssistantGuardContinuation(m))
         .map(m => m.id),
     );
     return uiMessages.filter(m => threadMessageIds.has(m.id));
