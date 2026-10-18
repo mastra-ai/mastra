@@ -446,7 +446,7 @@ describe('SystemPromptScrubber', () => {
     });
 
     it('should not emit a stream part when strict model detection fails', async () => {
-      processor = new SystemPromptScrubber({ model: mockModel, errorStrategy: 'strict', bufferSize: 0 });
+      processor = new SystemPromptScrubber({ model: mockModel, errorStrategy: 'strict' });
       vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('provider failure'));
       const tripwire = new TripWire('strict system prompt failure');
       const abort = vi.fn(() => {

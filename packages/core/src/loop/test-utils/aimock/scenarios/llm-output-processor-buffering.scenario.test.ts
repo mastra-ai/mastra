@@ -13,9 +13,9 @@ import { SCENARIO_MODEL_ID } from '../types';
  * asks its own model whether the streamed text is safe.
  *
  * Bug #13644: both guardrails asked their model once per streamed text-delta, so a 200-token reply
- * made ~200 sequential guardrail calls and streamed at a few characters per second. They now buffer
- * streamed text and check it once per sentence (or every `bufferSize` characters); `bufferSize: 0`
- * restores the old per-chunk behaviour.
+ * made ~200 sequential guardrail calls and streamed at a few characters per second. With
+ * `bufferSize` set (e.g. 200) they buffer streamed text and check it once per sentence (or every
+ * `bufferSize` characters). Buffering is opt-in: the default stays per-chunk until v2.
  */
 
 const AGENT_INSTRUCTIONS = 'You are a helpful support agent.';
@@ -75,42 +75,45 @@ describeForAllEngines('Support agent with LLM-backed output guardrails (#13644)'
     [
       'SystemPromptScrubber',
       SCRUBBER_PROMPT,
-      (llm: LLMock) => new SystemPromptScrubber({ model: guardrailModel(llm) }),
+      (llm: LLMock) => new SystemPromptScrubber({ model: guardrailModel(llm), bufferSize: 200 }),
     ],
-    ['ModerationProcessor', MODERATOR_PROMPT, (llm: LLMock) => new ModerationProcessor({ model: guardrailModel(llm) })],
-  ])('%s checks the streamed reply once per sentence, not once per chunk', async (name, systemPrompt, create) => {
-    const llm = getMock();
-    const { output, requests } = await runLoopScenario({
-      engine,
-      llm,
-      prompt: 'Tell me a short story.',
-      instructions: AGENT_INSTRUCTIONS,
-      outputProcessors: [create(llm)],
-      fixtures: llm => {
-        scriptCleanGuardrails(llm);
-        scriptReply(llm);
-      },
-    });
+    [
+      'ModerationProcessor',
+      MODERATOR_PROMPT,
+      (llm: LLMock) => new ModerationProcessor({ model: guardrailModel(llm), bufferSize: 200 }),
+    ],
+  ])(
+    '%s with bufferSize: 200 checks the streamed reply once per sentence, not once per chunk',
+    async (name, systemPrompt, create) => {
+      const llm = getMock();
+      const { output, requests } = await runLoopScenario({
+        engine,
+        llm,
+        prompt: 'Tell me a short story.',
+        instructions: AGENT_INSTRUCTIONS,
+        outputProcessors: [create(llm)],
+        fixtures: llm => {
+          scriptCleanGuardrails(llm);
+          scriptReply(llm);
+        },
+      });
 
-    expect(await output.text).toBe(REPLY);
-    expect(
-      guardrailInputs(requests, systemPrompt).map(text => text.trim()),
-      `${name} must call its model once per sentence plus once for the final message, not once per streamed chunk (#13644)`,
-    ).toEqual([FIRST_SENTENCE.trim(), SECOND_SENTENCE.trim(), REPLY]);
-  });
+      expect(await output.text).toBe(REPLY);
+      expect(
+        guardrailInputs(requests, systemPrompt).map(text => text.trim()),
+        `${name} must call its model once per sentence plus once for the final message, not once per streamed chunk (#13644)`,
+      ).toEqual([FIRST_SENTENCE.trim(), SECOND_SENTENCE.trim(), REPLY]);
+    },
+  );
 
   it.each([
     [
       'SystemPromptScrubber',
       SCRUBBER_PROMPT,
-      (llm: LLMock) => new SystemPromptScrubber({ model: guardrailModel(llm), bufferSize: 0 }),
+      (llm: LLMock) => new SystemPromptScrubber({ model: guardrailModel(llm) }),
     ],
-    [
-      'ModerationProcessor',
-      MODERATOR_PROMPT,
-      (llm: LLMock) => new ModerationProcessor({ model: guardrailModel(llm), bufferSize: 0 }),
-    ],
-  ])('%s with bufferSize: 0 still checks every streamed chunk', async (name, systemPrompt, create) => {
+    ['ModerationProcessor', MODERATOR_PROMPT, (llm: LLMock) => new ModerationProcessor({ model: guardrailModel(llm) })],
+  ])('%s by default still checks every streamed chunk (buffering is opt-in)', async (name, systemPrompt, create) => {
     const llm = getMock();
     const { output, requests, chunks } = await runLoopScenario({
       engine,
@@ -130,11 +133,11 @@ describeForAllEngines('Support agent with LLM-backed output guardrails (#13644)'
     // The call count is the behaviour under test: one call per streamed chunk plus the final message.
     expect(
       guardrailInputs(requests, systemPrompt),
-      `${name} with bufferSize: 0 must keep its per-chunk checks`,
+      `${name} must keep per-chunk checks unless bufferSize is set; buffering is opt-in until v2`,
     ).toHaveLength(textDeltaCount(chunks) + 1);
   });
 
-  it('SystemPromptScrubber hides leaked instructions even when they arrive split across chunks', async () => {
+  it('SystemPromptScrubber with bufferSize: 200 hides leaked instructions even when they arrive split across chunks', async () => {
     const leak = 'lazy dog';
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const llm = getMock();
@@ -143,7 +146,9 @@ describeForAllEngines('Support agent with LLM-backed output guardrails (#13644)'
       llm,
       prompt: 'Tell me a short story.',
       instructions: AGENT_INSTRUCTIONS,
-      outputProcessors: [new SystemPromptScrubber({ model: guardrailModel(llm), redactionMethod: 'placeholder' })],
+      outputProcessors: [
+        new SystemPromptScrubber({ model: guardrailModel(llm), redactionMethod: 'placeholder', bufferSize: 200 }),
+      ],
       collectChunks: true,
       fixtures: llm => {
         llm.on({ endpoint: 'chat', systemMessage: SCRUBBER_PROMPT }, req => {
@@ -174,7 +179,7 @@ describe('SystemPromptScrubber streaming without a stream writer', () => {
   it('emits every part when text is followed by text-end and finish', async () => {
     const llm = getMock();
     scriptCleanGuardrails(llm);
-    const scrubber = new SystemPromptScrubber({ model: guardrailModel(llm) });
+    const scrubber = new SystemPromptScrubber({ model: guardrailModel(llm), bufferSize: 200 });
     const state: Record<string, unknown> = {};
     const parts = [
       { type: 'text-delta', payload: { id: 'text-1', text: 'Hello' }, runId: 'run-1', from: 'AGENT' },

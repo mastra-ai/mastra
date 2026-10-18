@@ -109,9 +109,9 @@ const processor = new ModerationProcessor({
             name: 'bufferSize',
             type: 'number',
             description:
-              'Number of characters to buffer before moderating streamed text. Buffered text is handled in one LLM call when it ends a sentence, reaches this size, or a non-text part arrives. Set to `0` to restore the previous behavior of one LLM call per text chunk.',
+              'Opt-in buffering for streamed text. When greater than `0`, streamed text is held back and moderated in one LLM call when it ends a sentence, reaches this many characters, or a non-text part arrives. This makes far fewer LLM calls and catches content split across chunks. Recommended for production streaming, for example `bufferSize: 200`. With `0`, every text chunk gets its own LLM call.',
             isOptional: true,
-            default: '200',
+            default: '0',
           },
           {
             name: 'providerOptions',
@@ -187,9 +187,9 @@ export const agent = new Agent({
 
 ### Output processing with batching
 
-`ModerationProcessor` buffers streamed text by default, so it makes one moderation call per sentence instead of one per chunk. The buffer flushes at a sentence boundary, when it reaches `bufferSize` characters, or before a non-text part. Use `bufferSize` to control how much text each moderation call sees.
+For production streaming, set `bufferSize` (for example `bufferSize: 200`) so `ModerationProcessor` makes one moderation call per sentence instead of one per chunk. Buffering also catches content that is split across chunks. Text then reaches the client in sentence-sized pieces.
 
-`BatchPartsProcessor` is optional. Add it before `ModerationProcessor` when you also want to coalesce stream parts.
+When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
 
 ```typescript title="src/mastra/agents/output-moderated-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -201,14 +201,15 @@ export const agent = new Agent({
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [
-    // Optional: coalesce stream parts before moderation
+    // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
       batchSize: 10,
     }),
-    // Moderate the buffered text
+    // Then apply moderation on batched content
     new ModerationProcessor({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',
       strategy: 'filter',
+      chunkWindow: 1,
     }),
   ],
 })
