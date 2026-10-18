@@ -61,6 +61,24 @@ describe('Memory', () => {
           }),
       ).toThrow("workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'");
     });
+
+    it('passes the observation failure policy to the observational-memory engine', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            observation: { maxRetries: 1, failurePolicy: 'continue' },
+            reflection: { maxRetries: 0, failurePolicy: 'continue' },
+          },
+        },
+      });
+
+      const om = await memory.omEngine;
+
+      expect(om?.config.observation).toMatchObject({ maxRetries: 1, failurePolicy: 'continue' });
+      expect(om?.config.reflection).toMatchObject({ maxRetries: 0, failurePolicy: 'continue' });
+    });
   });
 
   describe('settled', () => {
@@ -2703,6 +2721,26 @@ describe('Memory', () => {
       expect(result).toHaveProperty('total', 5);
       expect(result).toHaveProperty('hasMore', false);
     });
+
+    it('subscribeToThread withInitialHistory emits the newest page oldest first (#25810)', async () => {
+      const agent = new Agent({
+        id: 'history-order',
+        name: 'History order',
+        instructions: 'test',
+        model: new MockLanguageModelV2(),
+        memory,
+      });
+      const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: { perPage: 3 } });
+      const { value: history } = await subscription.stream[Symbol.asyncIterator]().next();
+      subscription.unsubscribe();
+
+      expect(history).toMatchObject({ type: 'thread-history', payload: { hasMore: true } });
+      expect(history.payload.messages.map((m: MastraDBMessage) => m.id)).toEqual([
+        'msg-page-3',
+        'msg-page-4',
+        'msg-page-5',
+      ]);
+    });
   });
 
   describe('recall signal exclusions', () => {
@@ -3437,6 +3475,17 @@ describe('Memory', () => {
         });
       });
     });
+  });
+
+  it('normalizes the observationalMemory boolean shorthand to automatic model selection', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: true },
+    });
+
+    const om = await memory.omEngine;
+    expect((om as any).observationConfig.model).toBe('auto');
+    expect((om as any).reflectionConfig.model).toBe('auto');
   });
 
   describe('deleteThread observational-memory coordination', () => {

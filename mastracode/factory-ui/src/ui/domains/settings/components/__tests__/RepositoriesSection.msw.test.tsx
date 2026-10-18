@@ -50,10 +50,9 @@ describe('Repositories settings', () => {
 
     renderRepositoriesSettings();
 
-    expect(await screen.findByRole('link', { name: 'Reconnect GitLab' })).toHaveAttribute(
-      'href',
-      'https://projects.mastra.ai',
-    );
+    const reconnect = await screen.findByRole('button', { name: 'Reconnect GitLab' });
+    expect(reconnect).toBeInTheDocument();
+    expect(reconnect.tagName).toBe('BUTTON');
   });
 
   it('shows GitLab repository details without unrelated GitHub settings for a GitLab-only Factory', async () => {
@@ -121,9 +120,6 @@ describe('Repositories settings', () => {
           ],
         });
       }),
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-1/settings`, () =>
-        HttpResponse.json({ setupCommand: null, teardownCommand: null }),
-      ),
     );
 
     renderRepositoriesSettings();
@@ -134,10 +130,17 @@ describe('Repositories settings', () => {
     expect(await screen.findByText(/factory-gitlab-control/)).toBeInTheDocument();
     expect(screen.queryByText('GitHub is disabled on the server.')).not.toBeInTheDocument();
     expect(screen.queryByText('GitHub CLI tokens')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage GitLab connection' })).toHaveAttribute(
+    expect(screen.queryByRole('heading', { name: 'Sandbox' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Setup command for/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Environment' })).toHaveAttribute(
       'href',
-      'https://projects.mastra.ai',
+      `/factories/${FACTORY_ID}/settings/environment`,
     );
+    const connectAnother = screen.getByRole('button', { name: 'Connect another GitLab account' });
+    expect(connectAnother).toBeInTheDocument();
+    expect(connectAnother.tagName).toBe('BUTTON');
+    const manage = screen.getByRole('link', { name: 'Manage GitLab connection' });
+    expect(manage).toHaveAttribute('href', 'https://projects.mastra.ai');
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
 });

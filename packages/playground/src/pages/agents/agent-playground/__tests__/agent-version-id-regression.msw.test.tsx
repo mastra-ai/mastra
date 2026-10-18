@@ -16,8 +16,6 @@ import {
   LATEST_DRAFT_VERSION_ID,
   PUBLISHED_VERSION_ID,
 } from './fixtures/agent-version-id-regression';
-import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -32,13 +30,9 @@ const renderAgentPlayground = () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/editor`]}>
           <TooltipProvider>
-            <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>
-                <Routes>
-                  <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
-                </Routes>
-              </SchemaRequestContextProvider>
-            </TracingSettingsProvider>
+            <Routes>
+              <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
+            </Routes>
           </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -84,7 +78,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       server.use(
         http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
           const body = (await request.json()) as {
-            ifIdle?: { streamOptions?: { requestContext?: Record<string, unknown> } };
+            ifIdle?: { streamOptions?: { requestContext?: Record<string, any> } };
           };
           sentRequestContexts.push(body.ifIdle?.streamOptions?.requestContext);
           return HttpResponse.json({ accepted: true, runId: 'run-1' });
@@ -115,6 +109,40 @@ describe('AgentPlayground — test chat agent version id', () => {
       expect(sentRequestContexts[0]?.agentVersionId).toBe(LATEST_DRAFT_VERSION_ID);
       expect(sentRequestContexts[0]?.agentVersionId).not.toBe(PUBLISHED_VERSION_ID);
       expect(sentRequestContexts[0]?.agentVersionId).not.toBeUndefined();
+    });
+  });
+
+  describe('when the agent has a saved local request context', () => {
+    it('sends the local request context in the test chat stream options', async () => {
+      window.localStorage.setItem(`mastra-request-context:agent:${AGENT_ID}`, JSON.stringify({ tenantId: 'acme' }));
+      registerBaselineHandlers();
+
+      const sentRequestContexts: Array<Record<string, unknown> | undefined> = [];
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
+          const body = (await request.json()) as {
+            ifIdle?: { streamOptions?: { requestContext?: Record<string, any> } };
+          };
+          sentRequestContexts.push(body.ifIdle?.streamOptions?.requestContext);
+          return HttpResponse.json({ accepted: true, runId: 'run-1' });
+        }),
+      );
+
+      await act(async () => {
+        renderAgentPlayground();
+      });
+
+      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      await act(async () => {
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+      });
+      const sendButton = await screen.findByRole('button', { name: /send/i });
+      await act(async () => {
+        fireEvent.click(sendButton);
+      });
+
+      await waitFor(() => expect(sentRequestContexts.length).toBeGreaterThan(0));
+      expect(sentRequestContexts[0]?.tenantId).toBe('acme');
     });
   });
 });

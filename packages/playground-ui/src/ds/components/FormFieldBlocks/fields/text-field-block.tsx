@@ -19,6 +19,7 @@ export type TextFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labelC
     size?: InputProps['size'];
   };
 
+/** @deprecated Use `Field` + `FieldLabel` + `Input`. */
 export function TextFieldBlock({
   name,
   value,

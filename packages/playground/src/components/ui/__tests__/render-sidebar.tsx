@@ -1,7 +1,9 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -24,8 +26,6 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !==
 
 import { AppSidebar } from '../app-sidebar';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-import type { AuthCapabilities } from '@/domains/auth/types';
-import { LinkComponentProvider } from '@/lib/framework';
 
 export const BASE_URL = 'http://localhost:4111';
 
@@ -80,9 +80,9 @@ export function renderSidebar(initialPath = '/agents') {
           <LinkComponentProvider Link={'a' as never} navigate={() => {}} paths={noopPaths}>
             <MemoryRouter initialEntries={[initialPath]}>
               <TooltipProvider>
-                <SidebarNew.Provider LinkComponent={'a' as never}>
+                <Sidebar.Provider LinkComponent={'a' as never}>
                   <AppSidebar />
-                </SidebarNew.Provider>
+                </Sidebar.Provider>
               </TooltipProvider>
             </MemoryRouter>
           </LinkComponentProvider>

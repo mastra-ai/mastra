@@ -43,6 +43,10 @@ function createAgentMock(activeRunId: () => string | null) {
       accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
       signal: message,
     })),
+    queueSignal: vi.fn((signal: any, _options?: any) => ({
+      accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
+      signal,
+    })),
   };
 }
 
@@ -172,7 +176,7 @@ describe('AgentController signal messages', () => {
       events.push(event);
     });
     let approvalSettled = false;
-    void session.approval.arm({ toolName: 'request_access' }).then(() => {
+    void session.approval.arm({ toolName: 'request_access', toolCallId: 'call-1' }).then(() => {
       approvalSettled = true;
     });
 
@@ -412,7 +416,7 @@ describe('AgentController signal messages', () => {
     session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
-    const approval = session.approval.arm({ toolName: 'request_access' });
+    const approval = session.approval.arm({ toolName: 'request_access', toolCallId: 'call-1' });
 
     const result = session.sendSignal({ content: 'actually do this first' });
 
@@ -426,6 +430,113 @@ describe('AgentController signal messages', () => {
     });
     await expect(result.accepted).resolves.toEqual({ accepted: true, runId: 'run-1' });
     expect(agent.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('declines only the current thread gate when a user signal interrupts the run', async () => {
+    let activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-approval-cross-thread-interrupt',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    const subscription = createSubscription(() => activeRunId);
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+
+    const current = session.approval.arm({ toolName: 'request_access', toolCallId: 'call-current', threadId });
+    let backgroundSettled = false;
+    void session.approval
+      .arm({ toolName: 'request_access', toolCallId: 'call-background', threadId: 'thread-background' })
+      .then(() => {
+        backgroundSettled = true;
+      });
+
+    const result = session.sendSignal({ content: 'actually do this first' });
+
+    await expect(current).resolves.toEqual(expect.objectContaining({ decision: 'decline' }));
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: 'run-1' });
+
+    // The detached thread's gate is not this thread's authority to revoke.
+    await Promise.resolve();
+    expect(backgroundSettled).toBe(false);
+    expect(session.approval.isArmed({ toolCallId: 'call-background' })).toBe(true);
+  });
+
+  it('aborts only the current thread gate, leaving a detached thread approval parked', async () => {
+    let activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-approval-cross-thread-abort',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    const subscription = createSubscription(() => activeRunId);
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+
+    const current = session.approval.arm({ toolName: 'request_access', toolCallId: 'call-current', threadId });
+    void session.approval.arm({
+      toolName: 'request_access',
+      toolCallId: 'call-background',
+      threadId: 'thread-background',
+    });
+
+    session.abort();
+
+    await expect(current).resolves.toEqual(expect.objectContaining({ decision: 'decline' }));
+    expect(session.approval.isArmed({ threadId })).toBe(false);
+    expect(session.approval.isArmed({ toolCallId: 'call-background' })).toBe(true);
+  });
+
+  it('honors a response to a detached thread gate while this thread is aborting', async () => {
+    let activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-approval-cross-thread-abort-response',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    const subscription = createSubscription(() => activeRunId);
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+
+    void session.approval.arm({ toolName: 'request_access', toolCallId: 'call-current', threadId });
+    const background = session.approval.arm({
+      toolName: 'request_access',
+      toolCallId: 'call-background',
+      threadId: 'thread-background',
+    });
+
+    session.abort();
+    expect(session.run.isAbortRequested()).toBe(true);
+    expect(session.approval.isArmed({ toolCallId: 'call-background' })).toBe(true);
+
+    // The abort flag is session-wide, but an abort only tears down this thread's
+    // gates. Swallowing a response aimed at another thread's gate would strand
+    // that gate forever.
+    session.respondToToolApproval({ decision: 'approve', toolCallId: 'call-background' });
+
+    await expect(background).resolves.toEqual(expect.objectContaining({ decision: 'approve' }));
+    expect(session.approval.isArmed({ toolCallId: 'call-background' })).toBe(false);
   });
 
   it('forwards untilIdle into idle-run stream options', async () => {
@@ -493,7 +604,7 @@ describe('AgentController signal messages', () => {
     session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
-    void session.approval.arm({ toolName: 'request_access' });
+    void session.approval.arm({ toolName: 'request_access', toolCallId: 'call-1' });
 
     session.abort();
     expect(session.run.isRunning()).toBe(true);
@@ -604,6 +715,113 @@ describe('AgentController signal messages', () => {
     const queuedRequestContext = (agent.queueMessage.mock.calls[0]?.[1] as any).ifIdle.streamOptions.requestContext;
     expect(queuedRequestContext).not.toBe(requestContext);
     expect(requestContext.get('controller')).toBeUndefined();
+  });
+
+  it('delegates queued typed signals with request context to Agent.queueSignal', async () => {
+    const activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-queued-signal',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({
+      subscription: createSubscription(() => activeRunId) as any,
+      key: `agent-1:resource-1:${threadId}`,
+    });
+    const requestContext = new RequestContext();
+    const signal = {
+      type: 'reactive' as const,
+      tagName: 'skill',
+      attributes: { name: 'factory-triage' },
+      contents: 'Triage the card.',
+    };
+
+    await session.queueSignal(signal, { requestContext });
+
+    expect(agent.queueSignal).toHaveBeenCalledWith(
+      signal,
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId,
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({
+            requestContext: expect.any(RequestContext),
+            abortSignal: expect.any(AbortSignal),
+          }),
+        }),
+      }),
+    );
+    const queuedAbortSignal = (agent.queueSignal.mock.calls[0]?.[1] as any).ifIdle.streamOptions.abortSignal;
+    expect(queuedAbortSignal).not.toBe(session.run.getAbortSignal?.());
+    expect(agent.queueMessage).not.toHaveBeenCalled();
+    expect(agent.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('queues active follow-ups with file attachments as message parts', async () => {
+    const activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-follow-up-files',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({
+      subscription: createSubscription(() => activeRunId) as any,
+      key: `agent-1:resource-1:${threadId}`,
+    });
+
+    await session.followUp({
+      content: 'then review this',
+      files: [
+        { data: 'hello', mediaType: 'text/plain', filename: 'notes.txt' },
+        { data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' },
+      ],
+    });
+
+    expect(agent.queueMessage).toHaveBeenCalledTimes(1);
+    expect(agent.queueMessage.mock.calls[0]![0].contents).toEqual([
+      { type: 'text', text: 'then review this' },
+      { type: 'text', text: '[File: notes.txt]\n```\nhello\n```' },
+      { type: 'file', data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' },
+    ]);
+    expect(agent.queueMessage.mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ resourceId: 'resource-1', threadId }),
+    );
+  });
+
+  it('sends idle follow-ups and steering input with their file attachments', async () => {
+    const agent = createAgentMock(() => null);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-idle-files',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const sendMessage = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+    const requestContext = new RequestContext();
+
+    await session.followUp({ content: 'look at this', files, requestContext });
+    await session.steer({ content: 'use this instead', files, requestContext });
+
+    expect(sendMessage).toHaveBeenNthCalledWith(1, { content: 'look at this', files, requestContext });
+    expect(sendMessage).toHaveBeenNthCalledWith(2, { content: 'use this instead', files, requestContext });
+    expect(agent.queueMessage).not.toHaveBeenCalled();
   });
 
   it('propagates an idle queued-message submission failure', async () => {

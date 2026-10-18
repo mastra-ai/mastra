@@ -361,6 +361,20 @@ describe('waitForSuspendedSnapshot', () => {
     expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a claimed run whose row disappears instead of waiting out the timeout', async () => {
+    vi.useFakeTimers();
+    const workflowsStore = storeReturning(['pending', 'running', null]);
+    const onClaimedRunFinished = vi.fn();
+
+    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1', { onClaimedRunFinished });
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expect(snapshotPromise).resolves.toBeNull();
+    expect(onClaimedRunFinished).toHaveBeenCalledOnce();
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
   it('uses a caller-requested grace period for a temporarily missing snapshot', async () => {
     vi.useFakeTimers();
     const workflowsStore = storeReturning([null, null, 'suspended']);

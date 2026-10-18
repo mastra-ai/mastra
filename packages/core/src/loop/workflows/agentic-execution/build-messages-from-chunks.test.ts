@@ -386,6 +386,86 @@ describe('buildMessagesFromChunks', () => {
     expect((result[0] as any).providerMetadata).toBeUndefined();
   });
 
+  it('should keep providerExecuted from the tool-call chunk when the result chunk omits it (Google server tool shape)', () => {
+    const providerMetadata = {
+      google: { serverToolCallId: 'call_962734', serverToolType: 'GOOGLE_SEARCH_WEB' },
+    };
+    const result = parts(
+      [
+        {
+          type: 'tool-call',
+          payload: {
+            toolCallId: 'call_962734',
+            toolName: 'server:GOOGLE_SEARCH_WEB',
+            args: { queries: ['test'] },
+            providerExecuted: true,
+            providerMetadata,
+          },
+        },
+        {
+          type: 'tool-result',
+          payload: {
+            toolCallId: 'call_962734',
+            toolName: 'server:GOOGLE_SEARCH_WEB',
+            result: { searchResults: [] },
+            providerMetadata,
+          },
+        },
+      ],
+      { google_search: { type: 'provider-defined', id: 'google.google_search', name: 'google_search' } },
+    );
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).toolInvocation.state).toBe('result');
+    expect((result[0] as any).providerExecuted).toBe(true);
+  });
+
+  describe('provider-executed tool-result with isError (#26526)', () => {
+    const toolSearchError = { type: 'tool_search_tool_result_error', errorCode: 'invalid_tool_input' };
+    const chunks = (isError?: boolean): CollectedChunk[] => [
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'srvtoolu_1',
+          toolName: 'tool_search_tool_regex',
+          args: { pattern: '(' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'srvtoolu_1',
+          toolName: 'tool_search_tool_regex',
+          result: toolSearchError,
+          providerExecuted: true,
+          ...(isError === undefined ? {} : { isError }),
+        },
+      },
+    ];
+
+    it('should merge into an output-error part keeping the structured error', () => {
+      const result = parts(chunks(true));
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'output-error',
+          toolCallId: 'srvtoolu_1',
+          toolName: 'tool_search_tool_regex',
+          result: toolSearchError,
+          errorText: JSON.stringify(toolSearchError),
+        },
+        providerExecuted: true,
+      });
+    });
+
+    it('should keep state result when isError is not set', () => {
+      const result = parts(chunks());
+      expect((result[0] as any).toolInvocation.state).toBe('result');
+      expect((result[0] as any).toolInvocation.errorText).toBeUndefined();
+    });
+  });
+
   it('should merge tool-call + tool-error into a single output-error part', () => {
     const result = parts([
       {
@@ -616,6 +696,32 @@ describe('buildMessagesFromChunks', () => {
       type: 'source',
       source: { sourceType: 'url', url: 'https://example.com', title: 'Example' },
     });
+  });
+
+  it('should produce a source-document part for a document source', () => {
+    const result = parts([
+      {
+        type: 'source',
+        payload: {
+          id: 'doc-1',
+          sourceType: 'document',
+          title: 'Q3 report',
+          mimeType: 'application/pdf',
+          filename: 'q3.pdf',
+          providerMetadata: { anthropic: { citedText: 'Revenue grew' } },
+        },
+      },
+    ]);
+    expect(result).toEqual([
+      {
+        type: 'source-document',
+        sourceId: 'doc-1',
+        mediaType: 'application/pdf',
+        title: 'Q3 report',
+        filename: 'q3.pdf',
+        providerMetadata: { anthropic: { citedText: 'Revenue grew' } },
+      },
+    ]);
   });
 
   it('should produce a file part', () => {

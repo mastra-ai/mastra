@@ -1,24 +1,24 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
-import { useLinkComponent } from '@/lib/framework';
 
-const sectionAccentClasses = {
-  amber: '[--section-accent:var(--badge-yellow-fg)]',
-  blue: '[--section-accent:var(--badge-blue-fg)]',
-  cyan: '[--section-accent:var(--badge-cyan-fg)]',
-  green: '[--section-accent:var(--badge-green-fg)]',
-  orange: '[--section-accent:var(--badge-orange-fg)]',
-  pink: '[--section-accent:var(--badge-pink-fg)]',
-  purple: '[--section-accent:var(--badge-purple-fg)]',
+const sectionAccentIcon = {
+  amber: 'text-badge-amber-indicator',
+  blue: 'text-badge-blue-indicator',
+  cyan: 'text-badge-cyan-indicator',
+  green: 'text-badge-green-indicator',
+  orange: 'text-badge-orange-indicator',
+  pink: 'text-badge-pink-indicator',
+  purple: 'text-badge-purple-indicator',
 };
 
 export interface AgentMetadataSectionProps {
   title: string;
   count?: number;
-  accent: keyof typeof sectionAccentClasses;
+  accent: keyof typeof sectionAccentIcon;
   icon?: React.ReactNode;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -40,29 +40,26 @@ export const AgentMetadataSection = ({
 }: AgentMetadataSectionProps) => {
   const { Link } = useLinkComponent();
   return (
-    <section
-      className={cn(
-        'group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 p-4',
-        sectionAccentClasses[accent],
-      )}
-    >
+    <section className="group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 p-4">
       <header className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">
         <div className="flex min-w-0 items-center gap-2">
-          <Txt as="h3" variant="label" tone="ink" className="flex min-w-0 items-center gap-2">
+          <h3 className="flex min-w-0 items-center gap-2 text-foreground">
             {icon && (
-              <Icon aria-hidden="true" className="shrink-0 text-(--section-accent)">
+              <Icon aria-hidden="true" className={cn('shrink-0', sectionAccentIcon[accent])}>
                 {icon}
               </Icon>
             )}
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="text-(--section-accent)">{title}</span>
+              <Txt as="span" variant="label">
+                {title}
+              </Txt>
               {count !== undefined && count > 0 && (
                 <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
                   {count}
                 </Txt>
               )}
             </span>
-          </Txt>
+          </h3>
           {hint && (
             <TooltipProvider>
               <Tooltip>

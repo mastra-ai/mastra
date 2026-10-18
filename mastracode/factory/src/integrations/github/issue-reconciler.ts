@@ -4,13 +4,20 @@ import {
   githubRulesOptions,
   reconcilableIssueNumber,
   reconciledIssueClosedEvent,
+  reconciledIssueOpenedEvent,
   reconciledIssueRelabeledEvent,
   RECONCILE_ERROR_SAMPLE_LIMIT,
   sameStrings,
   sweepTrustLookup,
   GithubRules,
 } from './rules.js';
-import type { GithubIssueFetcher, GithubRulesIntegration, GithubRulesOptions, ReconcileRepository } from './rules.js';
+import type {
+  GithubIssueFetcher,
+  GithubOpenIssueLister,
+  GithubRulesIntegration,
+  GithubRulesOptions,
+  ReconcileRepository,
+} from './rules.js';
 
 export interface GithubIssueReconcileSummary {
   /** Repositories included in the sweep. */
@@ -23,6 +30,8 @@ export interface GithubIssueReconcileSummary {
   closed: number;
   /** Open issues whose changed labels were replayed through the rules ingress. */
   relabeled: number;
+  /** Open issues with no Work card replayed as `opened` through the rules ingress. */
+  created: number;
   /** Errors encountered during the sweep. */
   failed: number;
   /** Error samples with context. */
@@ -34,6 +43,7 @@ export type GithubIssueReconciler = (repositories: ReconcileRepository[]) => Pro
 export function createGithubIssueReconciler(
   options: GithubRulesOptions,
   fetchIssue: GithubIssueFetcher,
+  listOpenIssues?: GithubOpenIssueLister,
 ): GithubIssueReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
@@ -43,6 +53,7 @@ export function createGithubIssueReconciler(
       updated: 0,
       closed: 0,
       relabeled: 0,
+      created: 0,
       failed: 0,
       errors: [],
     };
@@ -70,6 +81,9 @@ export function createGithubIssueReconciler(
 
         // Collect issue cards: number -> items (skip terminal stages)
         const itemsByNumber = new Map<number, import('../../storage/domains/work-items/base.js').WorkItemRow[]>();
+        // Every issue with any card, terminal included: a finished card must
+        // not be re-minted by missed-open discovery.
+        const carded = new Set<number>();
 
         for (const project of projects) {
           const items = await options.storage.list({
@@ -79,6 +93,7 @@ export function createGithubIssueReconciler(
           for (const item of items) {
             const issueNumber = reconcilableIssueNumber(item, repository);
             if (!issueNumber) continue;
+            carded.add(issueNumber);
             if (workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') continue;
             let list = itemsByNumber.get(issueNumber);
             if (!list) {
@@ -86,6 +101,29 @@ export function createGithubIssueReconciler(
               itemsByNumber.set(issueNumber, list);
             }
             list.push(item);
+          }
+        }
+
+        // Missed-open discovery: an `opened` delivery that never reached the
+        // ingress leaves no card for the sweeps above to repair. Only issues
+        // filed after the repository was linked are replayed, so linking a
+        // repository never backfills its existing backlog.
+        if (listOpenIssues) {
+          const linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
+          const openIssues = await listOpenIssues({
+            installationId: repository.installationId,
+            repository: repository.fullName,
+          });
+          for (const issue of openIssues) {
+            if (carded.has(issue.number)) continue;
+            const createdAt = issue.createdAt ? Date.parse(issue.createdAt) : Number.NaN;
+            if (!Number.isFinite(createdAt) || createdAt < linkedAt) continue;
+            try {
+              const result = await rules.ingest(reconciledIssueOpenedEvent(repository, issue.number, issue));
+              if (result.status === 'committed') summary.created += 1;
+            } catch (error) {
+              recordFailure(repository, error, issue.number);
+            }
           }
         }
 
@@ -134,7 +172,9 @@ export function createGithubIssueReconciler(
             // metadata patch, so the ingress sees the drift it acts on.
             if (
               state.labels !== undefined &&
-              items.some(item => Array.isArray(item.metadata?.labels) && !sameStrings(item.metadata.labels, state.labels))
+              items.some(
+                item => Array.isArray(item.metadata?.labels) && !sameStrings(item.metadata.labels, state.labels),
+              )
             ) {
               await rules.ingest(reconciledIssueRelabeledEvent(repository, issueNumber, state));
               summary.relabeled += 1;
@@ -179,9 +219,10 @@ export function attachGithubIssueReconciler(
   github: GithubRulesIntegration,
   context: IntegrationContext,
   fetchIssue: GithubIssueFetcher,
+  listOpenIssues?: GithubOpenIssueLister,
 ): GithubIssueReconciler | undefined {
   if (!context.runtime) return undefined;
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
-  return createGithubIssueReconciler(options, fetchIssue);
+  return createGithubIssueReconciler(options, fetchIssue, listOpenIssues);
 }

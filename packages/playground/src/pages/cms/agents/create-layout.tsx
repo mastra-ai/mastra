@@ -2,13 +2,13 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { useLinkComponent } from '@/lib/framework';
 
 const crumbs = [navCrumb('/agents'), { id: 'create-agent', label: 'Create agent' }];
 

@@ -1,20 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 
 import type { PromptBlockFormValues } from './utils/form-validation';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { SectionHeader } from '@/domains/cms';
-import { useLinkComponent } from '@/lib/framework';
 
 function RecursiveFieldRenderer({
   field,
@@ -121,30 +124,27 @@ export function PromptBlockEditSidebar({
         <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Configuration" subtitle="Define your prompt block's name and description." />
 
-          <TextFieldBlock
-            label="Name"
-            required
-            placeholder="My Prompt Block"
-            {...register('name')}
-            errorMsg={errors.name?.message}
-          />
+          <Field invalid={Boolean(errors.name)}>
+            <FieldLabel required>Name</FieldLabel>
+            <Input placeholder="My Prompt Block" required {...register('name')} />
+            <FieldError>{errors.name?.message}</FieldError>
+          </Field>
 
-          <TextareaFieldBlock
-            label="Description"
-            placeholder="Describe what this prompt block does"
-            {...register('description')}
-            errorMsg={errors.description?.message}
-          />
+          <Field invalid={Boolean(errors.description)}>
+            <FieldLabel>Description</FieldLabel>
+            <Textarea placeholder="Describe what this prompt block does" {...register('description')} />
+            <FieldError>{errors.description?.message}</FieldError>
+          </Field>
         </div>
 
-        {/* Variables */}
         <div className="flex flex-col gap-4 border-t border-border p-4">
           <SectionHeader
             title="Variables"
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax in your content.
+                <InlineCode className="text-label text-foreground">{'{{variableName}}'}</InlineCode> syntax in your
+                content.
               </>
             }
           />
@@ -170,7 +170,6 @@ export function PromptBlockEditSidebar({
           </JSONSchemaForm.Root>
         </div>
 
-        {/* Used by */}
         {mode === 'edit' && blockId && (
           <div className="flex flex-col gap-3 border-t border-border p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
@@ -198,7 +197,6 @@ export function PromptBlockEditSidebar({
         )}
       </ScrollArea>
 
-      {/* Sticky footer */}
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">

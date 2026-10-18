@@ -1,5 +1,6 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { DataList as EntityList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useRef } from 'react';
 import type { SyntheticEvent } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
@@ -7,7 +8,6 @@ import { AgentProviderDetails } from './agent-provider-details';
 import { AgentSubagentDetails } from './agent-subagent-details';
 import { AgentToolsDetails } from './agent-tools-details';
 import { AgentWorkflowDetails } from './agent-workflow-details';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentRowProps {
   agent: GetAgentResponse;
@@ -32,8 +32,8 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
   const purpose = instructions || 'No instructions provided.';
 
   return (
-    <EntityList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
-      <EntityList.RowLink
+    <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
+      <DataList.RowLink
         ref={linkRef}
         colEnd={3}
         to={paths.agentNewThreadLink(agent.id)}
@@ -41,29 +41,29 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
         tabIndex={-1}
         onClick={stopPropagation}
       >
-        <EntityList.Cell className="min-w-0 overflow-visible text-left text-muted-foreground">
+        <DataList.Cell className="min-w-0 overflow-visible text-left text-muted-foreground">
           <span title={agent.name} className="block max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
             {agent.name}
           </span>
-        </EntityList.Cell>
-        <EntityList.Cell className="min-w-0 overflow-visible">
+        </DataList.Cell>
+        <DataList.Cell className="min-w-0 overflow-visible">
           <span title={purpose} className="block max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
             {purpose}
           </span>
-        </EntityList.Cell>
-      </EntityList.RowLink>
-      <EntityList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+        </DataList.Cell>
+      </DataList.RowLink>
+      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
         <AgentProviderDetails agentName={agent.name} provider={agent.provider} modelId={agent.modelId} />
-      </EntityList.Cell>
-      <EntityList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+      </DataList.Cell>
+      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
         <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
-      </EntityList.Cell>
-      <EntityList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+      </DataList.Cell>
+      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
         <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
-      </EntityList.Cell>
-      <EntityList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+      </DataList.Cell>
+      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
         <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
-      </EntityList.Cell>
-    </EntityList.RowWrapper>
+      </DataList.Cell>
+    </DataList.RowWrapper>
   );
 }

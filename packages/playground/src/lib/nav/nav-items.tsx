@@ -6,7 +6,6 @@ import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
-import { RequestContextIcon } from '@mastra/playground-ui/icons/RequestContextIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { SettingsIcon } from '@mastra/playground-ui/icons/SettingsIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -24,9 +23,7 @@ export interface NavItem {
   Icon: NavIcon;
   isOnMastraPlatform?: boolean;
   activePaths?: string[];
-  /** When true, the item stays in the registry (so breadcrumbs/routes can resolve it) but is hidden from the sidebar and command palette. */
   hidden?: boolean;
-  /** When true, the sidebar folds the item under "More" unless it was visited recently or the server reports it is in use. */
   foldable?: boolean;
 }
 
@@ -37,11 +34,7 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// The Intelligence sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
-// so the feature can be toggled independently of the platform config that the
-// Intelligence route itself consumes.
-const isSignalsEnabled =
-  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+const isSignalsEnabled = typeof window !== 'undefined' && window.MASTRA_SIGNALS_UI === 'true';
 
 const signalsNavItem: NavItem = {
   name: 'Intelligence',
@@ -49,8 +42,6 @@ const signalsNavItem: NavItem = {
   activePaths: ['/intelligence'],
   Icon: LayoutGrid,
   isOnMastraPlatform: true,
-  // Kept in the registry so /intelligence routes and breadcrumbs always resolve, but
-  // only surfaced in the sidebar/command palette when the flag is enabled.
   hidden: !isSignalsEnabled,
 };
 
@@ -104,12 +95,6 @@ export const mainNav: NavSection[] = [
         Icon: WorkspacesIcon,
         isOnMastraPlatform: true,
         foldable: true,
-      },
-      {
-        name: 'Request Context',
-        url: '/request-context',
-        Icon: RequestContextIcon,
-        isOnMastraPlatform: true,
       },
     ],
   },

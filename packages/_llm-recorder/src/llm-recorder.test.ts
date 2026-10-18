@@ -339,6 +339,51 @@ describe('recording file format', () => {
     expect(replayBytes).toEqual(payload);
   });
 
+  it('drops provider account headers from recorded responses', async () => {
+    const name = 'skip-account-headers';
+    const filePath = path.join(tempDir, `${name}.json`);
+
+    process.env.LLM_TEST_MODE = 'record';
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'msg_1', content: [] }), {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'content-type': 'application/json',
+          'request-id': 'req_recorded_verbatim',
+          'anthropic-organization-id': 'org-secret-value',
+          'anthropic-workspace-id': 'workspace-secret-value',
+          'openai-organization': 'openai-org-secret-value',
+          'openai-project': 'proj_secret_value',
+        },
+      }),
+    );
+
+    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    recorder.start();
+    await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-ant-not-recorded' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 16, messages: [] }),
+    });
+    await recorder.save();
+    recorder.stop();
+
+    const recorded = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const headers = recorded.recordings[0].response.headers;
+    // Account metadata never lands in committed fixtures.
+    expect(headers['anthropic-organization-id']).toBeUndefined();
+    expect(headers['anthropic-workspace-id']).toBeUndefined();
+    expect(headers['openai-organization']).toBeUndefined();
+    expect(headers['openai-project']).toBeUndefined();
+    // The request's credentials are not written anywhere in the file, request headers included.
+    expect(JSON.stringify(recorded)).not.toContain('sk-ant-not-recorded');
+    // Non-account headers are still recorded: replay rebuilds the response from them.
+    expect(headers['request-id']).toBe('req_recorded_verbatim');
+    expect(headers['content-type']).toContain('application/json');
+  });
+
   it('loads legacy array recording format in replay mode', () => {
     const legacyName = 'legacy-array-format';
     const filePath = path.join(tempDir, `${legacyName}.json`);

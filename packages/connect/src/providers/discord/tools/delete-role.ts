@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const deleteRoleInputSchema = z.object({
   guildId: z.string().describe('The ID of the guild containing the role. Example: "1234567890123456789"'),
@@ -37,8 +38,7 @@ export function deleteRoleTool(proxy: PlatformProxy) {
     outputSchema: deleteRoleOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteRoleOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       if (!botToken) {
         throw new platformProxy.ActionError({

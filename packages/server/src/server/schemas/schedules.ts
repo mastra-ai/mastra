@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-export const scheduleStatusSchema = z.enum(['active', 'paused']);
+export const scheduleStatusSchema = z.enum(['active', 'paused', 'completed']);
+
+/** Statuses a caller may set directly; `completed` is only reached by the scheduler. */
+const settableScheduleStatusSchema = z.enum(['active', 'paused']);
 
 /** Mirrors the core `AgentSignalType` union. */
 const signalTypeSchema = z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']);
@@ -234,7 +237,7 @@ export const createScheduleBodySchema = z.union([createAgentScheduleBodySchema, 
 export const updateScheduleBodySchema = z.object({
   cron: z.string().optional(),
   timezone: z.string().optional(),
-  status: scheduleStatusSchema.optional(),
+  status: settableScheduleStatusSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   // Agent-schedule fields
   prompt: z.string().optional(),

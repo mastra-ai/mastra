@@ -153,7 +153,7 @@ export function createLogsPropertyFilterFields({
   const fields: PropertyFilterField[] = [
     {
       id: 'rootEntityType',
-      label: 'Primitive Type',
+      label: 'Primitive type',
       kind: 'pick-multi',
       searchable: false,
       options: LOGS_ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ label: o.label, value: o.entityType })),
@@ -162,7 +162,7 @@ export function createLogsPropertyFilterFields({
     },
     {
       id: 'entityName',
-      label: 'Primitive Name',
+      label: 'Primitive name',
       kind: 'pick-multi',
       options: availableRootEntityNames.map(name => ({ label: name, value: name })),
       placeholder: 'Choose entity names',

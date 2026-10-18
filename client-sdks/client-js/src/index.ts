@@ -28,12 +28,16 @@ export type {
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,
   PlanResume,
+  AgentControllerCommandAck,
+  AgentControllerCommandRejection,
 } from './resources/agent-controller';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most
 // users interact via `observe` on the tool execution context.
 export type { ObservabilityCollector } from './observability/types';
 export type {
+  QuerySpansInput,
+  QuerySpansResult,
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
   QueryTracesInput,
@@ -44,6 +48,9 @@ export type {
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
 export type { GetMetricTimeSeriesResponse } from './types';
 export type {
+  AggregateTracesArgs,
+  AggregateTracesResponse,
+  TraceAggregateDiscovery,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { UsageStats } from '@mastra/core/observability';
 import { assert, describe, expect, it } from 'vitest';
 import { getTokenUsageView } from '../span-token-usage.utils';

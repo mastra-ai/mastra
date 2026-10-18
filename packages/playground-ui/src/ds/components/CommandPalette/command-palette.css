@@ -1,16 +1,26 @@
 /* Fixed height: dialog is centred, so a content-driven one slides the input while typing.
  * Unlayered on purpose — `Command`'s own `size-full` height would otherwise win by utility order. */
 .command-palette-shell {
-  height: var(--command-palette-height, min(34rem, calc(100dvh - 2rem)));
-  max-height: calc(100dvh - 2rem);
+  height: var(--command-palette-height, min(34rem, calc(100dvh - 4rem)));
+  max-height: calc(100dvh - 4rem);
 }
 
-.command-palette-popup[data-open] {
-  animation: none !important;
+/* The surfaces choreograph their own entrance, so the dialog popup holding them stays still. */
+.command-palette-popup.dialog-popup-motion,
+.command-palette-popup.dialog-popup-motion[data-starting-style],
+.command-palette-popup.dialog-popup-motion[data-ending-style] {
+  opacity: 1;
+  scale: none;
+  transition: none;
 }
 
 .command-palette-popup[data-closed] {
-  animation: command-palette-popup-hold 260ms linear both !important;
+  animation: command-palette-popup-hold 260ms linear both;
+}
+
+.command-palette-popup [data-slot='dialog-close'] {
+  top: 0.5rem;
+  right: 0.5rem;
 }
 
 .command-palette-surface {
@@ -52,13 +62,7 @@
   height: var(--command-palette-footer-height);
   pointer-events: none;
   content: '';
-  background: linear-gradient(
-    to top,
-    var(--card) 0%,
-    var(--card) 28%,
-    color-mix(in oklab, var(--card) 94%, transparent) 68%,
-    transparent 100%
-  );
+  background: linear-gradient(to top, var(--card) 0%, var(--card) 28%, transparent 100%);
   border-bottom-right-radius: calc(var(--radius-xl) - 1px);
   border-bottom-left-radius: calc(var(--radius-xl) - 1px);
 }

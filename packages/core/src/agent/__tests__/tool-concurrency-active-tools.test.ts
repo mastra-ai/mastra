@@ -68,17 +68,6 @@ function createApprovalTool() {
   });
 }
 
-function createSuspendingTool() {
-  return createTool({
-    id: 'suspending-tool',
-    description: 'Suspending tool',
-    inputSchema: z.object({ data: z.string() }),
-    suspendSchema: z.object({ reason: z.string() }),
-    resumeSchema: z.object({ approved: z.boolean() }),
-    execute: async () => ({ result: 'suspending done' }),
-  });
-}
-
 async function runAgent({
   tools,
   activeTools,
@@ -116,60 +105,6 @@ async function runAgent({
 }
 
 describe('active tool concurrency', () => {
-  it('runs active safe tools concurrently when an approval tool is registered but inactive', async () => {
-    const tracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
-
-    await runAgent({
-      tools: {
-        'tool-1': createTrackedTool('tool-1', tracker),
-        'tool-2': createTrackedTool('tool-2', tracker),
-        'approval-tool': createApprovalTool(),
-      },
-      activeTools: ['tool-1', 'tool-2'],
-    });
-
-    expect(tracker.peak).toBe(2);
-    expect(tracker.completed).toEqual(expect.arrayContaining(['tool-1', 'tool-2']));
-  });
-
-  it('runs active safe tools concurrently when a suspending tool is registered but inactive', async () => {
-    const tracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
-
-    await runAgent({
-      tools: {
-        'tool-1': createTrackedTool('tool-1', tracker),
-        'tool-2': createTrackedTool('tool-2', tracker),
-        'suspending-tool': createSuspendingTool(),
-      },
-      activeTools: ['tool-1', 'tool-2'],
-    });
-
-    expect(tracker.peak).toBe(2);
-    expect(tracker.completed).toEqual(expect.arrayContaining(['tool-1', 'tool-2']));
-  });
-
-  it('uses processor-replaced tools when resolving concurrency', async () => {
-    const tracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
-    const stepTools = {
-      'tool-1': createTrackedTool('tool-1', tracker),
-      'tool-2': createTrackedTool('tool-2', tracker),
-    };
-
-    await runAgent({
-      tools: {
-        'approval-tool': createApprovalTool(),
-      },
-      prepareStep: () => ({
-        tools: stepTools,
-        activeTools: undefined,
-      }),
-      toolNames: Object.keys(stepTools),
-    });
-
-    expect(tracker.peak).toBe(2);
-    expect(tracker.completed).toEqual(expect.arrayContaining(['tool-1', 'tool-2']));
-  });
-
   it('does not leak concurrency decisions across concurrent runs', async () => {
     const safeTracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
     const sequentialTracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };

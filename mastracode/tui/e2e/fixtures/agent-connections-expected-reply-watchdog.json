@@ -73,7 +73,7 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "userMessage": "expected-reply-reminder",
+        "userMessage": "A connected peer expected a correlated reply",
         "hasToolResult": true
       },
       "response": {

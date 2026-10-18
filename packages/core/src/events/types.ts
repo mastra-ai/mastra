@@ -8,6 +8,12 @@ export type Event = {
   /** Epoch ms at which the event's payload was produced, when it differs from publish time. */
   producedAt?: number;
   /**
+   * Claim generation of the durable run execution that published the event.
+   * Consumers drop events from a generation older than one they have already
+   * seen: a newer execution has taken the run over.
+   */
+  generation?: number;
+  /**
    * Sequential index for position tracking.
    * Enables efficient resume from a specific position.
    */
@@ -114,4 +120,10 @@ export type EventCallback = (
   event: Event,
   ack?: () => Promise<void>,
   nack?: () => Promise<void>,
+  /**
+   * Renews the delivery's lease/visibility so the broker does not redeliver
+   * the event while its handler is still running. Omitted by backends that
+   * cannot extend a delivery.
+   */
+  extend?: () => Promise<void>,
 ) => void | Promise<void>;

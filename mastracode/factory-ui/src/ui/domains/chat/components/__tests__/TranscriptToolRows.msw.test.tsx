@@ -1,4 +1,6 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import type { DatePreset } from '@mastra/playground-ui/utils/date-format';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -118,6 +120,32 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(row).queryByText('execute_command')).not.toBeInTheDocument();
   });
 
+  it("shows a shell command's description alone on its row and the command when expanded", async () => {
+    const command = "cd packages/core && rg -n 'processor' src";
+    renderEntries([
+      assistantMessage('msg-1', [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'execute_command',
+            args: { description: 'Finding the processor wiring', command },
+            result: 'src/a.ts:1:processor',
+          },
+        },
+      ]),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Tool: execute_command' });
+    expect(within(row).getByText('Finding the processor wiring')).toBeInTheDocument();
+    expect(within(row).queryByText('Run')).not.toBeInTheDocument();
+    expect(within(row).queryByText(/rg -n/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getAllByRole('button')[0]);
+    expect(within(row).getByText(/rg -n 'processor' src/)).toBeInTheDocument();
+  });
+
   it('collapses three or more consecutive tool calls into a single group row', async () => {
     renderEntries([
       assistantMessage('msg-1', [
@@ -221,7 +249,7 @@ describe('TranscriptEntries tool rows', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('group', { name: 'Question from the agent' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Which auth flow?' })).toBeInTheDocument();
     expect(screen.getByText('Both are supported.')).toBe(settledText);
   });
 
@@ -240,7 +268,7 @@ describe('TranscriptEntries tool rows', () => {
   });
 
   it.each([
-    ['ask_user', 'Question from the agent', { question: 'Which file should I edit?' }],
+    ['ask_user', 'Which file should I edit?', { question: 'Which file should I edit?' }],
     ['submit_plan', 'Plan approval', { plan: { title: 'Ship the fix', content: 'Step one' } }],
     ['skill', 'Skill: understand-issue', { name: 'understand-issue' }],
   ])('breaks a run on %s so its card is never swallowed by a group', (toolName, promptLabel, args) => {
@@ -319,7 +347,7 @@ describe('TranscriptEntries tool rows', () => {
     ]);
 
     expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
-    const question = screen.getByRole('group', { name: 'Question from the agent' });
+    const question = screen.getByRole('group', { name: 'Which file should I edit?' });
     expect(within(question).getByText('Which file should I edit?')).toBeInTheDocument();
   });
 
@@ -334,7 +362,7 @@ describe('TranscriptEntries tool rows', () => {
     const { rerender } = renderEntries([message]);
 
     expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Which file should I edit?' })).not.toBeInTheDocument();
 
     rerender(
       <MemoryRouter>
@@ -357,7 +385,7 @@ describe('TranscriptEntries tool rows', () => {
     );
 
     expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Question from the agent' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Which file should I edit?' })).toBeInTheDocument();
   });
 
   it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {
@@ -423,8 +451,6 @@ describe('TranscriptEntries tool rows', () => {
       assistantMessage('msg-text', [{ type: 'text', text: 'All 36 tests passed.' }]),
     ]);
 
-    // The transcript container no longer adds gaps between entries, so prose
-    // content must own its breathing room via explicit margins.
     const userBubbleWrapper = screen.getByText('Please run the tests').closest('.ml-auto');
     expect(userBubbleWrapper).toHaveClass('my-3');
 
@@ -433,9 +459,13 @@ describe('TranscriptEntries tool rows', () => {
   });
 
   describe('local timestamps', () => {
-    const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-    const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'medium' });
     const PART_AT = new Date('2026-07-15T10:03:42.000Z');
+
+    function shown(date: Date, preset: DatePreset): string {
+      const text = formatDate(date, preset);
+      if (text === undefined) throw new Error(`${date.toISOString()} is not a valid date`);
+      return text;
+    }
 
     it('leads a tool row with the moment core stamped on the call, in local time', () => {
       renderEntries([
@@ -445,11 +475,10 @@ describe('TranscriptEntries tool rows', () => {
       ]);
 
       const row = screen.getByRole('group', { name: 'Tool: execute_command' });
-      const time = within(row).getByText(clock.format(PART_AT));
+      const time = within(row).getByText(shown(PART_AT, 'time-seconds'));
       expect(time.tagName).toBe('TIME');
       expect(time).toHaveAttribute('dateTime', PART_AT.toISOString());
-      expect(time).toHaveAttribute('title', calendar.format(PART_AT));
-      // Reads left to right: the clock, then what ran.
+      expect(time).toHaveAttribute('title', shown(PART_AT, 'date-time-seconds'));
       expect(
         time.compareDocumentPosition(within(row).getByText('Run')) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
@@ -459,7 +488,10 @@ describe('TranscriptEntries tool rows', () => {
       renderEntries([assistantMessage('msg-1', [doneTool('call-1', 'view')])]);
 
       const row = screen.getByRole('group', { name: 'Tool: view' });
-      expect(within(row).getByText(clock.format(CREATED_AT))).toHaveAttribute('dateTime', CREATED_AT.toISOString());
+      expect(within(row).getByText(shown(CREATED_AT, 'time-seconds'))).toHaveAttribute(
+        'dateTime',
+        CREATED_AT.toISOString(),
+      );
     });
 
     it('leads a group row with the time its first call began', () => {
@@ -472,8 +504,10 @@ describe('TranscriptEntries tool rows', () => {
       ]);
 
       const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
-      expect(within(group).getByText(clock.format(PART_AT))).toBeInTheDocument();
-      expect(within(group).queryByText(clock.format(new Date(PART_AT.getTime() + 2000)))).not.toBeInTheDocument();
+      expect(within(group).getByText(shown(PART_AT, 'time-seconds'))).toBeInTheDocument();
+      expect(
+        within(group).queryByText(shown(new Date(PART_AT.getTime() + 2000), 'time-seconds')),
+      ).not.toBeInTheDocument();
     });
   });
 });

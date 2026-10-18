@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -13,6 +12,7 @@ import type { SessionRetirementCoordinator } from '../sandbox/session-retirement
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlSession,
@@ -27,7 +27,7 @@ function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
 
-const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -44,6 +44,7 @@ type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IU
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
+  projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
@@ -54,6 +55,7 @@ export interface SourceControlSessionRoutesOptions {
 interface ResolvedProjectRepository {
   sourceControl: SourceControlStorageHandle;
   project: ProjectRepository;
+  factoryProjectId: string;
   defaultBranch: string;
 }
 
@@ -90,9 +92,12 @@ async function resolveProjectRepository(
         if (!project) return null;
         const repository = await sourceControl.repositories.get({ orgId, id: project.repositoryId });
         if (!repository) return null;
+        const connection = await sourceControl.connections.get({ orgId, id: project.connectionId });
+        if (!connection) return null;
         return {
           sourceControl,
           project,
+          factoryProjectId: connection.factoryProjectId,
           defaultBranch: project.branch ?? repository.defaultBranch,
         };
       }),
@@ -206,6 +211,11 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 }
 
+function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
+  const owner = owners.get(session.userId);
+  return owner ? { ...session, owner } : session;
+}
+
 function projectSessionRoutes(
   path: '/web/source-control/projects/:id/sessions' | '/web/github/projects/:id/sessions',
   options: SourceControlSessionRoutesOptions,
@@ -229,12 +239,7 @@ function projectSessionRoutes(
           viewerUserId: userId,
         });
         const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({
-          sessions: sessions.map(session => {
-            const owner = owners.get(session.userId);
-            return { ...session, ...(owner ? { owner } : {}) };
-          }),
-        });
+        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
       },
     }),
     registerApiRoute(path, {
@@ -268,7 +273,7 @@ function projectSessionRoutes(
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
         const requestedSessionId = body.sessionId as string | undefined;
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
         if (body.title !== undefined && typeof body.title !== 'string') {
           return c.json({ error: 'Invalid title' }, 400);
         }
@@ -297,6 +302,7 @@ function projectSessionRoutes(
           .create({
             sessionId,
             projectRepositoryId: project.project.id,
+            factoryProjectId: project.factoryProjectId,
             orgId,
             userId,
             branch,
@@ -330,6 +336,28 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
   const nameSession = createSessionNaming();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
   return [
+    registerApiRoute('/web/factory/projects/:id/sessions', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const factoryProjectId = c.req.param('id');
+        const project = factoryProjectId ? await options.projects.get({ orgId, id: factoryProjectId }) : null;
+        if (!project) return c.json({ error: 'Factory not found' }, 404);
+        // Storage is partitioned per provider; a Factory's sessions can live in any of them.
+        const sessions = (
+          await Promise.all(
+            options.sourceControls.map(sourceControl =>
+              sourceControl.sessions.listByProject({ orgId, factoryProjectId: project.id, viewerUserId: userId }),
+            ),
+          )
+        ).flat();
+        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
+        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
+      },
+    }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
     // Compatibility for existing clients; new code uses the provider-neutral path.
     ...projectSessionRoutes('/web/github/projects/:id/sessions', options, resolveOwnerProfiles),
@@ -348,7 +376,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         ) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session });
+        const owners = await resolveOwnerProfiles([session.userId]);
+        return c.json({ session: withOwnerProfile(session, owners) });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {

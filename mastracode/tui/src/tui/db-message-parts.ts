@@ -1,15 +1,17 @@
 import {
   ACCOUNT_SWITCH_PART_TYPE,
   isAccountSwitchReason,
-  isPackFallbackReason,
+  isModelFallbackReason,
+  MODEL_FALLBACK_PART_TYPE,
   type AccountSwitchPartData,
-  type PackFallbackPartData,
+  type ModelFallbackPartData,
 } from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
 
 import { getBackgroundToolMetadata } from './background-tool-result.js';
+import type { CommandExitRecord } from './components/tool-execution-interface.js';
 
 /**
  * DB-native accessors for `MastraDBMessage`.
@@ -42,6 +44,9 @@ export interface ToolRenderPart {
   hasResult: boolean;
   isError: boolean;
   backgroundTask?: ReturnType<typeof getBackgroundToolMetadata>;
+  /** Best-effort wall-clock bounds recovered from part timestamps, when history carries them. */
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export interface OmRenderPart {
@@ -55,7 +60,7 @@ export interface AccountSwitchRenderPart extends AccountSwitchPartData {
   kind: 'account-switch';
 }
 
-export type PackFallbackRenderPart = PackFallbackPartData & { kind: 'pack-fallback' };
+export type PackFallbackRenderPart = ModelFallbackPartData & { kind: 'pack-fallback' };
 
 export type AssistantRenderPart =
   | TextRenderPart
@@ -86,20 +91,18 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
   'data-om-thread-update': 'thread-title',
 };
 
-const PACK_FALLBACK_PART_TYPE = 'data-mastracode-pack-fallback';
-
 function packFallbackRenderPart(data: unknown): PackFallbackRenderPart | null {
   if (!data || typeof data !== 'object') return null;
   const record = data as Record<string, unknown>;
-  const endpoint = (value: unknown): { packId: string; label: string } | null => {
+  const endpoint = (value: unknown): { entryId: string; label: string } | null => {
     if (!value || typeof value !== 'object') return null;
     const entry = value as Record<string, unknown>;
-    if (typeof entry.packId !== 'string' || typeof entry.label !== 'string') return null;
-    return { packId: entry.packId, label: entry.label };
+    if (typeof entry.entryId !== 'string' || typeof entry.label !== 'string') return null;
+    return { entryId: entry.entryId, label: entry.label };
   };
   const from = endpoint(record.from);
   const to = endpoint(record.to);
-  if (!from || !to || !isPackFallbackReason(record.reason)) return null;
+  if (!from || !to || !isModelFallbackReason(record.reason)) return null;
   return {
     kind: 'pack-fallback',
     from,
@@ -145,11 +148,74 @@ function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null 
  * document order. Text/reasoning/tool-invocation/data-om-* parts are surfaced;
  * bookkeeping parts (`step-start`, `data-om-status`, etc.) are skipped.
  */
+const partCreatedAt = (part: unknown): number | undefined => {
+  const createdAt = (part as { createdAt?: unknown }).createdAt;
+  return typeof createdAt === 'number' ? createdAt : undefined;
+};
+
+const isDataPart = (part: unknown): boolean => String((part as { type?: unknown }).type).startsWith('data-');
+
+/**
+ * Tool invocation parts are not reliably stamped, so recover timing from their neighbours: tools
+ * emit `data-*` parts while they run, and the next stamped non-data part (usually the following
+ * `step-start`) lands right after the result.
+ */
+function getToolPartTiming(
+  parts: readonly unknown[],
+  index: number,
+  messageCreatedAt: number | undefined,
+): { startedAt?: number; endedAt?: number } {
+  let endedAt: number | undefined;
+  let firstDataAt: number | undefined;
+  for (let i = index + 1; i < parts.length; i++) {
+    const part = parts[i];
+    const type = (part as { type?: unknown }).type;
+    if (type === 'tool-invocation') continue;
+    const createdAt = partCreatedAt(part);
+    if (createdAt === undefined) continue;
+    if (isDataPart(part)) {
+      firstDataAt ??= createdAt;
+      continue;
+    }
+    endedAt = createdAt;
+    break;
+  }
+  let previousAt: number | undefined;
+  for (let i = index - 1; i >= 0 && previousAt === undefined; i--) previousAt = partCreatedAt(parts[i]);
+  const startedAt = partCreatedAt(parts[index]) ?? firstDataAt ?? previousAt ?? messageCreatedAt;
+  if (startedAt === undefined || endedAt === undefined || endedAt < startedAt) return {};
+  return { startedAt, endedAt };
+}
+
+/**
+ * Collects the sandbox exit records (`data-sandbox-exit`) of shell calls by tool call id. They
+ * carry the real exit status and run time, and can land in a later message than the call itself,
+ * so collect them across the whole thread.
+ */
+export function collectCommandExits(messages: readonly MastraDBMessage[]): Map<string, CommandExitRecord> {
+  const exits = new Map<string, CommandExitRecord>();
+  for (const message of messages) {
+    for (const part of getParts(message)) {
+      if ((part as { type?: unknown }).type !== 'data-sandbox-exit') continue;
+      const data = (part as { data?: Record<string, unknown> }).data;
+      if (typeof data?.toolCallId !== 'string' || typeof data.exitCode !== 'number') continue;
+      exits.set(data.toolCallId, {
+        exitCode: data.exitCode,
+        success: typeof data.success === 'boolean' ? data.success : data.exitCode === 0,
+        ...(typeof data.executionTimeMs === 'number' ? { executionTimeMs: data.executionTimeMs } : {}),
+      });
+    }
+  }
+  return exits;
+}
+
 export function getAssistantRenderParts(message: MastraDBMessage): AssistantRenderPart[] {
   const out: AssistantRenderPart[] = [];
   const toolCalls = new Map<string, { toolName: string; args: unknown }>();
+  const parts = getParts(message);
+  const messageCreatedAt = message.createdAt ? new Date(message.createdAt).getTime() : undefined;
 
-  for (const part of getParts(message)) {
+  for (const [index, part] of parts.entries()) {
     const partType = (part as { type: string }).type;
     switch (partType) {
       case 'text': {
@@ -173,6 +239,9 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
           result: inv.result,
           hasResult,
           isError: hasResult && (typeof inv.isError === 'boolean' ? inv.isError : isErrorResult(inv.result)),
+          ...(hasResult
+            ? getToolPartTiming(parts, index, Number.isNaN(messageCreatedAt) ? undefined : messageCreatedAt)
+            : {}),
         });
         break;
       }
@@ -206,7 +275,7 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
           if (switchPart) out.push(switchPart);
           break;
         }
-        if (partType === PACK_FALLBACK_PART_TYPE) {
+        if (partType === MODEL_FALLBACK_PART_TYPE) {
           const hopPart = packFallbackRenderPart((part as { data?: unknown }).data);
           if (hopPart) out.push(hopPart);
           break;

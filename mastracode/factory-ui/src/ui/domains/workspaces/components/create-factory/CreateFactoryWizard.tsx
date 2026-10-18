@@ -98,6 +98,18 @@ export function CreateFactoryWizard() {
         step={step}
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
+        onBack={
+          // Once the final commit has written any server state (a Factory row or
+          // a linked repository), stepping back would let the user pick a new
+          // name or repository while the retry still resumes the prior IDs, so
+          // the Back affordance is dropped until the wizard completes.
+          step === 'name' || committing || Boolean(draft.factoryId) || Boolean(draft.linkedRepositoryId)
+            ? undefined
+            : () => {
+                setTyped(undefined);
+                void flow.back();
+              }
+        }
         onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
       >
         {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
@@ -139,7 +151,7 @@ export function CreateFactoryWizard() {
             query={value}
             savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
             error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={(providerId, modelId) => createFactory.mutate({ providerId, modelId })}
+            onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
           />
         )}
       </CreateFactoryPalette>

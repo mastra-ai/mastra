@@ -1,9 +1,10 @@
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
+import { requireLocal } from '../runtime.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleResourceCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const { state, controller } = ctx;
-  const { session } = state;
+  const { state } = ctx;
+  const { controller, session } = requireLocal(state, '/resource');
   const sub = args[0]?.trim();
   const current = session.identity.getResourceId();
   const defaultId = session.identity.getDefaultResourceId();

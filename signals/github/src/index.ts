@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -1402,7 +1402,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   ): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#subscribe({
-      id: `github-command-subscribe-${randomUUID()}`,
+      id: `github-command-subscribe-${globalThis.crypto.randomUUID()}`,
       ...pr,
       mode: normalizeGithubSubscriptionMode(input.mode),
       threadId: input.threadId,
@@ -1415,7 +1415,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   ): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#unsubscribe({
-      id: `github-command-unsubscribe-${randomUUID()}`,
+      id: `github-command-unsubscribe-${globalThis.crypto.randomUUID()}`,
       ...pr,
       threadId: input.threadId,
       resourceId: input.resourceId,
@@ -1672,7 +1672,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           for (const pr of requestedPrs) {
             try {
               const result = await this.#subscribe({
-                id: `github-tool-subscribe-${randomUUID()}`,
+                id: `github-tool-subscribe-${globalThis.crypto.randomUUID()}`,
                 owner: pr.owner,
                 repo: pr.repo,
                 number: pr.number,
@@ -1738,7 +1738,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           for (const pr of requestedPrs) {
             try {
               const result = await this.#unsubscribe({
-                id: `github-tool-unsubscribe-${randomUUID()}`,
+                id: `github-tool-unsubscribe-${globalThis.crypto.randomUUID()}`,
                 owner: pr.owner,
                 repo: pr.repo,
                 number: pr.number,

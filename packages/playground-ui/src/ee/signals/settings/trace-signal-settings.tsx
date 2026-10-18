@@ -11,6 +11,7 @@ import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Switch } from '@/ds/components/Switch';
+import { Txt } from '@/ds/components/Txt';
 
 export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; onClick: () => void }) {
   const { signalManagement } = useTraceIntelligence();
@@ -37,7 +38,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
     <aside id="trace-signal-settings" aria-label="Trace signal settings" className="min-h-0">
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
-          <DataDetailsPanel.Heading className="items-center font-medium text-foreground">
+          <DataDetailsPanel.Heading className="items-center text-subheading text-foreground">
             <Settings aria-hidden="true" /> Trace signal settings
           </DataDetailsPanel.Heading>
           <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />
@@ -124,12 +125,12 @@ function TraceSignalSettingsContent() {
       <section aria-labelledby="custom-signals-heading">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 id="custom-signals-heading" className="text-subheading text-muted-foreground">
+            <Txt as="h3" variant="subheading" tone="muted" id="custom-signals-heading">
               Custom signals
-            </h3>
-            <p className="text-meta text-muted-foreground">
+            </Txt>
+            <Txt variant="meta" tone="muted">
               {active.length} of {limit} active organization definitions
-            </p>
+            </Txt>
           </div>
           <Button
             icon={<LayoutGrid />}
@@ -151,12 +152,16 @@ function TraceSignalSettingsContent() {
             <div key={definition.id} className="flex min-h-16 items-center justify-between gap-4 py-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-caption text-muted-foreground">{definition.displayLabel}</span>
+                  <Txt as="span" variant="caption" tone="muted" className="truncate">
+                    {definition.displayLabel}
+                  </Txt>
                   <Badge variant="neutral" size="sm">
                     v{definition.version}
                   </Badge>
                 </div>
-                <p className="truncate text-meta text-muted-foreground">{definition.description || definition.name}</p>
+                <Txt variant="meta" tone="muted" className="truncate">
+                  {definition.description || definition.name}
+                </Txt>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button
@@ -195,18 +200,26 @@ function TraceSignalSettingsContent() {
             </div>
           ))}
         </div>
-        {active.length === 0 ? <p className="py-3 text-caption text-muted-foreground">No custom signals yet.</p> : null}
+        {active.length === 0 ? (
+          <Txt variant="caption" tone="muted" className="py-3">
+            No custom signals yet.
+          </Txt>
+        ) : null}
       </section>
 
       {archived.length > 0 ? (
         <details>
-          <summary className="cursor-pointer text-caption text-muted-foreground">
-            Archived definitions ({archived.length})
+          <summary className="cursor-pointer text-muted-foreground">
+            <Txt as="span" variant="caption" className="block">
+              Archived definitions ({archived.length})
+            </Txt>
           </summary>
           <div className="mt-2 divide-y divide-border">
             {archived.map(definition => (
               <div key={definition.id} className="flex min-h-12 items-center justify-between gap-3 py-2">
-                <span className="text-caption text-muted-foreground">{definition.displayLabel}</span>
+                <Txt as="span" variant="caption" tone="muted">
+                  {definition.displayLabel}
+                </Txt>
                 <Button
                   icon={<ArchiveRestore />}
                   size="sm"
@@ -226,10 +239,10 @@ function TraceSignalSettingsContent() {
         </details>
       ) : null}
 
-      <p className="text-meta text-muted-foreground">
+      <Txt variant="meta" tone="muted">
         Enabling a signal starts collection for new traces. Entity status shows when enough generated data has been
         processed and clustered.
-      </p>
+      </Txt>
 
       {creating ? (
         <SignalDefinitionFormDialog

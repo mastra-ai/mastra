@@ -518,6 +518,8 @@ const toolCallActionBodySchema = z.object({
   requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+  modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
 });
 const networkToolCallActionBodySchema = z.object({
   runId: z.string(),
@@ -773,6 +775,7 @@ export const sendAgentMessageBodySchema = z.union([
 ]);
 
 export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
+export const queueAgentSignalBodySchema = sendAgentSignalBodySchema;
 
 const agentThreadBodySchema = z.object({
   resourceId: z.string().optional(),

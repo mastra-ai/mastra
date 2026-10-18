@@ -57,10 +57,7 @@ function isAttrActive(element: HTMLElement, attr: string) {
   return value !== null && value !== 'false';
 }
 
-type MouseHandlers = Pick<
-  React.HTMLAttributes<HTMLElement>,
-  'onMouseMove' | 'onMouseEnter' | 'onMouseLeave' | 'onClick'
->;
+type MouseHandlers = Pick<React.HTMLAttributes<HTMLElement>, 'onMouseMove' | 'onMouseLeave' | 'onClick'>;
 
 export type UseFluidMenuOptions = {
   /** Attribute the underlying library sets on its highlighted row. */
@@ -123,10 +120,6 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
       onMouseMove: e => {
         own.onMouseMove?.(e);
         handlers.onMouseMove(e);
-      },
-      onMouseEnter: e => {
-        own.onMouseEnter?.(e);
-        handlers.onMouseEnter(e);
       },
       onMouseLeave: e => {
         own.onMouseLeave?.(e);

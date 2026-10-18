@@ -6,6 +6,7 @@ import { createBoardRegistry } from '../../../boards/index.js';
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
+import { registerGithubRefreshTarget } from '../../github/token-refresh.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 import { PlatformGithubIntegration } from './integration.js';
 
@@ -324,6 +325,16 @@ describe('PlatformGithubIntegration', () => {
     await expect(integration.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '99' })).resolves.toBeNull();
   });
 
+  it('exposes the base repository id and head ref through the octokit pulls shim', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(json(pullRequest));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.getInstallationOctokit(7).pulls.get({ owner: 'acme', repo: 'app', pull_number: 34 }),
+    ).resolves.toEqual({ data: { base: { repo: { id: 101 } }, head: { ref: 'feat/intake' } } });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/repos/acme/app/pulls/34');
+  });
+
   it('updates issue state via PATCH after probing the pulls endpoint', async () => {
     const closedIssue = { ...issue, state: 'closed' as const };
     const fetchImpl = vi
@@ -476,10 +487,65 @@ describe('PlatformGithubIntegration', () => {
     }
   });
 
+  it('publishes commit checks through the platform check-run route', async () => {
+    const head = 'cd1e5903851234567890abcdef1234567890abcd';
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ id: 9, htmlUrl: 'https://github.com/acme/app/runs/9' }))
+      .mockResolvedValueOnce(json({ id: 10, htmlUrl: 'https://github.com/acme/app/runs/10' }));
+    const integration = createIntegration(fetchImpl);
+    const base = {
+      connection: { type: 'app-installation' as const, installationId: 7 },
+      sourceId: 'acme/app',
+      headSha: head,
+      name: 'Factory Review / tests',
+    };
+
+    await expect(
+      integration.versionControl.publishCommitCheck!({
+        ...base,
+        status: 'in-progress',
+        title: 'Running',
+        summary: 'Plan',
+      }),
+    ).resolves.toEqual({
+      id: '9',
+      name: 'Factory Review / tests',
+      headSha: head,
+      status: 'in-progress',
+      url: 'https://github.com/acme/app/runs/9',
+    });
+    await integration.versionControl.publishCommitCheck!({
+      ...base,
+      status: 'failure',
+      title: 'x'.repeat(300),
+      summary: '1 failed',
+      details: 'stack',
+    });
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      'https://platform.example.com/v1/server/github/repos/acme/app/check-runs',
+    );
+    expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+      name: 'Factory Review / tests',
+      headSha: head,
+      status: 'in_progress',
+      output: { title: 'Running', summary: 'Plan' },
+    });
+    expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
+      name: 'Factory Review / tests',
+      headSha: head,
+      status: 'completed',
+      conclusion: 'failure',
+      output: { title: 'x'.repeat(255), summary: '1 failed', text: 'stack' },
+    });
+  });
+
   it('sends the acting user header on writes when actingUserId is provided', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(json(pullRequest))
+      .mockResolvedValueOnce(json({ connected: false, githubUsername: null }))
       .mockResolvedValueOnce(
         json({
           id: 91,
@@ -509,9 +575,84 @@ describe('PlatformGithubIntegration', () => {
       actingUserId: 'user-42',
     });
 
-    for (const call of fetchImpl.mock.calls) {
-      expect((call[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
-    }
+    expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
+    expect((fetchImpl.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
+  });
+
+  it('assigns a PR to the verified GitHub account of its opener', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/pulls')) return json(pullRequest);
+      if (url.includes('/user-connection?')) return json({ connected: true, githubUsername: 'grace' });
+      if (url.endsWith('/token')) return json({ token: 'installation-token' });
+      if (url.endsWith('/issues/34/assignees')) return json({ assignees: [{ login: 'grace' }] });
+      throw new Error(`Unexpected request: ${url} ${init?.method}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const created = await integration.versionControl.createPullRequest({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      title: 'Ship intake',
+      baseBranch: 'main',
+      headBranch: 'feat/intake',
+      actingUserId: 'user-42',
+    });
+
+    expect(created.assignees).toEqual(['grace']);
+    expect(fetchImpl.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls',
+      'https://platform.example.com/v1/server/github-app/user-connection?userId=user-42',
+      'https://platform.example.com/v1/server/github-app/installations/7/token',
+      'https://api.github.com/repos/acme/app/issues/34/assignees',
+    ]);
+    expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body))).toEqual({
+      repositories: ['app'],
+      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+    });
+    expect(JSON.parse(String((fetchImpl.mock.calls[3]?.[1] as RequestInit).body))).toEqual({ assignees: ['grace'] });
+  });
+
+  it('does not claim an assignment when GitHub silently ignores the requested user', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/pulls')) return json(pullRequest);
+      if (url.includes('/user-connection?')) return json({ connected: true, githubUsername: 'grace' });
+      if (url.endsWith('/token')) return json({ token: 'installation-token' });
+      if (url.endsWith('/issues/34/assignees')) return json({ assignees: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const created = await integration.versionControl.createPullRequest({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      title: 'Ship intake',
+      baseBranch: 'main',
+      headBranch: 'feat/intake',
+      actingUserId: 'user-42',
+    });
+    expect(created.assignees).toEqual([]);
+  });
+
+  it('keeps a created PR when assignment fails', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/pulls')) return json(pullRequest);
+      if (url.includes('/user-connection?')) return json({ connected: true, githubUsername: 'grace' });
+      if (url.endsWith('/token')) return json({ token: 'installation-token' });
+      if (url.endsWith('/issues/34/assignees')) return json({ message: 'Forbidden' }, 403);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    await expect(
+      integration.versionControl.createPullRequest({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        title: 'Ship intake',
+        baseBranch: 'main',
+        headBranch: 'feat/intake',
+        actingUserId: 'user-42',
+      }),
+    ).resolves.toMatchObject({ id: '34', url: pullRequest.htmlUrl });
   });
 
   it('maps every version-control operation to its platform endpoint', async () => {
@@ -667,6 +808,100 @@ describe('PlatformGithubIntegration', () => {
     expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
       repositories: ['app'],
       permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+    });
+  });
+
+  describe('getRepositoriesAccess', () => {
+    async function seed(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>) {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
+      const register = async (externalId: string, accountName: string) =>
+        integration.versionControl.registerInstallation({
+          orgId: 'org-1',
+          userId: 'user-1',
+          installation: { externalId, accountName, accountType: 'Organization' },
+        });
+      const acme = await register('7', 'acme');
+      const repositories = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: acme.id,
+        repositories: [
+          { externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
+          { externalId: '102', slug: 'acme/docs', defaultBranch: 'main' },
+        ],
+      });
+      return { integration, acme, repositories, register };
+    }
+
+    it('mints one token naming every repository of a single installation', async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }));
+      const { integration, repositories } = await seed(fetchImpl);
+
+      const access = await integration.versionControl.getRepositoriesAccess!({
+        orgId: 'org-1',
+        repositoryIds: repositories.map(repository => repository.id),
+      });
+      expect(access).toEqual({
+        cloneUrl: 'https://github.com/acme/app.git',
+        authorization: { scheme: 'bearer', token: 'ghs_environment' },
+      });
+      expect(String((fetchImpl.mock.calls[0] as unknown[])[0])).toContain('/github-app/installations/7/token');
+      expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+        repositories: ['app', 'docs'],
+        permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+      });
+
+      // The grant is reused for the same set, in any order.
+      const again = await integration.versionControl.getRepositoriesAccess!({
+        orgId: 'org-1',
+        repositoryIds: [...repositories.map(repository => repository.id)].reverse(),
+      });
+      expect(again).toBe(access);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('declines a set spanning two installations without minting', async () => {
+      const fetchImpl = vi.fn<typeof fetch>();
+      const { integration, repositories, register } = await seed(fetchImpl);
+      const other = await register('8', 'globex');
+      const [elsewhere] = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: other.id,
+        repositories: [{ externalId: '201', slug: 'globex/site', defaultBranch: 'main' }],
+      });
+
+      await expect(
+        integration.versionControl.getRepositoriesAccess!({
+          orgId: 'org-1',
+          repositoryIds: [repositories[0]!.id, elsewhere!.id],
+        }),
+      ).resolves.toBeUndefined();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('declines more than ten repositories without minting', async () => {
+      const fetchImpl = vi.fn<typeof fetch>();
+      const { integration, acme } = await seed(fetchImpl);
+      const many = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: acme.id,
+        repositories: Array.from({ length: 11 }, (_, index) => ({
+          externalId: String(300 + index),
+          slug: `acme/repo-${index}`,
+          defaultBranch: 'main',
+        })),
+      });
+
+      await expect(
+        integration.versionControl.getRepositoriesAccess!({
+          orgId: 'org-1',
+          repositoryIds: many.map(repository => repository.id),
+        }),
+      ).resolves.toBeUndefined();
+      expect(fetchImpl).not.toHaveBeenCalled();
     });
   });
 
@@ -826,6 +1061,7 @@ describe('PlatformGithubIntegration', () => {
       session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
       getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
     });
+    registerGithubRefreshTarget(requestContext, { orgId: 'org-1', repositoryId: 'repository-1' });
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
       'github_refresh_token',
       'github_upsert_factory_triage_comment',

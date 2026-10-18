@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { describeForAllEngines, runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: tool-level `requireApproval` flag.
@@ -11,7 +11,7 @@ import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * `requireApproval: true` on a tool definition gates only THAT tool. Other tools
  * execute without approval. This scenario proves only the flagged tool suspends.
  */
-describe('AIMock loop scenario: tool-level requireApproval', () => {
+describeForAllEngines('AIMock loop scenario: tool-level requireApproval', engine => {
   const getMock = useLoopScenarioAimock();
 
   // Tool WITHOUT approval — should execute freely.
@@ -40,6 +40,7 @@ describe('AIMock loop scenario: tool-level requireApproval', () => {
     // Turn 2: after both execute, model produces final text.
     const { output, approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Read config.yaml then delete it.',
       tools: { read_file: makeReadTool(), delete_file: makeDeleteTool() },
       stopWhen: stepCountIs(5),

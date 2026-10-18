@@ -555,6 +555,19 @@ describe('TokenLimiterProcessor', () => {
       expect(freshState.currentTokens).toBeGreaterThan(0);
     });
 
+    it('should count long digit runs as multiple tokens', async () => {
+      processor = new TokenLimiterProcessor({ limit: 1_000_000 });
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: '0'.repeat(3_000), id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      const state: Record<string, any> = {};
+      await processor.processOutputStream({ part, streamParts: [], state, abort: mockAbort });
+      expect(state.currentTokens).toBeGreaterThanOrEqual(1_000);
+    });
+
     it('should return max tokens', () => {
       processor = new TokenLimiterProcessor({ limit: 42 });
       expect(processor.getMaxTokens()).toBe(42);

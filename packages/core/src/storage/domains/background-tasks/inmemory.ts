@@ -1,9 +1,9 @@
 import type {
   BackgroundTask,
-  BackgroundTaskStatus,
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '../../../background-tasks/types';
 import type { InMemoryDB } from '../inmemory-db';
 import { BackgroundTasksStorage } from './base';
@@ -27,10 +27,18 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTaskStatus },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const existing = this.db.backgroundTasks.get(taskId);
-    if (!existing || (options?.expectedStatus && existing.status !== options.expectedStatus)) return false;
+    if (!existing) return false;
+    if (options?.expectedStatus && existing.status !== options.expectedStatus) return false;
+    if (options?.expectedOwnerId !== undefined && (existing.ownerId ?? null) !== options.expectedOwnerId) return false;
+    if (
+      options?.expectedLeaseExpiresAt !== undefined &&
+      (existing.leaseExpiresAt?.getTime() ?? null) !== (options.expectedLeaseExpiresAt?.getTime() ?? null)
+    ) {
+      return false;
+    }
     this.db.backgroundTasks.set(taskId, { ...existing, ...update });
     return true;
   }

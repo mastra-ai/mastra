@@ -13,6 +13,8 @@ import { WrappingSelectList } from './wrapping-select-list.js';
 
 export interface AskQuestionDialogOptions {
   question: string;
+  /** Dialog heading. Defaults to "Question". */
+  title?: string;
   options?: Array<{ label: string; description?: string }>;
   /** Controls whether options are single- or multi-select. Defaults to single_select. */
   selectionMode?: AskQuestionSelectionMode;
@@ -78,7 +80,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.selectedOptionLabel = options.selectedOptionLabel;
 
     // Title
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Question')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', options.title ?? 'Question')), 0, 0));
     this.addChild(new Spacer(1));
 
     // Question text (may be multi-line)

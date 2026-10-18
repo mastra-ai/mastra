@@ -1,7 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Lock } from 'lucide-react';
-import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
-import { isAuthenticated } from '../types';
 import { AuthHeadersForm } from './auth-headers-form';
 import { LoginButton } from './login-button';
 import { withStudioBasePath } from '@/lib/studio-base-path';
@@ -63,7 +63,9 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <div className="flex flex-col items-center space-y-6 text-center">
           <LogoWithoutText className="h-16 w-16 opacity-50" />
           <div className="space-y-2">
-            <h2 className="text-heading text-foreground">Authentication Required</h2>
+            <Txt as="h2" variant="heading" tone="ink">
+              Authentication Required
+            </Txt>
             <p className="max-w-sm text-muted-foreground">
               Add the authorization header that Studio needs to reach your Mastra server.
             </p>
@@ -88,22 +90,30 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
       <div className="flex flex-col items-center space-y-6 text-center">
         <LogoWithoutText className="h-16 w-16 opacity-50" />
         <div className="space-y-2">
-          <h2 className="text-heading text-foreground">Sign in to continue</h2>
+          <Txt as="h2" variant="heading" tone="ink">
+            Sign in to continue
+          </Txt>
           <p className="max-w-sm text-muted-foreground">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
           <div className="flex items-start gap-2.5 rounded-md border border-border bg-background p-3 text-left">
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <p className="max-w-sm text-body text-muted-foreground">{capabilities.login.description}</p>
+            <Txt tone="muted" className="max-w-sm">
+              {capabilities.login.description}
+            </Txt>
           </div>
         )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
         {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
           capabilities.login.signUpEnabled !== false && (
-            <div className="text-body">
-              <span className="text-muted-foreground">{"Don't have an account? "}</span>
+            <div>
+              <Txt as="span" variant="body" tone="muted">
+                {"Don't have an account? "}
+              </Txt>
               <button type="button" onClick={handleSignUp} className="text-foreground hover:underline">
-                Sign up
+                <Txt as="span" variant="body" className="block">
+                  Sign up
+                </Txt>
               </button>
             </div>
           )}

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MastraVoice } from '@internal/voice';
 import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
@@ -128,6 +127,7 @@ export class GeminiLiveVoice extends MastraVoice<
   private sessionStartTime?: number;
   private isResuming = false;
   private sessionDurationTimeout?: NodeJS.Timeout;
+  private sessionExpiringTimeout?: NodeJS.Timeout;
 
   // Tool integration properties
   private tools?: ToolsInput;
@@ -505,7 +505,7 @@ export class GeminiLiveVoice extends MastraVoice<
       // Send initial configuration (session_resumption handle is embedded in setup frame)
       this.sendInitialConfig();
       this.sessionStartTime = Date.now();
-      this.sessionId = randomUUID();
+      this.sessionId = globalThis.crypto.randomUUID();
 
       // Wait for session to be created after sending config
       await this.waitForSessionCreated();
@@ -552,10 +552,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.emit('session', { state: 'disconnecting' });
 
     // Clean up session duration monitoring
-    if (this.sessionDurationTimeout) {
-      clearTimeout(this.sessionDurationTimeout);
-      this.sessionDurationTimeout = undefined;
-    }
+    this.clearSessionTimers();
 
     // Session handle is set by the server via sessionResumptionUpdate frames.
     // Do not overwrite it with the client-side sessionId here.
@@ -1187,15 +1184,13 @@ export class GeminiLiveVoice extends MastraVoice<
     }
 
     // Clear existing monitor if any
-    if (this.sessionDurationTimeout) {
-      clearTimeout(this.sessionDurationTimeout);
-    }
+    this.clearSessionTimers();
 
     // Set timeout for session expiry warning
     const warningTime = durationMs - 5 * 60 * 1000; // 5 minutes before expiry
 
     if (warningTime > 0) {
-      setTimeout(() => {
+      this.sessionExpiringTimeout = setTimeout(() => {
         this.emit('sessionExpiring', {
           expiresIn: 5 * 60 * 1000,
           sessionId: this.sessionId,
@@ -1208,6 +1203,32 @@ export class GeminiLiveVoice extends MastraVoice<
       this.log('Session duration limit reached, disconnecting');
       void this.disconnect();
     }, durationMs);
+  }
+
+  /**
+   * Clear the session expiry and expiry-warning timers
+   * @private
+   */
+  private clearSessionTimers(): void {
+    if (this.sessionDurationTimeout) {
+      clearTimeout(this.sessionDurationTimeout);
+      this.sessionDurationTimeout = undefined;
+    }
+    if (this.sessionExpiringTimeout) {
+      clearTimeout(this.sessionExpiringTimeout);
+      this.sessionExpiringTimeout = undefined;
+    }
+  }
+
+  /**
+   * Release per-session resources when the socket goes away without disconnect().
+   * disconnect() returns early once state is 'disconnected', so the socket close and
+   * error handlers have to end speaker streams and clear session timers themselves.
+   * @private
+   */
+  private releaseSessionResources(): void {
+    this.clearSessionTimers();
+    this.audioStreamManager.cleanupSpeakerStreams();
   }
 
   /**
@@ -1262,6 +1283,7 @@ export class GeminiLiveVoice extends MastraVoice<
       const reasonText = reason.toString();
       this.log('WebSocket connection closed', { code, reason: reasonText });
       this.state = 'disconnected';
+      this.releaseSessionResources();
       this.emit('session', { state: 'disconnected', code, reason: reasonText });
 
       // A clean server-initiated close (e.g. 1007 invalid-argument for a bad model id or a
@@ -1280,6 +1302,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.ws.on('error', (error: Error) => {
       this.log('WebSocket error', error);
       this.state = 'disconnected';
+      this.releaseSessionResources();
       this.emit('session', { state: 'disconnected' });
       this.emit('error', {
         message: error.message,
@@ -1521,7 +1544,7 @@ export class GeminiLiveVoice extends MastraVoice<
             toolCall: {
               name: part.functionCall.name,
               args: part.functionCall.args || {},
-              id: part.functionCall.id || randomUUID(),
+              id: part.functionCall.id || globalThis.crypto.randomUUID(),
             },
           };
 
@@ -1539,7 +1562,7 @@ export class GeminiLiveVoice extends MastraVoice<
             const int16Array = this.audioStreamManager.base64ToInt16Array(audioData);
 
             // Use the tracked response ID or generate one if not available
-            const responseId = this.getCurrentResponseId() || randomUUID();
+            const responseId = this.getCurrentResponseId() || globalThis.crypto.randomUUID();
 
             // Get or create the speaker stream for this response
             let speakerStream = this.audioStreamManager.getSpeakerStream(responseId);
@@ -1657,7 +1680,7 @@ export class GeminiLiveVoice extends MastraVoice<
     for (const toolCall of toolCalls) {
       const toolName = toolCall.name || '';
       const toolArgs = toolCall.args || {};
-      const toolId = toolCall.id || randomUUID();
+      const toolId = toolCall.id || globalThis.crypto.randomUUID();
 
       await this.processSingleToolCall(toolName, toolArgs, toolId);
     }

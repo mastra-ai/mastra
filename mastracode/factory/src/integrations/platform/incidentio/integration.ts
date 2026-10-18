@@ -281,6 +281,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
       api: new IncidentioApiClient({
         baseUrl: proxyBaseUrl,
         accessToken: this.#clientConfig.accessToken,
+        ...(this.#clientConfig.projectId ? { projectId: this.#clientConfig.projectId } : {}),
         ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
       }),
       connection: incidentioConnection(connectionId),
@@ -512,6 +513,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildIncidentioRoutes({
       incidentio: this,
+      mode: 'platform',
       auth: ctx.auth,
       intake: ctx.storage.intake,
       ingestFactoryIssues: attachIncidentioRules(this, ctx),

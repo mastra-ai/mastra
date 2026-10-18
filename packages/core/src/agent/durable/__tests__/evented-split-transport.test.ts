@@ -18,6 +18,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { createTextStreamModel } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -27,26 +28,6 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createEventedAgent } from '../create-evented-agent';
 import type { EventedAgent } from '../evented-agent';
-
-function createTextStreamModel(text: string) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: text },
-        { type: 'text-end', id: 'text-1' },
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-    }),
-  }) as unknown as LanguageModelV2;
-}
 
 function createToolCallModel(toolName: string, args: Record<string, unknown>) {
   return new MockLanguageModelV2({

@@ -6,6 +6,7 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Txt } from '@/ds/components/Txt';
 import { formatTimestampPrecise } from '@/utils/date-format';
 
 export interface LogDataPanelProps {
@@ -101,7 +102,9 @@ export function LogDataPanel({
                         onClick={() => log.traceId && onTraceClick?.(log.traceId)}
                       >
                         <span>Trace</span>
-                        <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {log.traceId}</span>
+                        <Txt as="span" variant="caption" tone="faint" className="ml-auto min-w-0 truncate">
+                          # {log.traceId}
+                        </Txt>
                       </Button>
                       <CopyButton content={log.traceId} tooltip="Copy Trace ID to clipboard" />
                     </ButtonsGroup>
@@ -115,7 +118,9 @@ export function LogDataPanel({
                         icon={<ArrowRightIcon />}
                       >
                         <span>Span</span>
-                        <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {log.spanId}</span>
+                        <Txt as="span" variant="caption" tone="faint" className="ml-auto min-w-0 truncate">
+                          # {log.spanId}
+                        </Txt>
                       </Button>
                       <CopyButton content={log.spanId} tooltip="Copy Span ID to clipboard" />
                     </ButtonsGroup>

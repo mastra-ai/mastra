@@ -38,13 +38,13 @@ describe('ReasoningPartRenderer', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('shows a streaming "Reasoning..." shimmer line while reasoning is streaming with no text yet', () => {
+  it('shows a busy Reasoning line without a disclosure while reasoning streams with no text yet', () => {
     const part: ReasoningPart & { state: 'streaming' } = { type: 'reasoning', reasoning: '', state: 'streaming' };
 
-    const { container } = render(<ReasoningPartRenderer part={part} />);
+    render(<ReasoningPartRenderer part={part} />);
 
-    expect(container.textContent).toContain('Reasoning...');
-    expect(screen.queryByRole('button', { name: /reasoning/i })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Reasoning' }).getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('renders the collapsible panel once streaming reasoning has text', () => {
@@ -58,7 +58,6 @@ describe('ReasoningPartRenderer', () => {
 
     expect(container.textContent).toContain('partial thought');
     expect(screen.getByRole('button', { name: 'Reasoning' })).toBeTruthy();
-    expect(container.textContent).not.toContain('Reasoning...');
   });
 
   it('surfaces a label for redacted reasoning instead of an empty box', () => {
@@ -72,10 +71,10 @@ describe('ReasoningPartRenderer', () => {
   it('replaces the waiting indicator with text and keeps it after streaming finishes', () => {
     const part: ReasoningPart = { type: 'reasoning', reasoning: '', state: 'streaming' };
     const { rerender } = render(<ReasoningPartRenderer part={part} />);
-    expect(screen.getByText('Reasoning...')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
 
     rerender(<ReasoningPartRenderer part={{ ...part, reasoning: 'A partial thought' }} />);
-    expect(screen.queryByText('Reasoning...')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reasoning' })).toBeTruthy();
     expect(screen.getByText('A partial thought')).toBeTruthy();
 
     rerender(<ReasoningPartRenderer part={{ ...part, reasoning: 'A complete thought', state: 'done' }} />);

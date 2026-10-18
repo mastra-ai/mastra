@@ -1,6 +1,6 @@
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useLinkComponent } from '@/lib/framework';
 
 /** Renders the "New prompt" CTA for the page header of the prompts listing page. */
 export function PromptBlocksHeaderCreateAction() {

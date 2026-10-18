@@ -22,7 +22,7 @@
 import posixPath from 'node:path/posix';
 
 import type { RequestContext } from '../../request-context';
-import { PermissionError } from '../errors';
+import { FilesystemError, PermissionError } from '../errors';
 import { callLifecycle } from '../lifecycle';
 import type { ProviderStatus } from '../lifecycle';
 import type {
@@ -305,7 +305,7 @@ export class CompositeFilesystem<
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     const r = this.resolveMount(path);
-    if (!r) throw new Error(`No mount for path: ${path}`);
+    if (!r) throw new FilesystemError(`No mount for path: ${path}`, 'ENOENT', path);
     return r.fs.readFile(r.fsPath, options);
   }
 
@@ -370,7 +370,7 @@ export class CompositeFilesystem<
     if (virtual) return virtual;
 
     const r = this.resolveMount(path);
-    if (!r) throw new Error(`No mount for path: ${path}`);
+    if (!r) throw new FilesystemError(`No mount for path: ${path}`, 'ENOENT', path);
     return r.fs.readdir(r.fsPath, options);
   }
 
@@ -414,7 +414,7 @@ export class CompositeFilesystem<
     }
 
     const r = this.resolveMount(path);
-    if (!r) throw new Error(`No mount for path: ${path}`);
+    if (!r) throw new FilesystemError(`No mount for path: ${path}`, 'ENOENT', path);
 
     // Mount point root always returns directory stat (even if errored)
     if (r.fsPath === '') {

@@ -29,7 +29,7 @@ export const TabContent = ({ children, value, flush = false, keepMounted = false
         'grid overflow-y-auto ring-offset-background',
         // Flush panels give the row to their content (scroll region, code block) instead of padding it.
         flush ? 'h-full min-h-0' : 'py-2',
-        focusRing.visible,
+        focusRing,
         className,
       )}
     >

@@ -1,28 +1,36 @@
 import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
-import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
+import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
+import { toMemoryModelId } from '../onboarding/packs.js';
 import {
-  findModePackForModel,
   loadSettings,
   resolveDefaultThinkingLevel,
-  resolveModePackModels,
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
+import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
+import { normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
-import { resolveCredentialStore } from './credential-resolver.js';
+import {
+  hasCredentialTenantResolver,
+  prepareCredentialTenant,
+  resolveCredentialScope,
+  resolveCredentialStore,
+} from './credential-resolver.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 import {
   MASTRA_GATEWAY_PREFIX,
   MASTRACODE_GATEWAY_ID,
   MastraCodeGateway,
   getGlobalAuthStorage,
+  hasProviderEnvironmentKey,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
 } from './mastracode-gateway.js';
@@ -50,7 +58,7 @@ export {
 } from './custom-provider-source.js';
 export type { CustomProvidersSource } from './custom-provider-source.js';
 
-type ResolvedModel = GatewayLanguageModel;
+type ResolvedModel = GatewayLanguageModel | ModelRouterLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
 function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
@@ -156,19 +164,58 @@ export function resolveModelId(modelId: string): string {
  */
 export function resolveModel(
   modelId: string,
-  options?: { thinkingLevel?: ThinkingLevelSetting; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
-): GatewayLanguageModel {
+  options?: {
+    thinkingLevel?: ThinkingLevelSetting;
+    remapForCodexOAuth?: boolean;
+    requestContext?: RequestContext;
+    anthropicPromptCacheScope?: AnthropicPromptCacheScope;
+  },
+): ResolvedModel {
+  if (!hasCredentialTenantResolver()) return resolveModelForRequest(modelId, options);
+  const createRequestModel = () => {
+    const requestContext = options?.requestContext ? new RequestContext(options.requestContext.entries()) : undefined;
+    // The router supplies stable SDK metadata and adapts whichever provider the refreshed policy selects.
+    // Each invocation owns its policy context and model cache, including concurrent OM and subagent calls.
+    return new ModelRouterLanguageModel({ id: `${MASTRACODE_GATEWAY_ID}/${modelId}` }, [
+      {
+        id: MASTRACODE_GATEWAY_ID,
+        name: 'Request-scoped MastraCode',
+        fetchProviders: async () => ({}),
+        buildUrl: () => undefined,
+        getApiKey: async () => '',
+        resolveAuth: () => ({ apiKey: 'request-scoped' }),
+        resolveLanguageModel: async () => {
+          await prepareCredentialTenant(requestContext);
+          return resolveModelForRequest(modelId, { ...options, requestContext });
+        },
+      },
+    ]);
+  };
+  let currentModel = createRequestModel();
+  return new Proxy(currentModel, {
+    get(_target, property) {
+      if (property === 'supportedUrls') return createRequestModel().supportedUrls;
+      if (property === 'doStream' || property === 'doGenerate') {
+        return async (...args: unknown[]) => {
+          const refreshed = createRequestModel();
+          currentModel = refreshed;
+          return Reflect.apply(Reflect.get(refreshed, property), refreshed, args);
+        };
+      }
+      const value = Reflect.get(currentModel, property, currentModel);
+      return typeof value === 'function' ? value.bind(currentModel) : value;
+    },
+  });
+}
+
+function resolveModelForRequest(modelId: string, options?: Parameters<typeof resolveModel>[1]): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  // Bedrock was previously cataloged under the MastraCode gateway namespace
-  // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
-  // standalone `amazon-bedrock/<model>` form so they resolve through the
-  // dedicated Bedrock gateway.
-  const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
-  const bedrockNormalizedInput = modelId.startsWith(bedrockLegacyPrefix)
-    ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
-    : modelId;
+  // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
+  // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
+  // already-saved ids (packs, OM settings, thread metadata) to current ids.
+  const legacyNormalizedInput = normalizeLegacyModelId(modelId);
   // Deployed web registers a custom providers source (DB-backed, tenant
   // scoped); when registered it is authoritative and settings.json custom
   // providers are ignored. Undefined = local settings-based behavior.
@@ -179,7 +226,7 @@ export function resolveModel(
   // Normalize at resolution time (in addition to stripping at selection time)
   // so already-saved ids and any surface that persists the raw catalog id
   // still resolve to the custom provider.
-  const normalizedInput = stripMastraCodeCustomProviderPrefix(bedrockNormalizedInput, customProviders);
+  const normalizedInput = stripMastraCodeCustomProviderPrefix(legacyNormalizedInput, customProviders);
   const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
   const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');
@@ -188,7 +235,23 @@ export function resolveModel(
     throw new Error(`Invalid model id: ${modelId}`);
   }
 
+  // Deployed hosts resolve exactly the trusted policy's credential scope.
+  // Only local mode falls back to global AuthStorage.
+  const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
+  const baseCredentialStore = tenantCredentialStore ?? getGlobalAuthStorage();
+
   if (providerId === AMAZON_BEDROCK_GATEWAY_ID) {
+    // Bedrock authenticates through the server process's AWS credential chain,
+    // never a tenant credential. A tenant store only lets it through when the
+    // operator opted the deployment in.
+    if (
+      tenantCredentialStore?.allowEnvironmentFallback === false &&
+      !tenantCredentialStore.allowsDeploymentCredentials?.(AMAZON_BEDROCK_GATEWAY_ID)
+    ) {
+      throw new ProviderAuthRequiredError(
+        'Amazon Bedrock is not enabled for this Factory deployment. The operator must provide AWS credentials to the server and set FACTORY_DEPLOYMENT_MODEL_PROVIDERS=amazon-bedrock.',
+      );
+    }
     const bedrockGateway = createAmazonBedrockGateway();
     const routerId = `${AMAZON_BEDROCK_GATEWAY_ID}/${bareModelId}`;
     const auth = bedrockGateway.resolveAuth({
@@ -210,16 +273,13 @@ export function resolveModel(
   const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
-  // Deployed web registers a per-tenant credential store provider; when the
-  // request carries an authenticated tenant, resolve credentials through the
-  // caller's own store (user > org > env). Undefined = global AuthStorage.
-  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
   const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
   const gateway = createMastraCodeGateway({
     mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
     mastraGatewayApiKey: mgApiKey,
     routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
     thinkingLevel: options?.thinkingLevel,
+    anthropicPromptCacheScope: options?.anthropicPromptCacheScope,
     customProviders,
     credentialStore,
   });
@@ -232,8 +292,12 @@ export function resolveModel(
   });
 
   if (!auth && credentialStore?.allowEnvironmentFallback === false) {
+    // Scopes are exclusive, so name the one in effect: otherwise a user with a
+    // personal sign-in can't tell why an organization-scoped Factory fails.
     throw new ProviderAuthRequiredError(
-      `No usable ${providerId} credential is configured for this signed-in Factory account. Connect the provider or add an organization credential, then try again.`,
+      resolveCredentialScope(options?.requestContext) === 'factory'
+        ? `No usable ${providerId} credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
+        : `No usable ${providerId} credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
     );
   }
 
@@ -243,6 +307,32 @@ export function resolveModel(
     apiKey: auth?.apiKey ?? '',
     headers,
   });
+}
+
+/**
+ * Whether `resolveModel` can authenticate a provider for this request, using the
+ * same credential lookup: the tenant store in deployed Factory (no environment
+ * keys), otherwise local auth and then the provider's environment keys.
+ */
+export function canUseProvider(providerId: string, options?: { requestContext?: RequestContext }): boolean {
+  reloadAuthStorage();
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: '',
+    routeThroughMastraGateway: false,
+    customProviders: resolveCustomProviders(options?.requestContext) ?? loadSettings().customProviders,
+    credentialStore,
+  });
+  const auth = gateway.resolveAuth({
+    gatewayId: MASTRACODE_GATEWAY_ID,
+    providerId,
+    modelId: '',
+    routerId: `${MASTRACODE_GATEWAY_ID}/${providerId}`,
+  });
+  if (auth) return true;
+  // resolveModel lets the models.dev gateway read environment keys only when the store allows it.
+  return credentialStore.allowEnvironmentFallback !== false && hasProviderEnvironmentKey(providerId);
 }
 
 export interface ThinkingRequestContext {
@@ -255,86 +345,62 @@ export interface ThinkingRequestContext {
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
- *   3. Global default (`preferences.thinkingLevel`).
+ *   2. The host's default for this request (`hostDefault`), when the host
+ *      stores thinking defaults itself (the Factory keeps one per Factory).
+ *   3. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
+ *      only when the context carries a session mode.
+ *   4. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
  * (rule-driven) Factory runs that nobody ever opens interactively.
  */
-
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
+  hostDefault?: ThinkingLevelSetting,
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
+  if (hostDefault) return hostDefault;
   const modeId = agentControllerContext?.session?.modeId;
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
-/** Structural pack shape for fallback resolution (custom pack models are partial by nature). */
-export interface ResolvableModePack {
-  id: string;
-  name: string;
-  models: Record<string, string>;
-}
-
-/** All packs a fallback chain may reference: every builtin plus saved customs. */
-export function listResolvableModePacks(settings: ReturnType<typeof loadSettings>): ResolvableModePack[] {
-  return [
-    ...listBuiltinModePacks(),
-    ...settings.customModelPacks.map(pack => ({
-      id: `custom:${pack.name}`,
-      name: pack.name,
-      models: { ...pack.models },
-    })),
-  ];
-}
-
 /**
- * Dynamic model function that reads the current model from controller state.
- * This allows runtime model switching via the /models picker.
- *
- * When the session's model came from a pack with a fallback chain configured
- * (`settings.models.packFallbacks`), returns core's `ModelWithRetries[]`
- * fallback array instead of a bare model: the active pack's model first, then
- * each fallback pack's model for the same mode. Core advances the array when
- * the error processors decline to retry (pool exhausted / persistent outage —
- * see AccountRotationProcessor). Entry ids are unique per occurrence — the
- * one allowed revisit of a pack gets `<packId>#2` — because core re-resolves
- * the active fallback index by id across agentic steps.
+ * Dynamic model function that reads the current model and optional ordered
+ * fallback route from controller state. Route entry ids are opaque host-owned
+ * identifiers; repeated ids receive occurrence suffixes because core tracks the
+ * active fallback index by id across agentic steps.
  */
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-): ResolvedModel | ModelWithRetries[] {
-  const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-
-  const controllerState = agentControllerContext?.getState?.() as
+  { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
+): IdentifiedModelConfig | ModelWithRetries[] {
+  const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
+  const state = controller?.getState?.() as
     | {
-        activeModelPackId?: unknown;
-        mastracodePendingPackFallback?: { toPackId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
+        modelRoute?: {
+          entries?: Array<{ id?: unknown; modelId?: unknown }>;
+        };
+        mastracodePendingModelFallback?: { toEntryId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
       }
     | undefined;
-  const pendingState = controllerState?.mastracodePendingPackFallback;
+  const pendingState = state?.mastracodePendingModelFallback;
   const pendingFallback =
     pendingState &&
     (pendingState.threadId === undefined ||
-      (typeof pendingState.threadId === 'string' && pendingState.threadId === agentControllerContext?.threadId))
+      (typeof pendingState.threadId === 'string' && pendingState.threadId === controller?.threadId))
       ? pendingState
       : undefined;
   const pendingModelId =
     pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
       ? pendingFallback.toModelId
       : undefined;
-  const modelId = pendingModelId ?? agentControllerContext?.session?.modelId;
+  const modelId = pendingModelId ?? controller?.session?.modelId;
   if (!modelId) {
-    // A missing controller context means the run was started without session
-    // request context at all (e.g. a signal delivered to an idle thread) —
-    // "use /models" would mislead there, the user's selection was never the
-    // problem.
-    if (!agentControllerContext) {
+    if (!controller) {
       throw new Error(
         'No model available: this run started without a controller session context, so no model selection could be resolved.',
       );
@@ -342,115 +408,102 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
-  const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
-  const primary = resolveModel(modelId, resolveOptions);
-
-  const settings = loadSettings(settingsPath);
-  // `models?` tolerates partial settings mocks; loaded settings always carry it.
-  const fallbacks = settings.models?.packFallbacks ?? {};
-  if (Object.keys(fallbacks).length === 0) return primary;
-
-  const modeId = agentControllerContext?.session?.modeId ?? 'build';
-  const packs = listResolvableModePacks(settings);
-  const pendingPackId =
-    pendingFallback && typeof pendingFallback.toPackId === 'string' && pendingFallback.toPackId.length > 0
-      ? pendingFallback.toPackId
-      : undefined;
-  const statePackId = pendingPackId ?? controllerState?.activeModelPackId ?? settings.models.activeModelPackId;
-  const activePack = findModePackForModel(
-    settings,
-    packs,
-    modelId,
-    modeId,
-    typeof statePackId === 'string' ? statePackId : undefined,
+  const thinkingLevel = resolveRequestThinkingLevel(
+    modeless ? { state: controller?.state } : controller,
+    settingsPath,
+    defaultThinkingLevel,
   );
-  if (!activePack) return primary;
+  const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
+  // Label each resolved model with its full ID: the resolved gateway model only
+  // knows its bare provider model, and Memory's `'auto'` reads this label.
+  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
+  const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
+  const pendingEntryId =
+    pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
+  const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;
+  const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
+  if (!activeRoute || activeRoute.length < 2 || activeRoute[0]?.modelId !== modelId) return primary;
 
-  const chain = resolveModePackFallbackChain(fallbacks, activePack.id, settings.customModelPacks);
-  if (chain.length < 2) return primary;
+  const firstId =
+    typeof activeRoute[0]?.id === 'string' && activeRoute[0].id.length > 0 ? activeRoute[0].id : undefined;
+  if (!firstId) return primary;
 
-  const entries: ModelWithRetries[] = [{ id: activePack.id, model: primary }];
-  const appearances = new Map<string, number>([[activePack.id, 1]]);
-  for (const packId of chain.slice(1)) {
-    const pack = packs.find(candidate => candidate.id === packId);
-    if (!pack) break;
-    const entryModelId = resolveModePackModels(settings, pack)[modeId];
-    if (!entryModelId) break;
-    // Best-effort resolution: an unresolvable fallback (e.g. unconnected
-    // provider in deployed fail-closed mode) truncates the chain here rather
-    // than failing the request before the primary is ever tried.
+  const entries: ModelWithRetries[] = [{ id: firstId, model: primary }];
+  const appearances = new Map<string, number>([[firstId, 1]]);
+  for (const routeEntry of activeRoute.slice(1)) {
+    if (
+      typeof routeEntry.id !== 'string' ||
+      routeEntry.id.length === 0 ||
+      typeof routeEntry.modelId !== 'string' ||
+      routeEntry.modelId.length === 0
+    ) {
+      break;
+    }
     let entryModel: ResolvedModel;
     try {
-      entryModel = resolveModel(entryModelId, resolveOptions);
+      entryModel = resolveModel(routeEntry.modelId, resolveOptions);
     } catch {
       break;
     }
-    const occurrence = (appearances.get(packId) ?? 0) + 1;
-    appearances.set(packId, occurrence);
+    const occurrence = (appearances.get(routeEntry.id) ?? 0) + 1;
+    appearances.set(routeEntry.id, occurrence);
     entries.push({
-      id: occurrence === 1 ? packId : `${packId}#${occurrence}`,
-      model: entryModel,
+      id: occurrence === 1 ? routeEntry.id : `${routeEntry.id}#${occurrence}`,
+      model: identifyModel(routeEntry.modelId, entryModel),
     });
   }
-  // A chain that truncated to the primary alone is indistinguishable from no
-  // chain — return the bare model so core never sees a one-entry array.
-  if (entries.length < 2) return primary;
-  return entries;
+
+  return entries.length < 2 ? primary : entries;
 }
 
-/** OM fallback-chain entry: a pack's OM model resolved through the gateway. Assignable to `ModelWithRetries`. */
-export type PackMemoryModelChainEntry = { id: string; model: GatewayLanguageModel };
+function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
+  return { model, id: toMemoryModelId(modelId) };
+}
+
+type MemoryRouteState = {
+  modelRoute?: { entries?: Array<{ id?: unknown; memoryModelId?: unknown }> };
+  mastracodePendingModelFallback?: { toEntryId?: unknown; threadId?: unknown } | null;
+};
 
 /**
- * Resolve the observational-memory model for the active mode pack, walking the
- * pack's fallback chain (`settings.models.packFallbacks`) and collecting each
- * pack's optional `models.memory` entry. Packs without an OM model are skipped
- * (the field is optional, so absence must not truncate the chain); duplicate
- * model ids collapse so an A⇄B cycle never retries an identical OM model.
- *
- * Returns a bare model for a single entry, a fallback array for multiple
- * entries (OM's internal agents run the same agentic loop, so the array gives
- * OM its own cross-pack failover), or `undefined` when no pack in the chain
- * defines an OM model — callers then fall back to the standalone OM
- * configuration.
+ * The active model route for memory: the session route, starting at a pending
+ * fallback hop captured for this thread.
  */
-export function resolvePackMemoryModelChain(
-  settings: ReturnType<typeof loadSettings>,
-  startPackId: string,
-  resolveOptions: Parameters<typeof resolveModel>[1],
-): GatewayLanguageModel | PackMemoryModelChainEntry[] | undefined {
-  const packs = listResolvableModePacks(settings);
-  if (!packs.some(pack => pack.id === startPackId)) return undefined;
+export function getActiveMemoryRoute<TEntry extends { id?: unknown; memoryModelId?: unknown }>(
+  state:
+    | {
+        modelRoute?: { entries?: TEntry[] };
+        mastracodePendingModelFallback?: MemoryRouteState['mastracodePendingModelFallback'];
+      }
+    | undefined,
+  threadId?: string | null,
+): TEntry[] {
+  const pending = state?.mastracodePendingModelFallback;
+  const sameThreadPending =
+    pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : undefined;
+  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
+  const pendingIndex = sameThreadPending
+    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
+    : -1;
+  return pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+}
 
-  const chain = resolveModePackFallbackChain(
-    settings.models?.packFallbacks ?? {},
-    startPackId,
-    settings.customModelPacks,
+/**
+ * The memory model the active route applies to both OM roles: `'auto'`, the
+ * first concrete memory model, or `undefined` when the route sets none (both
+ * roles then follow their `/om` settings).
+ */
+export function getActiveRouteMemoryModelId(
+  state: Readonly<Record<string, unknown>> | undefined,
+  threadId?: string | null,
+): string | undefined {
+  const route = getActiveMemoryRoute(state as MemoryRouteState | undefined, threadId);
+  if (route[0]?.memoryModelId === 'auto') return 'auto';
+  const entry = route.find(
+    candidate =>
+      typeof candidate.memoryModelId === 'string' && candidate.memoryModelId && candidate.memoryModelId !== 'auto',
   );
-  const seenModelIds = new Set<string>();
-  const entries: PackMemoryModelChainEntry[] = [];
-  for (const packId of chain) {
-    const pack = packs.find(candidate => candidate.id === packId);
-    if (!pack) break;
-    const memoryModelId = resolveModePackModels(settings, pack).memory;
-    if (!memoryModelId || seenModelIds.has(memoryModelId)) continue;
-    seenModelIds.add(memoryModelId);
-    // Best-effort resolution: an unresolvable OM entry (e.g. unconnected
-    // provider in deployed fail-closed mode) truncates the chain here rather
-    // than failing observation before the pack's own OM model is tried.
-    let entryModel: ResolvedModel;
-    try {
-      entryModel = resolveModel(memoryModelId, resolveOptions);
-    } catch {
-      break;
-    }
-    entries.push({ id: `${packId}:memory`, model: entryModel });
-  }
-
-  if (entries.length === 0) return undefined;
-  if (entries.length === 1) return entries[0]!.model;
-  return entries;
+  return entry?.memoryModelId as string | undefined;
 }
 
 /**

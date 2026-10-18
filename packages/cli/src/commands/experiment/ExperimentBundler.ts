@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { lstat, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -33,7 +32,7 @@ export interface ExperimentWorkerArtifactManifest {
 
 export class ExperimentBundler extends Bundler {
   readonly buildIdentity: ExperimentWorkerBuildIdentity = {
-    buildId: randomUUID(),
+    buildId: globalThis.crypto.randomUUID(),
     protocolVersion: EXPERIMENT_WORKER_PROTOCOL_VERSION,
     datasetCanonicalizationVersion: EXPERIMENT_DATASET_CANONICALIZATION_VERSION,
   };
@@ -110,9 +109,12 @@ export class ExperimentBundler extends Bundler {
     const files = await collectFileDigests(outputDirectory);
     const lockfileNames = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb']);
     const lockfile = files.find(file => lockfileNames.has(file.path))?.path;
-    const contentDigest = createHash('sha256')
-      .update(files.map(file => `${file.path}\0${file.sha256}\n`).join(''))
-      .digest('hex');
+    const contentDigest = Buffer.from(
+      await globalThis.crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(files.map(file => `${file.path}\0${file.sha256}\n`).join('')),
+      ),
+    ).toString('hex');
     const manifest: ExperimentWorkerArtifactManifest = {
       artifactVersion: 1,
       kind: 'mastra-experiment-worker',
@@ -203,9 +205,7 @@ async function collectFileSignatures(root: string): Promise<Map<string, string>>
       if (stats.isFile()) {
         files.set(
           artifactPath,
-          `file:${createHash('sha256')
-            .update(await readFile(entryPath))
-            .digest('hex')}`,
+          `file:${Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', await readFile(entryPath))).toString('hex')}`,
         );
       } else if (stats.isSymbolicLink()) {
         files.set(artifactPath, `symlink:${await readlink(entryPath)}`);
@@ -262,9 +262,9 @@ async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
       } else if (stats.isFile()) {
         files.push({
           path: artifactPath,
-          sha256: createHash('sha256')
-            .update(await readFile(fullPath))
-            .digest('hex'),
+          sha256: Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', await readFile(fullPath))).toString(
+            'hex',
+          ),
         });
       } else if (stats.isSymbolicLink()) {
         const target = await readlink(fullPath);
@@ -280,7 +280,9 @@ async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
           path: artifactPath,
           type: 'symlink',
           target,
-          sha256: createHash('sha256').update(target).digest('hex'),
+          sha256: Buffer.from(
+            await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(target)),
+          ).toString('hex'),
         });
       } else {
         throw new Error(`Unsupported artifact file type: ${artifactPath}`);

@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI figurative noun: '%s'. Name the concrete thing it stands for."
+message: "AI figurative noun: '%s'. Say what concrete thing it stands for."
 level: error
 nonword: true
 ignorecase: true

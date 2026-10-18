@@ -7,22 +7,25 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
-import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import type { InstructionBlock, RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { DisplayConditionsDialog } from '@/domains/cms';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentCMSRefBlockProps {
   index: number;
   block: RefInstructionBlock;
+  onBlockChange?: (block: InstructionBlock) => void;
   onDelete?: (index: number) => void;
   onDereference?: (index: number, content: string) => void;
   className?: string;
@@ -31,7 +34,9 @@ export interface AgentCMSRefBlockProps {
 }
 
 interface RefBlockContentProps {
+  index: number;
   block: RefInstructionBlock;
+  onRulesChange?: (rules: RuleGroup | undefined) => void;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
   onDelete?: () => void;
   onDereference?: (content: string) => void;
@@ -40,17 +45,22 @@ interface RefBlockContentProps {
 }
 
 const RefBlockContent = ({
+  index,
   block,
+  onRulesChange,
   dragHandleProps,
   onDelete,
   onDereference,
   schema,
   readOnly = false,
 }: RefBlockContentProps) => {
-  const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: block.promptBlockId,
+    queryOptions: { enabled: Boolean(block.promptBlockId) },
+  });
   const isDraft = promptBlock && !promptBlock.activeVersionId;
   const hasUnpublishedEdits = promptBlock && !!promptBlock.activeVersionId && !!promptBlock.hasDraft;
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: block.promptBlockId });
   const { navigate, paths } = useLinkComponent();
   // Local state for the editor so edits aren't lost on query refetch
   const [localContent, setLocalContent] = useState('');
@@ -121,7 +131,7 @@ const RefBlockContent = ({
       )}
 
       {/* Content area with left accent border */}
-      <div className="border-l-2 border-accent3/30 pl-3">
+      <div className="border-l-2 border-info-edge pl-3">
         {isLoading ? (
           <div className="flex items-center gap-2 py-3 text-muted-foreground">
             <Spinner className="h-4 w-4" />
@@ -135,14 +145,24 @@ const RefBlockContent = ({
                 {promptBlock.name}
               </Txt>
               {isDraft && (
-                <Badge size="xs" variant="yellow" aria-label="Draft prompt block">
+                <Badge size="xs" variant="warning" aria-label="Draft prompt block">
                   Draft
                 </Badge>
               )}
               {hasUnpublishedEdits && (
-                <Badge size="xs" variant="yellow" aria-label="Unpublished prompt block edits">
+                <Badge size="xs" variant="warning" aria-label="Unpublished prompt block edits">
                   Unpublished edits
                 </Badge>
+              )}
+              {onRulesChange && (
+                <div className="ml-auto">
+                  <DisplayConditionsDialog
+                    entityName={`Block ${index + 1}`}
+                    schema={schema}
+                    rules={block.rules}
+                    onRulesChange={onRulesChange}
+                  />
+                </div>
               )}
               {!readOnly && (
                 <Popover>
@@ -151,7 +171,8 @@ const RefBlockContent = ({
                       type="button"
                       aria-label={`Open actions for ${promptBlock.name}`}
                       className={cn(
-                        'ml-auto rounded p-0.5 hover:bg-fill-subtle',
+                        'rounded p-0.5 hover:bg-fill-subtle',
+                        !onRulesChange && 'ml-auto',
                         quietTextHover,
                         controlStateColorTransition,
                       )}
@@ -175,39 +196,51 @@ const RefBlockContent = ({
                     <div className="p-1">
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-foreground hover:bg-fill-subtle"
                         onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
+                        className={cn(
+                          'text-foreground',
+                          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
+                        )}
                       >
                         <Icon className="h-3.5! w-3.5! text-muted-foreground">
                           <ExternalLink />
                         </Icon>
-                        Open original
+                        <Txt as="span" variant="meta" className="block">
+                          Open original
+                        </Txt>
                       </button>
                       {onDereference && (
                         <button
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-foreground hover:bg-fill-subtle"
                           onClick={() => {
                             debouncedSave.flush();
                             onDereference(localContent);
                           }}
+                          className={cn(
+                            'text-foreground',
+                            'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
+                          )}
                         >
                           <Icon className="h-3.5! w-3.5! text-muted-foreground">
                             <X />
                           </Icon>
-                          De-reference block
+                          <Txt as="span" variant="meta" className="block">
+                            De-reference block
+                          </Txt>
                         </button>
                       )}
                       {onDelete && (
                         <button
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-error hover:bg-fill-subtle"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive-foreground hover:bg-fill-subtle"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
                             <X />
                           </Icon>
-                          Remove block
+                          <Txt as="span" variant="meta" className="block">
+                            Remove block
+                          </Txt>
                         </button>
                       )}
                     </div>
@@ -231,13 +264,13 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="text-warning flex items-start gap-1.5 px-1 pb-1 text-meta">
+              <div className="flex items-start gap-1.5 px-1 pb-1 text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                <span>
+                <Txt as="span" variant="meta">
                   {isDraft
                     ? 'This block is skipped at runtime until it is published.'
                     : 'Runtime uses the last published version until these edits are published.'}
-                </span>
+                </Txt>
               </div>
             )}
 
@@ -257,7 +290,7 @@ const RefBlockContent = ({
             />
           </>
         ) : (
-          <div className="text-warning flex items-center gap-2 py-3">
+          <div className="flex items-center gap-2 py-3 text-warning-foreground">
             <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}
@@ -269,6 +302,7 @@ const RefBlockContent = ({
 export const AgentCMSRefBlock = ({
   index,
   block,
+  onBlockChange,
   onDelete,
   onDereference,
   className,
@@ -279,7 +313,9 @@ export const AgentCMSRefBlock = ({
     <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <RefBlockContent
+          index={index}
           block={block}
+          onRulesChange={readOnly || !onBlockChange ? undefined : rules => onBlockChange({ ...block, rules })}
           dragHandleProps={dragHandleProps}
           onDelete={readOnly || !onDelete ? undefined : () => onDelete(index)}
           onDereference={readOnly || !onDereference ? undefined : (content: string) => onDereference(index, content)}
