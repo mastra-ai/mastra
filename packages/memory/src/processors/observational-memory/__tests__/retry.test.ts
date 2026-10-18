@@ -5,6 +5,7 @@ import {
   computeDelay,
   isTransientLLMError,
   OmIncompleteResponseError,
+  OmModelCallTimeoutError,
   RETRY_CONFIG,
   withRetry,
 } from '../retry';
@@ -254,5 +255,57 @@ describe('assertCompleteModelResponse', () => {
   it.each(['stop', 'length'])('returns the output for finishReason %s', finishReason => {
     const output = { finishReason, text: 'done' };
     expect(assertCompleteModelResponse(output, 'OM observer')).toBe(output);
+  });
+});
+
+describe('withRetry timeoutMs', () => {
+  const original = { ...RETRY_CONFIG };
+  beforeEach(() => {
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 1;
+    RETRY_CONFIG.jitter = 0;
+  });
+  afterEach(() => Object.assign(RETRY_CONFIG, original));
+
+  const hang = (signal: AbortSignal) =>
+    new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+
+  it('aborts a hung attempt and retries it', async () => {
+    const signals: AbortSignal[] = [];
+    const fn = vi.fn(async (signal: AbortSignal) => {
+      signals.push(signal);
+      if (signals.length === 1) return hang(signal);
+      return 'ok';
+    });
+    await expect(withRetry(fn, { label: 'observer', timeoutMs: 20 })).resolves.toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(signals[0]!.aborted).toBe(true);
+    expect(signals[0]!.reason).toBeInstanceOf(OmModelCallTimeoutError);
+  });
+
+  it('bounds a call that ignores its signal', async () => {
+    const fn = vi.fn(() => new Promise<never>(() => {}));
+    await expect(withRetry(fn, { label: 'observer', timeoutMs: 10, maxRetries: 1 })).rejects.toBeInstanceOf(
+      OmModelCallTimeoutError,
+    );
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry when the caller aborts', async () => {
+    const controller = new AbortController();
+    const fn = vi.fn((signal: AbortSignal) => hang(signal));
+    const promise = withRetry(fn, { label: 'observer', timeoutMs: 1_000, abortSignal: controller.signal });
+    controller.abort(new Error('cancelled'));
+    await expect(promise).rejects.toThrow('cancelled');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies no timeout unless asked', async () => {
+    const fn = vi.fn(async () => {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      return 'slow';
+    });
+    RETRY_CONFIG.modelCallTimeoutMs = 1;
+    await expect(withRetry(fn, { label: 'append' })).resolves.toBe('slow');
   });
 });

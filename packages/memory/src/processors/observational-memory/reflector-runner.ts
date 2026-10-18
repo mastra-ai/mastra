@@ -50,7 +50,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
-import { assertCompleteModelResponse, withRetry } from './retry';
+import { assertCompleteModelResponse, RETRY_CONFIG, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
@@ -467,7 +467,7 @@ export class ReflectorRunner {
 
       let chunkCount = 0;
       const result = await withRetry(
-        () =>
+        attemptSignal =>
           withOmTracingSpan({
             phase: 'reflector',
             model: resolvedModel.model,
@@ -502,7 +502,7 @@ export class ReflectorRunner {
                     },
                     providerOptions: this.reflectionConfig.providerOptions as any,
                     ...(attemptMemory ? { memory: attemptMemory } : {}),
-                    ...(abortSignal ? { abortSignal } : {}),
+                    abortSignal: attemptSignal,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                     ...(attemptNumber === 1
@@ -546,6 +546,7 @@ export class ReflectorRunner {
         {
           label: 'reflector',
           abortSignal,
+          timeoutMs: RETRY_CONFIG.modelCallTimeoutMs,
           maxRetries: this.reflectionConfig.maxRetries,
         },
       );

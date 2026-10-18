@@ -24,6 +24,12 @@ export const RETRY_CONFIG = {
   maxDelayMs: 120_000,
   /** Random jitter as a fraction of the computed delay (e.g. 0.2 = ±20%). */
   jitter: 0.2,
+  /**
+   * How long one observer or reflector model call may run before it is aborted and retried.
+   * Without it a provider that accepts the request but never answers stalls the call forever,
+   * and the retry schedule above never gets a chance to run.
+   */
+  modelCallTimeoutMs: 120_000,
 };
 
 const TRANSIENT_MESSAGE_SUBSTRINGS = [
@@ -44,6 +50,21 @@ const TRANSIENT_MESSAGE_SUBSTRINGS = [
 ];
 
 const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown']);
+
+/**
+ * A model call that ran past `RETRY_CONFIG.modelCallTimeoutMs`. Retryable, and
+ * deliberately not an AbortError so `withRetry` doesn't treat it as cancellation.
+ *
+ * @internal
+ */
+export class OmModelCallTimeoutError extends Error {
+  readonly isRetryable = true;
+
+  constructor(label: string, timeoutMs: number) {
+    super(`${label} call timed out after ${timeoutMs}ms`);
+    this.name = 'OmModelCallTimeoutError';
+  }
+}
 
 /**
  * A model reply that ended before the model finished. Carries the AI SDK's
@@ -226,6 +247,41 @@ export interface WithRetryOptions {
   abortSignal?: AbortSignal;
   /** Internal retry override. Omit to use the shared retry schedule. */
   maxRetries?: number;
+  /**
+   * Abort and retry an attempt that runs longer than this. Only for model calls:
+   * a timed-out storage write may still land, so retrying it is unsafe.
+   */
+  timeoutMs?: number;
+}
+
+/**
+ * Run one attempt, failing with a retryable `OmModelCallTimeoutError` if it
+ * outlives `timeoutMs`. `fn` gets a signal that aborts on timeout or on the
+ * caller's signal, so the underlying request is cancelled too.
+ */
+async function attemptWithTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  label: string,
+  timeoutMs: number,
+  abortSignal?: AbortSignal,
+): Promise<T> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(abortSignal?.reason);
+  abortSignal?.addEventListener('abort', onAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new OmModelCallTimeoutError(label, timeoutMs);
+      reject(error);
+      controller.abort(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([fn(controller.signal), timeout]);
+  } finally {
+    clearTimeout(timer);
+    abortSignal?.removeEventListener('abort', onAbort);
+  }
 }
 
 /**
@@ -236,8 +292,8 @@ export interface WithRetryOptions {
  *
  * @internal
  */
-export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions): Promise<T> {
-  const { label, abortSignal, maxRetries = RETRY_CONFIG.maxRetries } = opts;
+export async function withRetry<T>(fn: (signal: AbortSignal) => Promise<T>, opts: WithRetryOptions): Promise<T> {
+  const { label, abortSignal, maxRetries = RETRY_CONFIG.maxRetries, timeoutMs } = opts;
   let attempt = 0;
   // total tries = maxRetries + 1 (the initial attempt isn't a "retry")
   while (true) {
@@ -245,9 +301,11 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions)
       throw new Error('The operation was aborted.');
     }
     try {
-      return await fn();
+      if (timeoutMs === undefined) return await fn(abortSignal ?? new AbortController().signal);
+      return await attemptWithTimeout(fn, label, timeoutMs, abortSignal);
     } catch (error) {
-      if (hasAbortInChain(error) || abortSignal?.aborted) throw error;
+      if (abortSignal?.aborted) throw error;
+      if (!(error instanceof OmModelCallTimeoutError) && hasAbortInChain(error)) throw error;
       if (attempt >= maxRetries || !isTransientLLMError(error)) {
         if (attempt > 0) {
           omDebug(
