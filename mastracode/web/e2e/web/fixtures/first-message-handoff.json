@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "First message of a new session"
+      },
+      "response": {
+        "content": "FIRST_MESSAGE_RESPONSE"
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -50,6 +51,8 @@ export interface ScenarioServerOptions {
   inheritStorageFromMastra?: boolean;
   /** Validate session state through the production MastraCode state schema. */
   useMastraCodeStateSchema?: boolean;
+  /** Give the agent memory so thread messages persist, as production agents do. */
+  memory?: boolean;
 }
 
 export interface ScenarioServer {
@@ -106,6 +109,7 @@ export async function startAgentControllerServer(
     browser: browserProvider = false,
     inheritStorageFromMastra = false,
     useMastraCodeStateSchema = false,
+    memory = false,
   } = options;
   const openai = createOpenAI({ apiKey: 'scenario-key', baseURL: aimockBaseUrl });
 
@@ -155,6 +159,7 @@ export async function startAgentControllerServer(
   } as any);
 
   const browser = browserProvider ? createScenarioBrowser(browserProvider) : undefined;
+  const agentMemory = memory ? new MockMemory() : undefined;
   const agent = new Agent({
     id: 'code-agent',
     name: 'code-agent',
@@ -162,6 +167,7 @@ export async function startAgentControllerServer(
     model: openai('gpt-5.4-mini'),
     tools: { ...(tools ?? {}), request_access: requestAccessTool } as any,
     ...(browser ? { browser } : {}),
+    ...(agentMemory ? { memory: agentMemory } : {}),
   });
 
   // A registered AgentController always reads storage through its parent Mastra
@@ -200,6 +206,8 @@ export async function startAgentControllerServer(
     default: new LibSQLStore({ id: 'scenario-mastra-storage', url: 'file::memory:?cache=shared' }),
     domains: { notifications },
   });
+  // Memory writes must land in the store the controller reads threads through.
+  agentMemory?.setStorage(compositeStorage);
   const mastra = new Mastra({ agentControllers: { [CONTROLLER_ID]: controller }, storage: compositeStorage });
 
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();

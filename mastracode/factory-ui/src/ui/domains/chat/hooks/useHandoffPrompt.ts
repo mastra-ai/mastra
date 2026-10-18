@@ -7,10 +7,12 @@ import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgen
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatConnection } from '../context/useChatConnection';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { takeHandoffFiles } from '../services/handoffFiles';
+import type { OutgoingFile } from '../services/transcript';
 
 interface PromptHandoff {
   handoffPrompt: string;
@@ -48,6 +50,14 @@ function readHandoffPrompt(state: unknown): string | undefined {
 
 const pendingHandoffKey = (resourceId: string) => `factory-pending-handoff:${resourceId}`;
 
+interface QueuedHandoff {
+  prompt: string;
+  files: ReturnType<typeof takeHandoffFiles>;
+  outgoing: OutgoingFile[];
+  modelId?: string;
+  thinkingLevel?: ThinkingLevelSetting;
+}
+
 function storePendingHandoff(resourceId: string, prompt: string): void {
   try {
     sessionStorage.setItem(pendingHandoffKey(resourceId), prompt);
@@ -75,7 +85,9 @@ export function clearPendingHandoff(resourceId: string): void {
 export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled, sessionThreadId } = useChatSessionContext();
+  const { threadId: boundThreadId, status: connectionStatus } = useChatConnection();
+  const sessionBound = !sessionThreadId || boundThreadId === sessionThreadId;
   const { localUser, clearPending, pushNotice } = useChatTranscript();
   const { prefillComposer } = useChatCommands();
   const { setImages } = useComposerImagesState();
@@ -90,6 +102,7 @@ export function useHandoffPrompt(): void {
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
   const handedOff = useRef(false);
   const recovered = useRef(false);
+  const queued = useRef<QueuedHandoff | null>(null);
   const prompt = readHandoffPrompt(location.state);
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
@@ -117,22 +130,8 @@ export function useHandoffPrompt(): void {
     if (!prompt && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
     localUser(prompt, false, outgoing);
-    void (async () => {
-      if (modelId) {
-        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
-        );
-      }
-      await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
-      clearPendingHandoff(resourceId);
-    })().catch(error => {
-      prefillComposer(prompt);
-      setImages(current => [...files, ...current]);
-      clearPending();
-      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
-    });
+    queued.current = { prompt, files, outgoing, modelId, thinkingLevel };
   }, [
-    clearPending,
     localUser,
     location.pathname,
     location.search,
@@ -142,10 +141,42 @@ export function useHandoffPrompt(): void {
     prompt,
     pushNotice,
     resourceId,
-    sendMessage,
     sessionEnabled,
-    setImages,
-    switchModel,
     thinkingLevel,
   ]);
+
+  // The send and model routes resolve the session without a thread id. Sending
+  // before session init binds the session thread would persist the prompt to a
+  // random-id thread this page never reads, so the network calls wait for it.
+  // No deps: it must also run in the same commit the first effect queues in.
+  useEffect(() => {
+    const handoff = queued.current;
+    if (!handoff) return;
+    const { prompt, files, outgoing, modelId, thinkingLevel } = handoff;
+    const restore = (message: string) => {
+      prefillComposer(prompt);
+      setImages(current => [...files, ...current]);
+      clearPending();
+      pushNotice(message, 'error');
+    };
+    if (!sessionBound) {
+      // Session init does not retry, so a failed init will never bind. The
+      // prompt was never posted: hand it back instead of leaving it pending.
+      if (connectionStatus !== 'error') return;
+      queued.current = null;
+      clearPendingHandoff(resourceId);
+      restore('The session could not start, so the message was not sent.');
+      return;
+    }
+    queued.current = null;
+    void (async () => {
+      if (modelId) {
+        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
+          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
+        );
+      }
+      await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
+      clearPendingHandoff(resourceId);
+    })().catch(error => restore(error instanceof Error ? error.message : 'The message could not be sent.'));
+  });
 }
