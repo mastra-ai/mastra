@@ -611,7 +611,10 @@ describe('transpilePackages (issue #19380)', () => {
           noopLogger,
         );
 
-        expect(result.externalDependencies.has('ts-source-package')).toBe(false);
+        expect(
+          result.externalDependencies.has('ts-source-package'),
+          'transpilePackages was ignored: the listed package was left external instead of being transpiled (#19380)',
+        ).toBe(false);
         expect(result.dependencies.has('ts-source-package')).toBe(true);
         const optimized = await readdir(outputDir);
         const optimizedCode = (
@@ -620,7 +623,10 @@ describe('transpilePackages (issue #19380)', () => {
           )
         ).join('\n');
         expect(optimizedCode).toContain('hello ${name}');
-        expect(optimizedCode).not.toContain('name: string');
+        expect(
+          optimizedCode,
+          'transpilePackages was ignored: TypeScript from the listed package reached the output untranspiled (#19380)',
+        ).not.toContain('name: string');
       } finally {
         process.chdir(originalCwd);
       }
