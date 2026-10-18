@@ -91,6 +91,7 @@ function createProject(
   },
 ) {
   // This process's one live session, as Mastra Code's delivery policy sees it.
+  let sessionLive = true;
   const session = {
     identity: { getResourceId: () => resourceId },
     getThreadScope: () => (projectPath ? { projectPath } : {}),
@@ -101,7 +102,9 @@ function createProject(
           : null,
     },
   } as unknown as Session<unknown>;
-  const sessions = { getSessionByResource: async (id: string) => (id === resourceId ? session : undefined) };
+  const sessions = {
+    getSessionByResource: async (id: string) => (sessionLive && id === resourceId ? session : undefined),
+  };
   let toolRunning = 0;
   let calls = 0;
   const model = new MockLanguageModelV3({
@@ -149,7 +152,7 @@ function createProject(
   const pubsub = createSignalsPubSub(resourceId, { rootDir });
   const dispatcher = createResourceNotificationDispatcher({
     getMastra: () => mastra,
-    getSessionScopes: () => [{ resourceId, scope: threadScopeKey(session.getThreadScope()) }],
+    getSessionScopes: () => (sessionLive ? [{ resourceId, scope: threadScopeKey(session.getThreadScope()) }] : []),
     leases: pubsub.getLeaseProvider(),
     owner: name,
     // Ticked by hand.
@@ -206,6 +209,10 @@ function createProject(
     dispatchTick: () => dispatchDueNotifications({ mastra, storage: notifications }),
     /** This process's own dispatch of its resource. */
     dispatcher,
+    /** Close this process's session, as when the user quits it; the process keeps running. */
+    closeSession: () => {
+      sessionLive = false;
+    },
     get toolRunning() {
       return toolRunning;
     },
@@ -376,7 +383,12 @@ describe('processes in different directories that share one resource', () => {
   /** Two checkouts of one repository: one resource, two projects, two processes. */
   async function setUpCheckouts() {
     const { rootDir, notifications, work, ours } = await setUp();
-    const threadProjects = { 'main-thread': '/repo/main', 'feature-thread': '/repo/feature' };
+    const threadProjects = {
+      'main-thread': '/repo/main',
+      'feature-thread': '/repo/feature',
+      // A third checkout with no process running.
+      'closed-thread': '/repo/closed',
+    };
     const shared = { rootDir, resourceId: ours.resourceId, notifications, work, withDispatch: true, threadProjects };
     const main = createProject('main', { ...shared, projectPath: '/repo/main' });
     const feature = createProject('feature', { ...shared, projectPath: '/repo/feature' });
@@ -435,6 +447,29 @@ describe('processes in different directories that share one resource', () => {
     expect(work.maxInFlight).toBe(1);
   }, 30_000);
 
+  it("delivers a thread however many of a closed checkout's notifications are waiting ahead of it", async () => {
+    const { notifications, work, main, round } = await setUpCheckouts();
+    for (let index = 0; index < 120; index++) {
+      await notifications.createNotification(dueNotification(main.resourceId, 'closed-thread', { id: `old-${index}` }));
+    }
+    await sleep(5);
+    await notifications.createNotification(
+      dueNotification(main.resourceId, 'feature-thread', { id: 'for-feature', priority: 'urgent' }),
+    );
+
+    await round();
+    await waitFor(() => work.ran.length > 0 && work.inFlight === 0, 'the feature run');
+
+    expect((await notifications.getNotification({ threadId: 'feature-thread', id: 'for-feature' }))?.status).toBe(
+      'delivered',
+    );
+    expect(work.ran.every(entry => entry.startsWith('feature:'))).toBe(true);
+    // No process runs in the closed checkout, so its notifications wait for one, without counting attempts.
+    const closed = await notifications.listNotifications({ threadId: 'closed-thread' });
+    expect(closed).toHaveLength(120);
+    expect(closed.every(record => record.status === 'pending' && (record.deliveryAttempts ?? 0) === 0)).toBe(true);
+  }, 30_000);
+
   it('lets one of two processes in the same project deliver its thread', async () => {
     const { rootDir, notifications, work, main, feature, round } = await setUpCheckouts();
     const featureAgain = createProject('feature-2', {
@@ -466,5 +501,37 @@ describe('processes in different directories that share one resource', () => {
         notificationDispatchLeaseKey(main.resourceId, threadScopeKey({ projectPath: '/repo/feature' })),
       ),
     ).toBe('feature');
+  }, 30_000);
+
+  it('hands a dispatch lease to another process once no session here needs it', async () => {
+    const { rootDir, notifications, work, main, feature } = await setUpCheckouts();
+    const featureAgain = createProject('feature-2', {
+      rootDir,
+      resourceId: main.resourceId,
+      notifications,
+      work,
+      withDispatch: true,
+      projectPath: '/repo/feature',
+    });
+    featureAgain.dispatcher.start();
+    await featureAgain.dispatcher.tick();
+    const resourceKey = notificationDispatchLeaseKey(main.resourceId);
+    const featureKey = notificationDispatchLeaseKey(main.resourceId, threadScopeKey({ projectPath: '/repo/feature' }));
+    expect(await feature.leases.getLeaseOwner(featureKey)).toBe('feature');
+    expect(await feature.leases.getLeaseOwner(resourceKey)).toBe('main');
+
+    // The feature session closes; its process keeps running, and releases the project's lease on its next tick.
+    feature.closeSession();
+    await feature.dispatcher.tick();
+    expect(await feature.leases.getLeaseOwner(featureKey)).toBeUndefined();
+    await featureAgain.dispatcher.tick();
+    expect(await feature.leases.getLeaseOwner(featureKey)).toBe('feature-2');
+
+    // Likewise the resource's own lease, once the main session closes.
+    main.closeSession();
+    await main.dispatcher.tick();
+    expect(await main.leases.getLeaseOwner(resourceKey)).toBeUndefined();
+    await featureAgain.dispatcher.tick();
+    expect(await main.leases.getLeaseOwner(resourceKey)).toBe('feature-2');
   }, 30_000);
 });
