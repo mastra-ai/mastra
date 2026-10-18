@@ -352,7 +352,7 @@ export class ObserverRunner {
 
     const doGenerate = async () => {
       return withRetry(
-        attemptSignal =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'observer',
             model: resolvedModel.model,
@@ -383,6 +383,7 @@ export class ObserverRunner {
                     providerOptions: this.observationConfig.providerOptions as any,
                     ...(attemptMemory ? { memory: attemptMemory } : {}),
                     abortSignal: attemptSignal,
+                    onChunk: onActivity,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
@@ -409,7 +410,7 @@ export class ObserverRunner {
         {
           label: 'observer',
           abortSignal,
-          timeoutMs: RETRY_CONFIG.modelCallTimeoutMs,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
       );
@@ -685,7 +686,7 @@ export class ObserverRunner {
 
     const doGenerate = async () => {
       return withRetry(
-        attemptSignal =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'observer-multi-thread',
             model: resolvedModel.model,
@@ -714,6 +715,7 @@ export class ObserverRunner {
                     modelSettings: { ...this.observationConfig.modelSettings },
                     providerOptions: this.observationConfig.providerOptions as any,
                     abortSignal: attemptSignal,
+                    onChunk: onActivity,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
@@ -742,7 +744,7 @@ export class ObserverRunner {
         {
           label: 'observer-multi-thread',
           abortSignal,
-          timeoutMs: RETRY_CONFIG.modelCallTimeoutMs,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
       );

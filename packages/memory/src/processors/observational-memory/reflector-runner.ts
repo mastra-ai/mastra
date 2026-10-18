@@ -467,7 +467,7 @@ export class ReflectorRunner {
 
       let chunkCount = 0;
       const result = await withRetry(
-        attemptSignal =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'reflector',
             model: resolvedModel.model,
@@ -505,20 +505,23 @@ export class ReflectorRunner {
                     abortSignal: attemptSignal,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
+                    // Every chunk resets the idle timer; the debug hooks only run on the first attempt.
+                    onChunk(chunk: any) {
+                      onActivity();
+                      if (attemptNumber !== 1) return;
+                      chunkCount++;
+                      if (chunkCount === 1 || chunkCount % 50 === 0) {
+                        const preview =
+                          chunk.type === 'text-delta'
+                            ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                            : chunk.type === 'tool-call'
+                              ? ` tool=${chunk.toolName}`
+                              : '';
+                        omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                      }
+                    },
                     ...(attemptNumber === 1
                       ? {
-                          onChunk(chunk: any) {
-                            chunkCount++;
-                            if (chunkCount === 1 || chunkCount % 50 === 0) {
-                              const preview =
-                                chunk.type === 'text-delta'
-                                  ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                                  : chunk.type === 'tool-call'
-                                    ? ` tool=${chunk.toolName}`
-                                    : '';
-                              omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                            }
-                          },
                           onFinish(event: any) {
                             omDebug(
                               `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
@@ -546,7 +549,7 @@ export class ReflectorRunner {
         {
           label: 'reflector',
           abortSignal,
-          timeoutMs: RETRY_CONFIG.modelCallTimeoutMs,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.reflectionConfig.maxRetries,
         },
       );
