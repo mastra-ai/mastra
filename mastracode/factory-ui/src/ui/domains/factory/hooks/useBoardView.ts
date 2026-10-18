@@ -11,7 +11,7 @@ import {
   clearOpenCard,
 } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
-import { DEFAULT_BOARD_LAYOUT } from '../boardLayout';
+import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardSort } from '../boardOrder';
 import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } from '../boardSavedViews';
@@ -71,7 +71,7 @@ export function useBoardView({
   const { applied } = savedViews;
   const pageSettings: BoardViewSettings = {
     sort: boardSortFromParams(searchParams, currentUserId),
-    layout: DEFAULT_BOARD_LAYOUT,
+    layout: boardLayoutFromParams(searchParams),
   };
   const pageFilters = boardFiltersFromParams(searchParams, kind);
   const settings = applied?.settings ?? pageSettings;
@@ -114,6 +114,7 @@ export function useBoardView({
     },
     setLayout: (next: BoardLayout) => {
       if (applied) savedViews.change({ settings: { ...applied.settings, layout: next } });
+      else replaceParams(boardLayoutParams(searchParams, next));
     },
   };
 }

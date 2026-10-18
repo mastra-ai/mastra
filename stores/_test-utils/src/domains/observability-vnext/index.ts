@@ -100,6 +100,15 @@ export interface CreateObservabilityVNextTestsOptions {
    * inline (InMemory upsert-by-id, DuckDB `INSERT OR IGNORE`) can omit this.
    */
   flushPendingMerges?: (storage: ObservabilityStorage) => Promise<void> | void;
+  /**
+   * Optional raw read of the stored `timeToFirstChunkMs` column for one span,
+   * taken from the row that reads resolve that span to. Adapters that persist
+   * the column pass this so the suite can check what the write path stored.
+   */
+  readTimeToFirstChunkMs?: (
+    storage: ObservabilityStorage,
+    span: { traceId: string; spanId: string },
+  ) => Promise<number | null>;
 }
 
 /**
@@ -290,7 +299,7 @@ async function waitFor<T>(
 }
 
 export function createObservabilityVNextTests(options: CreateObservabilityVNextTestsOptions) {
-  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges } = options;
+  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges, readTimeToFirstChunkMs } = options;
 
   describe(`observability vNext shared suite — ${capabilities.label}`, () => {
     let storage: ObservabilityStorage;
@@ -2296,6 +2305,39 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(branch!.spans).toHaveLength(7);
       });
     });
+
+    if (readTimeToFirstChunkMs) {
+      describe('timeToFirstChunkMs column', () => {
+        it('stores the time to first chunk from the span record, keeping zero and leaving missing values empty', async () => {
+          await storage.batchCreateSpans({
+            records: [
+              makeSpan({ traceId: 'ttfc', spanId: 'present', timeToFirstChunkMs: 250 }),
+              makeSpan({ traceId: 'ttfc', spanId: 'zero', timeToFirstChunkMs: 0 }),
+              makeSpan({ traceId: 'ttfc', spanId: 'empty', timeToFirstChunkMs: null }),
+              // Records built by a core version that predates the field leave it out.
+              makeSpan({ traceId: 'ttfc', spanId: 'missing' }),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+
+          const read = (spanId: string) => readTimeToFirstChunkMs(storage, { traceId: 'ttfc', spanId });
+          expect(await read('present')).toBe(250);
+          expect(await read('zero')).toBe(0);
+          expect(await read('empty')).toBeNull();
+          expect(await read('missing')).toBeNull();
+        });
+
+        it('reads the ended value when the span started before its first chunk', async () => {
+          await storage.createSpan({ span: makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', endedAt: null }) });
+          await storage.batchCreateSpans({
+            records: [makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', timeToFirstChunkMs: 400 })],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+
+          expect(await readTimeToFirstChunkMs(storage, { traceId: 'ttfc', spanId: 'lifecycle' })).toBe(400);
+        });
+      });
+    }
 
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {

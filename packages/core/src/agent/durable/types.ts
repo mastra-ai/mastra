@@ -455,6 +455,8 @@ export interface DurableToolCallInput {
   hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
+  /** Model usage of the step that produced this call, reported on its suspension chunk */
+  stepUsage?: LanguageModelUsage;
 }
 
 /**
@@ -663,6 +665,7 @@ export interface AgentErrorEventData {
     message: string;
     stack?: string;
   };
+  delivery?: 'reject';
 }
 
 /**
@@ -977,6 +980,12 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /**
+   * Tool call resumed by the `resume()` currently driving this run in this
+   * process. Its in-flight marker is cleared when the segment suspends again.
+   * @internal
+   */
+  resumeToolCallId?: string;
   /**
    * Set while an engine that persists the suspended snapshot before returning
    * is executing. The tool-call step queues suspension chunks/events here so

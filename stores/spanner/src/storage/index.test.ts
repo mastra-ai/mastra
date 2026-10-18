@@ -123,7 +123,10 @@ if (ENABLE_TESTS) {
     disableMetrics: false,
   };
 
-  createTestSuite(new SpannerStore(sharedConfig), { workflowResultsNoopWhenRunMissing: false });
+  createTestSuite(new SpannerStore(sharedConfig), {
+    workflowResultsNoopWhenRunMissing: false,
+    skillsMetadataFilter: false,
+  });
 
   describe('retention', () => {
     it('prunes expired observability spans and metrics', async () => {

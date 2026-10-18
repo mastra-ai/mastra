@@ -75,11 +75,6 @@ export function externallyAuthored(item: { source: string; metadata: Record<stri
   return item.metadata?.authorTrusted !== true;
 }
 
-// The board mark claims only what GitHub answered: a missing stamp is silence, not an outside contribution.
-export function knownExternalAuthor(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
-  return externallyAuthored(item) && item.metadata?.authorTrusted === false;
-}
-
 export function externallyAuthoredWorkItem(item: {
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
@@ -270,6 +265,8 @@ export interface FactoryStageRuleContext extends FactoryBoundRuleContext {
   stage: FactoryRuleStage;
   fromStage: FactoryRuleStage;
   toStage: FactoryRuleStage;
+  /** Project switch: Work items get an independent self-review before the change request opens. Unset means off. */
+  selfReviewEnabled?: boolean;
 }
 
 export interface FactoryToolResultRuleContext extends FactoryBoundRuleContext {

@@ -68,7 +68,7 @@ interface OAuthFlow {
   poll?(pending: Record<string, unknown>): Promise<OAuthFlowPoll>;
 }
 
-/** Web OAuth flows keyed by *catalog* provider id (mirrors {@link WEB_OAUTH_FLOW_KINDS}). */
+/** Web OAuth flows keyed by *catalog* provider id (mirrors {@link WEB_OAUTH_PROVIDERS}). */
 const OAUTH_FLOWS: Record<string, OAuthFlow> = {
   anthropic: {
     kind: 'paste-code',

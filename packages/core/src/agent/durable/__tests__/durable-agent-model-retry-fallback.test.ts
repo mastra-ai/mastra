@@ -41,8 +41,6 @@
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
-import { MockMemory } from '../../../memory/mock';
-import { Agent } from '../../agent';
 import {
   chunksOfType,
   createRecordingModel,
@@ -54,7 +52,9 @@ import {
   type ModelScript,
   type ParityEngine,
   type ParitySnapshot,
-} from './parity-harness';
+} from '../../../loop/test-utils/aimock/parity';
+import { MockMemory } from '../../../memory/mock';
+import { Agent } from '../../agent';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const MAX_STEPS = 3;
