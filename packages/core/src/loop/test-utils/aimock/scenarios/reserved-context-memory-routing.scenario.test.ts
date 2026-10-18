@@ -78,4 +78,51 @@ describeForAllEngines('AIMock loop scenario: reserved request-context memory key
     expect(JSON.stringify(ctxMessages)).toContain('What is my vault code?');
     expect(bodyMessages).toEqual([]);
   });
+
+  it('keeps routing memory to the memory options thread when no reserved keys are set', async () => {
+    const memory = new MockMemory();
+    const threadId = 'plain-options-thread';
+    const resourceId = 'plain-options-resource';
+    await memory.saveThread({
+      thread: { id: threadId, title: threadId, resourceId, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'acme');
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'My locker number is PLAIN_OPTIONS_9021.',
+      memory,
+      threadId,
+      resourceId,
+      requestContext,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Noted.' });
+      },
+    });
+
+    getMock().clearRequests();
+    getMock().clearFixtures();
+    getMock().resetMatchCounts();
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What is my locker number?',
+      memory,
+      threadId,
+      resourceId,
+      requestContext,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'It is PLAIN_OPTIONS_9021.' });
+      },
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(JSON.stringify(requests[0]?.body?.messages ?? [])).toContain('PLAIN_OPTIONS_9021');
+    const messages = (await memory.recall({ threadId, resourceId })).messages;
+    expect(JSON.stringify(messages)).toContain('What is my locker number?');
+  });
 });
