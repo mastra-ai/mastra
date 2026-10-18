@@ -1226,6 +1226,20 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    // Report the failure on the run's watch topic like the default engine does, so
+    // stream consumers (and RunOutput's workflow-finish status) see the failed step.
+    const failedStepId = workflow ? getStepId(workflow, executionPath ?? []) : null;
+    if (failedStepId && prevResult?.status === 'failed' && workflow?.options?.emitStepEvents !== false) {
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: { id: failedStepId, ...prevResult },
+        },
+      });
+    }
+
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.fail',
       runId,
