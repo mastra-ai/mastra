@@ -2,7 +2,7 @@ import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@m
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
-import { withOmInternalThreadId } from '../internal-request-context';
+import { withOwnThreadIds } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { resolveSubconsciousAgentModel } from './model';
@@ -178,7 +178,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
                 behavior: 'wake',
                 streamOptions: {
                   memory: { thread: remindThread.id, resource: resourceId },
-                  requestContext: withOmInternalThreadId(context.requestContext, agent.id),
+                  requestContext: withOwnThreadIds(context.requestContext, remindThread.id, resourceId),
                   abortSignal: context.abortSignal,
                   maxSteps: config.maxSteps,
                 },
