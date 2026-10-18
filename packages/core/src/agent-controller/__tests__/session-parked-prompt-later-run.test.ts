@@ -14,6 +14,7 @@ import { InMemoryServerCache } from '../../cache';
 import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
@@ -152,6 +153,33 @@ describe.each([false, true])('a message after a parked prompt, durable=%s', dura
 
     const memory = { thread: threadId, resource: resourceId };
     expect(await runOnThread(otherAgent, 'Is the work done?', memory)).toBe('checked');
+    await vi.waitFor(() => expect(runEnds()).toEqual(['suspended', 'complete']));
+
+    const sent = session.sendSignal({ content: 'Are you there?' }, { requireDelivery: true });
+    expect((await sent.accepted).action).toBe('wake');
+    await vi.waitFor(() => expect(runEnds()).toEqual(['suspended', 'complete', 'complete']));
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain('Are you there?');
+  });
+
+  it("starts a run once a message sent elsewhere with the thread's request context has run", async () => {
+    // A sender that forwards the session's request context puts its run on the
+    // session's thread: the reserved thread id outranks the target it names.
+    const { session, prompts, runEnds, threadId, resourceId, otherAgent } = await createHarness('carried', durable);
+
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    const elsewhere = `curate:${threadId}`;
+    const curate = otherAgent.sendMessage(
+      { contents: 'Curate these observations' },
+      {
+        resourceId,
+        threadId: elsewhere,
+        ifIdle: { streamOptions: { requestContext, memory: { thread: elsewhere, resource: resourceId } } },
+      },
+    );
+    expect((await curate.accepted).action).toBe('wake');
     await vi.waitFor(() => expect(runEnds()).toEqual(['suspended', 'complete']));
 
     const sent = session.sendSignal({ content: 'Are you there?' }, { requireDelivery: true });
