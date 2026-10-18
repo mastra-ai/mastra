@@ -1535,11 +1535,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         if (this.#streamIdleTtlMs > 0) {
           await this.#writeClient
             .multi()
-            .xAdd(sub.streamKey, '*', payload)
+            .xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions())
             .pExpire(sub.streamKey, this.#streamIdleTtlMs)
             .exec();
         } else {
-          await this.#writeClient.xAdd(sub.streamKey, '*', payload);
+          await this.#writeClient.xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions());
         }
       } catch (err) {
         this.#logger?.warn?.('redis-streams: nack republish failed for replayed event', {

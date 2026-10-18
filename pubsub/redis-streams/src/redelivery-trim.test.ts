@@ -61,4 +61,49 @@ describe('RedisStreamsPubSub redelivery trimming', () => {
     },
     90_000,
   );
+
+  it('bounds stream growth when a late fan-out subscriber nacks replayed entries', async () => {
+    const seeded = 300;
+    const ps = new RedisStreamsPubSub({ url: REDIS_URL, blockMs: 50, maxStreamLength: 10 });
+    pubsubs.push(ps);
+    const topic = `t-${randomUUID()}`;
+    const key = `mastra:topic:${topic}`;
+    const raw = createClient({ url: REDIS_URL });
+    await raw.connect();
+    try {
+      let acked = 0;
+      await ps.subscribe(topic, async (_event, ack) => {
+        acked++;
+        await ack?.();
+      });
+      // Seed untrimmed entries directly so the late subscriber replays more than one
+      // `MAXLEN ~` node; its republishes are the only writes that can trim the stream.
+      for (let i = 0; i < seeded; i++) {
+        const event = JSON.stringify({
+          id: randomUUID(),
+          type: 'test',
+          data: {},
+          runId: 'run-1',
+          createdAt: new Date(),
+        });
+        await raw.xAdd(key, '*', { event });
+      }
+      await waitFor(() => acked >= seeded, 30_000);
+
+      let republished = 0;
+      await ps.subscribe(topic, async (event, ack, nack) => {
+        if ((event.deliveryAttempt ?? 1) === 1) {
+          await nack?.();
+          republished++;
+        } else {
+          await ack?.();
+        }
+      });
+      await waitFor(() => republished >= seeded, 30_000);
+
+      expect(await raw.xLen(key)).toBeLessThan(seeded);
+    } finally {
+      await raw.quit();
+    }
+  }, 90_000);
 });
