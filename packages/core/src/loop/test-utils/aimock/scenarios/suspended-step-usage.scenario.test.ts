@@ -80,7 +80,7 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
   // The #27425 fix only reached the plain loop's output. On durable and evented
   // engines a suspended run reports no usage for the step that suspended (not on
   // the stream result, the generate() result, or the tool-call-suspended chunk).
-  // Resumed totals are still correct there. Not yet investigated.
+  // Resumed totals are still correct there. See #27440.
   const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
 
   async function setup(kind: Kind, { withPriorStep = false } = {}) {
