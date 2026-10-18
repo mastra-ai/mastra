@@ -70,7 +70,10 @@ interface FactoryMemorySettings {
 }
 
 type FactoryMemorySettingsContext =
-  FactoryMemorySettings | null | { status: 'unavailable'; reason: string } | undefined;
+  | FactoryMemorySettings
+  | null
+  | { status: 'unavailable'; reason: string }
+  | undefined;
 
 function getFactoryMemorySettingsContext(requestContext: RequestContext): FactoryMemorySettingsContext {
   return requestContext.get('mastra__factoryMemorySettings') as FactoryMemorySettingsContext;
