@@ -356,9 +356,9 @@ type ThreadControlSubscription = {
    */
   successorRunIds: Map<string, string>;
   /**
-   * Runs that another runtime registered on the thread while this one's active
-   * run was parked on a tool suspension, mapped to that parked run. When one of
-   * them ends, the thread has moved on without the parked run.
+   * Runs that another runtime registered on the thread while this one had a run
+   * active there, mapped to that run. When one of them ends after the local run
+   * parked on a tool suspension, the thread has moved on without the parked run.
    */
   supersedingRunIds: Map<string, string>;
   unsubscribe: () => void;
@@ -529,6 +529,12 @@ type AgentThreadRuntimeState = {
   leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
+  /**
+   * Thread subscribers reading a run's stream, by run id. A parked run that
+   * continues across its suspension keeps its stream open; once the thread
+   * moves on without it, its readers stop and read the runs queued behind it.
+   */
+  runStreamReaders: Map<string, Set<() => void>>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -720,6 +726,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     leaseRenewalTimers: new Map(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
+    runStreamReaders: new Map(),
   };
 }
 
@@ -1041,15 +1048,11 @@ export class AgentThreadStreamRuntime {
           if (data.clearPendingSignals) this.#notifyThreadEvents(state);
         }
       } else if (data?.type === 'run-registered') {
-        const parkedRunId = state.activeThreadRunIds.get(key);
-        if (
-          parkedRunId !== undefined &&
-          parkedRunId !== data.runId &&
-          !state.threadRunsByStreamId.has(data.streamId) &&
-          state.threadKeysByRunId.get(parkedRunId) === key &&
-          this.#isParkedRun(state, parkedRunId)
-        ) {
-          subscription.supersedingRunIds.set(data.runId, parkedRunId);
+        // Recorded whether or not the local run has parked yet: a run that starts
+        // while it is still streaming can end after it parks.
+        const localRunId = this.#localActiveRunId(state, key);
+        if (localRunId !== undefined && localRunId !== data.runId && !state.threadRunsByStreamId.has(data.streamId)) {
+          subscription.supersedingRunIds.set(data.runId, localRunId);
         }
         const lost = state.lostRunsByThread.get(key);
         if (data.sourceId === this.#id) {
@@ -1067,10 +1070,10 @@ export class AgentThreadStreamRuntime {
           this.#handOffQueuedSignals(state, resolvedPubSub, key, data.runId, lost.streamId);
         }
       } else if (data?.type === 'run-completed' || data?.type === 'run-failed') {
-        const parkedRunId = subscription.supersedingRunIds.get(data.runId);
-        if (parkedRunId !== undefined) {
+        const supersededRunId = subscription.supersedingRunIds.get(data.runId);
+        if (supersededRunId !== undefined) {
           subscription.supersedingRunIds.delete(data.runId);
-          this.#releaseSupersededParkedRun(state, resolvedPubSub, key, parkedRunId);
+          this.#releaseSupersededParkedRun(state, resolvedPubSub, key, supersededRunId);
         }
         const lostStreamId = subscription.successorRunIds.get(data.runId);
         if (lostStreamId === undefined || data.streamId === lostStreamId) return;
@@ -1088,8 +1091,10 @@ export class AgentThreadStreamRuntime {
         type !== 'run-registered' &&
         !(
           (type === 'run-completed' || type === 'run-failed') &&
+          // While a local run is active, its superseding runs are looked up in
+          // handleEvent: their registration may still be queued behind `tail`.
           (subscription.successorRunIds.has((event.data as { runId: string }).runId) ||
-            subscription.supersedingRunIds.has((event.data as { runId: string }).runId))
+            this.#localActiveRunId(state, key) !== undefined)
         )
       )
         return ack?.();
@@ -1173,6 +1178,14 @@ export class AgentThreadStreamRuntime {
       (state.pendingIdleSignalsByThread.get(key)?.filter(matches).length ?? 0) +
       (matches(state.drainingIdleSignalsByThread.get(key)) ? 1 : 0)
     );
+  }
+
+  /** The thread's active run, when it is one this runtime is running. */
+  #localActiveRunId(state: AgentThreadRuntimeState, key: string): string | undefined {
+    const runId = state.activeThreadRunIds.get(key);
+    return runId !== undefined && state.threadKeysByRunId.get(runId) === key && state.threadRunsById.has(runId)
+      ? runId
+      : undefined;
   }
 
   #notifyThreadEvents(state: AgentThreadRuntimeState): void {
@@ -2727,11 +2740,21 @@ export class AgentThreadStreamRuntime {
     if (!record || state.activeThreadRunIds.get(key) !== runId || !this.#isParkedRun(state, runId)) return;
     state.activeThreadRunIds.delete(key);
     if (state.activeThreadStreamIds.get(key) === record.streamId) state.activeThreadStreamIds.delete(key);
+    this.#stopReadingDisplacedRun(state, runId);
     if (this.#hasPendingThreadWork(state, key)) {
       void this.#drainPendingSignals(state, pubsub, key, record);
     } else {
       this.#releaseThreadLease(pubsub, key, runId);
     }
+  }
+
+  /**
+   * A parked run no longer holds its thread, so its answer resumes it on a new
+   * stream. Subscribers still reading its open stream move on to the runs queued
+   * behind it.
+   */
+  #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string): void {
+    for (const stop of [...(state.runStreamReaders.get(runId) ?? [])]) stop();
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions, pubsub?: PubSub): string | undefined {
@@ -3349,6 +3372,7 @@ export class AgentThreadStreamRuntime {
     state.activeThreadRunIds.set(key, output.runId);
     state.activeThreadStreamIds.set(key, streamId);
     state.lostRunsByThread.delete(key);
+    if (takesLeaseFrom) this.#stopReadingDisplacedRun(state, takesLeaseFrom);
     const resolvedPubSub = this.#getPubSub(pubsub);
     const registered = (async () => {
       await this.#ensureThreadControlSubscription(state, resolvedPubSub, key).ready;
@@ -5186,21 +5210,6 @@ export class AgentThreadStreamRuntime {
         // An abort is not completion: the owner still needs to finish and drain
         // pending signals before idle messages can start.
         if (data.type === 'run-completed') {
-          // Another run on the thread finished while this subscriber was still
-          // reading a parked run's stream (a run that continues across its
-          // suspension keeps that stream open). The thread has moved on, so stop
-          // waiting on the parked stream and read the runs queued behind it. A
-          // resume of the parked run registers a new stream.
-          if (
-            currentReader &&
-            activeReaderRunId !== null &&
-            activeReaderRunId !== data.runId &&
-            this.#isParkedRun(state, activeReaderRunId)
-          ) {
-            try {
-              void currentReader.cancel();
-            } catch {}
-          }
           await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         }
         wake();
@@ -5383,6 +5392,14 @@ export class AgentThreadStreamRuntime {
             currentReader = reader as ReadableStreamDefaultReader<any>;
             activeReaderRunId = run.runId;
             activeReaderStreamId = run.streamId;
+            const stopReading = () => {
+              try {
+                void reader.cancel();
+              } catch {}
+            };
+            const readers = state.runStreamReaders.get(run.runId) ?? new Set();
+            readers.add(stopReading);
+            state.runStreamReaders.set(run.runId, readers);
             currentRunRequestContext = run.streamOptions.requestContext;
             if (remoteRuns.has(run.streamId)) startRemoteRunLeaseWatch(run.runId, run.streamId);
             let readerReleased = false;
@@ -5451,6 +5468,10 @@ export class AgentThreadStreamRuntime {
                 cancelledByAbort = false;
               }
             } finally {
+              readers.delete(stopReading);
+              if (readers.size === 0 && state.runStreamReaders.get(run.runId) === readers) {
+                state.runStreamReaders.delete(run.runId);
+              }
               stopRemoteRunLeaseWatch(run.streamId);
               currentReader = null;
               activeReaderRunId = null;

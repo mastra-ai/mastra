@@ -63,7 +63,18 @@ async function runOnThread(
   return text;
 }
 
-async function createHarness(id: string, durable: boolean) {
+function gate() {
+  let open!: () => void;
+  const opened = new Promise<void>(resolve => (open = resolve));
+  return { opened, open };
+}
+
+/**
+ * A session on a thread, plus another agent that can run on that thread.
+ * By default the session's run has parked on its prompt when this returns;
+ * with `overlap`, nothing has run yet and both models wait for their gate.
+ */
+async function createHarness(id: string, durable: boolean, { overlap = false } = {}) {
   const requestAccess = createTool({
     id: 'request-access',
     description: 'Ask the user for access to a path.',
@@ -80,6 +91,13 @@ async function createHarness(id: string, durable: boolean) {
   const memory = new MockMemory({ storage });
   // What the session agent's model was asked, one entry per model call.
   const prompts: string[] = [];
+  const otherPrompts: string[] = [];
+  const sessionModel = gate();
+  const otherModel = gate();
+  if (!overlap) {
+    sessionModel.open();
+    otherModel.open();
+  }
   const baseAgent = new Agent({
     id: `${id}-agent`,
     name: `${id} agent`,
@@ -88,7 +106,9 @@ async function createHarness(id: string, durable: boolean) {
     model: new MastraLanguageModelV2Mock({
       doStream: async ({ prompt }) => {
         prompts.push(JSON.stringify(prompt));
-        return { stream: prompts.length === 1 ? askForAccess() : reply(`reply ${prompts.length}`) };
+        if (prompts.length > 1) return { stream: reply(`reply ${prompts.length}`) };
+        await sessionModel.opened;
+        return { stream: askForAccess() };
       },
     }),
     tools: { requestAccess },
@@ -100,7 +120,13 @@ async function createHarness(id: string, durable: boolean) {
     name: `${id} other`,
     instructions: 'You check.',
     memory,
-    model: new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: reply('checked') }) }),
+    model: new MastraLanguageModelV2Mock({
+      doStream: async ({ prompt }) => {
+        otherPrompts.push(JSON.stringify(prompt));
+        await otherModel.opened;
+        return { stream: reply('checked') };
+      },
+    }),
   });
 
   const cache = new InMemoryServerCache();
@@ -131,14 +157,20 @@ async function createHarness(id: string, durable: boolean) {
     events.push(event);
   });
 
-  await session.sendMessage({ content: 'Read /elsewhere' });
-  expect(events.flatMap(event => (event.type === 'agent_end' ? [event.reason] : []))).toEqual(['suspended']);
-  expect(session.displayState.get().pendingSuspensions.size).toBe(1);
-
   const runEnds = () => events.flatMap(event => (event.type === 'agent_end' ? [event.reason] : []));
+  const park = async () => {
+    await session.sendMessage({ content: 'Read /elsewhere' });
+    expect(runEnds()).toEqual(['suspended']);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+  };
+  if (!overlap) await park();
   return {
     session,
+    park,
+    sessionModel,
+    otherModel,
     prompts,
+    otherPrompts,
     runEnds,
     threadId: session.thread.getId()!,
     resourceId: session.identity.getResourceId(),
@@ -233,5 +265,44 @@ describe.each([false, true])('a message after a parked prompt, durable=%s', dura
     await session.respondToToolSuspension({ resumeData: 'granted' });
     await vi.waitFor(() => expect(prompts.some(prompt => prompt.includes('Are you there?'))).toBe(true));
     expect(prompts[1]).toContain('access: granted');
+  });
+});
+
+describe.each([false, true])('another run that overlaps the prompt, durable=%s', durable => {
+  /** Start the other run while the session's run is still streaming, then let the session's run park. */
+  async function overlapThenPark(id: string) {
+    const harness = await createHarness(id, durable, { overlap: true });
+    const parked = harness.park();
+    await vi.waitFor(() => expect(harness.prompts).toHaveLength(1));
+    const other = runOnThread(harness.otherAgent, 'Is the work done?', {
+      thread: harness.threadId,
+      resource: harness.resourceId,
+    });
+    await vi.waitFor(() => expect(harness.otherPrompts).toHaveLength(1));
+    harness.sessionModel.open();
+    await parked;
+    harness.otherModel.open();
+    expect(await other).toBe('checked');
+    await vi.waitFor(() => expect(harness.runEnds()).toEqual(['suspended', 'complete']));
+    return harness;
+  }
+
+  it('starts a run once a run that began before the prompt parked has finished', async () => {
+    const { session, prompts, runEnds } = await overlapThenPark('overlap-send');
+
+    const sent = session.sendSignal({ content: 'Are you there?' }, { requireDelivery: true });
+    expect((await sent.accepted).action).toBe('wake');
+    await vi.waitFor(() => expect(runEnds()).toEqual(['suspended', 'complete', 'complete']));
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain('Are you there?');
+  });
+
+  it('runs the answer to the prompt where the session sees it, after a run that began before the prompt parked', async () => {
+    const { session, prompts, runEnds } = await overlapThenPark('overlap-answer');
+
+    await session.respondToToolSuspension({ resumeData: 'granted' });
+    await vi.waitFor(() => expect(prompts).toHaveLength(2));
+    expect(prompts[1]).toContain('access: granted');
+    await vi.waitFor(() => expect(runEnds()).toEqual(['suspended', 'complete', 'complete']));
   });
 });
