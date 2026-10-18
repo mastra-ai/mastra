@@ -28,6 +28,12 @@ async function savedAssistantMessages(memory: MockMemory, threadId: string, reso
   return messages.filter(message => message.role === 'assistant');
 }
 
+type SavedMessage = Awaited<ReturnType<typeof savedAssistantMessages>>[number];
+
+function textOf(message: SavedMessage) {
+  return (message.content.parts ?? []).map(part => (part.type === 'text' ? part.text : '')).join('');
+}
+
 describeForAllEngines('AIMock loop scenario: abort persistence', engine => {
   const getMock = useLoopScenarioAimock();
 
@@ -66,7 +72,9 @@ describeForAllEngines('AIMock loop scenario: abort persistence', engine => {
     await vi.waitFor(async () => {
       const [assistant] = await savedAssistantMessages(memory, threadId, resourceId);
       expect(assistant, 'partial assistant message was not persisted after abort').toBeDefined();
-      expect(JSON.stringify(assistant!.content)).toContain(streamed);
+      const savedText = textOf(assistant!);
+      expect(savedText).toContain(streamed);
+      expect(savedText.length).toBeLessThan(REPLY.length);
       expect(assistant!.content.parts?.some(part => part.type === 'error')).toBe(false);
     });
     expect(onFinish).not.toHaveBeenCalled();
@@ -79,14 +87,15 @@ describeForAllEngines('AIMock loop scenario: abort persistence', engine => {
     const memory = new MockMemory();
     // A non-TripWire AbortError from processLLMResponse is rethrown into the
     // step's outer catch, which must still persist the already-streamed text.
+    const processLLMResponse = vi.fn(async () => {
+      const error = new Error('Aborted by processor');
+      error.name = 'AbortError';
+      throw error;
+    });
     const abortingProcessor = {
       id: 'abort-on-response',
       name: 'abort-on-response',
-      processLLMResponse: async () => {
-        const error = new Error('Aborted by processor');
-        error.name = 'AbortError';
-        throw error;
-      },
+      processLLMResponse,
     };
     const { agent } = await createSharedAgent(llm, {
       engine,
@@ -98,12 +107,25 @@ describeForAllEngines('AIMock loop scenario: abort persistence', engine => {
 
     const result = await agent.stream('Go', { memory: { thread: threadId, resource: resourceId } });
     const output = isDurableEngineVariant(engine) ? result.output : result;
-    await output.consumeStream().catch(() => undefined);
+    let streamed = '';
+    let streamError: unknown;
+    try {
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'text-delta') streamed += chunk.payload.text;
+      }
+    } catch (error) {
+      streamError = error;
+    }
+
+    // Guard: the reply streamed and the processor ran (and threw) afterwards.
+    expect(streamed).toBe('Hello');
+    expect(processLLMResponse).toHaveBeenCalled();
+    if (streamError) expect((streamError as Error).name).toBe('AbortError');
 
     await vi.waitFor(async () => {
       const [assistant] = await savedAssistantMessages(memory, threadId, resourceId);
       expect(assistant, 'streamed assistant message was not persisted after processor abort').toBeDefined();
-      expect(JSON.stringify(assistant!.content)).toContain('Hello');
+      expect(textOf(assistant!)).toContain('Hello');
     });
     result.cleanup?.();
   });
