@@ -858,11 +858,6 @@ export class AgentThreadStreamRuntime {
       state.pendingLeaseRenewals.set(runId, (state.pendingLeaseRenewals.get(runId) ?? 0) + 1);
       void leaseProvider
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
-        .finally(() => {
-          const pending = (state.pendingLeaseRenewals.get(runId) ?? 1) - 1;
-          if (pending > 0) state.pendingLeaseRenewals.set(runId, pending);
-          else state.pendingLeaseRenewals.delete(runId);
-        })
         .then(renewed => {
           if (!renewed) {
             // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
@@ -873,7 +868,13 @@ export class AgentThreadStreamRuntime {
             state.sweptLeasedRunIds.set(runId, Date.now());
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        // Stop counting the renewal only after the marker is refreshed, so nothing sees a stale marker in between.
+        .finally(() => {
+          const pending = (state.pendingLeaseRenewals.get(runId) ?? 1) - 1;
+          if (pending > 0) state.pendingLeaseRenewals.set(runId, pending);
+          else state.pendingLeaseRenewals.delete(runId);
+        });
     }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
     // Don't keep the process alive solely to renew a lease.
     if (typeof timer === 'object' && timer && typeof (timer as any).unref === 'function') {
