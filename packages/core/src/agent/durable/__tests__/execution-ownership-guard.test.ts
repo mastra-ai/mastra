@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DurableExecutionFenceError,
+  EXECUTION_LEASE_RENEW_INTERVAL_MS,
+  EXECUTION_LEASE_TTL_MS,
   EXECUTION_SUPERSEDED_ERROR_ID,
   EXECUTION_UNVERIFIED_ERROR_ID,
 } from '../execution-fence';
@@ -32,7 +34,7 @@ describe('invocation ownership observation', () => {
     const signal = ownership.composeSignal(user.signal);
     user.abort();
     observe.mockRejectedValue(superseded());
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
     expect(signal.aborted).toBe(true);
     expect(() => ownership.throwIfLost()).toThrow(DurableExecutionFenceError);
     expect(() => ownership.throwIfLost()).toThrow('lost its execution lease');
@@ -74,7 +76,7 @@ describe('invocation ownership observation', () => {
     observe.mockReturnValue(hung);
     const checked = boundary === 'periodic' ? undefined : ownership.check();
     const rejected = checked && expect(checked).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
     await rejected;
     expect(ownership.isLost()).toBe(true);
     complete();
@@ -106,7 +108,7 @@ describe('invocation ownership observation', () => {
         complete = resolve;
       }),
     );
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
     observe.mockRejectedValue(superseded());
     const final = ownership.check();
     const rejected = expect(final).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });

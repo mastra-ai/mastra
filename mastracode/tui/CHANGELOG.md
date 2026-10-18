@@ -1,5 +1,30 @@
 # mastracode
 
+## 0.48.0-alpha.3
+
+### Minor Changes
+
+- Added Factory mode to Mastra Code. The TUI can now run as a thin client for a Factory session, so the agent, tools, models, modes, and provider credentials all come from the Factory. ([#27222](https://github.com/mastra-ai/mastra/pull/27222))
+
+  ```sh
+  /factory connect   # sign in to Mastra Platform, pick a project and repository
+  /local             # switch back to local mode, keeping the connection saved
+  /factory           # switch into the saved Factory again
+  /factory status    # show the current mode and saved Factory
+  /factory disconnect
+  ```
+
+  - Switching modes restarts the TUI in place.
+  - Local-only commands (MCP, hooks, plugins, `/login`, model packs, `/goal`, `/diff`, `/github`, `/settings`, and similar) are disabled in Factory mode.
+  - If the Factory can't be reached at startup, Mastra Code falls back to local mode with a notice. Set `MASTRACODE_LOCAL=1` to run locally for one launch.
+
+### Patch Changes
+
+- Updated dependencies [[`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b), [`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`9cb6843`](https://github.com/mastra-ai/mastra/commit/9cb6843a8a39ab2e12498b0c08c9f4cdcefd9cea), [`9277d8e`](https://github.com/mastra-ai/mastra/commit/9277d8ef26ad2f08bfbae89d78d409fb91c95c8d), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`f1b04c7`](https://github.com/mastra-ai/mastra/commit/f1b04c77d40a9b8b423d947659754f7be21a68d5), [`680d914`](https://github.com/mastra-ai/mastra/commit/680d9141c851e8eb6fcd2d3c3fbadf05a0f1011d), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b)]:
+  - @mastra/core@1.79.0-alpha.3
+  - @mastra/code-sdk@1.15.0-alpha.3
+  - @mastra/memory@1.39.0-alpha.1
+
 ## 0.47.2-alpha.2
 
 ### Patch Changes

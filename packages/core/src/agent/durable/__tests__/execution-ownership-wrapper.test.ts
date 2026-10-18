@@ -6,6 +6,7 @@ import { InMemoryStore } from '../../../storage';
 import { ToolStream } from '../../../tools/stream';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import {
+  EXECUTION_LEASE_RENEW_INTERVAL_MS,
   EXECUTION_SUPERSEDED_ERROR_ID,
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
@@ -97,7 +98,7 @@ describe.each(['storage', 'lease'] as const)('durable ownership wrapper using %s
       const guard = getExecutionOwnershipGuard(params)!;
       expect(guard).toBeDefined();
       expect(guard.isLost()).toBe(false);
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
       await assertExecutionOwned(context.args);
       return 'done';
     });
@@ -117,7 +118,7 @@ describe.each(['storage', 'lease'] as const)('durable ownership wrapper using %s
         const guard = getExecutionOwnershipGuard(params)!;
         const signal = guard.composeSignal(undefined);
         await context.takeOver();
-        await vi.advanceTimersByTimeAsync(10_000);
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
         expect(signal.aborted).toBe(true);
         expect(signal.reason).toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
         return 'stale';
@@ -172,7 +173,7 @@ describe.each(['storage', 'lease'] as const)('durable ownership wrapper using %s
           await captured.write('before');
           expect(publish).toHaveBeenCalledTimes(1);
           await context.takeOver();
-          await vi.advanceTimersByTimeAsync(10_000);
+          await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
           await captured.write('after');
           await params.writer.write('after-direct');
           await params.writer.custom({ type: 'data-stale', data: 'after-custom' });

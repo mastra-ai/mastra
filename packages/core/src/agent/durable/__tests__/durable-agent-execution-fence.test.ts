@@ -768,6 +768,101 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       recovered.cleanup();
     });
 
+    it('a timed-out boot recovery keeps its live owner until shutdown and discards late provider output', async () => {
+      const storage = createStorage(backend);
+      const workflows = (await storage.getStore('workflows'))!;
+      const crashed = gatedModel('output from the crashed process');
+      const crashedAgent = buildAgent({ model: crashed.model, storage });
+      const started = await crashedAgent.stream('What is the answer?');
+      const { runId } = started;
+      const originalStream = collect(started.fullStream);
+      await crashed.entered;
+      await waitForCheckpoint(storage, runId);
+      const originalFence = ExecutionFence.getLocalActive(runId)!;
+      await originalFence.abandon();
+      crashed.release();
+      await originalFence.whenSettled;
+      await originalStream.stop();
+      started.cleanup();
+      globalRunRegistry.clear();
+      __resetExecutionFencesForTests();
+
+      const next = gatedModel('late output from timed-out recovery');
+      const durableAgent = createDurableAgent({
+        agent: new Agent({
+          id: 'fence-agent',
+          name: 'Fence Agent',
+          instructions: 'You are a helpful agent.',
+          model: next.model as LanguageModelV2,
+        }),
+        pubsub,
+      });
+      const mastra = new Mastra({
+        agents: { 'fence-agent': durableAgent as any },
+        logger: false,
+        storage,
+        pubsub,
+        recovery: { durableAgents: 'auto' },
+      });
+      const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
+      const publish = vi.spyOn(pubsub, 'publish');
+      const recover = vi.spyOn(durableAgent, 'recoverActiveRuns');
+      const persist = vi.spyOn(workflows, 'persistWorkflowSnapshot');
+      const remove = vi.spyOn(durableAgent, 'deleteRunSnapshots');
+      vi.useFakeTimers();
+      try {
+        const recovery = mastra.recoverAllDurableAgents();
+        await vi.waitFor(() => expect(next.calls()).toBe(1));
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        const execution = globalRunRegistry.get(runId)!.workflowExecution!;
+        const signal = globalRunRegistry.get(runId)!.abortController!.signal;
+        expect(fence).toBeDefined();
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(await recovery).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 1 });
+        expect(await recover.mock.results[0]!.value).toEqual({
+          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout' }],
+          succeeded: 0,
+          failed: 0,
+        });
+        expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
+        expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
+        expect(signal.aborted).toBe(false);
+        expect(remove).not.toHaveBeenCalled();
+
+        const shutdown = mastra.shutdown({ drainTimeout: 100 });
+        await vi.advanceTimersByTimeAsync(100);
+        await shutdown;
+        expect(signal.aborted).toBe(true);
+        expect(signal.reason).toMatchObject({ id: EXECUTION_ABANDONED_ERROR_ID });
+        expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+        expect(await foreign.owner(fence.agentId, runId)).toBeUndefined();
+
+        const checkpoint = await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
+        expect(checkpoint?.status).toBe('running');
+        persist.mockClear();
+        next.release();
+        await execution.catch(() => {});
+        await vi.advanceTimersByTimeAsync(100);
+        expect(await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId })).toEqual(
+          checkpoint,
+        );
+        expect(persist).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+        const events = publish.mock.calls
+          .filter(([topic]) => topic === AGENT_STREAM_TOPIC(runId))
+          .map(([, event]) => (event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type));
+        expect(events).not.toContain('finish');
+        expect(events).not.toContain('error');
+        expect(events).not.toContain('chunk:finish');
+        expect(events).not.toContain('chunk:error');
+      } finally {
+        next.release();
+        vi.useRealTimers();
+        await mastra.shutdown({ drainTimeout: 0 });
+      }
+    });
+
     it('shutdown() waits for a recovery re-check still claiming its run, and releases the run it claimed', async () => {
       const storage = createStorage(backend);
 
@@ -821,11 +916,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       await mastra.recoverAllDurableAgents();
       await claimEntered;
 
-      // ---- Shutdown starts before the re-check's claim lands, which then outlives the drain deadline.
+      // ---- A claim that lands during shutdown is released without starting the model.
       const shutdown = mastra.shutdown({ drainTimeout: 200 });
       releaseClaim();
       await shutdown;
-      await next.entered;
+      expect(next.calls()).toBe(0);
 
       expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
       expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();

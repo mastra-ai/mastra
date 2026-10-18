@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { describeForAllEngines, runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: conditional `requireToolApproval` function.
@@ -11,7 +11,7 @@ import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * approval is required. This scenario proves pattern-based gating works:
  * only tools matching the pattern suspend, others execute freely.
  */
-describe('AIMock loop scenario: conditional requireToolApproval function', () => {
+describeForAllEngines('AIMock loop scenario: conditional requireToolApproval function', engine => {
   const getMock = useLoopScenarioAimock();
 
   // Tools that should NOT require approval (don't match pattern).
@@ -62,6 +62,7 @@ describe('AIMock loop scenario: conditional requireToolApproval function', () =>
       requests: _requests,
     } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Read files, list them, then delete file.txt and all others.',
       tools: {
         read_file: makeReadTool(),
@@ -112,6 +113,7 @@ describe('AIMock loop scenario: conditional requireToolApproval function', () =>
   it('declining a pattern-matched tool still allows non-matching tools to complete', async () => {
     const { output, approvals } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Read config.yaml and delete it.',
       tools: {
         read_file: makeReadTool(),

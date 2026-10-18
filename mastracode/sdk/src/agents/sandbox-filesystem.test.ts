@@ -584,6 +584,60 @@ describe('SandboxFilesystem.grep', () => {
     ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
   });
 
+  it('includes the exit code and stderr in the rg failure reason', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) return { exitCode: 2, stdout: '', stderr: '\nregex parse error\nmore' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).rejects.toThrow(
+      'exit code 2: regex parse error',
+    );
+  });
+
+  it('reports a native grep timeout instead of an unsupported pattern', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) return { exitCode: 124, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).rejects.toThrow(
+      'timed out after 30s',
+    );
+  });
+
+  it('excludes .git from POSIX grep and keeps partial matches on exit 2', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) {
+        return { exitCode: 2, stdout: `${WORKDIR}/a.ts:3:foo`, stderr: 'grep: secret.txt: Permission denied' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).resolves.toEqual([
+      { path: 'a.ts', matches: [{ line: 3, column: 0, text: 'foo' }] },
+    ]);
+    expect(sandbox.calls.find(c => c.startsWith('grep '))).toContain('--exclude-dir=.git');
+  });
+
+  it('reports the POSIX grep failure reason when it fails without output', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) return { exitCode: 124, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).rejects.toThrow(
+      'timed out after 30s',
+    );
+    await expect(fs.grep({ pattern: '\\bfoo', path: '.', caseSensitive: true, includeHidden: false })).rejects.toThrow(
+      'POSIX ERE cannot express this syntax',
+    );
+  });
+
   it('applies the global match cap across files', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);

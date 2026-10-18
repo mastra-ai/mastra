@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "65.0.0-alpha.2",
+  "version": "65.0.0-alpha.3",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -152,8 +152,8 @@
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
@@ -254,10 +254,8 @@
     "@vitest/ui": "catalog:",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
     "eslint-plugin-storybook": "^10.6.0",
-    "eslint-plugin-tailwindcss": "^4.1.0",
+    "oxlint-tailwindcss": "1.16.0",
     "jsdom": "^30.1.1",
     "lucide-react": "catalog:",
     "msw": "^2.12.11",

@@ -332,6 +332,10 @@ export const mastra = new Mastra({
 
 On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
 
+Recovery attempts runs serially, waiting up to 30 seconds per run for both `recover()` setup and settlement of the whole recovered workflow. If that wait expires, the attempt continues in the background while recovery moves to later runs and agents. Discovery and overridden custom recovery methods aren't bounded by this budget.
+
+When shutdown begins, recovery stops dispatching new runs and agents and cancels pending re-checks. Original attempts, including those whose wait timed out, remain tracked for Mastra's shared shutdown drain. A recovery timeout doesn't cancel execution or add a separate drain window.
+
 Recovery doesn't take over a run that another execution still drives. It skips the run and checks it again once that execution's claim could have lapsed. A run whose process crashed shortly before the restart is still recovered, without another call.
 
 ### Manual recovery
@@ -342,20 +346,20 @@ If you need finer control, such as running recovery on a schedule, call the meth
 // Recover all durable agents
 const result = await mastra.recoverAllDurableAgents()
 console.log(
-  `Recovered ${result.recovered} runs (${result.succeeded} ok, ${result.failed} failed, ${result.skipped} still live)`,
+  `Recovered ${result.recovered} runs (${result.succeeded} ok, ${result.failed} failed, ${result.skipped} skipped)`,
 )
 
 // Recover a specific agent
 const { recovered } = await durableAgent.recoverActiveRuns()
 for (const run of recovered) {
-  if (run.status === 'skipped') console.log(`${run.runId} is still live: ${run.reason}`)
+  if (run.status === 'skipped') console.log(`${run.runId} was skipped: ${run.reason}`)
 }
 
 // Recover a single known run
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
-`recoverAllDurableAgents()` returns counts and re-checks skipped runs itself. `recoverActiveRuns()` returns each run's outcome as `success`, `failed`, or `skipped`, and doesn't re-check skipped runs. A run skipped because another process drives it carries `retryAt`, the time after which its claim lapses unless renewed.
+`recoverAllDurableAgents()` returns counts and schedules eligible ownership re-checks itself. `recoverActiveRuns()` returns each run's outcome as `success`, `failed`, or `skipped`, and doesn't re-check skipped runs. A run skipped because another process drives it carries `retryAt`, the time after which its claim lapses unless renewed. A timed-out attempt instead returns `status: 'skipped'` with `reason: 'recovery-timeout'` and no `retryAt`, so Mastra doesn't automatically retry it. Only the `skipped` count includes this attempt; the `recovered`, `succeeded`, and `failed` counts exclude it even if it settles later.
 
 Manual recovery reads the same `running` checkpoints as automatic recovery. For a `DurableAgent` using the default snapshot policy with `recovery.durableAgents` set to `'off'`, in-flight runs are only checkpointed at step boundaries reached after `mastra.shutdown()` starts. A run that crashes before then, or doesn't reach a step boundary during the drain, has no checkpoint, so `listActiveRuns()` and `recoverActiveRuns()` don't find it. See [snapshot persistence](#snapshot-persistence).
 
@@ -400,7 +404,7 @@ A lease only coordinates the processes that share it. `EventEmitterPubSub`, the 
 
 ### Stop work after ownership loss
 
-Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership every 10 seconds without renewing the original execution's claim. Detection depends on backend response time. If ownership checks keep failing or stop responding, the step stops trusting its claim after a 30-second uncertainty budget.
+Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that is every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. If ownership checks keep failing or stop responding, the step stops trusting its claim after one lease TTL, 15 seconds by default.
 
 Cancellation is cooperative. Use the tool execution context's `abortSignal` for cancellable operations, and check it before starting another side effect. A tool that ignores the signal can keep running. Work already completed outside Mastra isn't rolled back.
 

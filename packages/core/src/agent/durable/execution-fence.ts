@@ -34,11 +34,13 @@ import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import { isRunFenceConflictError, matchesRunFence, runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { RunFence, RunFenceScope } from '../../storage/run-fencing';
 import { PUBSUB_SYMBOL } from '../../workflows/constants';
+import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { runInRunFenceScope } from './run-fence-scope';
 
-export const EXECUTION_LEASE_TTL_MS = 30_000;
-export const EXECUTION_LEASE_RENEW_INTERVAL_MS = 10_000;
+/** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
+export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
+export const EXECUTION_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 const VERIFY_RETRY_DELAY_MS = 250;
 const TAKEOVER_ATTEMPTS = 3;
 const EXECUTION_CLAIM_WAIT_MS = 5_000;
