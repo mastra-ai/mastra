@@ -1185,27 +1185,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   chunk.payload.observability = meta.observability;
                 }
               }
-              // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
-              const existingSynthetic = self.#toolCalls.find(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
-              // In some providers (e.g. Anthropic PTC), args are only present in the final tool-call event.
-              // Synthetic tool-calls built from streaming deltas may have empty args,
-              // so we merge them here if missing.
-              if (existingSynthetic) {
-                // FIX: merge args if synthetic is empty
-                if (chunk.payload.args && Object.keys(existingSynthetic.payload.args || {}).length === 0) {
-                  existingSynthetic.payload.args = chunk.payload.args;
-                }
-
-                // existing logic
-                if (chunk.payload.providerMetadata && !existingSynthetic.payload.providerMetadata) {
-                  existingSynthetic.payload.providerMetadata = chunk.payload.providerMetadata;
-                }
-                if (chunk.payload.dynamic != null && existingSynthetic.payload.dynamic == null) {
-                  existingSynthetic.payload.dynamic = chunk.payload.dynamic;
-                }
-                if (chunk.payload.observability && !existingSynthetic.payload.observability) {
-                  existingSynthetic.payload.observability = chunk.payload.observability;
-                }
+              // A call already recorded under this id (a repeated tool-call) is not emitted twice.
+              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
                 return;
               }
               self.#toolCalls.push(chunk);
