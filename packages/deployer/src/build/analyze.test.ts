@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
@@ -542,4 +542,89 @@ describe('Software Factory project type detection', () => {
 
     expect(result.projectType).toBeUndefined();
   });
+});
+
+describe('transpilePackages (issue #19380)', () => {
+  /**
+   * A package resolved from node_modules that ships TypeScript source. It is not a workspace
+   * package, so the only thing that gets it transpiled is the user's `bundler.transpilePackages`.
+   */
+  async function createAppWithTypeScriptPackage() {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-transpile-packages-'));
+    tempDirs.push(tempDir);
+
+    const tsPackageDir = join(tempDir, 'node_modules', 'ts-source-package');
+    const entryFile = join(tempDir, 'index.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+
+    await mkdir(join(tsPackageDir, 'src'), { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(
+      join(tempDir, 'package.json'),
+      JSON.stringify({
+        name: 'transpile-packages-app',
+        version: '1.0.0',
+        type: 'module',
+        dependencies: { 'ts-source-package': '1.0.0' },
+      }),
+    );
+    await writeFile(
+      join(tsPackageDir, 'package.json'),
+      JSON.stringify({ name: 'ts-source-package', version: '1.0.0', type: 'module', main: './src/index.ts' }),
+    );
+    await writeFile(
+      join(tsPackageDir, 'src', 'index.ts'),
+      `export interface Greeting { text: string }\nexport const greet = (name: string): Greeting => ({ text: \`hello \${name}\` });\n`,
+    );
+    await writeFile(entryFile, `import { greet } from 'ts-source-package';\nexport const greeting = greet('mastra');`);
+
+    return { tempDir, entryFile, outputDir };
+  }
+
+  it.each([
+    { name: 'a production build', isDev: false, externals: [] as string[] | true },
+    { name: 'a production build with externals: true', isDev: false, externals: true as string[] | true },
+    { name: 'mastra dev', isDev: true, externals: true as string[] | true },
+  ])(
+    'transpiles a non-workspace package listed in transpilePackages during $name',
+    async ({ isDev, externals }) => {
+      const { tempDir, entryFile, outputDir } = await createAppWithTypeScriptPackage();
+
+      const originalCwd = process.cwd();
+      process.chdir(tempDir);
+      try {
+        const result = await analyzeBundle(
+          [entryFile],
+          entryFile,
+          {
+            outputDir,
+            projectRoot: tempDir,
+            platform: 'node',
+            isDev,
+            bundlerOptions: {
+              externals,
+              enableSourcemap: false,
+              transpilePackages: ['ts-source-package'],
+            },
+          },
+          noopLogger,
+        );
+
+        expect(result.externalDependencies.has('ts-source-package')).toBe(false);
+        expect(result.dependencies.has('ts-source-package')).toBe(true);
+        const optimized = await readdir(outputDir);
+        const optimizedCode = (
+          await Promise.all(
+            optimized.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+          )
+        ).join('\n');
+        expect(optimizedCode).toContain('hello ${name}');
+        expect(optimizedCode).not.toContain('name: string');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    },
+    30000,
+  );
 });

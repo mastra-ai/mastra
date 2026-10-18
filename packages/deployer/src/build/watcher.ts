@@ -50,10 +50,11 @@ export async function getInputOptions(
     noopLogger,
   );
 
+  const transpilePackages = bundlerOptions?.transpilePackages ?? [];
   const deps = /* @__PURE__ */ new Map();
   for (const [dep, metadata] of analyzeEntryResult.dependencies.entries()) {
     const pkgName = getPackageName(dep);
-    if (pkgName && workspaceMap.has(pkgName)) {
+    if (pkgName && (workspaceMap.has(pkgName) || transpilePackages.includes(pkgName))) {
       deps.set(dep, metadata);
     }
   }

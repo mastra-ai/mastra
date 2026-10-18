@@ -394,7 +394,7 @@ export async function analyzeBundle(
     isDev?: boolean;
     bundlerOptions?: Pick<
       InternalBundlerOptions,
-      'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
+      'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'transpilePackages' | 'alias'
     > | null;
     env?: Record<string, string>;
   },
@@ -423,6 +423,10 @@ export async function analyzeBundle(
     bundlerOptions?.externalsPreset,
   );
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
+  const transpilePackages = bundlerOptions?.transpilePackages ?? [];
+  // Listed packages ship source that has to go through the transpiler, so they are bundled
+  // like workspace packages instead of being left external by the externals preset or `mastra dev`.
+  const isTranspilePackage = (dep: string) => transpilePackages.some(pkg => isDependencyPartOfPackage(dep, pkg));
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -469,7 +473,7 @@ export async function analyzeBundle(
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       const isPartOfExternals = mergedExternals.some(external => isDependencyPartOfPackage(dep, external));
-      if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
+      if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace && !isTranspilePackage(dep))) {
         // Add all packages coming from src/mastra with their version info
         const pkgName = getPackageName(dep);
         if (pkgName) {
@@ -513,7 +517,7 @@ export async function analyzeBundle(
    */
   if (isDev || externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
-      if (!metadata.isWorkspace) {
+      if (!metadata.isWorkspace && !isTranspilePackage(dep)) {
         depsToOptimize.delete(dep);
       }
     }
@@ -528,6 +532,7 @@ export async function analyzeBundle(
       externalsPreset,
       mergedExternals,
       isDev,
+      transpilePackages,
       alias: bundlerOptions?.alias,
     },
     projectRoot,

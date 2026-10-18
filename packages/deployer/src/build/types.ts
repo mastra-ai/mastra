@@ -37,6 +37,8 @@ export interface BundlerOptions {
   /** Preserve the default external-all behavior alongside explicitly listed packages. */
   externalsPreset?: boolean;
   dynamicPackages?: string[];
+  /** Packages to run through the TypeScript transpiler and bundle, even when they are not workspace packages. */
+  transpilePackages?: string[];
 }
 
 export interface InternalBundlerOptions extends BundlerOptions {

@@ -24,7 +24,10 @@ export type WorkspaceDepsWatcherOptions = {
   workspaceRoot: string;
   outputDir: string;
   platform: BundlerPlatform;
-  bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
+  bundlerOptions?: Pick<
+    BundlerOptions,
+    'externals' | 'enableSourcemap' | 'dynamicPackages' | 'transpilePackages'
+  > | null;
 };
 
 /**
@@ -76,6 +79,7 @@ export function workspaceDepsWatcher(options: WorkspaceDepsWatcherOptions): Plug
           externalsPreset,
           mergedExternals,
           isDev: true,
+          transpilePackages: bundlerOptions?.transpilePackages,
         },
         projectRoot: workspaceRoot,
         workspaceRoot,

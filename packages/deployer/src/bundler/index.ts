@@ -631,6 +631,7 @@ export abstract class Bundler extends MastraBundler {
       enableEsmShim,
       alias: resolvedAlias,
       dynamicPackages: bundlerOptions.dynamicPackages,
+      transpilePackages: bundlerOptions.transpilePackages,
     };
 
     let analyzedBundleInfo;
