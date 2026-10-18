@@ -3391,6 +3391,8 @@ export class SessionDisplayState {
       getThreadId: () => string | null;
       /** Clear the session's follow-up queue when thread-scoped display state resets. */
       clearFollowUps: () => void;
+      /** The run the session is tracking, still set while its `agent_end` is applied. */
+      getRunId: () => string | null;
     },
   ) {}
 
@@ -3526,10 +3528,17 @@ export class SessionDisplayState {
         ds.isRunning = false;
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
-        // tool-suspension primitive). When the run ends for any other reason the
-        // parked suspensions are abandoned, so clear them all.
+        // tool-suspension primitive). When the run ends for any other reason its
+        // parked suspensions are abandoned, so clear them. Another run on the
+        // thread can end while a prompt is still waiting, and answering that
+        // prompt still resumes its run, so keep the prompts of other runs.
         if (event.reason !== 'suspended') {
-          ds.pendingSuspensions.clear();
+          const runId = this.deps.getRunId();
+          for (const [key, suspension] of ds.pendingSuspensions) {
+            if (!runId || suspension.runId === undefined || suspension.runId === runId) {
+              ds.pendingSuspensions.delete(key);
+            }
+          }
         }
         // Mark any still-running tools as errored (handles abort mid-run)
         for (const [, tool] of ds.activeTools) {
@@ -4192,6 +4201,7 @@ export class Session<TState = unknown> {
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
       getThreadId: () => this.thread.getId(),
       clearFollowUps: () => this.cleanupFollowUpBinding(),
+      getRunId: () => this.run.getRunId(),
     });
     this.#bus.setDisplayState(this.displayState);
     const sessionState = new SessionState(
