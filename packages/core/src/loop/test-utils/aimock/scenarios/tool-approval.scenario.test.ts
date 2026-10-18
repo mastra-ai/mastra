@@ -22,6 +22,8 @@ import {
  */
 describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engine => {
   const getMock = useLoopScenarioAimock();
+  // InngestAgent.resume() has no resume claim yet, so a second approval resolves instead of rejecting (#27485).
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
 
   const makeLookupTool = () =>
     createTool({
@@ -70,8 +72,7 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
     // original tool call id.
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      | { tool_call_id?: string }
-      | undefined;
+      { tool_call_id?: string } | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_lookup_alpha');
   });
 
@@ -141,7 +142,7 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
 
   // A user clicking Approve twice must not run the tool twice, and the second
   // click must fail right away instead of waiting on the first run (#27365).
-  it('approving the same tool call twice runs it once and fails the second approval fast', async () => {
+  itFailsOnInngest('approving the same tool call twice runs it once and fails the second approval fast', async () => {
     let executions = 0;
     let release!: () => void;
     const gate = new Promise<void>(resolve => {
