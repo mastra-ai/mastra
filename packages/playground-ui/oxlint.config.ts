@@ -118,5 +118,15 @@ export default defineConfig({
       files: ['.storybook/main.{js,cjs,mjs,ts}'],
       rules: { 'storybook/no-uninstalled-addons': 'error' },
     },
+    {
+      // ESLint's Tailwind plugin only ran on .js/.jsx/.ts/.tsx files.
+      files: ['**/*.{mjs,cjs}'],
+      rules: {
+        'tailwindcss/no-conflicting-classes': 'off',
+        'tailwindcss/enforce-negative-arbitrary-values': 'off',
+        'tailwindcss/enforce-shorthand': 'off',
+        'tailwindcss/no-unnecessary-arbitrary-value': 'off',
+      },
+    },
   ],
 });

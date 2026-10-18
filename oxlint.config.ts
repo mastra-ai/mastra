@@ -238,5 +238,13 @@ export default defineConfig({
       },
       plugins: ['vitest'],
     },
+    {
+      // ESLint kept type-aware rules on test files inside e2e folders (they're excluded from its test-file override).
+      files: ['**/e2e/**/*.{ts,tsx}'],
+      rules: {
+        'typescript/no-floating-promises': 'error',
+        'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],
+      },
+    },
   ],
 });
