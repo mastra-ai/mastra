@@ -899,14 +899,21 @@ export class SessionThread {
   }
 
   /**
-   * Transfer the active thread to a new owner.
+   * Transfer a thread to a new owner. Defaults to the active thread; pass
+   * `threadId` to transfer another thread of this resource without switching to it.
    *
    * Transfers are serialized within this process. Hosts needing strict durable
    * compare-and-set semantics should commit that change in their own store before
    * mirroring it here.
    */
-  async transferOwnership({ toOwnerId }: { toOwnerId: string }): Promise<void> {
-    const threadId = this.requireId();
+  async transferOwnership({
+    toOwnerId,
+    threadId: requestedThreadId,
+  }: {
+    toOwnerId: string;
+    threadId?: string;
+  }): Promise<void> {
+    const threadId = requestedThreadId ?? this.requireId();
 
     await withThreadOwnershipMutex(threadId, async () => {
       const store = this.#store;
@@ -1521,6 +1528,11 @@ export class SessionStream {
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
   #consumerFailure: { error: unknown } | null = null;
+  /**
+   * Run id whose trailing chunks the live subscription drops after an abort.
+   * Cleared by a later run, by an explicit resume of that run, or on attach/teardown.
+   */
+  #abortedRunId: string | null = null;
 
   constructor(private readonly getSessionRun: () => { sessionId: string; runId: string | null }) {}
 
@@ -1609,6 +1621,38 @@ export class SessionStream {
     this.#key = key;
     this.#binding = { resourceId, threadId };
     this.#consumerFailure = null;
+    this.#abortedRunId = null;
+  }
+
+  /** Record that `runId` was aborted on `subscription`, so its trailing chunks are dropped. */
+  markAbortedRun({
+    subscription,
+    runId,
+  }: {
+    subscription: AgentThreadSubscription<any, true>;
+    runId: string | null;
+  }): void {
+    if (this.#subscription === subscription) this.#abortedRunId = runId;
+  }
+
+  /** The run id `subscription` is dropping chunks for, or null. */
+  abortedRunId({ subscription }: { subscription: AgentThreadSubscription<any, true> }): string | null {
+    return this.#subscription === subscription ? this.#abortedRunId : null;
+  }
+
+  /**
+   * Stop dropping chunks for the aborted run (only if it is `runId`, when given).
+   * Returns a callback that restores the filter while the same subscription is
+   * still live and no other run has replaced it, or undefined if nothing was cleared.
+   */
+  clearAbortedRun({ runId }: { runId?: string } = {}): (() => void) | undefined {
+    const cleared = this.#abortedRunId;
+    if (cleared === null || (runId !== undefined && cleared !== runId)) return undefined;
+    this.#abortedRunId = null;
+    const subscription = this.#subscription;
+    return () => {
+      if (this.#subscription === subscription && this.#abortedRunId === null) this.#abortedRunId = cleared;
+    };
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -1662,6 +1706,7 @@ export class SessionStream {
     this.#agent = null;
     this.#key = null;
     this.#binding = null;
+    this.#abortedRunId = null;
     this.#notifyTeardown();
   }
 
@@ -1681,6 +1726,7 @@ export class SessionStream {
     this.#agent = null;
     this.#key = null;
     this.#binding = null;
+    this.#abortedRunId = null;
     this.#notifyTeardown();
   }
 }
@@ -4717,10 +4763,13 @@ export class Session<TState = unknown> {
   async respondToPersistedToolApproval({
     toolCallId,
     approved,
+    alwaysAllowCategory,
     requestContext,
   }: {
     toolCallId: string;
     approved: boolean;
+    /** Also grant the tool's category to the run's thread, like a parked "always allow". */
+    alwaysAllowCategory?: boolean;
     requestContext?: RequestContext;
   }): Promise<void> {
     const threadId = this.thread.getId();
@@ -4732,6 +4781,11 @@ export class Session<TState = unknown> {
     );
     if (!run) throw new Error(`No suspended run is waiting on tool call ${toolCallId}`);
     const identity = { toolCallId, requestContext, runId: run.runId, threadId, resourceId };
+    if (approved && alwaysAllowCategory) {
+      const toolName = run.toolCalls.find(call => call.toolCallId === toolCallId)?.toolName;
+      const category = toolName ? this.#resolveCategory?.(toolName) : undefined;
+      if (category) this.grantCategory(category, threadId);
+    }
     if (approved) await this.approveToolCall(identity);
     else await this.declineToolCall(identity);
   }
@@ -6180,8 +6234,12 @@ export class Session<TState = unknown> {
     });
     const toolsets = await this.machinery.buildToolsets(requestContext);
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
+    let restoreAbortedRun: (() => void) | undefined;
     if (sourceIsActive()) {
       await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId, sourceIsActive);
+      // A tool call can stay parked after its run was aborted. Resuming it reuses
+      // the aborted run id, so stop dropping that run's chunks on this subscription.
+      restoreAbortedRun = this.stream.clearAbortedRun({ runId: suspension.runId });
       if (sourceIsActive())
         resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
     }
@@ -6221,12 +6279,15 @@ export class Session<TState = unknown> {
           toolsets,
         },
       });
+      restoreAbortedRun = undefined;
       if (resumedSubscriptionBoundary) {
         await resumedSubscriptionBoundary.promise;
       } else {
         await observer?.promise;
       }
     } catch (error) {
+      // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
+      restoreAbortedRun?.();
       if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);

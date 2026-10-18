@@ -1,5 +1,99 @@
 # @mastra/playground-ui
 
+## 65.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`9cb6843`](https://github.com/mastra-ai/mastra/commit/9cb6843a8a39ab2e12498b0c08c9f4cdcefd9cea), [`9277d8e`](https://github.com/mastra-ai/mastra/commit/9277d8ef26ad2f08bfbae89d78d409fb91c95c8d), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`680d914`](https://github.com/mastra-ai/mastra/commit/680d9141c851e8eb6fcd2d3c3fbadf05a0f1011d), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b)]:
+  - @mastra/core@1.79.0-alpha.3
+  - @mastra/memory@1.39.0-alpha.1
+  - @mastra/client-js@1.56.0-alpha.3
+  - @mastra/ai-sdk@1.11.2-alpha.0
+  - @mastra/react@1.11.1-alpha.3
+
+## 65.0.0-alpha.2
+
+### Patch Changes
+
+- Improved DataList hover performance on long lists. Moving the pointer between rows no longer restyles every row to round the hover highlight at section ends. ([#27286](https://github.com/mastra-ai/mastra/pull/27286))
+
+- The New view button in saved view tabs now uses the default button style, matching the other toolbar buttons. ([#27286](https://github.com/mastra-ai/mastra/pull/27286))
+
+- Fixed the trace timeline for traces with more than one top-level span, such as an agent run followed by a live scorer run. Each run now shows its own duration instead of lasting until the trace ends, and the time axis fits every run. Fixes [#27234](https://github.com/mastra-ai/mastra/issues/27234) ([#27290](https://github.com/mastra-ai/mastra/pull/27290))
+
+- Fixed horizontal trackpad gestures for browser history navigation in chat while preserving vertical scroll containment. ([#27289](https://github.com/mastra-ai/mastra/pull/27289))
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`c56d026`](https://github.com/mastra-ai/mastra/commit/c56d026c5194b1977e5321f429565eedbccf2c40), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37)]:
+  - @mastra/core@1.79.0-alpha.2
+  - @mastra/client-js@1.56.0-alpha.2
+  - @mastra/react@1.11.1-alpha.2
+  - @mastra/ai-sdk@1.11.2-alpha.0
+
+## 65.0.0-alpha.1
+
+### Minor Changes
+
+- Added `@mastra/playground-ui/components.css`, the components' stylesheet uncompiled, so an app with its own Tailwind build compiles one sheet instead of loading `style.css` and then its own: ([#27254](https://github.com/mastra-ai/mastra/pull/27254))
+
+  ```css
+  @import 'tailwindcss';
+  @import '@mastra/playground-ui/components.css';
+  @import '@mastra/playground-ui/sources.css';
+  ```
+
+  The entry carries the tokens from `theme.css`, the `dark` variant, the typography plugin, `tw-animate-css`, and the components' custom utilities, base styles and keyframes, so the `@custom-variant dark` line from the `theme.css` recipe is no longer needed. Keep `sources.css` next to it: it is what makes Tailwind emit the classes the compiled components use. In the first app moved over, the page's CSS went from 102 KB to 61 KB gzipped.
+
+  `@tailwindcss/typography` and `tw-animate-css` are now dependencies instead of devDependencies, so the entry resolves them from the installed package. The `time-input` utility loads `/icons/clock.svg` from the app's root; an app that uses it ships that asset.
+
+  `style.css` changes in one place: CodeMirror's five `--syntax-*` roles now live in `theme/code.css` on `:root` instead of under `.cm-editor`. Apps without a Tailwind build keep loading it as before.
+
+- Added `@mastra/playground-ui/sources.css` so an app with its own Tailwind build can pick up every class the components use without pointing at `node_modules`. Import it after the app's own Tailwind entry: ([#27178](https://github.com/mastra-ai/mastra/pull/27178))
+
+  ```css
+  @import 'tailwindcss';
+  @import '@mastra/playground-ui/theme.css';
+  @import '@mastra/playground-ui/sources.css';
+
+  @custom-variant dark (&:is(.dark *));
+  ```
+
+  Without `sources.css`, a utility the app's sheet emits can override a responsive variant only the components use, for example `flex-col` beating `sm:flex-row`.
+
+  Keep the `dark` variant line: the components switch to dark mode on a `.dark` ancestor. Without it, Tailwind applies their `dark:` styles whenever the operating system is in dark mode, even in a light-themed app.
+
+### Patch Changes
+
+- `Crumb` now lets its `switcher` cover the whole crumb whenever the crumb doesn't link (no `to`), not only on the current crumb. A crumb that isn't the last one can now behave as a single combobox instead of a link next to a separate switcher arrow. ([#27241](https://github.com/mastra-ai/mastra/pull/27241))
+
+- Improved "Save as Dataset Item" so it opens in the same stacked side panel as the trace and score panels. `SaveAsDatasetItemDialog`, `TraceAsItemDialog` and `ScoreAsItemDialog` now take `depth` instead of `level`. ([#27273](https://github.com/mastra-ai/mastra/pull/27273))
+
+  ```tsx
+  // Before
+  <TraceAsItemDialog traceId={traceId} isOpen={open} onClose={close} level={2} />
+
+  // After
+  <TraceAsItemDialog traceId={traceId} isOpen={open} onClose={close} depth={2} />
+  ```
+
+  Added a "Create dataset" option at the top of the Dataset select in "Save as Dataset Item". Pass `renderCreateDatasetDialog` to `SaveAsDatasetItemDialog` or `TraceAsItemDialog` to enable it; the new dataset is selected automatically once created.
+
+  ```tsx
+  <TraceAsItemDialog
+    traceId={traceId}
+    isOpen={open}
+    onClose={close}
+    renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
+  />
+  ```
+
+- Fixed the JSON search highlight in the trace data panel losing its colors in apps that compile the design system's Tailwind sheet themselves. The highlight stylesheet now reads the `--warning-indicator`, `--warning-subtle` and `--sidebar` tokens directly instead of the `--color-*` theme aliases, which Tailwind only emits when a utility uses them. ([#27256](https://github.com/mastra-ai/mastra/pull/27256))
+
+- Updated dependencies [[`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e)]:
+  - @mastra/core@1.79.0-alpha.1
+  - @mastra/client-js@1.56.0-alpha.1
+  - @mastra/react@1.11.1-alpha.1
+  - @mastra/ai-sdk@1.11.2-alpha.0
+
 ## 64.0.1-alpha.0
 
 ### Patch Changes

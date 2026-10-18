@@ -43,7 +43,10 @@
     "callstack/apex",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-fast",
     "deepseek/deepseek-v4.1-flash-fast",
+    "elorian/glimpse",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
@@ -275,6 +278,8 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-fast",
     "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
@@ -490,6 +495,8 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-v4.1-flash-1017-fast",
     "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
@@ -621,7 +628,8 @@
     ],
     "zai/glm-5v-turbo": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "zai/glm-5.3-flash": [
@@ -643,7 +651,8 @@
     ],
     "zai/glm-5": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "zai/glm-4.5v": [
@@ -659,12 +668,14 @@
     ],
     "zai/glm-4.7-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "zai/glm-4.7": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "zai/glm-5.2": [
@@ -675,17 +686,20 @@
     ],
     "zai/glm-5.1": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "zai/glm-4.7-flashx": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "zai/glm-5-turbo": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "zai/glm-4.5-air": [
@@ -850,19 +864,13 @@
     "anthropic/claude-fable-5.1": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-fable-5": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8-fast": [
@@ -919,6 +927,12 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
@@ -961,6 +975,12 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
@@ -989,6 +1009,18 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "reflection/beam": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reflection/beam-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "thinkingmachines/inkling-small": [
@@ -1075,12 +1107,8 @@
     ],
     "alibaba/qwen-3-32b": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 38912
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "alibaba/qwen3.7-max": [
@@ -1247,6 +1275,12 @@
         "max": 262144
       }
     ],
+    "elorian/glimpse": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
     "bytedance/seed-1.8": [
       {
         "type": "toggle"
@@ -1277,9 +1311,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
     "google/gemini-3.1-flash-image-preview": [
@@ -1411,25 +1442,25 @@
     "sakana/fugu-max": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["high", "xhigh", "max"]
       }
     ],
     "sakana/fugu-ultra-v2": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["high", "xhigh", "max"]
       }
     ],
     "sakana/namazu": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "sakana/fugu-ultra": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["high", "xhigh", "max"]
       }
     ],
     "inclusionai/ling-3.0-flash": [
@@ -1462,7 +1493,7 @@
     "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "moonshotai/kimi-k3-fast": [
@@ -1473,7 +1504,8 @@
     ],
     "moonshotai/kimi-k2.7-code-highspeed": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "moonshotai/kimi-k2.6": [
@@ -1483,38 +1515,38 @@
     ],
     "moonshotai/kimi-k2.5": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "moonshotai/kimi-k2.7-code": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3-nano-30b-a3b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3.5-lightning": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 32768
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-nano-9b-v2": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3-super-120b-a12b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3.5-super-vl": [
@@ -1526,7 +1558,7 @@
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "effort",
-        "values": ["none", "medium", "high"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3.5-lightning-free": [
@@ -1537,7 +1569,8 @@
     ],
     "nvidia/nemotron-nano-12b-v2-vl": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "xiaomi/mimo-v2.6-pro": [
@@ -1628,11 +1661,8 @@
     ],
     "amazon/nova-2-lite": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "mistral/mistral-large-4": [

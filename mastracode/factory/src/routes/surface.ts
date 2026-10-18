@@ -135,6 +135,7 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
+    startCoordinator: FactoryStartCoordinator;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   }) => void;
 }
@@ -695,6 +696,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   if (transitionService && startCoordinator) {
     deps.onFactoryRuntime?.({
       transitionService,
+      startCoordinator,
       ...(sourceControlRegistrations.length > 0
         ? {
             prepareBinding: async (input: FactoryBindingPreparationInput) => {

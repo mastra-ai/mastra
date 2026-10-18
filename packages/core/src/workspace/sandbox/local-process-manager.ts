@@ -18,6 +18,9 @@ import type { CommandResult } from './types';
 
 const isWindows = process.platform === 'win32';
 
+/** How long a timed-out process tree gets to exit after SIGTERM before it is sent SIGKILL. */
+const TIMEOUT_KILL_GRACE_MS = 2_000;
+
 // =============================================================================
 // Local Process Handle
 // =============================================================================
@@ -49,6 +52,8 @@ class LocalProcessHandle extends ProcessHandle {
     this.startTime = startTime;
 
     let timedOut = false;
+    let killTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let releaseTimeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
@@ -56,8 +61,24 @@ class LocalProcessHandle extends ProcessHandle {
           // We handle timeout ourselves rather than using execa's timeout option
           // because execa only kills the direct subprocess, not the process tree.
           void killProcessTree(this._numericPid, subprocess, 'SIGTERM');
+          // A process can ignore SIGTERM, and the shell can exit while a descendant
+          // keeps stdout open. Either way 'close' never fires, so escalate to SIGKILL.
+          killTimeoutId = setTimeout(() => {
+            void killProcessTree(this._numericPid, subprocess, 'SIGKILL');
+            // A descendant that left the process group can still hold the pipes.
+            // Stop reading them so wait() settles instead of hanging.
+            releaseTimeoutId = setTimeout(() => {
+              subprocess.stdout?.destroy();
+              subprocess.stderr?.destroy();
+            }, TIMEOUT_KILL_GRACE_MS);
+          }, TIMEOUT_KILL_GRACE_MS);
         }, options.timeout)
       : undefined;
+    const clearTimers = () => {
+      clearTimeout(timeoutId);
+      clearTimeout(killTimeoutId);
+      clearTimeout(releaseTimeoutId);
+    };
 
     const stdoutDecoder = new TextDecoder(outputEncoding);
     const stderrDecoder = new TextDecoder(outputEncoding);
@@ -80,7 +101,7 @@ class LocalProcessHandle extends ProcessHandle {
 
     this.waitPromise = new Promise<CommandResult>(resolve => {
       subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimers();
         flushStdoutDecoder();
         flushStderrDecoder();
         if (timedOut) {
@@ -102,7 +123,7 @@ class LocalProcessHandle extends ProcessHandle {
       });
 
       subprocess.on('error', (err: Error) => {
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimers();
         flushStdoutDecoder();
         flushStderrDecoder();
         this.emitStderr(err.message);

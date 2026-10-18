@@ -3484,6 +3484,8 @@ type Shared_Type_61 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3599,6 +3601,8 @@ type Shared_Type_63 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -23426,6 +23430,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryP
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
+  alwaysAllowCategory?: boolean | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -23632,6 +23637,41 @@ export interface PostAgentControllerControllerIdSessionsResourceIdThread_RouteCo
   body: PostAgentControllerControllerIdSessionsResourceIdThread_Body;
   request: PostAgentControllerControllerIdSessionsResourceIdThread_Request;
   response: PostAgentControllerControllerIdSessionsResourceIdThread_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams =
+  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams =
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Response = {
+  ok: boolean;
+  ownerId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams;
+  body: never;
+  request: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Response;
   responseType: 'json';
 }
 
@@ -24582,6 +24622,7 @@ export interface RouteTypes {
   'POST /agent-controller/:controllerId/sessions/:resourceId/mode': PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/model': PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/thread': PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner': PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/notifications': PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract;
   'GET /agent-controller/:controllerId/workspace': GetAgentControllerControllerIdWorkspace_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId/om': GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract;
@@ -24745,6 +24786,9 @@ export interface Client {
   };
   '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages': {
     GET: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract;
   };
   '/agent-controller/:controllerId/sessions/:resourceId/threads/clone': {
     POST: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract;
