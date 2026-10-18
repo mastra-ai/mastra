@@ -41,7 +41,7 @@ describe('ModelCredentialsStorage', () => {
     });
     expect(await store.getCredential({ orgId: 'org1', userId: 'bob' }, 'anthropic')).toBeUndefined();
     expect(await store.getCredential({ orgId: 'org2', userId: 'alice' }, 'anthropic')).toBeUndefined();
-    expect(await store.resolveCredential('org1', 'bob', 'anthropic')).toBeUndefined();
+    expect(await store.resolveCredential('org1', 'bob', 'anthropic', 'user')).toBeUndefined();
   });
 
   it('stores org-scoped OAuth credentials (org-wide sign-in)', async () => {
@@ -50,46 +50,31 @@ describe('ModelCredentialsStorage', () => {
     await store.setCredential({ orgId: 'org1' }, 'anthropic', oauth('org', Date.now() + 60_000));
     expect(await store.getCredential({ orgId: 'org1' }, 'anthropic')).toMatchObject({ type: 'oauth' });
     // Visible to every org member through resolution.
-    expect(await store.resolveCredential('org1', 'alice', 'anthropic')).toMatchObject({ scope: 'org' });
+    expect(await store.resolveCredential('org1', 'alice', 'anthropic', 'org')).toMatchObject({ scope: 'org' });
   });
 
-  it('resolves user > org and lists both scopes for a member', async () => {
-    const store = await makeStore();
-    await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
-    await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
-
-    expect(await store.resolveCredential('org1', 'alice', 'openai')).toMatchObject({
-      scope: 'user',
-      credential: { key: 'sk-alice' },
-    });
-    // Bob has no personal row — inherits the org key.
-    expect(await store.resolveCredential('org1', 'bob', 'openai')).toMatchObject({
-      scope: 'org',
-      credential: { key: 'sk-org' },
-    });
-
-    const aliceList = await store.listCredentials('org1', 'alice');
-    expect(aliceList.map(r => r.scope).sort()).toEqual(['org', 'user']);
-    const bobList = await store.listCredentials('org1', 'bob');
-    expect(bobList).toHaveLength(1);
-    expect(bobList[0]!.scope).toBe('org');
-  });
-
-  it("resolves org > user when precedence is 'org' (factory runs)", async () => {
+  it('resolves exactly one scope and lists both scopes for management', async () => {
     const store = await makeStore();
     await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'google', { type: 'api_key', key: 'sk-alice-g' });
 
+    expect(await store.resolveCredential('org1', 'alice', 'openai', 'user')).toMatchObject({
+      scope: 'user',
+      credential: { key: 'sk-alice' },
+    });
     expect(await store.resolveCredential('org1', 'alice', 'openai', 'org')).toMatchObject({
       scope: 'org',
       credential: { key: 'sk-org' },
     });
-    // No org row — falls back to the user's personal key.
-    expect(await store.resolveCredential('org1', 'alice', 'google', 'org')).toMatchObject({
-      scope: 'user',
-      credential: { key: 'sk-alice-g' },
-    });
+    expect(await store.resolveCredential('org1', 'bob', 'openai', 'user')).toBeUndefined();
+    expect(await store.resolveCredential('org1', 'alice', 'google', 'org')).toBeUndefined();
+
+    const aliceList = await store.listCredentials('org1', 'alice');
+    expect(aliceList.map(r => r.scope).sort()).toEqual(['org', 'user', 'user']);
+    const bobList = await store.listCredentials('org1', 'bob');
+    expect(bobList).toHaveLength(1);
+    expect(bobList[0]!.scope).toBe('org');
   });
 
   it('removes only the addressed scope', async () => {
@@ -98,7 +83,7 @@ describe('ModelCredentialsStorage', () => {
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
 
     expect(await store.removeCredential({ orgId: 'org1', userId: 'alice' }, 'openai')).toBe(true);
-    expect(await store.resolveCredential('org1', 'alice', 'openai')).toMatchObject({ scope: 'org' });
+    expect(await store.resolveCredential('org1', 'alice', 'openai', 'org')).toMatchObject({ scope: 'org' });
     expect(await store.removeCredential({ orgId: 'org1', userId: 'alice' }, 'openai')).toBe(false);
   });
 

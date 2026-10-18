@@ -8,7 +8,7 @@ import {
   RetainedOutputBuffer,
 } from '../sandbox/process-manager/process-handle';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
-import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
 /**
@@ -324,11 +324,19 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     span.end({ success: result.success }, { exitCode: result.exitCode });
 
+    const stdoutForModel = noteDroppedOutput(
+      await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
+      result.stdoutDroppedBytes,
+      'stdout',
+    );
+    const stderrForModel = noteDroppedOutput(
+      await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
+      result.stderrDroppedBytes,
+      'stderr',
+    );
+
     if (!result.success) {
-      const parts = formatCommandOutput(
-        await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
-        await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
-      );
+      const parts = formatCommandOutput(stdoutForModel, stderrForModel);
       // The exit code of an aborted command is a provider-specific kill code (LocalSandbox
       // reports 128, which also means "fatal" for git), so the abort signal is the only
       // reliable way to tell the model why it stopped. `killed: false` means the command
@@ -340,12 +348,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       return appendTerminalLine(parts, aborted ? `${abortNote}\n${exitLine}` : exitLine);
     }
 
-    return (
-      formatCommandOutput(
-        await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
-        await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
-      ).join('\n') || '(no output)'
-    );
+    return formatCommandOutput(stdoutForModel, stderrForModel).join('\n') || '(no output)';
   } catch (error) {
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
@@ -358,8 +361,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
     });
     span.end({ success: false }, { exitCode: -1 });
     const parts = formatCommandOutput(
-      await truncateOutput(stdout.toString(), tail, tokenLimit, tokenFrom),
-      await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom),
+      noteDroppedOutput(await truncateOutput(stdout.toString(), tail, tokenLimit, tokenFrom), stdout.dropped, 'stdout'),
+      noteDroppedOutput(await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom), stderr.dropped, 'stderr'),
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorLine = `Error: ${errorMessage}`;

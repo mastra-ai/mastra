@@ -26,7 +26,8 @@
         "entityType": "agent",
         "entityId": "test-agent",
         "attributes": {
-          "instructions": "Return a simple response"
+          "instructions": "Return a simple response",
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -59,10 +60,10 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -122,6 +123,7 @@
                 "attributes": {
                   "stepIndex": 0,
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -294,6 +296,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "Return a simple response"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Return a list of items separated by commas"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": [],
@@ -385,9 +397,7 @@
                   "text": 25
                 }
               },
-              "hookDurationMs": {
-                "__any__": "number"
-              }
+              "hookDurationMs": { "__any__": "number" }
             },
             "metadata": {
               "runId": "<runId-1>",

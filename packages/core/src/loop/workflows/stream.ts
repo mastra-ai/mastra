@@ -545,6 +545,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        // The run is over, so close any output stream processor span still open, e.g. one
+        // opened by a tool result resumed after approval when no step follows it.
+        dataChunkProcessorRunner?.endStreamProcessorSpans(dataChunkProcessorStates!);
         upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });
