@@ -835,7 +835,7 @@ function parseIssueDetail(issue: LinearIssue, comments: LinearComment[], workspa
  * This function is the single precedence point; change the comparison here to
  * change the routing policy.
  */
-function dedupeIssuesBySource<T extends { issue: { id: string }; sourceId: string }>(
+export function dedupeIssuesBySource<T extends { issue: { id: string }; sourceId: string }>(
   entries: T[],
   selectionOrder: string[],
 ): T[] {

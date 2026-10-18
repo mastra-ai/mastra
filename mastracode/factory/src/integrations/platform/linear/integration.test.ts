@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntegrationContext } from '../../base.js';
-import { encodeSourceId, encodeTeamSourceId, linearConnectionToken, PlatformLinearIntegration } from './integration.js';
+import {
+  dedupeIssuesBySource,
+  encodeSourceId,
+  encodeTeamSourceId,
+  linearConnectionToken,
+  PlatformLinearIntegration,
+} from './integration.js';
 
 const PLATFORM_BASE = 'https://platform.example.com';
 const connection = { type: 'oauth' as const, accessToken: linearConnectionToken('conn-acme') };
@@ -39,7 +45,11 @@ type Workspace = {
   comments?: Array<Record<string, unknown>>;
   /** Serve projects one per page, keyed by the requested cursor, to exercise pagination. */
   pageProjects?: boolean;
+  /** Override the issues page served for a request, e.g. to hand back a stuck cursor. */
+  issuePage?: (variables: Record<string, any>) => { nodes?: Array<ReturnType<typeof rawIssue>>; pageInfo?: PageInfo };
 };
+
+type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 
 const acme = (): Workspace => ({
   organization: { id: 'org-acme', name: 'Acme', urlKey: 'acme' },
@@ -162,7 +172,8 @@ function fakePlatform(
       const nodes = workspace.issues.filter(
         i => (!projectId || i.project?.id === projectId) && (!teamId || i.team.id === teamId),
       );
-      return json({ data: { issues: { nodes, pageInfo: page } } });
+      const override = workspace.issuePage?.(variables);
+      return json({ data: { issues: { nodes: override?.nodes ?? nodes, pageInfo: override?.pageInfo ?? page } } });
     }
     if (query.includes('issue(')) {
       const found = workspace.issues.find(i => i.id === variables.id || i.identifier === variables.id);
@@ -330,6 +341,161 @@ describe('PlatformLinearIntegration', () => {
 
     const result = await new PlatformLinearIntegration().intake.listIssues({ connection, sourceIds: [legacy] });
     expect(result.issues.map(i => i.title)).toContain('Fix intake');
+  });
+
+  it('normalizes active project issues and filters labels client-side', async () => {
+    const requested: Array<Record<string, any>> = [];
+    const workspace = acme();
+    workspace.issues.push(
+      rawIssue({
+        id: 'issue-3',
+        identifier: 'ENG-43',
+        title: 'Add export',
+        labels: { nodes: [{ id: 'label-2', name: 'feature' }] },
+      }),
+    );
+    workspace.issuePage = variables => {
+      requested.push(variables);
+      return undefined;
+    };
+    fakePlatform({
+      connections: [{ id: 'conn-acme', status: 'active', accountLabel: 'Acme' }],
+      workspaces: { 'conn-acme': workspace },
+    });
+    const projectSource = encodeSourceId(ACME, 'project-1');
+    const linear = new PlatformLinearIntegration();
+
+    const unfiltered = await linear.intake.listIssues({ connection, sourceIds: [projectSource] });
+    expect(unfiltered.issues.map(i => i.identifier)).toEqual(['ENG-42', 'ENG-43']);
+
+    const result = await linear.intake.listIssues({ connection, sourceIds: [projectSource], labels: [' bug ', ''] });
+    expect(result).toEqual({
+      issues: [
+        expect.objectContaining({
+          id: 'issue-1',
+          identifier: 'ENG-42',
+          title: 'Fix intake',
+          sourceId: projectSource,
+          stateType: 'unstarted',
+          priority: 'High',
+          assignee: 'Ada',
+          labels: ['bug'],
+        }),
+      ],
+      nextCursor: null,
+    });
+    // Labels are filtered locally; Linear is only asked for active issues in the project.
+    expect(requested.at(-1)?.filter).toEqual({
+      state: { type: { in: ['triage', 'backlog', 'unstarted', 'started'] } },
+      project: { id: { eq: 'project-1' } },
+    });
+  });
+
+  it('dedupes an issue selected via several sources, keeping the first selected source', async () => {
+    fakePlatform({
+      connections: [
+        { id: 'conn-acme', status: 'active', accountLabel: 'joel@acme' },
+        { id: 'conn-acme-2', status: 'active', accountLabel: 'factory@acme' },
+      ],
+      workspaces: { 'conn-acme': acme(), 'conn-acme-2': acme() },
+    });
+    const viaFactory = encodeTeamSourceId({ linearWorkspaceId: 'org-acme', connectionId: 'conn-acme-2' }, 'team-eng');
+    const viaJoel = encodeTeamSourceId(ACME, 'team-eng');
+
+    const result = await new PlatformLinearIntegration().intake.listIssues({
+      connection,
+      sourceIds: [viaFactory, viaJoel],
+    });
+
+    expect(result.issues.map(i => [i.id, i.sourceId])).toEqual([['issue-1', viaFactory]]);
+  });
+
+  it('dedupes an issue selected via both a team and its project, project wins (most-specific)', () => {
+    const projectSource = encodeSourceId(ACME, 'project-1');
+    const teamSource = encodeTeamSourceId(ACME, 'team-eng');
+    const entries = [
+      { issue: { id: 'issue-1' }, sourceId: teamSource },
+      { issue: { id: 'issue-2' }, sourceId: teamSource },
+      { issue: { id: 'issue-1' }, sourceId: projectSource },
+    ];
+
+    // The team is selected first, so selection order alone would hand it the overlapping issue.
+    expect(dedupeIssuesBySource(entries, [teamSource, projectSource])).toEqual([
+      { issue: { id: 'issue-1' }, sourceId: projectSource },
+      { issue: { id: 'issue-2' }, sourceId: teamSource },
+    ]);
+  });
+
+  it('routes an issue reachable via a selected team and its selected project to the project', async () => {
+    const workspace = acme();
+    workspace.issues.push(rawIssue({ id: 'issue-2', identifier: 'ENG-99', project: null, labels: { nodes: [] } }));
+    fakePlatform({
+      connections: [{ id: 'conn-acme', status: 'active', accountLabel: 'Acme' }],
+      workspaces: { 'conn-acme': workspace },
+    });
+    const projectSource = encodeSourceId(ACME, 'project-1');
+    const teamSource = encodeTeamSourceId(ACME, 'team-eng');
+
+    // The team is selected first, so selection order alone would hand it the overlapping issue.
+    const result = await new PlatformLinearIntegration().intake.listIssues({
+      connection,
+      sourceIds: [teamSource, projectSource],
+    });
+
+    // Team and project pages are fetched in parallel, so only the attribution is asserted.
+    expect(result.issues.map(i => [i.id, i.sourceId]).sort()).toEqual([
+      ['issue-1', projectSource],
+      ['issue-2', teamSource],
+    ]);
+  });
+
+  it('keeps a selected-project issue out of an earlier team page', async () => {
+    const workspace = acme();
+    // The project page is still empty while the team page already returns the project's issue.
+    workspace.issuePage = variables =>
+      variables.filter?.project ? { nodes: [], pageInfo: { hasNextPage: true, endCursor: 'project-next' } } : undefined;
+    fakePlatform({
+      connections: [{ id: 'conn-acme', status: 'active', accountLabel: 'Acme' }],
+      workspaces: { 'conn-acme': workspace },
+    });
+    const projectSource = encodeSourceId(ACME, 'project-1');
+    const teamSource = encodeTeamSourceId(ACME, 'team-eng');
+
+    const result = await new PlatformLinearIntegration().intake.listIssues({
+      connection,
+      sourceIds: [projectSource, teamSource],
+    });
+
+    expect(result.issues).toEqual([]);
+    expect(result.nextCursor).not.toBeNull();
+  });
+
+  it('rejects an issue page that hands back the cursor it was asked for', async () => {
+    const workspace = acme();
+    const afters: Array<string | null> = [];
+    workspace.issuePage = variables => {
+      afters.push(variables.after);
+      return { pageInfo: { hasNextPage: true, endCursor: 'stuck' } };
+    };
+    fakePlatform({
+      connections: [{ id: 'conn-acme', status: 'active', accountLabel: 'Acme' }],
+      workspaces: { 'conn-acme': workspace },
+    });
+    const projectSource = encodeSourceId(ACME, 'project-1');
+    const linear = new PlatformLinearIntegration();
+
+    const first = await linear.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds: [projectSource] });
+    expect(first.nextCursor).not.toBeNull();
+
+    await expect(
+      linear.intake.listItems({
+        orgId: 'org-1',
+        userId: 'user-1',
+        sourceIds: [projectSource],
+        cursor: first.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
+    expect(afters).toEqual([null, 'stuck']);
   });
 
   it('fetches issue detail with comments across connections', async () => {
