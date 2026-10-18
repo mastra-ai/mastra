@@ -1,6 +1,6 @@
 /**
  * Durable port of the regular loop's MALFORMED_FUNCTION_CALL regression
- * (`save-and-errors.test.ts`). Gemini ends the stream with finishReason
+ * (`agent-gemini-malformed-function-call.test.ts`). Gemini ends the stream with finishReason
  * 'error' and no error part; the durable step must surface it as an
  * AGENT_STREAM_ERROR carrying `rawFinishReason` so the default
  * stream-error-retry-processor can retry it.
