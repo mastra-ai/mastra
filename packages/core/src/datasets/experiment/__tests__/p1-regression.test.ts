@@ -18,7 +18,7 @@ vi.mock('../../../agent', async importOriginal => {
 });
 
 // Import after mock setup
-// oxlint-disable-next-line import-x-js/order
+// oxlint-disable-next-line mastra/import-order
 import { isSupportedLanguageModel } from '../../../agent';
 
 // Helper: mock agent with configurable behavior

@@ -1,16 +1,11 @@
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'oxlint';
 
-const fromLintPackage = createRequire(new URL('./packages/_config/package.json', import.meta.url));
-
 export default defineConfig({
   plugins: ['import', 'unicorn', 'react', 'typescript', 'vitest'],
-  // Absolute specifiers: package configs extend this one, and oxlint rejects relative ones there.
+  // Absolute specifier: package configs extend this one, and oxlint rejects relative ones there.
   jsPlugins: [
     { name: 'mastra', specifier: fileURLToPath(new URL('./packages/_config/src/oxlint-plugin.js', import.meta.url)) },
-    // ESLint's import/order, unchanged (oxlint's own import plugin has no order rule).
-    { name: 'import-x-js', specifier: fromLintPackage.resolve('eslint-plugin-import-x') },
   ],
   categories: {
     correctness: 'off',
@@ -63,7 +58,7 @@ export default defineConfig({
     ],
     'unicorn/prefer-node-protocol': 'error',
     'react/jsx-key': 'warn',
-    'import-x-js/order': [
+    'mastra/import-order': [
       'error',
       {
         alphabetize: { order: 'asc', caseInsensitive: true },

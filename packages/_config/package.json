@@ -14,8 +14,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@e18e/eslint-plugin": "^0.8.0",
-    "eslint-plugin-import-x": "^4.17.1"
+    "@e18e/eslint-plugin": "^0.8.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

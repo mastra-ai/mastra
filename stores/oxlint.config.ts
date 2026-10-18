@@ -18,7 +18,7 @@ export default defineConfig({
       // ESLint never linted these (the root ignorePatterns reached it relative to each package), only oxlint did.
       files: ['azure-ai-search/examples/**'],
       rules: {
-        'import-x-js/order': 'off',
+        'mastra/import-order': 'off',
         'no-undef': 'off',
         'typescript/no-floating-promises': 'off',
         'typescript/no-misused-promises': 'off',
