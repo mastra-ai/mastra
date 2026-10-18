@@ -1372,8 +1372,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               );
             }
 
+            // Normalize a void result to null like executeToolCall does, so the loop continues
+            // instead of treating the call as pending client work.
+            const serializedResult = ensureSerializable(completedTask.result);
             return {
-              result: ensureSerializable(completedTask.result),
+              result: serializedResult === undefined ? null : serializedResult,
               ...inputData,
               providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
               ...(approvalGrant ?? {}),
