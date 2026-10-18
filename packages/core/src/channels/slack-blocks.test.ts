@@ -22,13 +22,13 @@ describe('layoutBlockTexts', () => {
     };
 
     expect(layoutBlockTexts(raw)).toEqual([
-      '❌ Workflow failure',
-      '*Lint* failed on `main`. [View workflow run](https://github.com/acme/web-app/actions/runs/1)',
-      'Commit: `3f8b55a`',
+      ['❌ Workflow failure'],
+      ['*Lint* failed on `main`. [View workflow run](https://github.com/acme/web-app/actions/runs/1)'],
+      ['Commit: `3f8b55a`'],
     ]);
   });
 
-  it('includes section fields after the section text', () => {
+  it('lists section fields after the section text', () => {
     const raw = {
       blocks: [
         {
@@ -42,12 +42,12 @@ describe('layoutBlockTexts', () => {
       ],
     };
 
-    expect(layoutBlockTexts(raw)).toEqual(['Deploy finished\n*Env:* prod\nDuration: 3m']);
+    expect(layoutBlockTexts(raw)).toEqual([['Deploy finished', '*Env:* prod', 'Duration: 3m']]);
   });
 
   it('passes markdown blocks through unconverted', () => {
     const raw = { blocks: [{ type: 'markdown', text: '**Bold** and <https://x.y|not converted>' }] };
-    expect(layoutBlockTexts(raw)).toEqual(['**Bold** and <https://x.y|not converted>']);
+    expect(layoutBlockTexts(raw)).toEqual([['**Bold** and <https://x.y|not converted>']]);
   });
 
   it('joins context text elements and ignores images', () => {
@@ -63,7 +63,7 @@ describe('layoutBlockTexts', () => {
         },
       ],
     };
-    expect(layoutBlockTexts(raw)).toEqual(['by octocat 2 minutes ago']);
+    expect(layoutBlockTexts(raw)).toEqual([['by octocat 2 minutes ago']]);
   });
 
   it('ignores non-layout block types', () => {
@@ -87,12 +87,26 @@ describe('layoutBlockTexts', () => {
         },
       ],
     };
-    expect(layoutBlockTexts(raw)).toEqual(['<!here> <@U123> in <#C456>: see https://x.y or [email us](mailto:a@b.c)']);
+    expect(layoutBlockTexts(raw)).toEqual([
+      ['<!here> <@U123> in <#C456>: see https://x.y or [email us](mailto:a@b.c)'],
+    ]);
+  });
+
+  it('keeps link destinations with parentheses intact and escapes label brackets', () => {
+    const raw = {
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: '<https://en.wikipedia.org/wiki/Mars_(planet)|[wiki] Mars>' },
+        },
+      ],
+    };
+    expect(layoutBlockTexts(raw)).toEqual([['[\\[wiki\\] Mars](<https://en.wikipedia.org/wiki/Mars_(planet)>)']]);
   });
 
   it('does not convert plain_text', () => {
     const raw = { blocks: [{ type: 'header', text: { type: 'plain_text', text: '<https://x.y|literal>' } }] };
-    expect(layoutBlockTexts(raw)).toEqual(['<https://x.y|literal>']);
+    expect(layoutBlockTexts(raw)).toEqual([['<https://x.y|literal>']]);
   });
 
   it('returns nothing for payloads without layout blocks', () => {
@@ -217,5 +231,31 @@ describe('messageText with Slack layout blocks', () => {
       raw: { blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '*main*' } }] },
     });
     expect(messageText(msg)).toBe('maintenance window\n\n*main*');
+  });
+
+  it('drops section text the fallback already has but keeps its fields', () => {
+    const msg = message({
+      text: 'Deploy finished',
+      raw: {
+        blocks: [
+          {
+            type: 'section',
+            text: { type: 'mrkdwn', text: 'Deploy finished' },
+            fields: [{ type: 'mrkdwn', text: '*Env:* prod' }],
+          },
+        ],
+      },
+    });
+    expect(messageText(msg)).toBe('Deploy finished\n\n*Env:* prod');
+  });
+
+  it('dedupes links whose destination contains parentheses', () => {
+    const mrkdwn = 'See <https://en.wikipedia.org/wiki/Mars_(planet)|Mars>';
+    const msg = parsed(
+      { text: mrkdwn, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: mrkdwn } }] },
+      'See Mars',
+      'See [Mars](<https://en.wikipedia.org/wiki/Mars_(planet)>)',
+    );
+    expect(messageText(msg)).toBe('See [Mars](https://en.wikipedia.org/wiki/Mars_\\(planet\\))');
   });
 });

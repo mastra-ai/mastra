@@ -49,12 +49,16 @@ export function messageText(message: Message): string {
 
   const seen = [contentKey(base ?? ''), contentKey(message.text ?? '')];
   const extra: string[] = [];
-  for (const block of blocks) {
-    const key = contentKey(block);
-    const duplicate = key ? seen.some(s => s.includes(key)) : !!base?.includes(block);
-    if (duplicate) continue;
-    seen.push(key);
-    extra.push(block);
+  for (const parts of blocks) {
+    const kept: string[] = [];
+    for (const part of parts) {
+      const key = contentKey(part);
+      const duplicate = key ? seen.some(s => s.includes(key)) : !!base?.includes(part);
+      if (duplicate) continue;
+      seen.push(key);
+      kept.push(part);
+    }
+    if (kept.length) extra.push(kept.join('\n'));
   }
   return [base, ...extra].filter(s => s?.trim()).join('\n\n');
 }
@@ -67,7 +71,7 @@ export function messageText(message: Message): string {
  */
 function contentKey(text: string): string {
   const words = text
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[((?:\\.|[^\]\\])*)\]\((?:<[^>]*>|[^)]*)\)/g, '$1')
     .replace(/<[^|>]*\|([^>]*)>/g, '$1')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
