@@ -57,11 +57,12 @@ export class ObservationTurn {
   inputMessageIds: string[] = [];
 
   /**
-   * Non-marker part count of each message when a step last drained it, so a message that only
-   * gained OM marker parts is not mistaken for unread step output.
+   * Fingerprints of the non-marker parts each message had when a step last drained it. A message
+   * is unread step output only if it gained a part the model has not seen — including a tool result
+   * merged in place into an existing tool-invocation part — not when it only gained OM markers.
    * @internal
    */
-  drainedPartCounts = new Map<string, number>();
+  drainedPartKeys = new Map<string, Set<string>>();
 
   /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
   memory?: MemoryContextProvider;

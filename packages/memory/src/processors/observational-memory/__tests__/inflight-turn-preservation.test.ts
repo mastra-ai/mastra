@@ -11,13 +11,15 @@
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
-import { InMemoryStore } from '@mastra/core/storage';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
+import { InMemoryDB, InMemoryMemory, InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+import { ObservationalMemory } from '../observational-memory';
 
 const USER_REQUEST = 'USER_REQUEST_MARKER: look up the order status for order 4471 and report it back.';
 const RESULT_MARKER = 'TOOL_RESULT_MARKER';
@@ -178,5 +180,83 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
     expect(last).not.toContain(`${RESULT_MARKER}-4471-0`);
     expect(last).not.toContain(`${RESULT_MARKER}-4471-1`);
     expect(observerCalls.count).toBe(3);
+  });
+});
+
+describe('tool result merged in place into an already-drained message', () => {
+  it('keeps the merged result in the live prompt when the next step observes', async () => {
+    const threadId = 'thread-merged-result';
+    const resourceId = 'resource-merged-result';
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const observerCalls = { count: 0 };
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: observerModel(observerCalls) as any, messageTokens: 1000, bufferTokens: false },
+      reflection: { model: observerModel({ count: 0 }) as any, observationTokens: 100_000 },
+    });
+
+    const t0 = Date.now() - 60_000;
+    const user = {
+      id: 'user-1',
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: USER_REQUEST }] },
+      createdAt: new Date(t0),
+      threadId,
+      resourceId,
+    } as MastraDBMessage;
+    // Step 0 output: some reasoning text and a tool call whose result has not arrived yet.
+    const assistant = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: filler },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'call-merged', toolName: 'lookup', args: {} },
+          },
+        ],
+      },
+      createdAt: new Date(t0 + 1000),
+      threadId,
+      resourceId,
+    } as MastraDBMessage;
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(user, 'input');
+    messageList.add(assistant, 'response');
+
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+    await turn.step(0).prepare();
+    // Step 1 drains and observes the call; the model has read the call, not a result.
+    await turn.step(1).prepare();
+    const callsAfterStep1 = observerCalls.count;
+
+    // The tool result is merged into the existing tool-invocation part: same message, same part count.
+    const merged = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'call-merged',
+        toolName: 'lookup',
+        args: {},
+        result: { status: `${RESULT_MARKER}-merged`, log: filler },
+      },
+    });
+    expect(merged).toBe(true);
+
+    await turn.step(2).prepare();
+
+    expect(observerCalls.count).toBeGreaterThan(callsAfterStep1);
+    expect(
+      JSON.stringify(messageList.get.all.db()),
+      'the merged tool result was removed before the model read it',
+    ).toContain(`${RESULT_MARKER}-merged`);
   });
 });

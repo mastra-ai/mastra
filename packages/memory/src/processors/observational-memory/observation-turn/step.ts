@@ -284,12 +284,10 @@ export class ObservationStep {
         // A message drained again only because OM markers were appended to it was already read.
         const unreadIds = messagesToSave
           .filter(msg => {
-            const contentParts = (msg.content.parts ?? []).filter(
-              part => !String((part as { type?: string }).type ?? '').startsWith('data-om-'),
-            ).length;
-            const seenParts = this.turn.drainedPartCounts.get(msg.id);
-            this.turn.drainedPartCounts.set(msg.id, contentParts);
-            return seenParts === undefined || contentParts > seenParts;
+            const keys = getPartKeys(msg);
+            const seen = this.turn.drainedPartKeys.get(msg.id);
+            this.turn.drainedPartKeys.set(msg.id, new Set([...(seen ?? []), ...keys]));
+            return !seen || keys.some(key => !seen.has(key));
           })
           .map(msg => msg.id);
         inFlightIds = [...new Set([...this.turn.inputMessageIds, ...unreadIds])];
@@ -704,4 +702,36 @@ function restoreDrainedMessages(messageList: MessageList, drained: MastraDBMessa
   for (const msg of messageList.removeByIds(ids)) {
     messageList.add(msg, source, { merge: false });
   }
+}
+
+/**
+ * Identity keys of a message's non-marker parts. Tool parts are keyed by call id, state and result,
+ * so a result merged in place into an existing tool-invocation part yields a new key. Bookkeeping
+ * fields that change when a part is re-stamped are not part of the identity.
+ */
+function getPartKeys(msg: MastraDBMessage): string[] {
+  const seen = new Map<string, number>();
+  return (msg.content.parts ?? []).flatMap(part => {
+    if (part.type.startsWith('data-om-')) return [];
+    let identity: string;
+    if (part.type === 'tool-invocation') {
+      const { toolCallId, state } = part.toolInvocation;
+      identity = JSON.stringify([part.type, toolCallId, state, state === 'result' ? part.toolInvocation.result : null]);
+    } else {
+      const {
+        providerMetadata: _providerMetadata,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        ...rest
+      } = part as typeof part & {
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      identity = JSON.stringify(rest);
+    }
+    // Ordinal keeps identical parts within one message distinct.
+    const ordinal = seen.get(identity) ?? 0;
+    seen.set(identity, ordinal + 1);
+    return [`${identity}#${ordinal}`];
+  });
 }
