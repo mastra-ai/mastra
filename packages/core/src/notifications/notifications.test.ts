@@ -865,6 +865,87 @@ describe('notification inbox', () => {
     ]);
   });
 
+  it('delivers past however many records the delivery policy holds ahead, and limits only the records it acts on', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      persisted: Promise.resolve(),
+      signal,
+    }));
+    // Another process's dispatcher delivers 'held-thread', so this one holds it.
+    const resolveNotificationDeliveryDecision = vi.fn(async ({ record }: { record: { threadId: string } }) => ({
+      action: 'deliver' as const,
+      hold: record.threadId === 'held-thread',
+    }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    const base = { agentId: 'agent-1', resourceId: 'resource-1', source: 'github', kind: 'ci', summary: 'CI' } as const;
+    for (let index = 0; index < 120; index++) {
+      await storage.createNotification({
+        ...base,
+        id: `held-${index}`,
+        threadId: 'held-thread',
+        priority: 'high',
+        deliverAt: new Date(now.getTime() - 60_000),
+      });
+    }
+    for (const id of ['mine-1', 'mine-2', 'mine-3']) {
+      await storage.createNotification({ ...base, id, threadId: `${id}-thread`, priority: 'high', deliverAt: now });
+    }
+
+    const first = await dispatchDueNotifications({ mastra, storage, now, limit: 2 });
+    expect(first.delivered.map(record => record.id).sort()).toEqual(['mine-1', 'mine-2']);
+    const second = await dispatchDueNotifications({ mastra, storage, now });
+    expect(second.delivered.map(record => record.id)).toEqual(['mine-3']);
+
+    expect(sendSignal).toHaveBeenCalledTimes(3);
+    const held = await storage.listNotifications({ threadId: 'held-thread' });
+    expect(held).toHaveLength(120);
+    expect(held.every(record => record.status === 'pending' && (record.deliveryAttempts ?? 0) === 0)).toBe(true);
+  });
+
+  it('delivers a record that shares its id with a held record on another thread', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      persisted: Promise.resolve(),
+      signal,
+    }));
+    const resolveNotificationDeliveryDecision = vi.fn(async ({ record }: { record: { threadId: string } }) => ({
+      action: 'deliver' as const,
+      hold: record.threadId === 'held-thread',
+    }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    const base = { agentId: 'agent-1', resourceId: 'resource-1', source: 'github', kind: 'ci', summary: 'CI' } as const;
+    // Callers choose notification ids, which are unique per thread only: a full page of held records, one of them 'ci-run'.
+    for (let index = 0; index < 100; index++) {
+      await storage.createNotification({
+        ...base,
+        id: index === 0 ? 'ci-run' : `held-${index}`,
+        threadId: 'held-thread',
+        priority: 'high',
+        deliverAt: new Date(now.getTime() - 60_000),
+      });
+    }
+    await storage.createNotification({
+      ...base,
+      id: 'ci-run',
+      threadId: 'live-thread',
+      priority: 'high',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.delivered.map(record => [record.threadId, record.id])).toEqual([['live-thread', 'ci-run']]);
+    expect((await storage.getNotification({ threadId: 'held-thread', id: 'ci-run' }))?.status).toBe('pending');
+  });
+
   it("dispatches only one resource's notifications when asked to", async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');

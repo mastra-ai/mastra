@@ -513,6 +513,12 @@ The `ResolveResourceIdContext` passed to the function:
     description:
       'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
   },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description:
+      "The per-message request context. Values a channel handler sets before calling `defaultHandler` (for example a tenant id) are readable here, so you don't need to look them up again.",
+  },
 ]}
 />
 
@@ -575,6 +581,11 @@ The `ResolveThreadIdContext` passed to the function:
     name: 'defaultThreadId',
     type: 'string',
     description: 'The built-in default (a random UUID). Return this to keep the current behavior.',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'The per-message request context, the same instance passed to `resolveResourceId`.',
   },
 ]}
 />

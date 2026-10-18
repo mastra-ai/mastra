@@ -751,6 +751,24 @@ export class ModelSpanTracker {
   }
 
   /**
+   * A suspended step emits no step-finish; its suspension chunk carries the
+   * step usage instead. Close MODEL_INFERENCE and MODEL_STEP with that usage so
+   * the suspended call is not reported without tokens.
+   */
+  #endSuspendedStep<OUTPUT>(chunk: ChunkType<OUTPUT>) {
+    if (chunk.type !== 'tool-call-suspended' && chunk.type !== 'tool-call-approval') return;
+    const usage = chunk.payload.usage;
+    if (!usage) return;
+
+    this.#inModelResponse = false;
+    this.#endStepSpan({
+      output: { usage },
+      stepResult: { reason: 'suspended', isContinued: false, warnings: [] },
+      metadata: {},
+    } as unknown as StepFinishPayload<any, OUTPUT>);
+  }
+
+  /**
    * Returns the parent span for chunks. Chunks parent under MODEL_INFERENCE
    * (the provider call) when available, falling back to MODEL_STEP only if
    * startStep() was bypassed.
@@ -984,11 +1002,17 @@ export class ModelSpanTracker {
     if (chunk.type !== 'tool-call-approval') return;
     const payload = chunk.payload;
 
-    this.#ensureStepAndInference();
+    // Only the first approval request of a step carries its usage. A later one (surfaced after
+    // that step was closed, e.g. in the leg resumed by the first approval) belongs to no model
+    // call, so record it under the generation instead of opening empty step spans.
+    if (payload.usage || this.#currentStepSpan) {
+      this.#ensureStepAndInference();
+    }
+    const parent = this.#chunkParent() ?? this.#modelSpan;
 
     // Create an event span for the approval request
     // Using createEventSpan since approvals are point-in-time events (not time ranges)
-    const span = this.#chunkParent()?.createEventSpan({
+    const span = parent?.createEventSpan({
       name: `chunk: 'tool-call-approval'`,
       type: SpanType.MODEL_CHUNK,
       attributes: {
@@ -1015,6 +1039,15 @@ export class ModelSpanTracker {
         transform: (chunk, controller) => {
           if ((this.#inModelResponse || this.#deferStepClose) && MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) {
             this.#captureCompletionStartTime();
+          }
+
+          // Close the suspended step before forwarding: downstream handling of
+          // the suspension finishes the run and ends the span tree.
+          if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+            if (chunk.type === 'tool-call-approval') {
+              this.#handleToolApprovalChunk(chunk);
+            }
+            this.#endSuspendedStep(chunk);
           }
 
           controller.enqueue(chunk);
@@ -1092,15 +1125,14 @@ export class ModelSpanTracker {
             case 'tripwire': // Processor rejection
             case 'watch': // Internal watch event
             case 'tool-error': // Tool error handling
-            case 'tool-call-suspended': // Suspension (not content)
             case 'reasoning-signature': // Signature metadata
             case 'redacted-reasoning': // Redacted content metadata
             case 'step-output': // Step output wrapper (content is nested)
               // Don't create spans for these chunks
               break;
 
-            case 'tool-call-approval': // Approval request - create span for debugging
-              this.#handleToolApprovalChunk(chunk);
+            case 'tool-call-suspended': // Suspension (handled before enqueue)
+            case 'tool-call-approval': // Approval request (handled before enqueue)
               break;
 
             case 'tool-output':

@@ -487,6 +487,8 @@ export interface ResolveResourceIdContext {
   message: Message;
   /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
   defaultResourceId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -511,6 +513,8 @@ export interface ResolveThreadIdContext {
   resourceId: string;
   /** The built-in default: a random UUID. Return this to keep current behavior. */
   defaultThreadId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**

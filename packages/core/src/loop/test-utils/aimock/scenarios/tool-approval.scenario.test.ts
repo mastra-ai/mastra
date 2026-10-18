@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { describeForAllEngines, runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: tool approval + suspend/resume.
@@ -13,7 +13,7 @@ import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * continue path keeps message ordering and tool plumbing intact across the
  * snapshot boundary.
  */
-describe('AIMock loop scenario: tool approval suspend/resume', () => {
+describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engine => {
   const getMock = useLoopScenarioAimock();
 
   const makeLookupTool = () =>
@@ -28,6 +28,7 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
   it('approves a suspended tool call, executes it, then completes', async () => {
     const { output, chunks, approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Look up the status for query alpha.',
       tools: { lookup_status: makeLookupTool() },
       stopWhen: stepCountIs(5),
@@ -70,6 +71,7 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
   it('declines a suspended tool call and reports the denial back to the model', async () => {
     const { output, approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Look up the status for query beta.',
       tools: { lookup_status: makeLookupTool() },
       stopWhen: stepCountIs(5),
@@ -110,6 +112,7 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
 
     const { approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Use the label "beta".',
       tools: { do_the_thing: dangerTool },
       stopWhen: stepCountIs(5),
