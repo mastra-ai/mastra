@@ -41,6 +41,13 @@ export interface LiveBoardRegistry extends BoardRegistry {
 /** Prefix of server-generated ids for boards built from the UI or API. */
 export const STORED_BOARD_ID_PREFIX = 'custom-';
 
+/**
+ * How long a replica trusts its stored boards. A lookup of a stored board after this long reloads them
+ * in the background, so a replica that only dispatches or handles webhooks still sees edits and
+ * deletions made on another replica.
+ */
+export const STORED_BOARD_MAX_AGE_MS = 30_000;
+
 export interface StoredBoardEntry {
   board: InstalledBoard;
   factoryProjectId: string;
@@ -76,8 +83,12 @@ export function createBoardRegistry(
   const owners = new Map<string, string>();
   let reloader: (() => Promise<void>) | undefined;
   let generation = 0;
+  let storedLoadedAt = 0;
   const reloadOnMiss = (id: string) => {
     if (reloader && id.startsWith(STORED_BOARD_ID_PREFIX)) void reloader();
+  };
+  const reloadIfStale = (id: string) => {
+    if (Date.now() - storedLoadedAt > STORED_BOARD_MAX_AGE_MS) reloadOnMiss(id);
   };
 
   const assertStored = (id: string) => {
@@ -93,12 +104,14 @@ export function createBoardRegistry(
     },
     get(id: string) {
       const board = registry.get(id);
-      if (!board) reloadOnMiss(id);
+      if (board) reloadIfStale(id);
+      else reloadOnMiss(id);
       return board;
     },
     has(id: string) {
       const found = registry.has(id);
-      if (!found) reloadOnMiss(id);
+      if (found) reloadIfStale(id);
+      else reloadOnMiss(id);
       return found;
     },
     keys: () => registry.keys(),
@@ -128,6 +141,7 @@ export function createBoardRegistry(
         registry.set(board.id, board);
         owners.set(board.id, factoryProjectId);
       }
+      storedLoadedAt = Date.now();
     },
     setStoredReloader(reload: () => Promise<void>) {
       reloader = reload;

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FactoryStageRuleContext } from '../rules/types.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { BoardDefinitionError } from './define-board.js';
-import { boardAvailableTo, createBoardRegistry } from './registry.js';
+import { STORED_BOARD_MAX_AGE_MS, boardAvailableTo, createBoardRegistry } from './registry.js';
 import {
   buildStoredBoard,
   debouncedStoredBoardReload,
@@ -121,6 +121,36 @@ describe('stored board reload across replicas', () => {
     expect(reload).not.toHaveBeenCalled();
     expect(replica.get('custom-gone')).toBeUndefined();
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes boards another replica changed or deleted once they pass their max age', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { storedBoards } = await createFactoryStorageForTests();
+      const changed = { orgId: 'org-1', factoryProjectId: 'fp-1', boardId: newStoredBoardId() };
+      const deleted = { orgId: 'org-1', factoryProjectId: 'fp-1', boardId: newStoredBoardId() };
+      await storedBoards.create({ ...changed, ...parseStoredBoard(INPUT) });
+      await storedBoards.create({ ...deleted, ...parseStoredBoard({ ...INPUT, title: 'Doomed' }) });
+
+      const replicaB = createBoardRegistry();
+      replicaB.setStoredReloader(debouncedStoredBoardReload(replicaB, storedBoards));
+      await loadStoredBoards(replicaB, storedBoards);
+      expect(replicaB.get(changed.boardId)?.title).toBe('Ops');
+      expect(replicaB.has(deleted.boardId)).toBe(true);
+
+      // Replica A edits one board and deletes the other; B only dispatches and never misses a lookup.
+      await storedBoards.update({ ...changed, ...parseStoredBoard({ ...INPUT, title: 'Ops 2' }) });
+      await storedBoards.delete(deleted);
+      expect(replicaB.get(changed.boardId)?.title).toBe('Ops');
+
+      vi.setSystemTime(Date.now() + STORED_BOARD_MAX_AGE_MS + 1);
+      await vi.waitFor(() => {
+        expect(replicaB.get(changed.boardId)?.title).toBe('Ops 2');
+        expect(replicaB.has(deleted.boardId)).toBe(false);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('drops a reload snapshot read before a local board write', async () => {
