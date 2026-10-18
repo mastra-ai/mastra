@@ -25,12 +25,8 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockMemory } from '../../../memory/mock';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import type { Deferred } from './abort-parity-support';
-import { aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
+  Deferred,
   EngineHandle,
   EngineParityResults,
   EngineParityScenario,
@@ -38,8 +34,19 @@ import type {
   ModelScript,
   ParityEngine,
   ParitySnapshot,
-} from './parity-harness';
-import { FAILED_STEP_WARNINGS_DIFFERENCE, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+} from '../../../loop/test-utils/aimock/parity';
+import {
+  FAILED_STEP_WARNINGS_DIFFERENCE,
+  aborted,
+  deferred,
+  expectEngineParity,
+  textOnlyTape,
+  toolCallTape,
+  toolResultCount,
+} from '../../../loop/test-utils/aimock/parity';
+import { MockMemory } from '../../../memory/mock';
+import { createTool } from '../../../tools';
+import { Agent } from '../../agent';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const AGENT_ID = 't36-agent';

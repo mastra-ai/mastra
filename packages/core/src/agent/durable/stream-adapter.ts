@@ -685,6 +685,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
+          // Let earlier chunk callbacks finish first, as FINISH does, so onSuspended
+          // sees every chunk that preceded the suspension.
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           // By default we leave the stream open on suspend so a later resume can
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`

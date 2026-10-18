@@ -111,9 +111,6 @@ packageExtensions:
   'eslint-plugin-storybook@10.6.0':
     dependencies:
       typescript: ^6.0.3
-  'eslint-plugin-tailwindcss@4.1.0':
-    dependencies:
-      typescript: ^6.0.3
   '@ai-sdk/provider-utils@3.0.25':
     dependencies:
       msw: ^2.12.11
