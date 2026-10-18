@@ -2198,6 +2198,54 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 }
               }
+              // Release parts output processors still hold (e.g. a partial
+              // BatchPartsProcessor batch) so a stream ending mid-batch keeps its tail.
+              if (
+                pubsub &&
+                !outputStreamBlocked &&
+                !executionAbortSignal?.aborted &&
+                effectiveOutputProcessors.length > 0 &&
+                registryEntry?.processorStates
+              ) {
+                const released = await getToolResultRunner().flushHeldParts(
+                  registryEntry.processorStates,
+                  createObservabilityContext(modelSpanTracker?.getTracingContext() ?? tracingContext),
+                  requestContext,
+                  messageList,
+                  0,
+                  outputStreamWriter,
+                );
+                for (const r of released) {
+                  if (r.blocked) {
+                    outputStreamBlocked = true;
+                    await emitChunkEvent(
+                      pubsub,
+                      runId,
+                      {
+                        type: 'tripwire',
+                        runId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          reason: r.reason || 'Output processor blocked content',
+                          retry: r.tripwireOptions?.retry,
+                          metadata: r.tripwireOptions?.metadata,
+                          processorId: r.processorId,
+                        },
+                      },
+                      true,
+                    );
+                    break;
+                  }
+                  if (r.part == null) continue;
+                  trackOpenReasoning(r.part, openReasoningIds);
+                  await emitChunkEvent(pubsub, runId, r.part, true);
+                  collectedChunks.push({
+                    type: r.part.type,
+                    payload: 'payload' in r.part ? r.part.payload : undefined,
+                    metadata: (r.part as { metadata?: Record<string, unknown> }).metadata,
+                  });
+                }
+              }
               throwIfInterrupted();
               interruptible = false;
               stopListening?.();
