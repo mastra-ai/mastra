@@ -5,9 +5,9 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
-import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -162,9 +162,9 @@ export function useHandoffPrompt(): void {
     if (!sessionBound) {
       // Session init does not retry, so a failed init will never bind. The
       // prompt was never posted: hand it back instead of leaving it pending.
+      // Keep the stored copy so the reload this failure asks for restores it.
       if (connectionStatus !== 'error') return;
       queued.current = null;
-      clearPendingHandoff(resourceId);
       restore('The session could not start, so the message was not sent.');
       return;
     }

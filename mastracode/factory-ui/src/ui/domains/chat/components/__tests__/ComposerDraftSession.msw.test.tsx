@@ -103,7 +103,7 @@ describe('Composer on a lazy user-session draft', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderDraft();
+    const { client, unmount } = renderDraft();
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
     await user.type(message, 'never sent');
@@ -116,6 +116,13 @@ describe('Composer on a lazy user-session draft', () => {
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText(/The session could not start, so the message was not sent/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('never sent'));
+    expect(preparation.posted).toEqual([]);
+
+    // The failed session blocks the composer and asks for a reload, which
+    // must bring the unsent prompt back.
+    unmount();
+    renderThread();
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('never sent'));
     expect(preparation.posted).toEqual([]);
   });
