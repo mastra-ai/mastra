@@ -74,4 +74,57 @@ describeForAllEngines('AIMock loop scenario: memory conversation history', engin
     const text = await output.text;
     expect(text).toContain('MEMORY_TEAL');
   });
+
+  // A readOnly turn still sees the thread's history but must not add to it, so a reload shows
+  // only the turns that were saved.
+  it('recalls history on a readOnly turn without saving that turn', async () => {
+    const memory = new MockMemory();
+    const threadId = 'memory-readonly-thread';
+    const resourceId = 'memory-readonly-resource';
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'My favorite color is MEMORY_TEAL.',
+      memory,
+      threadId,
+      resourceId,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Got it, I will remember that.' });
+      },
+    });
+
+    const { messages: savedBefore } = await memory.recall({ threadId, resourceId });
+    expect(savedBefore.map(m => m.role)).toEqual(['user', 'assistant']);
+
+    getMock().clearRequests();
+    getMock().clearFixtures();
+    getMock().resetMatchCounts();
+
+    const readOnlyOptions = { readOnly: true, lastMessages: 10 };
+    const { requests, output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What is my favorite color? READONLY_QUESTION',
+      memory,
+      threadId,
+      resourceId,
+      memoryOptions: readOnlyOptions,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Your favorite color is MEMORY_TEAL. READONLY_ANSWER' });
+      },
+    });
+
+    expect(await output.text).toContain('READONLY_ANSWER');
+    expect(requests).toHaveLength(1);
+    expect(JSON.stringify(requests[0]?.body?.messages ?? [])).toContain('MEMORY_TEAL');
+
+    // Give any (wrong) background save a chance to land before checking nothing was written.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const { messages: savedAfter } = await memory.recall({ threadId, resourceId });
+    expect(savedAfter.map(m => m.id)).toEqual(savedBefore.map(m => m.id));
+    const serializedAfter = JSON.stringify(savedAfter);
+    expect(serializedAfter).not.toContain('READONLY_QUESTION');
+    expect(serializedAfter).not.toContain('READONLY_ANSWER');
+  });
 });

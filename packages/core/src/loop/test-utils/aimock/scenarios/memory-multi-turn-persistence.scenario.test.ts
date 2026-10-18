@@ -1,6 +1,13 @@
-import { it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
+import { StreamErrorRetryProcessor } from '../../../../processors';
+import type { InputProcessor } from '../../../../processors';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { isDurableEngineVariant } from '../types';
+
+// Same processor id as the shipped default, so it replaces it: the failure is terminal at once
+// instead of waiting out the default 3s backoff.
+const noStreamRetries = () => [new StreamErrorRetryProcessor({ maxRetries: 0 })];
 
 /**
  * Regression class: multi-turn message persistence and recall.
@@ -272,5 +279,155 @@ describeForAllEngines('AIMock loop scenario: multi-turn memory persistence', eng
     // Tool call structure should be present (even if name/args are empty due to memory serialization)
     expect(serialized).toContain('tool_calls');
     expect(serialized).toContain('call_weather_1');
+  });
+
+  // A turn that fails must still leave a record in the thread: the user's message plus an
+  // assistant message carrying the error, so a reload shows what went wrong and the next turn
+  // doesn't see a dangling user message. A guardrail block is not a failure and saves no error.
+  describe('failed turns', () => {
+    const threadId = 'failed-turn-thread';
+    const resourceId = 'failed-turn-resource';
+    // The in-process loop (normal, fs) diverges from the durable engines on two failures below;
+    // see the comments on those tests and #27427.
+    const itFailsOnInProcessLoop = isDurableEngineVariant(engine) ? it : it.fails;
+
+    async function savedTurn(memory: MockMemory, expectedRoles = ['user', 'assistant']) {
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId });
+        expect(messages.map(m => m.role)).toEqual(expectedRoles);
+      });
+      const { messages } = await memory.recall({ threadId, resourceId });
+      return messages;
+    }
+
+    it('saves the error as the assistant reply when the provider fails', async () => {
+      const memory = new MockMemory();
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Summarize my account.',
+        memory,
+        threadId,
+        resourceId,
+        maxRetries: 0,
+        errorProcessors: noStreamRetries(),
+        fixtures: llm => {
+          llm.onMessage(/.*/, {
+            error: { message: 'PROVIDER_DOWN_27401', type: 'server_error', code: 'internal_error' },
+            status: 500,
+          });
+        },
+      });
+
+      const messages = await savedTurn(memory);
+      expect(messages[1]!.content.parts).toHaveLength(1);
+      expect(messages[1]!.content.parts[0]).toMatchObject({ type: 'error' });
+      expect(JSON.stringify(messages[1]!.content.parts[0])).toContain('PROVIDER_DOWN_27401');
+    });
+
+    // In-process loop: streamed text is only materialized on `text-end`, so a socket drop
+    // mid-reply saves the error alone and loses the text the user already saw.
+    itFailsOnInProcessLoop(
+      'keeps the partial reply and appends the error when the stream drops mid-reply',
+      async () => {
+        const memory = new MockMemory();
+        const partialReply = 'Your balance is forty-two dollars and the last payment was';
+
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'What is my balance?',
+          memory,
+          threadId,
+          resourceId,
+          maxRetries: 0,
+          errorProcessors: noStreamRetries(),
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat' },
+              { content: partialReply },
+              { chunkSize: 5, latency: 20, disconnectAfterMs: 150 },
+            );
+          },
+        });
+
+        const messages = await savedTurn(memory);
+        const parts = messages[1]!.content.parts;
+        const text = parts
+          .filter(p => p.type === 'text')
+          .map(p => p.text)
+          .join('');
+        expect(text.length).toBeGreaterThan(0);
+        expect(partialReply.startsWith(text)).toBe(true);
+        expect(parts.at(-1)).toMatchObject({ type: 'error' });
+      },
+    );
+
+    // In-process loop: a non-TripWire throw from processInputStep is rethrown before any terminal
+    // error is recorded, so neither the user message nor the error is saved.
+    itFailsOnInProcessLoop(
+      'saves the error when an input processor throws, including after rotating the response id',
+      async () => {
+        for (const rotate of [false, true]) {
+          const memory = new MockMemory();
+          const errorMessage = `input processor failure (rotate=${rotate})`;
+          const failingProcessor: InputProcessor = {
+            id: 'failing-input-processor',
+            processInputStep: async ({ rotateResponseMessageId }) => {
+              if (rotate) rotateResponseMessageId?.();
+              throw new Error(errorMessage);
+            },
+          };
+
+          const { requests } = await runLoopScenario({
+            engine,
+            llm: getMock(),
+            prompt: 'Hello there.',
+            memory,
+            threadId,
+            resourceId,
+            inputProcessors: [failingProcessor],
+            fixtures: llm => {
+              llm.on({ endpoint: 'chat' }, { content: 'unreachable' });
+            },
+          });
+
+          expect(requests).toHaveLength(0);
+          const messages = await savedTurn(memory);
+          expect(messages[1]!.content.parts).toHaveLength(1);
+          expect(messages[1]!.content.parts[0]).toMatchObject({ type: 'error' });
+          expect(JSON.stringify(messages[1]!.content.parts[0])).toContain(errorMessage);
+        }
+      },
+    );
+
+    it('saves no error when an input guardrail blocks the turn', async () => {
+      const memory = new MockMemory();
+      const guardrail: InputProcessor = {
+        id: 'blocking-guardrail',
+        processInput: async ({ abort, messages }) => {
+          abort('blocked by guardrail');
+          return messages;
+        },
+      };
+
+      const { requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Tell me something forbidden.',
+        memory,
+        threadId,
+        resourceId,
+        inputProcessors: [guardrail],
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: 'unreachable' });
+        },
+      });
+
+      expect(requests).toHaveLength(0);
+      const { messages } = await memory.recall({ threadId, resourceId });
+      expect(messages.flatMap(m => m.content.parts).some(p => p.type === 'error')).toBe(false);
+    });
   });
 });

@@ -7,7 +7,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  *
  * Tests that when a memory thread has many messages, only the last N messages
  * (based on `lastMessages` config) are recalled into the model request.
- * Also tests that `lastMessages: false` disables history recall entirely.
+ * Also tests that `lastMessages: 0` disables history recall entirely.
  *
  * This prevents regressions in memory recall windowing logic.
  */
@@ -176,5 +176,46 @@ describeForAllEngines('AIMock loop scenario: memory recall window', engine => {
     // Both facts should be present (default recall includes all history)
     expect(serialized).toContain('FULL_RECALL_1');
     expect(serialized).toContain('FULL_RECALL_2');
+  });
+
+  // `0` is a real window size, not "unset": it must not fall back to the default and recall history.
+  it('recalls no history when lastMessages is 0', async () => {
+    const memory = new MockMemory();
+    const threadId = 'zero-window-thread';
+    const resourceId = 'zero-window-resource';
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Remember ZERO_WINDOW_FACT.',
+      memory,
+      threadId,
+      resourceId,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Remembered.' });
+      },
+    });
+
+    getMock().clearRequests();
+    getMock().clearFixtures();
+    getMock().resetMatchCounts();
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What do you remember? ZERO_WINDOW_QUESTION',
+      memory,
+      threadId,
+      resourceId,
+      memoryOptions: { lastMessages: 0 },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Nothing yet.' });
+      },
+    });
+
+    expect(requests).toHaveLength(1);
+    const serialized = JSON.stringify(requests[0]?.body?.messages ?? []);
+    expect(serialized).toContain('ZERO_WINDOW_QUESTION');
+    expect(serialized).not.toContain('ZERO_WINDOW_FACT');
   });
 });

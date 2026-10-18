@@ -1,20 +1,19 @@
 /**
  * DurableAgent Memory Tests
  *
- * Tests for comprehensive memory features including readOnly, dynamic memory,
- * thread management, and memory config serialization in durable execution.
+ * Durable-only memory internals: prepare()-time thread normalization, memory config
+ * serialization into workflow state, and title-generation lifecycle ordering.
+ * User-visible memory behavior lives in the aimock loop scenarios
+ * (src/loop/test-utils/aimock/scenarios/memory-*.scenario.test.ts).
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
-import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { SaveQueueManager } from '../../save-queue';
 import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
@@ -52,56 +51,6 @@ function createTextModel(text: string) {
   });
 }
 
-function createTerminalErrorModel(errorMessage: string, partialText?: string) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        ...(partialText
-          ? [
-              { type: 'response-metadata' as const, id: 'id-error', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start' as const, id: 'text-error' },
-              { type: 'text-delta' as const, id: 'text-error', delta: partialText },
-              { type: 'text-end' as const, id: 'text-error' },
-            ]
-          : []),
-        { type: 'error', error: new Error(errorMessage) },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-    }),
-  });
-}
-
-/**
- * Creates a model that returns a tool call
- */
-function createToolCallModel(toolName: string, toolArgs: object) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        {
-          type: 'tool-call',
-          toolCallType: 'function',
-          toolCallId: 'call-1',
-          toolName,
-          input: JSON.stringify(toolArgs),
-          providerExecuted: false,
-        },
-        {
-          type: 'finish',
-          finishReason: 'tool-calls',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-    }),
-  });
-}
-
 // ============================================================================
 // DurableAgent Memory Tests
 // ============================================================================
@@ -118,30 +67,6 @@ describe('DurableAgent memory configuration', () => {
   });
 
   describe('basic memory options', () => {
-    it('should handle memory.thread as string', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'thread-string-agent',
-        name: 'Thread String Agent',
-        instructions: 'Test thread string',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Hello', {
-        memory: {
-          thread: 'my-thread-id',
-          resource: 'user-123',
-        },
-      });
-
-      expect(result.threadId).toBe('my-thread-id');
-      expect(result.resourceId).toBe('user-123');
-      expect(result.workflowInput.state.threadId).toBe('my-thread-id');
-      expect(result.workflowInput.state.resourceId).toBe('user-123');
-    });
-
     it('should handle memory.thread as object with id', async () => {
       const mockModel = createTextModel('Hello!');
 
@@ -213,297 +138,9 @@ describe('DurableAgent memory configuration', () => {
       expect(originalModelCalls).toBe(0);
       expect(overrideModelCalls).toBe(1);
     });
-
-    it('should handle missing memory options gracefully', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'no-memory-agent',
-        name: 'No Memory Agent',
-        instructions: 'Test without memory',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Hello');
-
-      expect(result.threadId).toBeUndefined();
-      expect(result.resourceId).toBeUndefined();
-    });
-
-    it('should persist both user input and assistant response after a completed stream', async () => {
-      const mockMemory = new MockMemory();
-      const baseAgent = new Agent({
-        id: 'persist-response-agent',
-        name: 'Persist Response Agent',
-        instructions: 'Test response persistence',
-        model: createTextModel('assistant response') as LanguageModelV2,
-        memory: mockMemory,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.stream('user input', {
-        memory: { thread: 'thread-persist-response', resource: 'resource-persist-response' },
-      });
-      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-      }
-
-      const messages = await mockMemory.recall({
-        threadId: 'thread-persist-response',
-        resourceId: 'resource-persist-response',
-      });
-
-      expect(messages.messages.map(message => message.role)).toEqual(['user', 'assistant']);
-      expect(JSON.stringify(messages.messages[0]?.content)).toContain('user input');
-      expect(JSON.stringify(messages.messages[1]?.content)).toContain('assistant response');
-      result.cleanup();
-    });
-
-    it('persists an error-only assistant message through the default durable flush path', async () => {
-      const mockMemory = new MockMemory();
-      const flushMessages = vi.spyOn(SaveQueueManager.prototype, 'flushMessages');
-      const baseAgent = new Agent({
-        id: 'persist-terminal-error-agent',
-        name: 'Persist Terminal Error Agent',
-        instructions: 'Test terminal error persistence',
-        model: createTerminalErrorModel('durable terminal failure') as LanguageModelV2,
-        memory: mockMemory,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-      const threadId = 'thread-terminal-error';
-      const resourceId = 'resource-terminal-error';
-
-      const result = await durableAgent.stream('user input', {
-        memory: { thread: threadId, resource: resourceId },
-      });
-      try {
-        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-        }
-      } catch {
-        // The durable bridge surfaces the terminal stream error to consumers.
-      }
-
-      await vi.waitFor(async () => {
-        const recalled = await mockMemory.recall({ threadId, resourceId });
-        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
-      });
-
-      const { messages } = await mockMemory.recall({ threadId, resourceId });
-      expect(messages[1]?.content.parts).toMatchObject([
-        { type: 'error', error: { name: 'Error', message: 'durable terminal failure' } },
-      ]);
-      expect(messages[1]?.content.parts).toHaveLength(1);
-      expect(flushMessages).toHaveBeenCalled();
-      expect(
-        flushMessages.mock.calls.some(([messageList]) =>
-          messageList.get.all.db().some(message => message.content.parts?.some(part => part.type === 'error')),
-        ),
-      ).toBe(true);
-      result.cleanup();
-    });
-
-    it('appends a terminal error after partial assistant output in durable memory', async () => {
-      const mockMemory = new MockMemory();
-      const baseAgent = new Agent({
-        id: 'persist-partial-terminal-error-agent',
-        name: 'Persist Partial Terminal Error Agent',
-        instructions: 'Test partial terminal error persistence',
-        model: createTerminalErrorModel('durable partial failure', 'partial response') as LanguageModelV2,
-        memory: mockMemory,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-      const threadId = 'thread-partial-terminal-error';
-      const resourceId = 'resource-partial-terminal-error';
-
-      const result = await durableAgent.stream('user input', {
-        memory: { thread: threadId, resource: resourceId },
-      });
-      try {
-        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-        }
-      } catch {
-        // The durable bridge surfaces the terminal stream error to consumers.
-      }
-
-      await vi.waitFor(async () => {
-        const recalled = await mockMemory.recall({ threadId, resourceId });
-        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
-      });
-
-      const { messages } = await mockMemory.recall({ threadId, resourceId });
-      expect(messages[1]?.content.parts).toMatchObject([
-        { type: 'text', text: 'partial response' },
-        { type: 'error', error: { name: 'Error', message: 'durable partial failure' } },
-      ]);
-      expect(messages[1]?.content.parts?.at(-1)).toMatchObject({
-        type: 'error',
-        error: { name: 'Error', message: 'durable partial failure' },
-      });
-      result.cleanup();
-    });
-
-    it('persists input-processor failures before stream collection, including rotated response ids', async () => {
-      for (const { name, rotate } of [
-        { name: 'direct', rotate: false },
-        { name: 'rotated', rotate: true },
-      ]) {
-        const mockMemory = new MockMemory();
-        const errorMessage = `${name} input processor failure`;
-        const failingProcessor: InputProcessor = {
-          id: `${name}-input-processor`,
-          processInputStep: async ({ rotateResponseMessageId }) => {
-            if (rotate) rotateResponseMessageId?.();
-            throw new Error(errorMessage);
-          },
-        };
-        const baseAgent = new Agent({
-          id: `${name}-input-processor-error-agent`,
-          name: 'Input Processor Error Agent',
-          instructions: 'Test input processor failure persistence',
-          model: createTextModel('unreachable') as LanguageModelV2,
-          memory: mockMemory,
-          inputProcessors: [failingProcessor],
-        });
-        const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-        const threadId = `thread-${name}-input-processor-error`;
-        const resourceId = `resource-${name}-input-processor-error`;
-        const result = await durableAgent.stream('user input', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-        try {
-          for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-          }
-        } catch {
-          // The input-processor exception reaches the existing terminal stream error surface.
-        }
-
-        await vi.waitFor(async () => {
-          const recalled = await mockMemory.recall({ threadId, resourceId });
-          expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
-        });
-        const { messages } = await mockMemory.recall({ threadId, resourceId });
-        const [errorPart] = messages[1]?.content.parts ?? [];
-        expect(errorPart).toMatchObject({ type: 'error', error: { name: 'Error' } });
-        expect((errorPart as { error?: { message?: string } }).error?.message).toContain(errorMessage);
-        expect(messages[1]?.content.parts).toHaveLength(1);
-        result.cleanup();
-      }
-    });
-
-    it('does not create error parts when an input processor triggers a TripWire', async () => {
-      const mockMemory = new MockMemory();
-      const tripwireProcessor: InputProcessor = {
-        id: 'durable-tripwire',
-        processInput: async ({ abort, messages }) => {
-          abort('Durable tripwire');
-          return messages;
-        },
-      };
-      const baseAgent = new Agent({
-        id: 'durable-tripwire-agent',
-        name: 'Durable TripWire Agent',
-        instructions: 'Test TripWire persistence',
-        model: createTextModel('unreachable') as LanguageModelV2,
-        memory: mockMemory,
-        inputProcessors: [tripwireProcessor],
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-      const threadId = 'thread-durable-tripwire';
-      const resourceId = 'resource-durable-tripwire';
-      const result = await durableAgent.stream('user input', {
-        memory: { thread: threadId, resource: resourceId },
-      });
-      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-      }
-
-      const { messages } = await mockMemory.recall({ threadId, resourceId });
-      expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
-      result.cleanup();
-    });
-
-    it('does not persist messages when memory is readOnly', async () => {
-      const mockMemory = new MockMemory();
-      await mockMemory.createThread({ threadId: 'thread-readonly', resourceId: 'resource-readonly' });
-
-      const baseAgent = new Agent({
-        id: 'readonly-persist-agent',
-        name: 'ReadOnly Persist Agent',
-        instructions: 'Test readOnly persistence',
-        model: createTextModel('assistant response') as LanguageModelV2,
-        memory: mockMemory,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.stream('user input', {
-        memory: {
-          thread: 'thread-readonly',
-          resource: 'resource-readonly',
-          options: { readOnly: true },
-        },
-      });
-      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-      }
-
-      const messages = await mockMemory.recall({
-        threadId: 'thread-readonly',
-        resourceId: 'resource-readonly',
-      });
-
-      // readOnly means "read memory but do not save new messages".
-      expect(messages.messages).toEqual([]);
-      result.cleanup();
-    });
   });
 
   describe('memory.options configuration', () => {
-    it('should include readOnly option in workflow state', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'readonly-agent',
-        name: 'ReadOnly Agent',
-        instructions: 'Test readonly',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Hello', {
-        memory: {
-          thread: 'thread-readonly',
-          resource: 'user-readonly',
-          options: {
-            readOnly: true,
-          },
-        },
-      });
-
-      expect(result.workflowInput.state.memoryConfig?.readOnly).toBe(true);
-    });
-
-    it('should include lastMessages option in workflow state', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'lastmessages-agent',
-        name: 'LastMessages Agent',
-        instructions: 'Test lastMessages',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Hello', {
-        memory: {
-          thread: 'thread-lastmsg',
-          resource: 'user-lastmsg',
-          options: {
-            lastMessages: 10,
-          },
-        },
-      });
-
-      expect(result.workflowInput.state.memoryConfig?.lastMessages).toBe(10);
-    });
-
     it('should include semanticRecall options in workflow state', async () => {
       const mockModel = createTextModel('Hello!');
 
@@ -530,37 +167,6 @@ describe('DurableAgent memory configuration', () => {
 
       expect(result.workflowInput.state.memoryConfig?.semanticRecall).toBeDefined();
       expect(result.workflowInput.state.memoryConfig?.semanticRecall?.topK).toBe(5);
-    });
-
-    it('should combine multiple memory options', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'combined-memory-agent',
-        name: 'Combined Memory Agent',
-        instructions: 'Test combined options',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Hello', {
-        memory: {
-          thread: 'thread-combined',
-          resource: 'user-combined',
-          options: {
-            readOnly: false,
-            lastMessages: 20,
-            semanticRecall: {
-              topK: 3,
-            },
-          },
-        },
-      });
-
-      const memoryConfig = result.workflowInput.state.memoryConfig;
-      expect(memoryConfig?.readOnly).toBe(false);
-      expect(memoryConfig?.lastMessages).toBe(20);
-      expect(memoryConfig?.semanticRecall?.topK).toBe(3);
     });
   });
 
@@ -625,128 +231,6 @@ describe('DurableAgent memory configuration', () => {
       expect(parsed.state.threadId).toBe('thread-undefined');
     });
   });
-
-  describe('memory with streaming', () => {
-    it('should pass memory options through stream()', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'stream-memory-agent',
-        name: 'Stream Memory Agent',
-        instructions: 'Test stream memory',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { runId, threadId, resourceId, cleanup } = await durableAgent.stream('Hello', {
-        memory: {
-          thread: 'stream-thread-123',
-          resource: 'stream-user-456',
-        },
-      });
-
-      expect(runId).toBeDefined();
-      expect(threadId).toBe('stream-thread-123');
-      expect(resourceId).toBe('stream-user-456');
-      cleanup();
-    });
-
-    it('should handle memory options with readOnly in stream()', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'readonly-stream-agent',
-        name: 'ReadOnly Stream Agent',
-        instructions: 'Test readonly stream',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
-        memory: {
-          thread: 'readonly-stream-thread',
-          resource: 'readonly-stream-user',
-          options: {
-            readOnly: true,
-          },
-        },
-      });
-
-      expect(runId).toBeDefined();
-      cleanup();
-    });
-  });
-
-  describe('memory with tools', () => {
-    it('should preserve memory context when using tools', async () => {
-      const mockModel = createToolCallModel('searchTool', { query: 'test' });
-
-      const searchTool = createTool({
-        id: 'searchTool',
-        description: 'Search for information',
-        inputSchema: z.object({ query: z.string() }),
-        execute: async () => ({ results: ['result1'] }),
-      });
-
-      const baseAgent = new Agent({
-        id: 'tool-memory-agent',
-        name: 'Tool Memory Agent',
-        instructions: 'Search with memory',
-        model: mockModel as LanguageModelV2,
-        tools: { searchTool },
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Search for test', {
-        memory: {
-          thread: 'tool-thread',
-          resource: 'tool-user',
-          options: {
-            lastMessages: 5,
-          },
-        },
-      });
-
-      expect(result.threadId).toBe('tool-thread');
-      expect(result.workflowInput.state.memoryConfig?.lastMessages).toBe(5);
-
-      // Tools should be registered
-      const tools = durableAgent.runRegistry.getTools(result.runId);
-      expect(tools.searchTool).toBeDefined();
-    });
-
-    it('should serialize memory config with requireToolApproval', async () => {
-      const mockModel = createToolCallModel('approvalTool', { data: 'test' });
-
-      const approvalTool = createTool({
-        id: 'approvalTool',
-        description: 'Tool requiring approval',
-        inputSchema: z.object({ data: z.string() }),
-        requireApproval: true,
-        execute: async () => ({ approved: true }),
-      });
-
-      const baseAgent = new Agent({
-        id: 'approval-memory-agent',
-        name: 'Approval Memory Agent',
-        instructions: 'Use approval tool with memory',
-        model: mockModel as LanguageModelV2,
-        tools: { approvalTool },
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Use the approval tool', {
-        memory: {
-          thread: 'approval-thread',
-          resource: 'approval-user',
-        },
-        requireToolApproval: true,
-      });
-
-      expect(result.workflowInput.state.threadId).toBe('approval-thread');
-      expect(result.workflowInput.options.requireToolApproval).toBe(true);
-    });
-  });
 });
 
 describe('DurableAgent memory edge cases', () => {
@@ -780,79 +264,6 @@ describe('DurableAgent memory edge cases', () => {
 
     expect(result.threadId).toBe('');
     expect(result.resourceId).toBe('user-empty-thread');
-  });
-
-  it('should handle special characters in thread/resource IDs', async () => {
-    const mockModel = createTextModel('Hello!');
-
-    const baseAgent = new Agent({
-      id: 'special-chars-agent',
-      name: 'Special Chars Agent',
-      instructions: 'Test special characters',
-      model: mockModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const result = await durableAgent.prepare('Hello', {
-      memory: {
-        thread: 'thread-with-special-chars_123-abc',
-        resource: 'user@example.com',
-      },
-    });
-
-    expect(result.threadId).toBe('thread-with-special-chars_123-abc');
-    expect(result.resourceId).toBe('user@example.com');
-  });
-
-  it('should handle very long thread/resource IDs', async () => {
-    const mockModel = createTextModel('Hello!');
-    const longId = 'a'.repeat(1000);
-
-    const baseAgent = new Agent({
-      id: 'long-id-agent',
-      name: 'Long ID Agent',
-      instructions: 'Test long IDs',
-      model: mockModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const result = await durableAgent.prepare('Hello', {
-      memory: {
-        thread: `thread-${longId}`,
-        resource: `user-${longId}`,
-      },
-    });
-
-    expect(result.threadId).toBe(`thread-${longId}`);
-    expect(result.resourceId).toBe(`user-${longId}`);
-
-    // Should still serialize correctly
-    const serialized = JSON.stringify(result.workflowInput);
-    expect(serialized).toContain(longId);
-  });
-
-  it('should handle memory options with zero values', async () => {
-    const mockModel = createTextModel('Hello!');
-
-    const baseAgent = new Agent({
-      id: 'zero-values-agent',
-      name: 'Zero Values Agent',
-      instructions: 'Test zero values',
-      model: mockModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const result = await durableAgent.prepare('Hello', {
-      memory: {
-        thread: 'thread-zero',
-        resource: 'user-zero',
-        options: {
-          lastMessages: 0,
-        },
-      },
-    });
-
-    expect(result.workflowInput.state.memoryConfig?.lastMessages).toBe(0);
   });
 
   // Regression: the durable finish step never ported the non-durable `#executeOnFinish`
@@ -891,37 +302,6 @@ describe('DurableAgent memory edge cases', () => {
         const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
         expect(thread?.title).toBe('Generated Thread Title');
       });
-      result.cleanup();
-    });
-
-    it('does not overwrite an existing thread title', async () => {
-      const mockMemory = new MockMemory();
-      await mockMemory.createThread({
-        threadId: 'thread-titled',
-        resourceId: 'resource-titled',
-        title: 'Existing Title',
-      });
-
-      const titleModel = createTextModel('Should Not Be Used');
-      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
-
-      const baseAgent = new Agent({
-        id: 'title-existing-agent',
-        name: 'Title Existing Agent',
-        instructions: 'Test durable title generation no-overwrite',
-        model: createTextModel('assistant response') as LanguageModelV2,
-        memory: mockMemory,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.stream('user input', {
-        memory: { thread: 'thread-titled', resource: 'resource-titled' },
-      });
-      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-      }
-
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-titled' });
-      expect(thread?.title).toBe('Existing Title');
       result.cleanup();
     });
   });

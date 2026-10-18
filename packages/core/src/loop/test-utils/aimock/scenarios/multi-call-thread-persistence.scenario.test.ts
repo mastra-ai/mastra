@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { MockMemory } from '../../../../memory';
 import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
@@ -233,6 +233,110 @@ describeForAllEngines(
       const { messages: threadMessages } = await sharedMemory.recall({ threadId, resourceId: 'resource-a' });
       const leaked = threadMessages.find(m => JSON.stringify(m.content).toLowerCase().includes('javascript'));
       expect(leaked).toBeUndefined();
+    });
+
+    it('persists and recalls a thread whose ids contain special characters and are very long', async () => {
+      const sharedMemory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), { memory: sharedMemory });
+
+      const threadId = `thread-with-special-chars_123-abc-${'a'.repeat(1000)}`;
+      const resourceId = 'user@example.com';
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Remember the code LONG_ID_FACT.',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/LONG_ID_FACT/, { content: 'Noted.' });
+        },
+        collectChunks: false,
+      });
+
+      getMock().clearFixtures();
+      getMock().clearRequests();
+      getMock().resetMatchCounts();
+
+      const { requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'What was the code?',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/what was the code/i, { content: 'It was LONG_ID_FACT.' });
+        },
+        collectChunks: false,
+      });
+
+      expect(JSON.stringify(requests[0]?.body?.messages)).toContain('LONG_ID_FACT');
+      const thread = await sharedMemory.getThreadById({ threadId });
+      expect(thread?.resourceId).toBe(resourceId);
+    });
+
+    it('generates and saves a thread title after the first turn', async () => {
+      const sharedMemory = new MockMemory();
+      sharedMemory.getMergedThreadConfig = () => ({ generateTitle: true });
+      const shared = await createSharedAgent(getMock(), { memory: sharedMemory });
+
+      const threadId = 'title-thread';
+      const resourceId = 'title-resource';
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'What is the weather like today?',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/User:/, { content: 'Weather Today' });
+          llm.onMessage(/weather like today/i, { content: 'It is sunny.' });
+        },
+        collectChunks: false,
+      });
+
+      await vi.waitFor(async () => {
+        const thread = await sharedMemory.getThreadById({ threadId });
+        expect(thread?.title).toBe('Weather Today');
+      });
+    });
+
+    it('does not regenerate the title of a thread that already has one', async () => {
+      const sharedMemory = new MockMemory();
+      sharedMemory.getMergedThreadConfig = () => ({ generateTitle: true });
+      const shared = await createSharedAgent(getMock(), { memory: sharedMemory });
+
+      const threadId = 'titled-thread';
+      const resourceId = 'titled-resource';
+      await sharedMemory.createThread({ threadId, resourceId, title: 'Existing Title' });
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'What is the weather like today?',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/User:/, { content: 'Should Not Be Used' });
+          llm.onMessage(/weather like today/i, { content: 'It is sunny.' });
+        },
+        collectChunks: false,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // Only the reply was requested; no title-generation call reached the model.
+      expect(getMock().getRequests()).toHaveLength(1);
+      const thread = await sharedMemory.getThreadById({ threadId });
+      expect(thread?.title).toBe('Existing Title');
     });
   },
   { skip: ['fs'] },
