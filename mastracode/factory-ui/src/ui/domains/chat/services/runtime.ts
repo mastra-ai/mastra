@@ -42,6 +42,57 @@ type RuntimeAction =
   | { type: 'event'; event: AgentControllerEvent }
   | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
 
+type MessagePart = Extract<AgentControllerEvent, { type: 'message_start' }>['message']['content']['parts'][number];
+
+/**
+ * Providers sometimes hold a whole response and send it at once after generating it,
+ * so it arrives within a few milliseconds and its generation time is unobservable.
+ * Such steps keep the last reading instead of dividing by the delivery time.
+ */
+const MIN_DECODE_WINDOW_SEC = 0.05;
+
+/** An empty thinking or text block: the model has started generating it. */
+function isGenerationBlockStart(
+  part: MessagePart | undefined,
+): part is Extract<MessagePart, { type: 'text' | 'reasoning' }> {
+  if (part?.type === 'text') return part.text === '';
+  if (part?.type === 'reasoning') {
+    return part.reasoning === '' && part.details.every(detail => detail.type !== 'text' || detail.text === '');
+  }
+  return false;
+}
+
+/**
+ * Opens the step's decode window when a block starts generating rather than at its first
+ * delta: providers can hold a block and deliver it in one late burst (notably summarized
+ * thinking), which would otherwise divide the whole block by milliseconds. The window is
+ * bound to the assistant message, so a step whose usage never arrived cannot leave its
+ * interval open over the next step. Tool arguments stream before their step's
+ * message_start, so they carry the message id; unstamped ones (older servers) keep the
+ * current window.
+ */
+function markGenerationStart(
+  state: ChatRuntimeState,
+  messageId: string | undefined,
+  isReasoning: boolean,
+  now: number,
+): ChatRuntimeState {
+  if (messageId !== undefined && state._decodeMessageId !== messageId) {
+    return {
+      ...state,
+      _decodeMessageId: messageId,
+      _decodeStartedAt: now,
+      _decodeLastDeltaAt: 0,
+      _decodeHasReasoning: isReasoning,
+    };
+  }
+  return {
+    ...state,
+    _decodeStartedAt: state._decodeStartedAt || now,
+    _decodeHasReasoning: state._decodeHasReasoning || isReasoning,
+  };
+}
+
 export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): ChatRuntimeState {
   if (action.type === 'reset') {
     const matchingSnapshot =
@@ -70,47 +121,38 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
         _decodeLastDeltaAt: 0,
         _decodeHasReasoning: false,
       };
+    case 'message_start': {
+      // The first thinking or text block of a message arrives inside its message_start.
+      const firstPart = event.message.content.parts.at(-1);
+      if (event.message.role !== 'assistant' || !isGenerationBlockStart(firstPart)) return state;
+      return markGenerationStart(state, event.message.id, firstPart.type === 'reasoning', Date.now());
+    }
     case 'message_update':
-      if (
-        (event.event.type === 'text-delta' || event.event.type === 'reasoning-delta') &&
-        event.event.delta.length > 0
-      ) {
+      if (event.event.type === 'part') {
+        const part = event.event.part;
+        if (!isGenerationBlockStart(part)) return state;
+        return markGenerationStart(state, event.id, part.type === 'reasoning', Date.now());
+      }
+      if (event.event.delta.length > 0) {
         const now = Date.now();
-        // The window is bound to the assistant message, so a step whose usage never
-        // arrived cannot leave its interval open over the next step's tool execution.
-        const startsWindow = state._decodeMessageId !== event.id;
         return {
-          ...state,
-          _decodeMessageId: event.id,
-          _decodeStartedAt: startsWindow ? now : state._decodeStartedAt,
+          ...markGenerationStart(state, event.id, event.event.type === 'reasoning-delta', now),
           _decodeLastDeltaAt: now,
-          _decodeHasReasoning: startsWindow
-            ? event.event.type === 'reasoning-delta'
-            : state._decodeHasReasoning || event.event.type === 'reasoning-delta',
         };
       }
       return state;
+    case 'tool_input_start':
+      return markGenerationStart(state, event.messageId, false, Date.now());
     case 'tool_input_delta':
       if (typeof event.argsTextDelta === 'string' && event.argsTextDelta.length > 0) {
         const now = Date.now();
-        // Arguments stream before this step's message_start, so the stamped id is what
-        // attributes them to a step. Unstamped (older server) keeps the existing window.
-        if (event.messageId !== undefined && state._decodeMessageId !== event.messageId) {
-          return {
-            ...state,
-            _decodeMessageId: event.messageId,
-            _decodeStartedAt: now,
-            _decodeLastDeltaAt: now,
-            _decodeHasReasoning: false,
-          };
-        }
-        return { ...state, _decodeStartedAt: state._decodeStartedAt || now, _decodeLastDeltaAt: now };
+        return { ...markGenerationStart(state, event.messageId, false, now), _decodeLastDeltaAt: now };
       }
       return state;
     case 'usage_update': {
       const usage = event.usage;
-      // Provider output already includes reasoning. Buffered delivery can still spike,
-      // but initial waiting and subsequent tool execution are not decode time.
+      // Provider output already includes reasoning. Initial waiting and subsequent tool
+      // execution are not decode time.
       const reportedReasoning = usage.reasoningTokens ?? 0;
       // Thinking that never streamed has no observable duration, so measure the output
       // we did see rather than dividing hidden tokens by a text-only window.
@@ -120,7 +162,7 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
           : usage.completionTokens;
       const decodeSeconds = (state._decodeLastDeltaAt - state._decodeStartedAt) / 1000;
       let tokensPerSec = state.tokensPerSec;
-      if (state._decodeStartedAt > 0 && decodeSeconds > 0 && stepTokens > 0) {
+      if (state._decodeStartedAt > 0 && decodeSeconds >= MIN_DECODE_WINDOW_SEC && stepTokens > 0) {
         const instantaneous = stepTokens / decodeSeconds;
         tokensPerSec =
           state.tokensPerSec > 0

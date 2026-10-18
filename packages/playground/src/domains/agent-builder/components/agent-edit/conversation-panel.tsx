@@ -1,4 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -21,8 +23,6 @@ import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { buildFormSnapshotInstructions } from '@/domains/agent-builder/services/build-form-snapshot';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
-import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProviderProps {
   initialUserMessage?: string;

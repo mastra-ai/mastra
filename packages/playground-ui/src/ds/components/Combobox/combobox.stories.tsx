@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Activity, BarChart3, Database, Gauge, GitBranch, ListChecks, ScrollText } from 'lucide-react';
 import { Fragment, useState } from 'react';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Combobox } from './combobox';
 
 const meta: Meta<typeof Combobox> = {
@@ -114,11 +115,15 @@ export const WithError: Story = {
   args: {
     options: frameworkOptions,
     placeholder: 'Select a framework...',
-    name: 'framework',
-    error: 'Choose a framework.',
-    'aria-label': 'Framework',
     className: 'w-[200px]',
   },
+  render: args => (
+    <Field invalid className="w-50">
+      <FieldLabel>Framework</FieldLabel>
+      <Combobox {...args} />
+      <FieldError>Choose a framework.</FieldError>
+    </Field>
+  ),
 };
 
 export const WithValue: Story = {

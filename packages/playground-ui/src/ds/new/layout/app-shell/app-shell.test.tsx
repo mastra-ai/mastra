@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { AppShell } from './app-shell';
+import { MainCard } from './main-card';
 
 function renderShell({ mobileHeader = true, sidebar = false }: { mobileHeader?: boolean; sidebar?: boolean } = {}) {
   return renderToStaticMarkup(
@@ -44,12 +45,28 @@ describe('AppShell', () => {
     });
 
     it('lays the sidebar and content out as a desktop grid', () => {
-      expect(markup).toContain('data-slot="app-shell" class="h-full min-h-0 lg:grid lg:grid-cols-[auto_1fr]');
+      expect(markup).toContain('data-slot="app-shell" class="h-full min-h-0 lg:grid lg:grid-cols-[auto_minmax(0,1fr)]');
+    });
+
+    it('lets wide content scroll inside itself instead of widening the content column', () => {
+      expect(markup).toMatch(/data-slot="app-shell-content" class="[^"]*\bmin-w-0\b/);
     });
 
     it('drops the left inset at lg so the sidebar padding provides the gap', () => {
-      expect(bodyClassName(markup)).toContain('p-1.5 lg:p-2');
-      expect(bodyClassName(markup)).toContain('lg:pl-0');
+      expect(bodyClassName(markup)).toContain('lg:py-2 lg:pr-2 lg:pl-0');
+    });
+
+    it('does not inset the body below lg, where the sidebar is a drawer', () => {
+      const unscopedPadding = bodyClassName(markup)
+        .split(/\s+/)
+        .filter(className => /^(max-lg:)?p[trblxy]?-/.test(className));
+      expect(unscopedPadding).toEqual([]);
+    });
+
+    it('never mixes padding shorthands with longhands, so consumer CSS order cannot override the lg inset', () => {
+      const classes = bodyClassName(markup).split(/\s+/);
+      expect(classes).not.toContain('p-1.5');
+      expect(classes).not.toContain('lg:p-2');
     });
 
     it('keeps the mobile header outside the inset body', () => {
@@ -61,11 +78,11 @@ describe('AppShell', () => {
     const markup = renderShell();
 
     it('does not reserve a sidebar column', () => {
-      expect(markup).not.toContain('lg:grid-cols-[auto_1fr]');
+      expect(markup).not.toContain('lg:grid-cols-');
     });
 
-    it('insets the body on all sides', () => {
-      expect(bodyClassName(markup)).toContain('p-1.5 lg:p-2');
+    it('insets the body on all sides from lg', () => {
+      expect(bodyClassName(markup)).toContain('lg:py-2 lg:pr-2 lg:pl-2');
       expect(bodyClassName(markup)).not.toContain('lg:pl-0');
     });
   });
@@ -77,5 +94,21 @@ describe('AppShell', () => {
       expect(markup).not.toContain('Mobile header');
       expect(markup).toContain('Main content');
     });
+  });
+});
+
+describe('MainCard', () => {
+  const classes =
+    renderToStaticMarkup(<MainCard>Content</MainCard>)
+      .match(/data-slot="main-card" class="([^"]*)"/)?.[1]
+      ?.split(/\s+/) ?? [];
+
+  it('frames the content only from lg, where the sidebar sits beside it', () => {
+    expect(classes).toEqual(expect.arrayContaining(['lg:rounded-studio-frame', 'lg:p-px', 'lg:shadow-raised']));
+  });
+
+  it('is flat below lg: no rounding, rim padding or elevation outside the lg variant', () => {
+    const frameClasses = classes.filter(className => /^(max-lg:)?(rounded|p-|shadow)/.test(className));
+    expect(frameClasses).toEqual([]);
   });
 });

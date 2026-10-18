@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -177,7 +176,10 @@ function adaptReadme(
 }
 
 async function writeSecureEnv(envPath: string, content: string): Promise<boolean> {
-  const tempPath = path.join(path.dirname(envPath), `.env.mastra-create-${process.pid}-${randomUUID()}.tmp`);
+  const tempPath = path.join(
+    path.dirname(envPath),
+    `.env.mastra-create-${process.pid}-${globalThis.crypto.randomUUID()}.tmp`,
+  );
   try {
     await fs.writeFile(tempPath, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     if (process.platform !== 'win32') await fs.chmod(tempPath, 0o600);

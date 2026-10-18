@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { createClient } from '@libsql/client';
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
@@ -14,6 +12,8 @@ import type {
   RetentionConfig,
 } from '@mastra/core/storage';
 
+import { gateIfLocalFile } from '../shared/file-transaction-gate';
+import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './db/client';
@@ -302,7 +302,7 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
 
     const values: Record<string, unknown> = { ...row };
     if (schema.columns[pk]!.type === 'uuid-pk' && values[pk] === undefined) {
-      values[pk] = randomUUID();
+      values[pk] = globalThis.crypto.randomUUID();
     }
 
     const columns = Object.keys(values).filter(column => values[column] !== undefined);
@@ -448,7 +448,13 @@ export class LibSQLFactoryStorage extends FactoryStorage {
       ...(config.authToken ? { authToken: config.authToken } : {}),
       ...(isLocalDb ? { timeout: DEFAULT_CONNECTION_TIMEOUT_MS } : {}),
     });
-    this.#client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
+    this.#client = isSingleConnectionDatabase(config)
+      ? gateSingleConnectionClient(client)
+      : isLocalDb
+        ? gateIfLocalFile(resetConnectionsAfterBusy(client, { maxWaitMs: DEFAULT_CONNECTION_TIMEOUT_MS }), config.url, {
+            maxWaitMs: DEFAULT_CONNECTION_TIMEOUT_MS,
+          })
+        : client;
     this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas, fn => withClientWriteLock(this.#client, fn));
   }
 
@@ -467,9 +473,6 @@ export class LibSQLFactoryStorage extends FactoryStorage {
 
   async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
     return withClientWriteLock(this.#client, async () => {
-      if (this.#config.url.includes(':memory:')) {
-        return fn(new LibSQLFactoryStorageOps(this.#client, this.#schemas, runWithoutWriteLock));
-      }
       const transaction = await this.#client.transaction('write');
       try {
         const result = await fn(new LibSQLFactoryStorageOps(transaction, this.#schemas, runWithoutWriteLock));

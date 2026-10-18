@@ -22,7 +22,7 @@ describe('provider connection commands', () => {
     await user.type(input, `${command}{Enter}`);
 
     const navigated = await screen.findByTestId('navigated-path');
-    expect(navigated).toHaveTextContent(/\/settings\/models$/);
+    expect(navigated).toHaveTextContent(/\/settings\/personal-models$/);
     expect(navigated).toHaveAttribute('data-return-to', expect.stringContaining('/threads/thread-test'));
   });
 });

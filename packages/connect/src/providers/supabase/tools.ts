@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { copyStorageObjectTool } from './tools/copy-storage-object.js';
 import { createAuthUserTool } from './tools/create-auth-user.js';
 import { createSignedUploadUrlTool } from './tools/create-signed-upload-url.js';
@@ -61,5 +61,5 @@ export function createSupabaseTools(options?: ProviderToolsOptions) {
     supabase_update_table_rows: updateTableRowsTool(platformProxy),
     supabase_upsert_table_row: upsertTableRowTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

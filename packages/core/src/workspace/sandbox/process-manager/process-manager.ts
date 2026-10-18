@@ -97,10 +97,10 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       const abortSignal = args[1]?.abortSignal;
       if (abortSignal) {
         const onAbort = () => {
-          handle.kill().catch(() => {});
+          handle.killForAbort().catch(() => {});
         };
         if (abortSignal.aborted) {
-          handle.kill().catch(() => {});
+          onAbort();
         } else {
           abortSignal.addEventListener('abort', onAbort, { once: true });
           // Clean up listener when process exits

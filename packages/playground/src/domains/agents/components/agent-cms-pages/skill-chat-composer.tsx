@@ -1,5 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useChat } from '@mastra/react';
+import { useChat } from '@mastra/react/chat';
 import { Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -132,8 +132,8 @@ export function SkillChatComposer({
 
   const emptyState = (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-5 text-center">
-      <div className="rounded-full bg-accent5/10 p-3">
-        <Sparkles className="h-6 w-6 text-accent5" />
+      <div className="rounded-full bg-info-subtle p-3">
+        <Sparkles className="h-6 w-6 text-info-indicator" />
       </div>
       <div className="flex flex-col gap-1">
         <Txt variant="subheading" tone="ink" as="p">

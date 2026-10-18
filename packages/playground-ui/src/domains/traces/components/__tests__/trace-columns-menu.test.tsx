@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '../../trace-list-columns';
 import { TraceColumnsMenu } from '../trace-columns-menu';
@@ -41,8 +42,9 @@ describe('TraceColumnsMenu', () => {
       const checked = async (name: string) =>
         (await screen.findByRole('menuitemcheckbox', { name })).getAttribute('aria-checked');
 
-      expect(await checked('Type')).toBe('true');
+      expect(await checked('Primitive type')).toBe('true');
       expect(await checked('Input')).toBe('true');
+      expect(await checked('Output')).toBe('true');
       expect(await checked('Duration')).toBe('true');
       expect(await checked('Estimated cost')).toBe('true');
       expect(await checked('Input tokens')).toBe('false');
@@ -56,6 +58,15 @@ describe('TraceColumnsMenu', () => {
       fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Duration' }));
 
       expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('duration');
+    });
+
+    it('lets the user toggle the Output column', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Output' }));
+
+      expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('output');
     });
 
     it('resets on request', async () => {
@@ -90,7 +101,7 @@ describe('TraceColumnsMenu', () => {
       expect(threadId.getAttribute('aria-checked')).toBe('false');
       expect(screen.getByRole('menuitemcheckbox', { name: 'Resource ID' })).toBeTruthy();
       expect(screen.getByRole('menuitemcheckbox', { name: 'Trace ID' })).toBeTruthy();
-      expect(screen.getByRole('menuitemcheckbox', { name: 'Entity ID' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Primitive ID' })).toBeTruthy();
       // Start is already a fixed column, so it is not offered again as a custom one.
       expect(screen.queryByRole('menuitemcheckbox', { name: /start/i })).toBeNull();
 
@@ -145,12 +156,14 @@ describe('TraceColumnsMenu', () => {
     const openAddDialog = async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-      return screen.getByRole('combobox', { name: 'Metadata key' });
+      return screen.getByRole<HTMLInputElement>('combobox', { name: 'Metadata key' });
     };
 
+    // The key field searches in itself: a click opens the list, typing filters it.
     const openKeyList = async () => {
-      fireEvent.click(screen.getByRole('combobox', { name: 'Metadata key' }));
-      return screen.findByPlaceholderText('Search metadata keys…');
+      const field = screen.getByRole('combobox', { name: 'Metadata key' });
+      await userEvent.click(field);
+      return field;
     };
 
     const pickOption = async (name: string) => {
@@ -160,8 +173,8 @@ describe('TraceColumnsMenu', () => {
     };
 
     const typeCustomKey = async (text: string) => {
-      const search = await openKeyList();
-      fireEvent.input(search, { target: { value: text }, inputType: 'insertText' });
+      await openKeyList();
+      await userEvent.keyboard(text);
       await pickOption(`Use “${text.trim()}”`);
     };
 
@@ -235,13 +248,13 @@ describe('TraceColumnsMenu', () => {
         expect(defaultProps.onAddMetadataColumn).toHaveBeenCalledWith('tenantId');
       });
 
-      it('shows the typed key on the trigger before it is added', async () => {
+      it('shows the typed key in the field before it is added', async () => {
         render(<TraceColumnsMenu {...defaultProps} />);
 
-        const trigger = await openAddDialog();
+        const field = await openAddDialog();
         await typeCustomKey('tenantId');
 
-        expect(trigger.textContent).toContain('tenantId');
+        await waitFor(() => expect(field.value).toBe('tenantId'));
       });
     });
 
@@ -279,11 +292,9 @@ describe('TraceColumnsMenu', () => {
       expect(field.getAttribute('aria-invalid')).toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
-      // The combobox remounts inside an error wrapper, so query it again.
       const invalidField = screen.getByRole('combobox', { name: 'Metadata key' });
-      expect(invalidField.getAttribute('aria-describedby')).toBe('error-trace-metadata-key');
+      expect(invalidField.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByRole('alert').id);
       expect(invalidField.getAttribute('aria-invalid')).toBe('true');
-      expect(screen.getByRole('alert').getAttribute('id')).toBe('error-trace-metadata-key');
     });
 
     it('clears the error as soon as a key is picked', async () => {

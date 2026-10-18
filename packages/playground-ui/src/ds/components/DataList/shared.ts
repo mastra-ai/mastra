@@ -1,3 +1,5 @@
+import { focusRingInset } from '@/ds/primitives/transitions';
+
 /**
  * Row-level styling for the element that participates in the row sibling
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
@@ -31,7 +33,10 @@ export const dataListRowStateStyles = [
   'active:bg-fill',
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
-  'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10 data-[variant=error]:active:bg-notice-destructive/20 has-data-[variant=error]:active:bg-notice-destructive/20',
+  'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
+  // Info is a faint translucent tint on the row element, so the surface below it (resting or selected) and the
+  // fluid hover still read through.
+  'data-[variant=info]:bg-info-subtle/50 has-data-[variant=info]:bg-info-subtle/50',
 ] as const;
 
 /**
@@ -40,7 +45,7 @@ export const dataListRowStateStyles = [
  */
 export const dataListRowInteractiveStyles = [
   'grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
-  'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  focusRingInset,
 ] as const;
 
 export const dataListRowStyles = [
@@ -66,8 +71,8 @@ export const dataListStickyStartStyles = [
   'data-list-sticky-start sticky left-0 z-10 isolate self-stretch overflow-visible',
 ] as const;
 
-/** Tone for a single row. Exposed as `data-variant`; `error` tints the row. */
-export type DataListRowVariant = 'default' | 'error';
+/** Tone for a single row. Exposed as `data-variant`; `error` tints the row red, `info` tints it blue to set it apart. */
+export type DataListRowVariant = 'default' | 'error' | 'info';
 
 /**
  * Layout/state modifiers shared by interactive row primitives

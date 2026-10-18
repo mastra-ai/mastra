@@ -33,7 +33,7 @@ tokens:
   - "\\bThe important thing here is\\b"
 
   # The "It's worth [verb]ing" hedged-assertion family is owned by
-  # HedgingPhrases.
+  # FigurativeWorth.
 
   # Bold callout phrases (in markdown)
   - "\\*\\*Key insight:?\\*\\*"
@@ -44,10 +44,9 @@ tokens:
   - "\\*\\*Bottom line:?\\*\\*"
   - "\\*\\*The point:?\\*\\*"
 
-  # "This is the insight/key/point" framing
+  # "This is the insight/key" framing. "This is the point" is PointVerdict's.
   - "\\bThis is the insight\\b"
   - "\\bThis is the key\\b"
-  - "\\bThis is the point\\b"
   - "\\bThis is the takeaway\\b"
   - "\\bThis is the crucial\\b"
   - "\\bThis is the critical\\b"

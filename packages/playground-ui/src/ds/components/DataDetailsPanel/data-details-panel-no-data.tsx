@@ -1,7 +1,12 @@
+import { Txt } from '@/ds/components/Txt';
 export interface DataDetailsPanelNoDataProps {
   children?: React.ReactNode;
 }
 
 export function DataDetailsPanelNoData({ children }: DataDetailsPanelNoDataProps) {
-  return <p className="px-4 py-6 text-caption text-placeholder">{children ?? 'No data found.'}</p>;
+  return (
+    <Txt variant="caption" tone="faint" className="px-4 py-6">
+      {children ?? 'No data found.'}
+    </Txt>
+  );
 }

@@ -42,6 +42,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
@@ -173,6 +174,7 @@ export class SkillsMySQL extends SkillsStorage {
       references: this.safeParseJSON(row.references) as SkillVersion['references'],
       scripts: this.safeParseJSON(row.scripts) as SkillVersion['scripts'],
       assets: this.safeParseJSON(row.assets) as SkillVersion['assets'],
+      files: this.safeParseJSON(row.files) as SkillVersion['files'],
       metadata: this.safeParseJSON(row.metadata) as Record<string, unknown> | undefined,
       tree: this.safeParseJSON(row.tree) as SkillVersion['tree'],
       changedFields: this.safeParseJSON(row.changedFields) as string[] | undefined,
@@ -532,6 +534,7 @@ export class SkillsMySQL extends SkillsStorage {
           references: input.references ?? null,
           scripts: input.scripts ?? null,
           assets: input.assets ?? null,
+          files: input.files ?? null,
           metadata: input.metadata ?? null,
           tree: input.tree ?? null,
           changedFields: input.changedFields ?? null,

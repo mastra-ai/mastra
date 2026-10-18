@@ -10,11 +10,13 @@ import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
 import { getPackageMetadata, getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
+import { moduleAlias } from '../plugins/module-alias';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
 import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
+import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
 function analysisExternals({
@@ -60,12 +62,16 @@ function getInputPlugins(
     workspaceMap,
     externals,
     externalsPreset,
+    alias,
+    platform,
   }: {
     sourcemapEnabled: boolean;
     env: Record<string, string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     externals: string[];
     externalsPreset: boolean;
+    alias: Record<string, string>;
+    platform: BundlerPlatform;
   },
 ): Plugin[] {
   let virtualPlugin = null;
@@ -81,10 +87,12 @@ function getInputPlugins(
     plugins.push(virtualPlugin);
   }
 
+  const aliasPlugin = moduleAlias(alias, mastraEntry, platform);
   plugins.push(
     ...[
       protocolExternalResolver(),
       mastraInternalAliasPlugin(mastraEntry),
+      ...(aliasPlugin ? [aliasPlugin] : []),
       mastraToolsAliasPlugin(),
       tsConfigPaths(),
       analysisExternals({ workspaceMap, externals, externalsPreset }),
@@ -124,6 +132,8 @@ async function captureDependenciesToOptimize(
     activeEntries,
     externals,
     externalsPreset,
+    alias,
+    platform,
   }: {
     logger: IMastraLogger;
     mastraEntry: string;
@@ -135,6 +145,8 @@ async function captureDependenciesToOptimize(
     activeEntries: Set<string>;
     externals: string[];
     externalsPreset: boolean;
+    alias: Record<string, string>;
+    platform: BundlerPlatform;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -228,6 +240,8 @@ async function captureDependenciesToOptimize(
         activeEntries,
         externals,
         externalsPreset,
+        alias,
+        platform,
       });
 
       if (!analysis?.dependencies) {
@@ -337,6 +351,8 @@ export async function analyzeEntry(
     activeEntries: providedActiveEntries,
     externals = [],
     externalsPreset = false,
+    alias = {},
+    platform = 'node',
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -352,6 +368,9 @@ export async function analyzeEntry(
     externals?: string[];
     /** Whether all non-workspace dependencies must remain external during analysis */
     externalsPreset?: boolean;
+    /** Exact module specifier aliases applied before externalization */
+    alias?: Record<string, string>;
+    platform?: BundlerPlatform;
   },
 ): Promise<AnalyzeEntryResult> {
   const resolvedEntry = isVirtualFile ? undefined : slash(entry);
@@ -383,6 +402,8 @@ export async function analyzeEntry(
         workspaceMap,
         externals,
         externalsPreset,
+        alias,
+        platform,
       }),
       external: id => DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep)),
     });
@@ -407,6 +428,8 @@ export async function analyzeEntry(
       activeEntries,
       externals,
       externalsPreset,
+      alias,
+      platform,
     });
 
     const result: AnalyzeEntryResult = {

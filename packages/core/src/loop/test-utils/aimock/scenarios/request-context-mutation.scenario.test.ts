@@ -6,7 +6,7 @@
  * (normal, durable, fs) tools share the same RequestContext reference,
  * so mutations persist between tool calls and are visible to the caller.
  *
- * The evented engine is excluded: it serializes requestContext into event
+ * The evented and Inngest engines are excluded: it serializes requestContext into event
  * payloads (`requestContext.toJSON()` in evented/execution-engine.ts) and
  * rehydrates a fresh RequestContext per step in the event processor, so
  * mutation-by-reference cannot survive the pubsub boundary. This matches
@@ -137,5 +137,5 @@ describeForAllEngines(
       expect(requestContext.get('count')).toBe('3');
     });
   },
-  { skip: ['evented'] },
+  { skip: ['evented', 'inngest'] },
 );

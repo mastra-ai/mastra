@@ -10,6 +10,7 @@ import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { processBufferedTextStream } from './llm-stream-buffer';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 import { handleModelError } from './model-error-strategy';
@@ -32,6 +33,15 @@ export interface SystemPromptScrubberOptions extends LastMessageOnlyOption {
   model: MastraModelConfig;
   /** How internal model errors are handled. Defaults to 'warn'. */
   errorStrategy?: ModelErrorStrategy;
+  /**
+   * Character threshold for buffering streamed text before it is checked (default: 0, off).
+   * Opt in (e.g. `bufferSize: 200`) for production streaming: fewer LLM calls, and
+   * content split across chunks is caught.
+   * Streamed text is held back and checked once per sentence or once this many
+   * characters have accumulated, instead of once per text-delta.
+   * When 0, every text-delta is checked individually (one detection call per chunk).
+   */
+  bufferSize?: number;
   /**
    * Structured output options used for the detection agent
    */
@@ -82,6 +92,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
   private errorStrategy: ModelErrorStrategy;
+  private bufferSize: number;
 
   constructor(options: SystemPromptScrubberOptions) {
     if (!options.model) {
@@ -96,6 +107,8 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.errorStrategy = options.errorStrategy ?? 'warn';
+    // TODO(v2): default to 200 (DEFAULT_LLM_STREAM_BUFFER_SIZE) so streamed text is buffered by default.
+    this.bufferSize = options.bufferSize ?? 0;
 
     // Initialize instructions after customPatterns is set
     this.instructions = options.instructions || this.getDefaultInstructions();
@@ -115,7 +128,8 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   }
 
   /**
-   * Process streaming chunks to detect and handle system prompts
+   * Process streaming chunks to detect and handle system prompts.
+   * With `bufferSize` > 0, text is buffered and checked once per sentence or `bufferSize` characters.
    */
   async processOutputStream(
     args: {
@@ -123,12 +137,32 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       streamParts: ChunkType[];
       state: Record<string, any>;
       abort: (reason?: string) => never;
+      writer?: unknown;
       requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, requestContext, ...rest } = args;
+    const { part, state, abort, writer, requestContext, streamParts: _streamParts, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
+    if (this.bufferSize <= 0) {
+      return this.checkStreamPart(part, abort, observabilityContext, requestContext);
+    }
+
+    return processBufferedTextStream({
+      part,
+      state,
+      bufferSize: this.bufferSize,
+      writer,
+      check: textPart => this.checkStreamPart(textPart, abort, observabilityContext, requestContext),
+    });
+  }
+
+  private async checkStreamPart(
+    part: ChunkType,
+    abort: (reason?: string) => never,
+    observabilityContext: ObservabilityContext,
+    requestContext?: RequestContext,
+  ): Promise<ChunkType | null> {
     // Only process text-delta chunks
     if (part.type !== 'text-delta') {
       return part;

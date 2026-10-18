@@ -307,6 +307,24 @@ describe('LinearIntegration capability surface', () => {
     expect(projectless.sourceId).toBe(secondTeamSourceId);
   });
 
+  it('preserves the actual project id when a team is the selected intake source', async () => {
+    const linear = integration();
+    const teamSourceId = 'linear-team:team-1';
+    const teamIssue: LinearIssue = { ...issue, projectId: 'project-1', teamId: 'team-1' };
+    vi.spyOn(linear, 'loadConnection').mockResolvedValue({} as never);
+    vi.spyOn(linear, 'getFreshAccessToken').mockResolvedValue('linear-token');
+    vi.spyOn(linear, 'listActiveIssues').mockResolvedValue({ issues: [teamIssue], nextCursor: null });
+
+    const page = await linear.intake.listIssues({ connection, sourceIds: [teamSourceId] });
+    expect(page.issues[0]).toMatchObject({ sourceId: teamSourceId, projectId: 'project-1' });
+
+    const listed = await linear.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds: [teamSourceId] });
+    expect(listed.items[0]).toMatchObject({
+      sourceId: teamSourceId,
+      metadata: { linearProjectId: 'project-1' },
+    });
+  });
+
   it('returns projectless team issues from the generic listItems surface', async () => {
     const linear = integration();
     const teamSourceId = 'linear-team:team-1';

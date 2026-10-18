@@ -45,12 +45,12 @@ export class PullTransport implements WorkerTransport {
       this.#logger?.debug('[PullTransport] start() called while already subscribed; ignoring duplicate call');
       return;
     }
-    const cb: EventCallback = (event, ack, nack) => {
+    const cb: EventCallback = (event, ack, nack, extend) => {
       // route() is async; surface unexpected rejections as a nack instead
       // of an unhandledRejection. The router's own try/catch already turns
       // expected processing errors into nack — this guard only catches
       // synchronous-throw-becomes-rejected-promise leaks.
-      const inFlight = router.route(event, ack, nack).catch(err => {
+      const inFlight = router.route(event, ack, nack, extend).catch(err => {
         try {
           // Best-effort: ack/nack are optional in some PubSub backends.
           if (typeof nack === 'function') {

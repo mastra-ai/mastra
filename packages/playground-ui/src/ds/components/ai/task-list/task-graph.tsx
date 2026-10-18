@@ -12,9 +12,9 @@ const laneX = (status: TaskStatus, singleLane: boolean) => (status === 'in_progr
 const rowCenter = (index: number) => index * TASK_ROW_HEIGHT + TASK_ROW_HEIGHT / 2;
 
 const ink: Record<TaskStatus, string> = {
-  completed: 'var(--accent1)',
-  in_progress: 'var(--accent6)',
-  pending: 'color-mix(in oklab, var(--muted-foreground) 45%, transparent)',
+  completed: 'var(--success-indicator)',
+  in_progress: 'var(--warning-indicator)',
+  pending: 'var(--border-strong)',
 };
 
 const connectorPathData = (upper: TaskStatus, lower: TaskStatus, index: number, singleLane: boolean) => {

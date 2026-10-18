@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { EmptyStateIllustration } from './empty-state-illustration';
 import { EmptyState } from './EmptyState';
 
 describe('EmptyState', () => {
@@ -23,5 +24,33 @@ describe('EmptyState', () => {
       expect(wrapper?.className).toContain('justify-center-safe');
       expect(wrapper?.contains(screen.getByRole('heading', { name: 'Nothing here' }))).toBe(true);
     });
+  });
+});
+
+describe('EmptyState illustration', () => {
+  afterEach(cleanup);
+
+  it('renders the named illustration instead of the icon, hidden from assistive tech', () => {
+    render(<EmptyState iconSlot={<EmptyStateIllustration name="logs" />} titleSlot="No logs yet" />);
+    const art = document.querySelector('svg[data-illustration="logs"]');
+    expect(art?.getAttribute('aria-hidden')).toBe('true');
+    expect(document.querySelectorAll('svg')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'No logs yet' })).toBeTruthy();
+  });
+
+  it('gives each rendered illustration its own mask and gradient ids', () => {
+    render(
+      <>
+        <EmptyState iconSlot={<EmptyStateIllustration name="api-keys" />} titleSlot="First" />
+        <EmptyState iconSlot={<EmptyStateIllustration name="api-keys" />} titleSlot="Second" />
+      </>,
+    );
+    const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const element of document.querySelectorAll('[mask], [fill^="url("]')) {
+      const reference = (element.getAttribute('mask') ?? element.getAttribute('fill'))?.match(/url\(#(.+)\)/)?.[1];
+      expect(reference && ids.includes(reference)).toBe(true);
+    }
   });
 });

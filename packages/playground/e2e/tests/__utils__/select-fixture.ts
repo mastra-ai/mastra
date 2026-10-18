@@ -15,19 +15,10 @@ export type Fixtures =
   | 'agent-builder-complex';
 
 export const selectFixture = async (page: Page, fixture: Fixtures) => {
-  const setFixture = (browserFixture: Fixtures) => {
-    window.localStorage.setItem(
-      'mastra-playground-store',
-      `{"state":{"requestContext":{"fixture":"${browserFixture}"}},"version":0}`,
-    );
-  };
-
   await page.route(
     /\/agents\/[^/]+\/(?:generate|stream|generate-legacy|stream-legacy|stream-until-idle|network|signals|send-message)(?:[/?#]|$)/,
     route => injectFixtureIntoAgentRequest(route, fixture),
   );
-  await page.context().addInitScript(setFixture, fixture);
-  await page.addInitScript(setFixture, fixture);
 };
 
 async function injectFixtureIntoAgentRequest(route: Route, fixture: Fixtures) {

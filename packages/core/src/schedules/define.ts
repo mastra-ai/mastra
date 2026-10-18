@@ -54,7 +54,7 @@ export type AgentScheduleHandler<TMastra = unknown> = (
 
 /** Fields shared by both execution modes. */
 type AgentScheduleCommon = {
-  /** Standard five-field cron expression (e.g. `0 * * * *` for hourly). */
+  /** Cron expression with 5, 6, or 7 parts (e.g. `0 * * * *` for hourly). */
   cron: string;
   /** IANA timezone the cron is evaluated in. Defaults to the host timezone. */
   timezone?: string;

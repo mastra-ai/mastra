@@ -8,6 +8,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import { useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export type SettingsScope = 'personal' | 'factory' | 'org' | 'deployment';
 
@@ -76,17 +77,17 @@ function ScopeOption({
       className={cn(
         'text-muted-foreground hover:text-foreground inline-flex h-5 cursor-pointer items-center rounded-[7px] outline-none',
         'aria-disabled:hover:text-muted-foreground aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
-        focusRing.visible,
+        focusRing,
         transitions.colors,
       )}
     >
       {selected ? (
         <ScopeBadge scope={scope} />
       ) : (
-        <span className="text-meta inline-flex h-5 items-center gap-1 px-1.5">
+        <Txt as="span" variant="meta" className="inline-flex h-5 items-center gap-1 px-1.5">
           <Icon aria-hidden="true" className="size-icon-xs" />
           {label}
-        </span>
+        </Txt>
       )}
     </button>
   );

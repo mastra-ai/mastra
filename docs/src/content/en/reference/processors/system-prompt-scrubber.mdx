@@ -102,6 +102,14 @@ const processor = new SystemPromptScrubber({
             isOptional: true,
             default: "'[SYSTEM_PROMPT]'",
           },
+          {
+            name: 'bufferSize',
+            type: 'number',
+            description:
+              'Opt-in buffering for streamed text. When greater than `0`, streamed text is held back and checked in one LLM call when it ends a sentence, reaches this many characters, or a non-text part arrives. This makes far fewer LLM calls and catches content split across chunks. Recommended for production streaming, for example `bufferSize: 200`. With `0`, every text chunk gets its own LLM call.',
+            isOptional: true,
+            default: '0',
+          },
         ],
       },
     ],
@@ -122,18 +130,18 @@ const processor = new SystemPromptScrubber({
   {
     name: 'name',
     type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
+    description: "Processor display name, always 'System Prompt Scrubber'",
+    isOptional: false,
   },
   {
     name: 'processOutputStream',
-    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null>',
+    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<ChunkType | null>',
     description: 'Processes streaming output parts to detect and handle system prompts during streaming',
     isOptional: false,
   },
   {
     name: 'processOutputResult',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
     description: 'Processes final output results to detect and handle system prompts in non-streaming scenarios',
     isOptional: false,
   },
@@ -141,6 +149,8 @@ const processor = new SystemPromptScrubber({
 />
 
 ## Extended usage example
+
+For production streaming, set `bufferSize` (for example `bufferSize: 200`) so `SystemPromptScrubber` makes one detection call per sentence instead of one per chunk. Buffering also catches content that is split across chunks. Text then reaches the client in sentence-sized pieces.
 
 When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
 

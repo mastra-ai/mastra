@@ -218,6 +218,14 @@ describe('JiraIntegration capability surface', () => {
     });
   });
 
+  it('returns null when commenting on an unknown issue key', async () => {
+    stubRoutes([['POST', '/comment', () => jsonResponse({ errorMessages: ['Issue does not exist'] }, 404)]]);
+
+    await expect(
+      integration().intake.createComment({ connection, issueId: 'ENG-404', body: 'Done' }),
+    ).resolves.toBeNull();
+  });
+
   it('resolves a byType target against transitions and applies the matching one', async () => {
     const applied: string[] = [];
     let fetches = 0;

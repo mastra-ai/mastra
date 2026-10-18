@@ -118,7 +118,7 @@ describe('LinearRouting board target', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Factory for All issues in Engineering' })).toBeInTheDocument(),
     );
-    expect(screen.queryByRole('textbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('searchbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
   });
 
   describe('with many sources', () => {
@@ -145,7 +145,7 @@ describe('LinearRouting board target', () => {
       renderMany();
 
       const group = await screen.findByRole('group', { name: 'Linear routing' });
-      const search = screen.getByRole('textbox', { name: 'Search Linear routing' });
+      const search = screen.getByRole('searchbox', { name: 'Search Linear routing' });
       expect(within(group).getAllByRole('combobox', { name: /^Factory for/ })).toHaveLength(12);
 
       await user.type(search, 'release');
@@ -164,7 +164,7 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       const { rerender } = renderMany();
 
-      await user.type(screen.getByRole('textbox', { name: 'Search Linear routing' }), 'release');
+      await user.type(screen.getByRole('searchbox', { name: 'Search Linear routing' }), 'release');
       await waitFor(() =>
         expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument(),
       );
@@ -179,7 +179,7 @@ describe('LinearRouting board target', () => {
         />,
       );
 
-      expect(screen.queryByRole('textbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('searchbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
       const group = screen.getByRole('group', { name: 'Linear routing' });
       expect(within(group).getAllByRole('combobox', { name: /^Factory for/ })).toHaveLength(5);
       expect(within(group).getByRole('combobox', { name: 'Factory for Project 1' })).toBeInTheDocument();
@@ -190,7 +190,7 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       renderMany();
 
-      const search = screen.getByRole('textbox', { name: 'Search Linear routing' });
+      const search = screen.getByRole('searchbox', { name: 'Search Linear routing' });
       await user.type(search, 'release');
       const factory = await screen.findByRole('combobox', { name: 'Factory for Release Tools' });
       await user.click(factory);

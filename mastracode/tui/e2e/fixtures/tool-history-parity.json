@@ -1,0 +1,48 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Render live tool output."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_live_view",
+            "name": "view",
+            "arguments": {
+              "path": "src/compact-e2e.ts",
+              "offset": 1,
+              "limit": 4
+            }
+          },
+          {
+            "id": "call_live_task",
+            "name": "task_write",
+            "arguments": {
+              "tasks": [
+                {
+                  "id": "compact-live-task",
+                  "content": "Verify compact live task summary",
+                  "status": "pending",
+                  "activeForm": "Verifying compact live task summary"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Compact live tool output complete."
+      }
+    }
+  ]
+}

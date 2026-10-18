@@ -3,7 +3,7 @@
  * Handles loading, saving, and refreshing credentials from auth.json.
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
@@ -35,7 +35,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
-  'kimi-for-coding': 'kimi-for-coding/kimi-for-coding',
+  'kimi-for-coding': 'kimi-code-plan-cn/kimi-for-coding',
   xai: 'xai/grok-4.5',
 };
 
@@ -73,7 +73,7 @@ export function getOAuthProviders(): OAuthProviderInterface[] {
  * then failed to match its own entry and registered a second one for it.
  */
 function mintAccountId(providerId: string): string {
-  return `${providerId}:${randomUUID()}`;
+  return `${providerId}:${globalThis.crypto.randomUUID()}`;
 }
 
 /**
@@ -275,7 +275,7 @@ export class AuthStorage {
     // fetch wrappers reload this file on every request, including in older
     // Mastra Code processes; writing in place lets them observe truncated JSON
     // and temporarily treat every provider as logged out.
-    const tempPath = `${this.authPath}.${process.pid}.${randomUUID()}.tmp`;
+    const tempPath = `${this.authPath}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
     try {
       writeFileSync(tempPath, JSON.stringify(this.data, null, 2), { encoding: 'utf-8', mode: 0o600 });
       chmodSync(tempPath, 0o600);

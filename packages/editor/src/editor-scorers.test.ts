@@ -312,6 +312,18 @@ describe('Scorer Definition CRUD (LibSQL)', () => {
       expect(codeScorer.source).toBe('code');
     });
 
+    it('clearCache() unregisters stored scorers hydrated by version-specific requests', async () => {
+      await editor.scorer.create(definition);
+      editor.scorer.clearCache();
+      expect(mastra.listScorers()['quality']).toBeUndefined();
+
+      expect(await editor.scorer.getById('quality', { versionNumber: 1 })).not.toBeNull();
+      expect(mastra.getScorer('quality').source).toBe('stored');
+
+      editor.scorer.clearCache();
+      expect(mastra.listScorers()['quality']).toBeUndefined();
+    });
+
     it('ignores absent registrations and an unregistered Editor', () => {
       expect(() => editor.scorer.clearCache('missing')).not.toThrow();
       expect(mastra.listScorers()).toEqual({});

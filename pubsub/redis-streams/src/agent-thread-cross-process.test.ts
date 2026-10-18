@@ -393,6 +393,41 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       expect(finishedSigIds).toEqual(new Set(['sig-1', 'sig-2', 'sig-3']));
     }, 60_000);
 
+    it('owner without a thread subscription drains a mid-run follow-up sent from another pod', async () => {
+      // Issue #24375 topology: subscriber on pod A, run owner on pod B, follow-up
+      // sender on pod C. Neither B nor C calls subscribeToThread, so B must pick
+      // up C's signal-enqueued through its own control listener.
+      const resourceId = `unsubscribed-owner-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '1500' };
+      const noSub = { ...env, NO_DEFAULT_SUBSCRIPTION: '1' };
+
+      const subscriber = spawnWorker('pod-a-subscriber', env);
+      const owner = spawnWorker('pod-b-owner', noSub);
+      const sender = spawnWorker('pod-c-sender', noSub);
+      workers = [subscriber, owner, sender];
+      await Promise.all([
+        waitForLine(subscriber, '"type":"ready"'),
+        waitForLine(owner, '"type":"ready"'),
+        waitForLine(sender, '"type":"ready"'),
+      ]);
+
+      owner.send({ cmd: 'send', sigId: 'sig-1' });
+      await waitForLine(owner, '"type":"run-started"');
+
+      sender.send({ cmd: 'send', sigId: 'sig-2' });
+      await waitForLine(sender, '"type":"owner-stream-resolved"');
+      expect(eventsByType(sender, 'owner-stream-resolved')[0]?.defined).toBe(false);
+
+      await waitFor(async () => eventsByType(owner, 'run-finished').length >= 2, 20_000);
+      // Give any duplicate drain a chance to show up before asserting exactly-once.
+      await new Promise(r => setTimeout(r, 500));
+
+      expect(eventsByType(owner, 'run-started').map(e => e.sigId)).toEqual(['sig-1', 'sig-2']);
+      expect(eventsByType(subscriber, 'run-started')).toHaveLength(0);
+      expect(eventsByType(sender, 'run-started')).toHaveLength(0);
+    }, 60_000);
+
     it('holds the thread lease across drained follow-up runs so a racing process cannot start a competing run', async () => {
       const resourceId = `drain-race-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;

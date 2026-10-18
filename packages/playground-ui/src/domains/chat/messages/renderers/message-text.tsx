@@ -1,13 +1,13 @@
-import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
+import { CheckCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { MessageMetadata } from '../message-metadata';
 import { TripwireNotice } from '../tripwire-notice';
 import { errorMessage, messageTextKind } from './message-text-kind';
 import { Badge } from '@/ds/components/Badge';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { MarkdownRenderer, type MarkdownExternalLinkTarget } from '@/ds/components/MarkdownRenderer';
 import { Notice } from '@/ds/components/Notice';
 import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/lib/utils';
 
 export interface MessageTextProps {
   text: string;
@@ -46,9 +46,13 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming, tab
     case 'completion':
       return (
         <div className="mb-2 space-y-2">
-          <button onClick={() => setCollapsedCompletionCheck(s => !s)} className="flex items-center gap-2">
+          <button
+            onClick={() => setCollapsedCompletionCheck(s => !s)}
+            aria-expanded={!collapsedCompletionCheck}
+            className="flex items-center gap-2"
+          >
             <Icon>
-              <ChevronUpIcon className={cn('transition-all', collapsedCompletionCheck ? 'rotate-90' : 'rotate-180')} />
+              <DisclosureChevron direction="right" />
             </Icon>
             <Badge variant="blue" icon={<CheckCircleIcon />}>
               {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check

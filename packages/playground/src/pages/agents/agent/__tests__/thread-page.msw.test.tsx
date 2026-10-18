@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { deleteDB, openDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
@@ -30,9 +30,9 @@ import {
   preferenceThread,
 } from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
+import { emptyThreadTracesList } from './fixtures/thread-traces';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
-import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
@@ -584,6 +584,20 @@ describe('Standalone thread page', () => {
     });
   });
 
+  describe('when a saved draft is still being restored', () => {
+    it('ignores files dragged over the page', async () => {
+      installHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+      await screen.findByText('Restoring draft…');
+      const event = new Event('dragenter', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [] } });
+      act(() => {
+        fireEvent(window, event);
+      });
+      expect(screen.queryByText('Drop to attach')).toBeNull();
+    });
+  });
+
   describe('when authentication status cannot be checked', () => {
     it.each([false, true])(
       'blocks fallback composing and restores the saved draft after recovery (retryOnMount=%s)',
@@ -988,7 +1002,7 @@ describe('Standalone thread page', () => {
   });
 
   describe('when the thread list is still loading', () => {
-    it('shows a compact skeleton in the sidebar, replaced by the threads once loaded', async () => {
+    it('keeps the sidebar header in place without a skeleton, then fills in the threads', async () => {
       installHandlers();
       let releaseThreads!: () => void;
       const gate = new Promise<void>(resolve => (releaseThreads = resolve));
@@ -1001,11 +1015,56 @@ describe('Standalone thread page', () => {
 
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByTestId('agent-route-sidebar-skeleton')).not.toBeNull();
+      expect(await screen.findByRole('link', { name: /New Thread/ })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+      expect(screen.queryByText(/Your conversations will appear here/)).toBeNull();
 
       releaseThreads();
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+    });
+  });
+
+  describe('when the agent is still loading', () => {
+    it('keeps the threads panel in place next to the chat skeleton', async () => {
+      installHandlers();
+      let releaseAgent!: () => void;
+      const gate = new Promise<void>(resolve => (releaseAgent = resolve));
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, async () => {
+          await gate;
+          return HttpResponse.json(agentResponse);
+        }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByTestId('agent-thread-skeleton')).not.toBeNull();
+      expect(screen.getByRole('link', { name: /New Thread/ })).not.toBeNull();
+
+      releaseAgent();
+      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+    });
+  });
+
+  describe('when the user reloads an agent without threads after opening its threads panel', () => {
+    it('keeps the threads panel open', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads`, () =>
+          HttpResponse.json({ ...threadsResponse, threads: [], total: 0 }),
+        ),
+      );
+      window.localStorage.setItem(
+        `react-resizable-panels:agent-layout-v6-${AGENT_ID}`,
+        JSON.stringify({ 'left-slot': 300 }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+      expect(await screen.findByText(/Your conversations will appear here/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
     });
   });
 
@@ -1141,9 +1200,10 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Sushi ideas');
 
-      const deleteButtons = screen.getAllByRole('button', { name: /delete thread/i });
-      expect(deleteButtons).toHaveLength(2);
-      fireEvent.click(deleteButtons[1]);
+      const menus = screen.getAllByRole('button', { name: 'Thread actions' });
+      expect(menus).toHaveLength(2);
+      fireEvent.click(menus[1]);
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
       // Confirmation dialog gates the deletion.
       expect(await screen.findByText('Are you absolutely sure?')).not.toBeNull();
@@ -1166,7 +1226,8 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Pasta night');
 
-      fireEvent.click(screen.getAllByRole('button', { name: /delete thread/i })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thread actions' })[0]);
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
 
       await waitFor(() =>
@@ -1191,7 +1252,74 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Sushi ideas');
 
-      expect(screen.queryByRole('button', { name: /delete thread/i })).toBeNull();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thread actions' })[1]);
+      expect(await screen.findByRole('menuitem', { name: 'Pin' })).not.toBeNull();
+      expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+    });
+  });
+
+  describe('thread rename', () => {
+    async function renameSushiThread(title: string) {
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      await screen.findByText('Sushi ideas');
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thread actions' })[1]);
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: title } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    }
+
+    describe('when the server accepts the rename', () => {
+      it('shows the new title in the thread list', async () => {
+        installHandlers();
+        let renamed = false;
+        server.use(
+          http.get(`${BASE_URL}/api/memory/threads`, () =>
+            HttpResponse.json(
+              renamed
+                ? {
+                    ...threadsResponse,
+                    threads: threadsResponse.threads.map(t => (t.id === 'thread-2' ? { ...t, title: 'Omakase' } : t)),
+                  }
+                : threadsResponse,
+            ),
+          ),
+          http.patch(`${BASE_URL}/api/memory/threads/thread-2`, async ({ request }) => {
+            expect(await request.json()).toMatchObject({ title: 'Omakase' });
+            renamed = true;
+            const thread = threadsResponse.threads.find(t => t.id === 'thread-2');
+            return HttpResponse.json({ ...thread, title: 'Omakase' });
+          }),
+        );
+
+        await renameSushiThread('Omakase');
+
+        expect(await screen.findByText('Omakase')).not.toBeNull();
+        expect(screen.queryByText('Sushi ideas')).toBeNull();
+      });
+    });
+
+    describe('when the server rejects the rename', () => {
+      it('keeps the previous title', async () => {
+        installHandlers();
+        const rejected = vi.fn();
+        server.use(
+          http.patch(`${BASE_URL}/api/memory/threads/thread-2`, () => {
+            rejected();
+            return HttpResponse.json({ error: 'boom' }, { status: 500 });
+          }),
+        );
+
+        await renameSushiThread('Omakase');
+
+        await waitFor(() => expect(rejected).toHaveBeenCalled(), { timeout: 5000 });
+        await waitFor(
+          () => expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false),
+          { timeout: 5000 },
+        );
+        expect(screen.getByRole('dialog')).not.toBeNull();
+        expect(screen.getAllByText('Sushi ideas').length).toBeGreaterThan(0);
+      });
     });
   });
 
@@ -1276,7 +1404,7 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
-    });
+    }, 15_000);
   });
 
   describe('when the current agent no longer exists', () => {

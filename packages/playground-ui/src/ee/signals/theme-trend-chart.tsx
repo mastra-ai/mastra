@@ -1,6 +1,8 @@
+import { getSignalAreaClass, getSignalColor } from './signal-colors';
 import { formatSnapshotDate, traceLabel } from './signal-formatting';
 import type { ThemeHistoryPoint } from './theme-trend';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 const TREND_CHART_HEIGHT = 32;
 
@@ -9,7 +11,8 @@ function trendPointLabel(point: ThemeHistoryPoint) {
 }
 
 /** Trace count over time for one theme, with absent stretches dropping to the baseline. */
-export function ThemeTrendChart({ points, color }: { points: ThemeHistoryPoint[]; color: string }) {
+export function ThemeTrendChart({ points, signalName }: { points: ThemeHistoryPoint[]; signalName: string }) {
+  const color = getSignalColor(signalName);
   const firstPoint = points[0];
   const lastPoint = points.at(-1);
   if (!firstPoint || !lastPoint) return null;
@@ -33,14 +36,12 @@ export function ThemeTrendChart({ points, color }: { points: ThemeHistoryPoint[]
           viewBox={`0 0 100 ${TREND_CHART_HEIGHT}`}
         >
           <polygon
-            fill={color}
-            fillOpacity={0.14}
+            className={getSignalAreaClass(signalName)}
             points={[`0,${TREND_CHART_HEIGHT}`, ...coordinates, `100,${TREND_CHART_HEIGHT}`].join(' ')}
           />
           <polyline
             fill="none"
             stroke={color}
-            strokeOpacity={0.7}
             strokeWidth={1.2}
             vectorEffect="non-scaling-stroke"
             points={coordinates.join(' ')}
@@ -52,7 +53,7 @@ export function ThemeTrendChart({ points, color }: { points: ThemeHistoryPoint[]
             <Tooltip key={point.snapshotId}>
               <TooltipTrigger
                 aria-label={label}
-                className="absolute size-2 -translate-1/2 cursor-default rounded-full hover:brightness-125"
+                className="absolute size-2 -translate-1/2 cursor-default rounded-full transition-transform hover:scale-150"
                 style={{
                   left: `${x(point)}%`,
                   top: `${(y(point) / TREND_CHART_HEIGHT) * 100}%`,
@@ -64,9 +65,13 @@ export function ThemeTrendChart({ points, color }: { points: ThemeHistoryPoint[]
           );
         })}
       </div>
-      <div className="mt-1 flex justify-between font-mono text-caption text-muted-foreground">
-        <span>{formatSnapshotDate(firstPoint.startedAt)}</span>
-        <span>{formatSnapshotDate(lastPoint.startedAt)}</span>
+      <div className="mt-1 flex justify-between">
+        <Txt tone="muted" as="span" variant="caption">
+          {formatSnapshotDate(firstPoint.startedAt)}
+        </Txt>
+        <Txt tone="muted" as="span" variant="caption">
+          {formatSnapshotDate(lastPoint.startedAt)}
+        </Txt>
       </div>
     </div>
   );

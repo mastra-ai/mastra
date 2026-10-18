@@ -6,10 +6,10 @@
  * The service layer (mastracode/sdk/src/workflows/service.ts) is the single
  * implementation; agent tools and this slash handler both call it.
  */
-import { randomUUID } from 'node:crypto';
 import { deleteWorkflow, getWorkflow, listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
 import type { StoredWorkflowRow, WorkflowRunEvent } from '@mastra/code-sdk/workflows/service';
 import { RequestContext } from '@mastra/core/request-context';
+import { requireLocal } from '../runtime.js';
 import { getTermWidth } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -69,7 +69,7 @@ function buildSessionRequestContext(ctx: SlashCommandContext): RequestContext | 
   // in the parent thread, swap in `session.thread?.getId?.()`.
   const resourceId = session.identity?.getResourceId?.() ?? '';
   requestContext.set('MastraMemory', {
-    thread: { id: randomUUID() },
+    thread: { id: globalThis.crypto.randomUUID() },
     resourceId,
     memoryConfig: undefined,
   });
@@ -323,7 +323,7 @@ export async function handleWorkflowsCommand(
     return;
   }
 
-  const mastra = ctx.controller.getMastra();
+  const mastra = requireLocal(ctx.state, '/workflows').controller.getMastra();
   if (!mastra) {
     ctx.showError('Workflows: no Mastra instance attached to this controller.');
     return;

@@ -10,10 +10,6 @@ import { Login } from '@/pages/login';
 import { SignUp } from '@/pages/signup';
 import { server } from '@/test/msw-server';
 
-vi.mock('@/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 const BASE_URL = 'http://localhost:4111';
 
 function renderAuthRoute(path: string) {
@@ -80,7 +76,7 @@ describe('AuthLayout', () => {
 
       await screen.findByTestId('login-page');
       expect(screen.queryByRole('navigation', { name: /main/i })).toBeNull();
-      expect(document.querySelector('[data-slot="app-shell-body"]')?.className).toContain('lg:p-2');
+      expect(document.querySelector('[data-slot="app-shell-body"]')?.className).toContain('lg:pl-2');
       expect(document.querySelector('[data-slot="app-shell-body"]')?.className).not.toContain('lg:pl-0');
     });
   });

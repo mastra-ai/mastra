@@ -1,7 +1,7 @@
 import type { GetScorerResponse } from '@mastra/client-js';
+import { useTriggerScorer } from '@mastra/react/hooks/scores';
 import { InfoIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useTriggerScorer } from '../hooks/use-trigger-scorer';
 import { Combobox } from '@/ds/components/Combobox';
 import { DialogAction, DialogBody, DialogCancel, DialogDescription, DialogFooter } from '@/ds/components/Dialog';
 import { Notice } from '@/ds/components/Notice';
@@ -114,7 +114,7 @@ export function SpanScoring({
           disabled={isWaiting}
         />
         {selectedScorerDescription && (
-          <TextAndIcon className="text-caption text-muted-foreground">
+          <TextAndIcon>
             <InfoIcon /> {selectedScorerDescription}
           </TextAndIcon>
         )}

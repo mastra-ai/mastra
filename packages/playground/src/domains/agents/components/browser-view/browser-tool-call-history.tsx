@@ -1,7 +1,8 @@
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown } from 'lucide-react';
 import { useRef, useEffect, useState } from 'react';
-import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
 
 interface BrowserToolCallHistoryProps {
@@ -34,10 +35,10 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
         aria-expanded={isExpanded}
         className="flex w-full shrink-0 items-center gap-2 px-3 py-1 text-left hover:bg-fill-subtle"
       >
-        <ChevronDown
-          className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', isExpanded ? 'rotate-180' : '')}
-        />
-        <span className="text-column text-muted-foreground">Browser Actions ({toolCalls.length})</span>
+        <DisclosureChevron className="size-3.5 text-muted-foreground" />
+        <Txt as="span" variant="column" tone="muted">
+          Browser Actions ({toolCalls.length})
+        </Txt>
       </button>
 
       {isExpanded && (

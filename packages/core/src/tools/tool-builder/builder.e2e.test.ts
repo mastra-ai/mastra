@@ -980,6 +980,71 @@ describe('Tool Tracing Context Injection', () => {
     expect(mockToolSpan.error).not.toHaveBeenCalled();
   });
 
+  it('should end span with failure when Mastra tool output validation fails', async () => {
+    const mastraTool = createTool({
+      id: 'mastra-output-fail-tool',
+      description: 'Mastra tool with output schema',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ count: z.number() }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ count: 'not-a-number' }),
+    });
+
+    const mockToolSpan = { end: vi.fn(), error: vi.fn() };
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: mastraTool,
+      options: {
+        name: 'mastra-output-fail-tool',
+        description: 'Mastra tool with output schema',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    }).build();
+
+    const result: any = await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(result).toHaveProperty('error', true);
+    expect(result.message).toContain('Tool output validation failed');
+    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: result, attributes: { success: false } });
+    expect(mockToolSpan.error).not.toHaveBeenCalled();
+  });
+
+  it("should end span with success and the raw output when a Mastra tool uses outputValidation: 'warn'", async () => {
+    const mastraTool = createTool({
+      id: 'mastra-output-warn-tool',
+      description: 'Mastra tool with output schema',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ count: z.number() }),
+      outputValidation: 'warn',
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ count: 'not-a-number' }),
+    });
+
+    const mockToolSpan = { end: vi.fn(), error: vi.fn() };
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: mastraTool,
+      options: {
+        name: 'mastra-output-warn-tool',
+        description: 'Mastra tool with output schema',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    }).build();
+
+    const result = await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(result).toEqual({ count: 'not-a-number' });
+    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: result, attributes: { success: true } });
+  });
+
   it('should create child span with correct logType attribute', async () => {
     const testTool = createTool({
       id: 'toolset-tool',

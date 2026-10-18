@@ -101,9 +101,17 @@ const processor = new ModerationProcessor({
             name: 'chunkWindow',
             type: 'number',
             description:
-              'Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.',
+              'Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc. Only applies when `bufferSize` is `0`.',
             isOptional: true,
             default: '0 (no context window)',
+          },
+          {
+            name: 'bufferSize',
+            type: 'number',
+            description:
+              'Opt-in buffering for streamed text. When greater than `0`, streamed text is held back and moderated in one LLM call when it ends a sentence, reaches this many characters, or a non-text part arrives. This makes far fewer LLM calls and catches content split across chunks. Recommended for production streaming, for example `bufferSize: 200`. With `0`, every text chunk gets its own LLM call.',
+            isOptional: true,
+            default: '0',
           },
           {
             name: 'providerOptions',
@@ -133,8 +141,8 @@ const processor = new ModerationProcessor({
   {
     name: 'name',
     type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
+    description: "Processor display name, always 'Moderation'",
+    isOptional: false,
   },
   {
     name: 'processInput',
@@ -178,6 +186,8 @@ export const agent = new Agent({
 ```
 
 ### Output processing with batching
+
+For production streaming, set `bufferSize` (for example `bufferSize: 200`) so `ModerationProcessor` makes one moderation call per sentence instead of one per chunk. Buffering also catches content that is split across chunks. Text then reaches the client in sentence-sized pieces.
 
 When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
 

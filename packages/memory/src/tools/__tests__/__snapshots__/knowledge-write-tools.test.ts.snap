@@ -19,6 +19,8 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
         "type": "string",
       },
       "text": {
+        "description": "One durable fact, or a few closely related facts, in your own words. Hard limit 1000 UTF-16 code units. Never paste files, command output, or logs.",
+        "maxLength": 1000,
         "minLength": 1,
         "type": "string",
       },
@@ -39,6 +41,10 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
     "$schema": "http://json-schema.org/draft-07/schema#",
     "additionalProperties": false,
     "properties": {
+      "confirmDistinct": {
+        "description": "Set true only after a previous call reported similar existing nodes and this node is genuinely a different thing.",
+        "type": "boolean",
+      },
       "kind": {
         "minLength": 1,
         "type": "string",
@@ -48,11 +54,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
         "type": "string",
       },
       "nodeScope": {
-        "enum": [
-          "org",
-          "resource",
-          "thread",
-        ],
+        "description": "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory'). When omitted, the node uses the first record's scope. A structural node is visible at least as widely as its structural scope.",
         "type": "string",
       },
       "scope": {
@@ -64,6 +66,8 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
         "type": "string",
       },
       "text": {
+        "description": "One durable fact, or a few closely related facts, in your own words. Hard limit 1000 UTF-16 code units. Never paste files, command output, or logs.",
+        "maxLength": 1000,
         "minLength": 1,
         "type": "string",
       },

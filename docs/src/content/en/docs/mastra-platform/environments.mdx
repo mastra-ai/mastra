@@ -43,7 +43,7 @@ mastra env list
 
 The output shows each environment's name, region, active deploy status, and the managed environment variables injected by attached databases. Pass `--json` for machine-readable output in CI.
 
-All `mastra env` commands resolve their project from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` file written by your first deploy, in that order. Run them from your project directory and you never need to name the project.
+All `mastra env` commands resolve their project from the `--project` flag, the `MASTRA_PROJECT_ID` environment variable, or the `.mastra-project.json` file written by your first deploy, in that order. Run them from your project directory and you never need to name the project.
 
 ## Environment variables
 
@@ -60,7 +60,7 @@ Variables are applied when a deploy starts. To apply changed variables to a runn
 mastra env restart staging
 ```
 
-To see the set an environment's deploys actually run with, with managed variables listed by name, pull them into a local env file. Each environment is pulled on its own, so the file never mixes in another environment's values:
+To see the set an environment's deploys actually run with, with managed variables listed by name, pull them into a local env file. Each environment is pulled on its own. The file never mixes in another environment's values:
 
 ```bash
 mastra env vars pull staging --output .env.staging

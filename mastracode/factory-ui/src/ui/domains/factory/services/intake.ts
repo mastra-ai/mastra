@@ -11,6 +11,7 @@ export interface IntakeSelection {
   enabled: boolean;
   /** Source ids to sync; `null` = nothing selected. */
   sourceIds: string[] | null;
+  repositoryByLinearProject?: Record<string, string>;
 }
 
 export interface IntakeConfig {

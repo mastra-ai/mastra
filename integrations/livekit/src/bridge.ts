@@ -1,10 +1,13 @@
 import { ReadableStream } from 'node:stream/web';
-import { llm, voice } from '@livekit/agents';
+import { FlushSentinel, llm, voice } from '@livekit/agents';
 import type { Agent as MastraAgent, AgentExecutionOptionsBase, AgentMemoryOption } from '@mastra/core/agent';
 import type { TracingContext } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { chatContextToMessages, extractNewTurnMessages } from './messages';
 import type { VoiceTurnMessage } from './messages';
+import { createGenerationMetrics, VOICE_TEXT_FLUSH, VOICE_TURN_METADATA } from './turn-metrics';
+import type { VoiceReplyChunk, VoiceTurnMetricsHook } from './turn-metrics';
+import { mapVoiceStream } from './voice-stream';
 
 const DEFAULT_INSTRUCTIONS = 'You are a helpful voice assistant powered by a Mastra agent.';
 
@@ -43,10 +46,10 @@ export class DisclosureReminder {
  * TTS pauses before the reply) before piping the rest of `source` through unchanged. Cancelling the
  * wrapper cancels `source` — so barge-in still aborts the underlying generation.
  */
-export function prependText(source: ReadableStream<string>, text: string): ReadableStream<string> {
+export function prependText<T>(source: ReadableStream<T>, text: string): ReadableStream<T | string> {
   const prefix = text.endsWith(' ') ? text : `${text} `;
   const reader = source.getReader();
-  return new ReadableStream<string>({
+  return new ReadableStream<T | string>({
     start(controller) {
       controller.enqueue(prefix);
     },
@@ -141,6 +144,12 @@ export interface MastraVoiceAgentMemory {
  * detected user turn; the bridge builds this context and asks the generator for the reply.
  */
 export interface VoiceTurnContext {
+  /** Stable user-turn identifier, supplied by the worker or plugin. */
+  turnId?: string;
+  /** Unique generation attempt identifier, including speculative replies and retries. */
+  attemptId?: string;
+  /** @internal Bridge-side timing collector. */
+  metrics?: ReturnType<typeof createGenerationMetrics>;
   /**
    * The messages to generate a reply from. With Mastra Memory on, only the messages new since
    * the agent last spoke (history comes from the thread); with memory off, the full session.
@@ -206,7 +215,7 @@ export type VoiceTurnCompleteHook = (ctx: VoiceTurnCompleteContext) => void | Pr
  */
 export type VoiceReplyGenerator = (
   ctx: VoiceTurnContext,
-) => ReadableStream<string> | null | Promise<ReadableStream<string> | null>;
+) => ReadableStream<VoiceReplyChunk> | null | Promise<ReadableStream<VoiceReplyChunk> | null>;
 
 export interface AgentReplyGeneratorOptions {
   /** The Mastra agent that generates replies. Tools and memory run inside this agent. */
@@ -245,8 +254,7 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
     const toolCalls: VoiceToolCall[] = [];
     let usage: VoiceTurnUsage | undefined;
 
-    // Fire-and-forget after the reply has streamed: off the audio path (the caller already heard
-    // the text), and not awaited, so it never delays the next turn. Errors are logged, not thrown.
+    // Fire-and-forget after generation; playback can still be pending, and not awaited, so it never delays the next turn. Errors are logged, not thrown.
     const emitTurnComplete = (interrupted: boolean) => {
       if (!onTurnComplete) return;
       const completeCtx: VoiceTurnCompleteContext = {
@@ -260,7 +268,7 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
         });
     };
 
-    return new ReadableStream<string>({
+    return new ReadableStream<VoiceReplyChunk>({
       start: async controller => {
         try {
           const result = await agent.stream(ctx.messages, mergedOptions);
@@ -271,6 +279,10 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
                 replyText += chunk.payload.text;
                 controller.enqueue(chunk.payload.text);
               }
+            } else if (chunk.type === 'text-end' || chunk.type === 'step-finish') {
+              controller.enqueue(VOICE_TEXT_FLUSH);
+            } else if (chunk.type === 'tool-result') {
+              ctx.metrics?.toolEnd(chunk.payload.toolCallId);
             } else if (chunk.type === 'tool-call') {
               const toolCall: VoiceToolCall = {
                 toolCallId: chunk.payload.toolCallId,
@@ -278,6 +290,8 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
                 args: chunk.payload.args,
               };
               toolCalls.push(toolCall);
+              ctx.metrics?.toolStart({ toolCallId: toolCall.toolCallId, toolName: toolCall.toolName });
+              controller.enqueue(VOICE_TEXT_FLUSH);
               // Observer hooks are customer code: a throw must not tear down an otherwise healthy
               // reply stream (same isolation as onTurnComplete).
               try {
@@ -292,7 +306,10 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
                 } catch (error) {
                   console.warn('@mastra/livekit: toolFeedback hook threw', error);
                 }
-                if (filler) controller.enqueue(filler.endsWith(' ') ? filler : `${filler} `);
+                if (filler) {
+                  controller.enqueue(filler.endsWith(' ') ? filler : `${filler} `);
+                  controller.enqueue(VOICE_TEXT_FLUSH);
+                }
               }
             } else if (chunk.type === 'finish') {
               // Usage is dropped from the spoken stream but surfaced via the per-turn side channel
@@ -334,6 +351,8 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
 }
 
 export interface MastraVoiceAgentOptions {
+  /** Receives per-attempt generation metrics. Playback metrics come from observeVoiceSession. */
+  onTurnMetrics?: VoiceTurnMetricsHook;
   /**
    * The Mastra agent that generates replies. Tools and memory run inside this agent. Provide
    * either this or {@link MastraVoiceAgentOptions.generate}.
@@ -440,6 +459,7 @@ export class MastraVoiceAgent extends voice.Agent {
   readonly requestContext?: RequestContext;
   readonly streamOptions?: MastraStreamOptions;
   private readonly replyGenerator: VoiceReplyGenerator;
+  private readonly onTurnMetrics?: VoiceTurnMetricsHook;
   private readonly reminder?: DisclosureReminder;
 
   constructor(options: MastraVoiceAgentOptions) {
@@ -457,6 +477,7 @@ export class MastraVoiceAgent extends voice.Agent {
       tts: options.tts,
       turnHandling: options.turnHandling,
     });
+    this.onTurnMetrics = options.onTurnMetrics;
     this.memory = options.memory ?? false;
     this.requestContext = toRequestContext(options.requestContext);
     this.streamOptions = options.streamOptions;
@@ -487,18 +508,19 @@ export class MastraVoiceAgent extends voice.Agent {
     chatCtx: llm.ChatContext,
     _toolCtx: llm.ToolContext,
     _modelSettings: voice.ModelSettings,
-  ): Promise<ReadableStream<llm.ChatChunk | string> | null> {
+  ): Promise<ReadableStream<llm.ChatChunk | string | FlushSentinel> | null> {
     const messages: VoiceTurnMessage[] =
       this.memory === false ? chatContextToMessages(chatCtx) : extractNewTurnMessages(chatCtx);
     if (messages.length === 0) return null;
 
-    const reply = await this.replyGenerator({
+    const ctx = {
       messages,
       chatCtx,
       memory: this.memory,
       requestContext: this.requestContext,
       tracingContext: this.streamOptions?.tracingContext,
-    });
+    };
+    const { reply, identity } = await instrumentVoiceReply(this.replyGenerator, ctx, this.onTurnMetrics);
     if (!reply) return null;
 
     // Periodic AI re-disclosure: when the interval has elapsed, prefix this turn's spoken reply with
@@ -510,12 +532,74 @@ export class MastraVoiceAgent extends voice.Agent {
     // turn can miss its reminder — hence the documented repeatEvery/preemptiveGeneration
     // incompatibility. A playout-accurate reset needs a confirmed-turn signal llmNode doesn't have.
     const reminder = this.reminder?.due();
-    if (!reminder) return reply;
-    this.reminder?.markDelivered();
-    return prependText(reply, reminder);
+    if (reminder) this.reminder?.markDelivered();
+    const source = reminder ? prependText(reply, reminder) : reply;
+    return mapVoiceStream(source, chunk => {
+      if (typeof chunk === 'string') {
+        return {
+          id: identity.attemptId,
+          delta: { role: 'assistant' as const, content: chunk, extra: { [VOICE_TURN_METADATA]: identity } },
+        };
+      } else {
+        return FlushSentinel;
+      }
+    });
   }
 }
 
 export function createMastraVoiceAgent(options: MastraVoiceAgentOptions): MastraVoiceAgent {
   return new MastraVoiceAgent(options);
+}
+
+/** @internal Wrap every reply source, including custom generators, with one terminal metric. */
+export async function instrumentVoiceReply(
+  generator: VoiceReplyGenerator,
+  ctx: VoiceTurnContext,
+  onTurnMetrics?: VoiceTurnMetricsHook,
+): Promise<{ reply: ReadableStream<VoiceReplyChunk> | null; identity: { turnId: string; attemptId: string } }> {
+  const identity = {
+    turnId: ctx.turnId ?? ctx.messages.findLast(message => message.role === 'user')?.id ?? crypto.randomUUID(),
+    attemptId: crypto.randomUUID(),
+  };
+  const metrics = createGenerationMetrics(identity, onTurnMetrics);
+  let reply: ReadableStream<VoiceReplyChunk> | null;
+  try {
+    reply = await generator({ ...ctx, ...identity, metrics });
+  } catch (error) {
+    metrics.end('failed');
+    throw error;
+  }
+  if (!reply) {
+    metrics.end('completed');
+    return { reply: null, identity };
+  }
+  const reader = reply.getReader();
+  let cancelled = false;
+  return {
+    identity,
+    reply: new ReadableStream<VoiceReplyChunk>({
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (cancelled) return;
+          if (done) {
+            metrics.end('completed');
+            controller.close();
+          } else {
+            if (typeof value === 'string' && value) metrics.text();
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          if (cancelled) return;
+          metrics.end('failed');
+          controller.error(error);
+        }
+      },
+      cancel(reason) {
+        cancelled = true;
+        metrics.end('interrupted');
+        return reader.cancel(reason);
+      },
+    }),
+  };
 }

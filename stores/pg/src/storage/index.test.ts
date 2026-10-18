@@ -163,6 +163,37 @@ describe('read/write pools', () => {
     }
   });
 
+  it('reads the observational memory head from the writer even when the replica lags', async () => {
+    const writePool = createTestPool();
+    const readPool = createTestPool();
+    // A replica that never catches up: every read sees an empty table.
+    vi.spyOn(readPool, 'query').mockResolvedValue({ rows: [], rowCount: 0 } as never);
+    const store = new PostgresStore({ id: 'pg-lagging-replica-om-test', writePool, readPool });
+
+    try {
+      await store.init();
+      const memory = await store.getStore('memory');
+      const resourceId = `lag-om-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const first = await memory.initializeObservationalMemory({
+        threadId: null,
+        resourceId,
+        scope: 'resource',
+        config: {},
+      });
+      const next = await memory.createReflectionGeneration({ currentRecord: first, reflection: '- r', tokenCount: 1 });
+
+      // Lifecycle retries re-read the head; a stale (or missing) head would exhaust them.
+      const head = await memory.getObservationalMemory(null, resourceId);
+      expect(head?.id).toBe(next.id);
+      expect(head?.supersededBy ?? null).toBeNull();
+
+      await memory.clearObservationalMemory(null, resourceId);
+    } finally {
+      await store.close();
+      await Promise.all([writePool.end(), readPool.end()]);
+    }
+  });
+
   it('does not close caller-provided reader or writer pools', async () => {
     const writePool = createTestPool();
     const readPool = createTestPool();

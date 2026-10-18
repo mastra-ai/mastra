@@ -9,10 +9,17 @@
  * and held on the parent `Mastra` instance. Nothing in the scope is ever
  * persisted or published.
  *
- * Scopes are managed alongside the internal-workflow registry on `Mastra`
- * (see `__createRunScope` / `__deleteRunScope`) so they share the same TTL
- * sweep and explicit unregister hooks as the run-scoped workflow registrations
- * they back.
+ * Scopes are refcounted alongside the internal-workflow registry on `Mastra`:
+ * `__registerInternalWorkflow` / `__unregisterInternalWorkflow` hold and
+ * release them, and call sites that need a scope before registration pair
+ * `__createRunScope` with `__releaseRunScope`. They share the same TTL sweep
+ * as the run-scoped workflow registrations they back, so a scope dies with its
+ * run.
+ *
+ * Never put RunScope values on step input/output schemas. Step I/O crosses the
+ * wire and must stay JSON-safe: the codec in `events/codec` round-trips a fixed
+ * set of built-ins and registered classes at the `UnixSocketPubSub` boundary,
+ * but live handles and closures are dropped.
  *
  * Keys are branded symbols carrying their value type as a phantom parameter,
  * so `scope.get(SAVE_QUEUE_MANAGER)` returns `SaveQueueManager | undefined`

@@ -280,6 +280,15 @@ export function mockAgentMethods(agent: Agent) {
     } as any;
   });
 
+  vi.spyOn(agent, 'queueSignal').mockImplementation((signal: any, target: any) => {
+    const createdSignal = createSignal(signal);
+    const runId = target?.runId ?? 'test-run';
+    return {
+      accepted: Promise.resolve({ action: 'deliver', runId }),
+      signal: createdSignal,
+    } as any;
+  });
+
   vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
     stream: (async function* () {
       yield { type: 'text-delta', textDelta: 'test' };
@@ -652,15 +661,19 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         ...(observability.getFeatures() ?? []),
         'trace-query',
         'trace-query-discovery',
+        'trace-aggregate',
         'thread-query',
+        'span-query',
       ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
+      vi.spyOn(observability, 'aggregateTraces').mockResolvedValue({ rows: [], truncated: false });
       vi.spyOn(observability, 'getTraceQueryObservedFields').mockResolvedValue({
         observedFields: [],
         observedFieldsTruncated: false,
       });
       vi.spyOn(observability, 'getTraceQueryValues').mockResolvedValue({ values: [], valuesTruncated: false });
       vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
+      vi.spyOn(observability, 'querySpans').mockResolvedValue({ spans: [], page: { next: null } });
       await observability.createSpan({
         span: {
           spanId: 'test-span',

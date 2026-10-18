@@ -124,6 +124,40 @@ const MIN_SHARED_TYPE_LENGTH = 160;
  */
 const UNREPRESENTABLE_SCHEMA_TYPES = new Set(['transform', 'custom']);
 
+const INDEX_SIGNATURE_KEY_TYPES = new Set(['string', 'number', 'symbol']);
+
+/**
+ * zod-to-ts renders every record as an index signature, but TypeScript rejects index
+ * signatures keyed by literal or template-literal unions (TS1337). Render those as a
+ * mapped type instead, optional unless the key is an exhaustive enum (mirroring Zod).
+ */
+function renderLiteralKeyedRecord(schema: z4.$ZodType, tsLib: typeof ts, io: ZodIo): ts.TypeNode | undefined {
+  const def = schema._zod.def as z4.$ZodRecordDef;
+  if (def.type !== 'record' || INDEX_SIGNATURE_KEY_TYPES.has(def.keyType._zod.def.type)) {
+    return undefined;
+  }
+
+  const convert = (child: z4.$ZodType) =>
+    zodToTs(child, {
+      auxiliaryTypeStore: renderStates[io].auxiliaryTypeStore,
+      io,
+      overrideFunction: createSchemaOverrideFunction(io),
+    }).node;
+  const exhaustive =
+    def.keyType._zod.values !== undefined &&
+    !def.partial &&
+    !(io === 'input' && def.valueType._zod.optin !== undefined);
+
+  return tsLib.factory.createMappedTypeNode(
+    undefined,
+    tsLib.factory.createTypeParameterDeclaration(undefined, 'K', convert(def.keyType)),
+    undefined,
+    exhaustive ? undefined : tsLib.factory.createToken(tsLib.SyntaxKind.QuestionToken),
+    convert(def.valueType),
+    undefined,
+  );
+}
+
 function createSchemaOverrideFunction(io: ZodIo) {
   const state = renderStates[io];
 
@@ -140,11 +174,11 @@ function createSchemaOverrideFunction(io: ZodIo) {
     // While a schema's own shared declaration is being rendered, let the default
     // conversion (and the auxiliary store, for recursive schemas) handle it.
     if (state.promotionInProgress.has(schema)) {
-      return undefined;
+      return renderLiteralKeyedRecord(schema, tsLib, io);
     }
 
     if ((state.nestedOccurrenceCounts.get(schema) ?? 0) < 2) {
-      return undefined;
+      return renderLiteralKeyedRecord(schema, tsLib, io);
     }
 
     let sharedName = state.promotedSchemaNames.get(schema);
@@ -174,7 +208,7 @@ function createSchemaOverrideFunction(io: ZodIo) {
     }
 
     if (!sharedName) {
-      return undefined;
+      return renderLiteralKeyedRecord(schema, tsLib, io);
     }
 
     return tsLib.factory.createTypeReferenceNode(sharedName);
