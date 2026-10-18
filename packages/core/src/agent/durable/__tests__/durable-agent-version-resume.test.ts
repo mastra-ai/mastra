@@ -173,6 +173,23 @@ describe('durable agent version pinning across suspend/resume', () => {
     result.cleanup();
   });
 
+  it('hands the tool-call resume marker to the pinned version (#27365)', async () => {
+    const { store, durableAgent, resolveSpy } = setup();
+    const runId = 'version-pin-tool-call-run';
+    await seedSuspendedRun(store, runId, durableAgent.id, { threadId: 't-1', resourceId: 'r-1' }, 'v1');
+
+    // Before, the pinned fork's resume() found the marker still held by this
+    // call, failed with AGENT_RESUME_ALREADY_CLAIMED, and the run fell back to
+    // the current definition.
+    const result = await durableAgent.resume(runId, { approved: true }, { toolCallId: 'call-1' });
+
+    expect(resolveSpy).toHaveBeenCalledTimes(1);
+    const fork = (await resolveSpy.mock.results[0]!.value) as DurableAgent;
+    expect(fork.runRegistry.has(runId)).toBe(true);
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    result.cleanup();
+  });
+
   it('does not resolve a version when the run recorded none', async () => {
     const { store, durableAgent, resolveSpy } = setup();
     const runId = 'no-version-cold-run';

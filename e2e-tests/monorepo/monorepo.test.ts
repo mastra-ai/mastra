@@ -858,7 +858,7 @@ export const versionlessRoute = registerApiRoute('/versionless', {
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^10.0.6');
+      expect(packageJson.dependencies?.nodemailer).toBe('^10.1.1');
     });
 
     it('should keep configured workspace externals out of bundles without inlining default externals', async () => {

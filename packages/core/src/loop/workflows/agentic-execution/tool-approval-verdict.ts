@@ -17,6 +17,8 @@ import type {
 } from '../../../tools/types';
 import { validateToolInput } from '../../../tools/validation';
 
+type ToolInputValidator = (input: unknown) => { data?: unknown; error?: unknown };
+
 type BeforeApprovalWithRuntime = (
   input: unknown,
   ctx: BeforeApprovalContext,
@@ -95,12 +97,14 @@ export async function resolveToolApprovalVerdict({
 }
 
 /**
- * Runs a tool's `beforeApproval` hook for a call that is about to suspend for approval.
- * Returns the rejection when the hook returns `{ proceed: false, output }`, otherwise
- * `undefined` so the call continues to the approval gate. A hook that throws is logged and
- * treated as "continue": the approval gate still protects execution.
+ * Runs the checks for a call that is about to suspend for approval: the tool's input
+ * validation, then its `beforeApproval` hook. Returns `{ proceed: false, output }` when the
+ * input is invalid (output is the same validation error `execute` would return) or when the
+ * hook rejects the call; otherwise `undefined` so the call continues to the approval gate.
+ * A hook that throws is logged and treated as "continue": the approval gate still protects
+ * execution.
  */
-export async function runBeforeApprovalHook({
+export async function runBeforeApprovalChecks({
   tool,
   input,
   context,
@@ -117,17 +121,24 @@ export async function runBeforeApprovalHook({
   };
   logger?: IMastraLogger;
 }): Promise<ToolBeforeHookResult | undefined> {
+  // Built CoreTools expose `validateInput` (the schema execute uses); raw Tool instances on the
+  // network loop still carry `inputSchema`.
+  const validateInput = (tool as { validateInput?: unknown } | undefined)?.validateInput;
+  const inputSchema = (tool as { inputSchema?: unknown } | undefined)?.inputSchema;
+  const validation =
+    typeof validateInput === 'function'
+      ? (validateInput as ToolInputValidator)(input)
+      : inputSchema
+        ? validateToolInput(inputSchema as StandardSchemaWithJSON, input, context.toolName)
+        : undefined;
+  if (validation?.error) {
+    logger?.warn(`Tool input validation failed before approval for tool ${context.toolName}`);
+    return { proceed: false, output: validation.error };
+  }
+  if (validation) input = validation.data;
+
   const beforeApproval = getBeforeApprovalFn(tool);
   if (!beforeApproval) return undefined;
-
-  // Raw Tool instances (network loop) still carry `inputSchema`; built CoreTools validate inside
-  // their own beforeApproval wrapper. Invalid input skips the hook so execute reports the error.
-  const inputSchema = (tool as { inputSchema?: unknown } | undefined)?.inputSchema;
-  if (inputSchema) {
-    const validation = validateToolInput(inputSchema as StandardSchemaWithJSON, input, context.toolName);
-    if (validation.error) return undefined;
-    input = validation.data;
-  }
 
   const { requestContext } = buildToolApprovalContext({
     toolName: context.toolName,
