@@ -4,12 +4,13 @@
  *   so the answer can be retried instead of being lost;
  * - detaching the host leaves a parked approval in storage instead of declining it.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
+import { useLoopScenarioAimock } from '../../loop/test-utils/aimock/aimock-scenario';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
@@ -17,35 +18,19 @@ import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
 
-const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const ids = { id: 'gate-session', ownerId: 'owner', resourceId: 'gate-user', threadId: 'gate-thread' };
 
+const getMock = useLoopScenarioAimock();
+
 function model() {
-  return new MockLanguageModelV2({
-    doStream: async ({ prompt }) => {
-      const answered = JSON.stringify(prompt).includes('"type":"tool-result"');
-      const parts = answered
-        ? [
-            { type: 'text-start' as const, id: 't' },
-            { type: 'text-delta' as const, id: 't', delta: 'done' },
-            { type: 'text-end' as const, id: 't' },
-            { type: 'finish' as const, finishReason: 'stop' as const, usage },
-          ]
-        : [
-            { type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
-            { type: 'finish' as const, finishReason: 'tool-calls' as const, usage },
-          ];
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start' as const, warnings: [] },
-          { type: 'response-metadata' as const, id: 'r', modelId: 'mock', timestamp: new Date(0) },
-          ...parts,
-        ]),
-      };
-    },
-  });
+  const llm = getMock();
+  // Answered turns carry the tool result; everything else asks for the approval-gated tool.
+  llm.on(
+    { endpoint: 'chat', predicate: req => req.messages.some(message => message.role === 'tool') },
+    { content: 'done' },
+  );
+  llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { q: 'x' } }] });
+  return createOpenAI({ apiKey: 'aimock', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` })('gpt-4o-mini');
 }
 
 async function parked() {
@@ -84,7 +69,7 @@ async function parked() {
     events.filter(event => event.type === 'tool_approval_required' && event.toolCallId === 'call-1').length;
   const errors = () => events.flatMap(event => (event.type === 'error' ? [event.error.message] : []));
 
-  void session.sendMessage({ content: 'use the tool' }).catch(() => {});
+  const sent = session.sendMessage({ content: 'use the tool' }).catch(() => {});
   await vi.waitFor(() => expect(approvalPrompts()).toBe(1), { timeout: 10_000 });
   await vi.waitFor(async () => expect(await suspendedApprovals()).toEqual(['call-1']));
 
@@ -95,7 +80,7 @@ async function parked() {
     return runs.flatMap(run => run.toolCalls.filter(call => call.requiresApproval).map(call => call.toolCallId));
   }
 
-  return { session, events, executed, approvalPrompts, errors, suspendedApprovals };
+  return { session, sent, events, executed, approvalPrompts, errors, suspendedApprovals };
 }
 
 afterEach(() => {
@@ -162,13 +147,15 @@ describe('approval gate reconciliation', () => {
 
   it('keeps a parked approval in storage when the host detaches', async () => {
     const env = await parked();
+    const decline = vi.spyOn(env.session, 'declineToolCall');
 
     env.session.thread.detachFromCurrent();
 
     expect(env.session.approval.isArmed()).toBe(false);
     expect(env.session.displayState.get().pendingApprovals.has('call-1')).toBe(false);
-    // Give any (wrong) decline time to land before checking it did not.
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // The run settles only after the engine has dispatched any (wrong) decline.
+    await env.sent;
+    expect(decline).not.toHaveBeenCalled();
     expect(await env.suspendedApprovals()).toEqual(['call-1']);
     expect(env.executed).toEqual([]);
     expect(env.errors()).toEqual([]);
