@@ -549,6 +549,16 @@ export async function processWorkflowForEach(
         requestContext: withoutAuthToken(requestContext),
       });
       stepResults[getEntryId(step.step)] = result as StepResult<any, any, any, any>;
+    } else {
+      result = { ...currentResult, status: 'success', endedAt: Date.now() };
+      await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: getEntryId(step.step),
+        result,
+        requestContext: withoutAuthToken(requestContext),
+      });
+      stepResults[getEntryId(step.step)] = result as StepResult<any, any, any, any>;
     }
 
     await pubsub.publish('workflows', {
@@ -594,7 +604,7 @@ export async function processWorkflowForEach(
       runId,
       stepId: getEntryId(step.step),
       result: {
-        status: 'success',
+        status: 'running',
         output: dummyResult as any,
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
@@ -651,9 +661,9 @@ export async function processWorkflowForEach(
     runId,
     stepId: getEntryId(step.step),
     result: {
-      status: 'success',
+      status: 'running',
       output: (currentResult as any).output,
-      startedAt: Date.now(),
+      startedAt: (currentResult as any).startedAt ?? Date.now(),
       payload: (prevResult as any)?.output,
     } as any,
     requestContext: withoutAuthToken(requestContext),

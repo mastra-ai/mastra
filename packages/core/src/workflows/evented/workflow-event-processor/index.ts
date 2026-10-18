@@ -2814,6 +2814,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         };
 
+        // The foreach stays running until loop.ts finalizes it; an iteration's own status and
+        // timing must not overwrite the step's. A failure (this iteration or an earlier sibling) sticks.
+        const foreachStatus =
+          existingStepResult?.status === 'failed' || prevResult.status === 'failed'
+            ? ('failed' as const)
+            : existingStepResult?.status === 'success' && existingStepResult?.endedAt
+              ? ('success' as const)
+              : ('running' as const);
+        const { endedAt: _iterationEndedAt, ...iterationFields } = prevResult as any;
+
         if (currentResult) {
           currentResult[currentIdx] = iterationResult;
           // Merge foreach step-level properties (suspendPayload, resumePayload, suspendedAt, resumedAt)
@@ -2821,9 +2831,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           // Existing step's suspend properties are preserved (first suspend)
           newResult = {
             ...existingStepResult, // Preserve step-level properties
-            ...prevResult, // Get iteration timing info
-            // An iteration that finishes after a sibling failed must not mark the foreach successful.
-            ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
+            ...iterationFields,
+            status: foreachStatus,
+            startedAt: existingStepResult?.startedAt ?? (prevResult as any).startedAt,
+            endedAt: foreachStatus === 'success' ? existingStepResult?.endedAt : undefined,
             output: currentResult,
             payload: originalPayload,
             suspendPayload,
@@ -2833,7 +2844,13 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
           } as any;
         } else {
-          newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
+          newResult = {
+            ...iterationFields,
+            status: foreachStatus,
+            output: [iterationResult],
+            payload: originalPayload,
+            suspendPayload,
+          } as any;
         }
       }
       // Persist (and thread forward) any state changes made inside the foreach body,
