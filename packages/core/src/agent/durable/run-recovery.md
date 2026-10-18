@@ -91,7 +91,7 @@ This retry advice applies only to errors propagated by `recover()` for an identi
 
 `recover(runId, { force: true })` takes the run from a live execution. Use it when the owner is known to be gone (a killed container whose claim hasn't expired yet) or stuck.
 
-With storage fencing, the old execution's writes are rejected from the moment the takeover's claim lands. It notices on its next step check or heartbeat (within 10s), aborts its model call and tools, and writes nothing terminal. Its caller's stream receives the new owner's events, because the run topic is shared and older generations are dropped. Without storage fencing, `force` transfers the pubsub lease; the old execution still stops at its next check, but writes it makes before then are not rejected.
+With storage fencing, the old execution's writes are rejected from the moment the takeover's claim lands. It notices on its next step check or heartbeat (within 5s by default), aborts its model call and tools, and writes nothing terminal. Its caller's stream receives the new owner's events, because the run topic is shared and older generations are dropped. Without storage fencing, `force` transfers the pubsub lease; the old execution still stops at its next check, but writes it makes before then are not rejected.
 
 `force` never takes a run this process is executing, and a forced takeover still loses to a concurrent claimer.
 
