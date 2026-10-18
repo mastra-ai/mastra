@@ -230,9 +230,11 @@ async function getInputPlugins(
             }
 
             const pkgName = pkgJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
+            const subpath = id.replace(pkgName, '.');
+            let resolvedPath: string | undefined = resolve.exports(pkgJson, subpath)?.[0];
             if (!resolvedPath) {
-              resolvedPath = pkgJson!.main ?? 'index.js';
+              // Without an exports map only the bare package name maps to `main`; a subpath points at a file in the package.
+              resolvedPath = subpath === '.' ? (pkgJson!.main ?? 'index.js') : subpath;
             }
 
             const resolved = await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);

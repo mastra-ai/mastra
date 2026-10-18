@@ -633,4 +633,61 @@ describe('transpilePackages (issue #19380)', () => {
     },
     30000,
   );
+
+  it.each([
+    { name: 'a production build', isDev: false, externals: [] as string[] | true },
+    { name: 'a production build with externals: true', isDev: false, externals: true as string[] | true },
+    { name: 'mastra dev', isDev: true, externals: true as string[] | true },
+  ])(
+    'resolves a subpath import of a listed package without an exports map during $name',
+    async ({ isDev, externals }) => {
+      const { tempDir, entryFile, outputDir } = await createAppWithTypeScriptPackage();
+      const tsPackageDir = join(tempDir, 'node_modules', 'ts-source-package');
+      await writeFile(
+        join(tsPackageDir, 'src', 'shout.ts'),
+        `export const shout = (text: string): string => \`\${text.toUpperCase()}!\`;\n`,
+      );
+      await writeFile(
+        entryFile,
+        `import { shout } from 'ts-source-package/src/shout.ts';\nexport const loud = shout('mastra');`,
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(tempDir);
+      try {
+        await analyzeBundle(
+          [entryFile],
+          entryFile,
+          {
+            outputDir,
+            projectRoot: tempDir,
+            platform: 'node',
+            isDev,
+            bundlerOptions: {
+              externals,
+              enableSourcemap: false,
+              transpilePackages: ['ts-source-package'],
+            },
+          },
+          noopLogger,
+        );
+
+        const optimized = await readdir(outputDir);
+        const optimizedCode = (
+          await Promise.all(
+            optimized.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+          )
+        ).join('\n');
+        expect(optimizedCode, 'the subpath import resolved to the package main instead of the imported file').toContain(
+          'toUpperCase',
+        );
+        expect(optimizedCode, 'TypeScript from the imported subpath reached the output untranspiled').not.toContain(
+          'text: string',
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
+    },
+    30000,
+  );
 });
