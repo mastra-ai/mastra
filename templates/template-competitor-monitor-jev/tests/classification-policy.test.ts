@@ -222,6 +222,9 @@ describe('auditable classifier policy', () => {
   it('routes_policy_boundaries_and_uncertainty', () => {
     expect(routeClassification(evidence, answers(), confidence)).toMatchObject({ route: 'alert' });
     expect(
+      routeClassification(evidence, answers({ is_breaking_change: { type: 'refusal' } }), confidence),
+    ).toMatchObject({ route: 'review', reason: 'CLASSIFICATION_REFUSED' });
+    expect(
       routeClassification(evidence, answers({ is_substantive: { type: 'boolean', probability: 0.7 } }), confidence),
     ).toMatchObject({ route: 'alert' });
     expect(

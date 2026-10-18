@@ -18,12 +18,12 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
-import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
@@ -108,7 +108,7 @@ export interface MountGithubRoutesOptions {
    * `sandboxEnabled: false` and sandbox-backed routes respond 503. Sandboxes
    * themselves are constructed per session and started lazily elsewhere.
    */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   /** Factory storage backend used for the `appDbConfigured` diagnostic. */
   storage?: FactoryStorage;
   /**
@@ -718,14 +718,24 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const installs = await github.sourceControlStorage.installations.list({ orgId });
 
         const query = (c.req.query('q') ?? '').toLowerCase();
+        const fresh = c.req.query('refresh') === '1';
         // List every installation's repositories in parallel — installations
         // are independent upstream calls, and serial listing multiplied
         // worst-case latency by installation count.
         const listed = await Promise.all(
           installs.map(async inst => {
             try {
-              return { inst, list: await github.listInstallationRepos(Number(inst.externalId)) };
+              return { inst, list: await github.listInstallationRepos(Number(inst.externalId), { fresh }) };
             } catch (err) {
+              // 403 means this credential may not use the installation (e.g. the
+              // Platform refuses personal-account installations to org API
+              // keys). Skip it so the org's usable installations still list.
+              if ((err as { status?: number }).status === 403) {
+                console.warn(
+                  `[Mastra Factory] skipping GitHub installation ${inst.externalId} (${inst.accountName}): ${(err as Error).message}`,
+                );
+                return { inst, list: [] };
+              }
               // GitHub 404s when the installation no longer exists for this app
               // (app uninstalled/reinstalled, or the row was recorded under
               // different app credentials). Prune the stale row so `/status`
@@ -1158,7 +1168,7 @@ function gitErrorResponse(c: Context, err: unknown) {
 async function loadOwnedProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   c: RouteContext;
 }): Promise<{ orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }> {
   const { github, auth, sandbox, c } = options;
@@ -1305,7 +1315,7 @@ function buildProjectGitRoutes({
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
   memorySettings: MountGithubRoutesOptions['memorySettings'];
@@ -1412,6 +1422,7 @@ function buildProjectGitRoutes({
           .create({
             sessionId,
             projectRepositoryId: project.id,
+            factoryProjectId: project.factoryProjectId,
             orgId,
             userId,
             branch,

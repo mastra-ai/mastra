@@ -8,9 +8,10 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
+import { stageToggle } from './boardLayoutQueries';
 
 describe('Factory board saved views', () => {
-  it('starts on All cards and offers layout controls for a custom view', async () => {
+  it('switches All cards between list and board and starts a new view with that layout', async () => {
     stubWorkBoard();
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
     renderWithProviders(<RouterProvider router={router} />);
@@ -18,12 +19,16 @@ describe('Factory board saved views', () => {
 
     const views = await screen.findByRole('group', { name: 'Board views' });
     expect(within(views).getByRole('button', { name: 'All cards' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'List' })).toBeChecked();
     expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     expect(screen.getByRole('combobox', { name: 'Add filter' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('radio', { name: 'Board' }));
+    expect(await screen.findByRole('group', { name: 'Board columns' })).toBeInTheDocument();
+    expect(router.state.location.search).toBe('?layout=board');
 
     await user.click(screen.getByRole('button', { name: 'New view' }));
     expect(await screen.findByRole('radio', { name: 'Board' })).toBeChecked();
@@ -44,13 +49,13 @@ describe('Factory board saved views', () => {
     await within(triageBeforeView).findByText('Moved recently');
     await user.type(within(viewFilters).getByRole('combobox', { name: 'Add filter' }), 'Created{Enter}{Escape}');
     await waitFor(() => expect(within(triageBeforeView).queryByText('Moved recently')).not.toBeInTheDocument());
-    await user.click(screen.getByRole('radio', { name: 'List' }));
+    await user.click(screen.getByRole('radio', { name: 'Board' }));
     await user.click(screen.getByRole('button', { name: 'Save view' }));
 
     await screen.findByRole('button', { name: 'Untitled view', pressed: true });
     expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Board columns' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Board columns' })).toBeInTheDocument();
     const viewId = new URLSearchParams(first.state.location.search).get('view');
     expect(viewId).toBeTruthy();
     firstView.unmount();
@@ -62,12 +67,12 @@ describe('Factory board saved views', () => {
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Created later');
     expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Board columns' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Board columns' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'All cards' }));
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
-    expect(screen.getByRole('group', { name: 'Board columns' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Board columns' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
   });
 
@@ -248,10 +253,6 @@ describe('Factory board list layout', () => {
     );
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
     renderWithProviders(<RouterProvider router={router} />);
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'New view' }));
-    await user.click(await screen.findByRole('radio', { name: 'List' }));
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
     const triage = await screen.findByTestId('board-column-triage');
     const title = await within(triage).findByText('Moved recently');
     const row = title.closest<HTMLElement>('[data-testid="work-item-card"]');
@@ -272,9 +273,12 @@ describe('Factory board list layout', () => {
     expect(await screen.findByRole('dialog', { name: 'Moved recently' })).toBeInTheDocument();
   });
 
-  it('moves a row into another stage when it is dropped on that group', async () => {
+  it('moves a row into another stage when it is dropped on a collapsed group', async () => {
     const { row, transitions } = await openListBoard();
+    const user = userEvent.setup();
     const planning = screen.getByTestId('board-column-planning');
+    await user.click(stageToggle('Planning', planning));
+    expect(stageToggle('Planning', planning)).toHaveAttribute('aria-expanded', 'false');
     const dataTransfer = createDataTransfer();
 
     fireEvent.dragStart(row, { dataTransfer });

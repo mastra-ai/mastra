@@ -1,13 +1,22 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   normalizePerPage,
+  resolveRunFence,
+  TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_SNAPSHOT,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   ensureDate,
 } from '@mastra/core/storage';
 import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -18,7 +27,16 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { ValkeyDB } from '../../db';
 import type { ValkeyDomainConfig } from '../../db';
 import type { ValkeyClient } from '../../types';
-import { getKey } from '../utils';
+import {
+  claimRunOwnership,
+  getRunOwnership,
+  releaseRunOwnership,
+  renewRunOwnership,
+  runClaimKey,
+  writeBatch,
+} from '../run-fencing';
+import type { RunFenceCheck } from '../run-fencing';
+import { getKey, processRecord } from '../utils';
 
 function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
@@ -54,8 +72,64 @@ export class WorkflowsValkey extends WorkflowsStorage {
     return false;
   }
 
+  public override supportsRunFencing(): boolean {
+    return true;
+  }
+
   public async dangerouslyClearAll(): Promise<void> {
     await this.db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.db.scanAndDelete(`${runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, '')}*`);
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence, runId);
+    return resolved && { claims: TABLE_WORKFLOW_RUN_OWNERS, fence: resolved, operation };
+  }
+
+  #ownershipError(operation: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('VALKEY', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { runId },
+      },
+      error,
+    );
+  }
+
+  // Each operation is one script over the run's ownership hash, so racing
+  // claimers and renewals serialize on Valkey and resolve to a single winner.
+  public override async claimRunOwnership(args: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    try {
+      return await claimRunOwnership(this.client, args);
+    } catch (error) {
+      throw this.#ownershipError('CLAIM_RUN_OWNERSHIP', args.runId, error);
+    }
+  }
+
+  public override async renewRunOwnership(args: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    try {
+      return await renewRunOwnership(this.client, args);
+    } catch (error) {
+      throw this.#ownershipError('RENEW_RUN_OWNERSHIP', args.runId, error);
+    }
+  }
+
+  public override async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    try {
+      return await releaseRunOwnership(this.client, fence);
+    } catch (error) {
+      throw this.#ownershipError('RELEASE_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  public override async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    try {
+      return await getRunOwnership(this.client, runId);
+    } catch (error) {
+      throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
   }
 
   public async updateWorkflowResults({
@@ -65,6 +139,7 @@ export class WorkflowsValkey extends WorkflowsStorage {
     result,
     requestContext,
     state,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -72,7 +147,9 @@ export class WorkflowsValkey extends WorkflowsStorage {
     result: StepResult<unknown, unknown, unknown, unknown>;
     requestContext: Record<string, unknown>;
     state?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
+    const resolvedFence = resolveRunFence(this, fence, runId);
     try {
       const existingRecord = await this.db.get<{
         namespace: string;
@@ -122,6 +199,7 @@ export class WorkflowsValkey extends WorkflowsStorage {
         runId,
         snapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
+        fence: resolvedFence,
       });
 
       return snapshot.context;
@@ -145,11 +223,14 @@ export class WorkflowsValkey extends WorkflowsStorage {
     workflowName,
     runId,
     opts,
+    fence,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
+    const resolvedFence = resolveRunFence(this, fence, runId);
     try {
       const existingRecord = await this.db.get<{
         namespace: string;
@@ -188,6 +269,7 @@ export class WorkflowsValkey extends WorkflowsStorage {
         runId,
         snapshot: updatedSnapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
+        fence: resolvedFence,
       });
 
       return updatedSnapshot;
@@ -215,8 +297,10 @@ export class WorkflowsValkey extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
+    const check = this.#runFenceCheck(params.fence, runId, 'persistWorkflowSnapshot');
     try {
       let finalCreatedAt = createdAt;
       if (!finalCreatedAt) {
@@ -238,19 +322,20 @@ export class WorkflowsValkey extends WorkflowsStorage {
         finalCreatedAt = existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
       }
 
-      await this.db.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          namespace,
-          workflow_name: workflowName,
-          run_id: runId,
-          resourceId,
-          snapshot,
-          createdAt: finalCreatedAt,
-          updatedAt: updatedAt ?? new Date(),
-        },
+      const { key, processedRecord } = processRecord(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        resourceId,
+        snapshot,
+        createdAt: finalCreatedAt,
+        updatedAt: updatedAt ?? new Date(),
       });
+      const batch = writeBatch(this.client, check);
+      batch.set(key, JSON.stringify(processedRecord));
+      await batch.exec();
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('VALKEY', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -374,11 +459,23 @@ export class WorkflowsValkey extends WorkflowsStorage {
     }
   }
 
-  public async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  public async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
     const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
+    const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     try {
-      await this.client.del(key);
+      const batch = writeBatch(this.client, check);
+      batch.del(key);
+      await batch.exec();
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('VALKEY', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

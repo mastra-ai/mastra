@@ -57,7 +57,7 @@ echo "Summarize the repo" | mastracode --prompt -
 | - | - |
 | `human` | Streaming assistant text to stdout; tool activity and errors to stderr |
 | `json` | A single final JSON object (text, usage, tool calls/results, threadId, status) |
-| `jsonl` | Newline-delimited JSON: one line per event, then a final `{ "type": "result", ... }` line |
+| `jsonl` | Newline-delimited JSON: one line per event except `display_state_changed` UI snapshots, then a final `{ "type": "result", ... }` line |
 
 ### Exit codes
 

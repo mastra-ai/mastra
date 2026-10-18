@@ -1,4 +1,4 @@
-import { DurableAgentDefaults } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, DurableAgentDefaults, globalRunRegistry } from '@mastra/core/agent/durable';
 
 import { MessageList } from '@mastra/core/agent/message-list';
 import { Mastra } from '@mastra/core/mastra';
@@ -150,43 +150,74 @@ describe('createInngestDurableAgenticWorkflow step-finish emission', () => {
     });
   });
 
-  it('emits the completed step-finish before a stopWhen decision error propagates', async () => {
-    const condition = conditionFor(3);
-    const published: any[] = [];
-    const policyError = new Error('stopWhen failed');
+  it("never calls another Mastra instance's stopWhen for a reused runId", async () => {
+    const runId = 'run-stop-when-foreign';
+    const foreignStopWhen = vi.fn(() => true);
+    globalRunRegistry.set(runId, { mastra: new Mastra({ logger: false }), stopWhen: foreignStopWhen } as any);
 
-    await expect(
-      condition({
+    try {
+      const published: any[] = [];
+      const result = await conditionFor(5)({
         inputData: {
-          runId: 'run-stop-when-error',
+          runId,
           iterationCount: 1,
           options: {},
-          accumulatedSteps: [{ text: '', toolCalls: [], toolResults: [] }],
+          accumulatedSteps: [{ text: 'mine', toolCalls: [], toolResults: [] }],
           lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
-          deferredStepFinishChunk: {
-            type: 'step-finish',
-            runId: 'run-stop-when-error',
-            payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
-          },
         },
-        engine: {
-          step: {
-            run: vi.fn(async (id: string, fn: () => Promise<boolean>) => {
-              if (id.startsWith('stop-when-')) throw policyError;
-              return fn();
-            }),
-          },
-        },
+        mastra: new Mastra({ logger: false }),
+        engine: { step: { run: async (_id: string, fn: () => Promise<boolean>) => fn() } },
         [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
-      }),
-    ).rejects.toBe(policyError);
+      });
 
-    expect(published.map(event => event.data)).toMatchObject([
-      {
-        type: 'step-finish',
-        payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+      expect(foreignStopWhen).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
+  it('marks a stopWhen error without emitting the deferred step-finish', async () => {
+    const condition = conditionFor(3);
+    const published: any[] = [];
+    const runId = 'run-stop-when-error';
+    const mastra = new Mastra({ logger: false });
+    globalRunRegistry.set(runId, {
+      mastra,
+      stopWhen: () => {
+        throw new TypeError('stopWhen failed');
       },
-    ]);
+    });
+
+    try {
+      await expect(
+        condition({
+          inputData: {
+            runId,
+            iterationCount: 1,
+            options: {},
+            accumulatedSteps: [{ text: '', toolCalls: [], toolResults: [] }],
+            lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
+            deferredStepFinishChunk: {
+              type: 'step-finish',
+              runId,
+              payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+            },
+          },
+          mastra,
+          engine: { step: { run: async (_id: string, fn: () => Promise<boolean>) => fn() } },
+          [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
+        }),
+      ).rejects.toMatchObject({
+        id: DURABLE_STOP_WHEN_ERROR_ID,
+        message: 'stopWhen failed',
+        details: { name: 'TypeError', message: 'stopWhen failed' },
+      });
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+
+    expect(published).toEqual([]);
   });
 });
 

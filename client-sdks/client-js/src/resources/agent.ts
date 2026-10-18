@@ -1,12 +1,3 @@
-import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
-import type {
-  JSONValue,
-  ReasoningUIPart,
-  TextUIPart,
-  ToolInvocation,
-  UIMessage,
-  UseChatOptions,
-} from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
@@ -43,6 +34,7 @@ import type {
   SendAgentMessageParams,
   SendAgentSignalParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SubscribeAgentThreadParams,
   AbortAgentThreadParams,
   CancelQueuedAgentMessagesParams,
@@ -68,6 +60,15 @@ import {
   requestContextQueryString,
   toQueryParams,
 } from '../utils';
+import type {
+  JSONValue,
+  ReasoningUIPart,
+  TextUIPart,
+  ToolInvocation,
+  UIMessage,
+  UseChatOptions,
+} from '../utils/ai-sdk-v4';
+import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
@@ -633,6 +634,10 @@ export class Agent extends BaseResource {
 
   sendSignal(params: SendAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/signals'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
+  }
+
+  queueSignal(params: QueueAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/queue-signal'>> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-signal`, params);
   }
 
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
@@ -1637,7 +1642,8 @@ export class Agent extends BaseResource {
         const toolInvocations = message.toolInvocations;
 
         if (toolInvocations == null) {
-          throw new Error('tool_result must be preceded by a tool_call');
+          // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+          return;
         }
 
         // find if there is any tool invocation with the same toolCallId
@@ -1645,7 +1651,7 @@ export class Agent extends BaseResource {
         const toolInvocationIndex = toolInvocations.findIndex(invocation => invocation.toolCallId === value.toolCallId);
 
         if (toolInvocationIndex === -1) {
-          throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+          return;
         }
 
         const invocation = {
@@ -2116,7 +2122,8 @@ export class Agent extends BaseResource {
             const toolInvocations = message.toolInvocations;
 
             if (toolInvocations == null) {
-              throw new Error('tool_result must be preceded by a tool_call');
+              // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+              break;
             }
 
             // find if there is any tool invocation with the same toolCallId
@@ -2126,7 +2133,7 @@ export class Agent extends BaseResource {
             );
 
             if (toolInvocationIndex === -1) {
-              throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+              break;
             }
 
             const invocation = {

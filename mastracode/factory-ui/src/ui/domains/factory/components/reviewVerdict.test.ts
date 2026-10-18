@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { reviewVerdict } from './WorkItemCardRows';
+import { reviewVerdict, selfReviewVerdict } from './WorkItemCardRows';
 
 describe('reviewVerdict', () => {
   it('labels a recorded verdict without the reviewed commit', () => {
@@ -39,5 +39,25 @@ describe('reviewVerdict', () => {
       outdated: false,
       label: 'Approved',
     });
+  });
+});
+
+describe('selfReviewVerdict', () => {
+  it('labels the self-review verdict with its round count', () => {
+    expect(selfReviewVerdict({ selfReviewVerdict: 'request changes', selfReviewRounds: 2 })).toEqual({
+      approved: false,
+      outdated: false,
+      label: 'Self-review: changes requested (round 2)',
+    });
+    expect(selfReviewVerdict({ selfReviewVerdict: 'approve' })).toEqual({
+      approved: true,
+      outdated: false,
+      label: 'Self-review: approved',
+    });
+  });
+
+  it('ignores the PR review verdict and unknown values', () => {
+    expect(selfReviewVerdict({ reviewVerdict: 'approve' })).toBeUndefined();
+    expect(selfReviewVerdict({ selfReviewVerdict: 'merge' })).toBeUndefined();
   });
 });

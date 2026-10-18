@@ -16,8 +16,14 @@ import {
   comparisonResponse,
   contenderResults,
   contenderScoreRows,
+  datasetItemsById,
   threeWayComparisonResponse,
+  usageBreakdownByExperimentId,
 } from './fixtures/comparison';
+import {
+  renamedPostgresWithMetrics,
+  storageWithoutMetrics,
+} from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
@@ -65,8 +71,29 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/scores/run/${CONTENDER_ID}`, () =>
       HttpResponse.json(scoresResponse(contenderScoreRows)),
     ),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
+    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items/:itemId`, ({ params }) => {
+      const item = datasetItemsById[String(params.itemId)];
+      return item ? HttpResponse.json(item) : HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
   );
 });
+
+/** Turns metrics on and answers each experiment's usage breakdown, optionally holding it until `release` resolves. */
+const useMetricsUsage = (release?: Promise<void>) => {
+  const requestedExperimentIds: string[] = [];
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(renamedPostgresWithMetrics)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, async ({ request }) => {
+      const body = (await request.json()) as { filters?: { experimentId?: string } };
+      const experimentId = body.filters?.experimentId ?? '';
+      requestedExperimentIds.push(experimentId);
+      await release;
+      return HttpResponse.json(usageBreakdownByExperimentId[experimentId] ?? { groups: [] });
+    }),
+  );
+  return requestedExperimentIds;
+};
 
 const renderComparison = (contenderIds: string[] = [CONTENDER_ID]) =>
   renderWithProviders(
@@ -114,27 +141,14 @@ describe('experiments comparison table', () => {
       expect(itemRow('item-c')).toBeTruthy();
     });
 
-    it('links each item id to its page in the dataset', async () => {
-      renderComparison();
-
-      const link = await within(await findItemRow('item-a')).findByRole('link', { name: 'Open item item-a' });
-
-      expect(link.getAttribute('href')).toBe('/datasets/dataset-1/items/item-a');
-      expect(link.getAttribute('target')).toBeNull();
-    });
-
-    it('reveals the item input and ground truth without leaving the page', async () => {
+    it('shows the item input and ground truth by default', async () => {
       renderComparison();
       const row = await findItemRow('item-a');
 
-      expect(within(row).queryByRole('region', { name: 'Input' })).toBeNull();
-
-      fireEvent.click(within(row).getByRole('button', { name: 'Input' }));
       const input = await within(row).findByRole('region', { name: 'Input' });
       expect(within(input).getByText(/What is the capital of France/)).toBeTruthy();
 
-      fireEvent.click(within(row).getByRole('button', { name: 'Ground truth' }));
-      const groundTruth = await within(row).findByRole('region', { name: 'Ground truth' });
+      const groundTruth = within(row).getByRole('region', { name: 'Ground truth' });
       expect(within(groundTruth).getByText(/Paris/)).toBeTruthy();
     });
 
@@ -146,6 +160,91 @@ describe('experiments comparison table', () => {
       });
       expect(within(sideOf('item-a', 'Contender 1')).getByText(/"Paris, France"/)).toBeTruthy();
       expect(within(sideOf('item-b', 'Baseline')).getByText(/"Frank Herbert"/)).toBeTruthy();
+    });
+  });
+
+  describe('when an item row is clicked', () => {
+    it('opens the dataset item in a side panel named after it', async () => {
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      expect(await screen.findByRole('dialog', { name: 'Dataset item item-a' })).toBeTruthy();
+    });
+
+    it('shows the dataset item input and ground truth in the side panel', async () => {
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+      const input = await within(panel).findByRole('region', { name: 'Input' });
+      expect(within(input).getByText(/What is the capital of France/)).toBeTruthy();
+      const groundTruth = within(panel).getByRole('region', { name: 'Ground Truth' });
+      expect(within(groundTruth).getByText(/Paris/)).toBeTruthy();
+    });
+
+    it('shows the dataset item metadata in the side panel', async () => {
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+      expect(await within(panel).findByText(/trivia-set/)).toBeTruthy();
+    });
+  });
+
+  describe('when the side panel close button is clicked', () => {
+    it('closes the dataset item side panel', async () => {
+      renderComparison();
+      fireEvent.click(await findItemRow('item-a'));
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+
+      // Waits for the loaded item, whose header replaces the loading one.
+      await within(panel).findByRole('region', { name: 'Input' });
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'Close Panel' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Dataset item item-a' })).toBeNull());
+    });
+  });
+
+  describe('when Enter is pressed on a focused item row', () => {
+    it('opens the dataset item in a side panel', async () => {
+      renderComparison();
+
+      fireEvent.keyDown(await findItemRow('item-b'), { key: 'Enter' });
+
+      expect(await screen.findByRole('dialog', { name: 'Dataset item item-b' })).toBeTruthy();
+    });
+  });
+
+  describe('when a control inside an item row is clicked', () => {
+    it('does not open the dataset item side panel', async () => {
+      renderComparison();
+      const trigger = await waitFor(() =>
+        within(sideOf('item-a', 'Baseline')).getByRole('button', { name: 'Show accuracy reason' }),
+      );
+
+      fireEvent.click(trigger);
+
+      expect(screen.queryByRole('dialog', { name: 'Dataset item item-a' })).toBeNull();
+    });
+  });
+
+  describe('when the clicked item no longer exists in the dataset', () => {
+    it('tells the item could not be loaded in the side panel', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items/item-a`, () =>
+          HttpResponse.json({ error: 'Not found' }, { status: 404 }),
+        ),
+      );
+      renderComparison();
+
+      fireEvent.click(await findItemRow('item-a'));
+
+      const panel = await screen.findByRole('dialog', { name: 'Dataset item item-a' });
+      expect(await within(panel).findByText('Dataset item "item-a" not found.')).toBeTruthy();
     });
   });
 
@@ -171,16 +270,41 @@ describe('experiments comparison table', () => {
     });
   });
 
-  describe('when scores carry a reason', () => {
-    it('shows the reason on each side and the delta once, on the contender', async () => {
+  describe('when scores are known', () => {
+    it('shows the delta once, on the contender', async () => {
       renderComparison();
 
       await waitFor(() => {
-        expect(within(sideOf('item-a', 'Baseline')).getByText('Missing the country')).toBeTruthy();
+        expect(within(sideOf('item-a', 'Contender 1')).getByRole('link', { name: 'Open accuracy' })).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Contender 1')).getByText('Complete answer')).toBeTruthy();
       expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40', { exact: false })).toBeNull();
+    });
+  });
+
+  describe('when a scorer explains its score', () => {
+    it('reveals the reason of that side when its info icon is hovered', async () => {
+      renderComparison();
+
+      const trigger = await waitFor(() =>
+        within(sideOf('item-a', 'Baseline')).getByRole('button', { name: 'Show accuracy reason' }),
+      );
+      expect(screen.queryByText('Missing the country')).toBeNull();
+
+      fireEvent.mouseEnter(trigger);
+
+      expect(await screen.findByText('Missing the country')).toBeTruthy();
+    });
+  });
+
+  describe('when a scorer gives no reason', () => {
+    it('shows no info icon for that score', async () => {
+      renderComparison();
+
+      await waitFor(() => {
+        expect(within(sideOf('item-a', 'Baseline')).getByRole('link', { name: 'Open relevancy' })).toBeTruthy();
+      });
+      expect(within(sideOf('item-a', 'Baseline')).queryByRole('button', { name: 'Show relevancy reason' })).toBeNull();
     });
   });
 
@@ -233,13 +357,136 @@ describe('experiments comparison table', () => {
       renderComparison([CONTENDER_ID, CHALLENGER_ID]);
 
       await waitFor(() => {
-        expect(within(sideOf('item-a', 'Contender 2')).getByText('Close enough')).toBeTruthy();
+        expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       // +0.10 on accuracy and -0.10 on relevancy.
-      expect(within(sideOf('item-a', 'Contender 2')).getAllByText('0.10')).toHaveLength(2);
+      expect(within(sideOf('item-a', 'Contender 2')).getByText('+0.10')).toBeTruthy();
+      expect(within(sideOf('item-a', 'Contender 2')).getByText('-0.10')).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40')).toBeNull();
-      expect(within(sideOf('item-a', 'Baseline')).queryByText('0.10')).toBeNull();
+      expect(within(sideOf('item-a', 'Baseline')).queryByText('0.10', { exact: false })).toBeNull();
+    });
+  });
+
+  describe('when observability storage supports metrics and usage is pending', () => {
+    it('keeps the page spinner up instead of the table', async () => {
+      const requestedExperimentIds = useMetricsUsage(new Promise(() => {}));
+      renderComparison();
+
+      await waitFor(() => expect(requestedExperimentIds).toHaveLength(2));
+      expect(screen.getByRole('status', { name: 'Loading' })).toBeTruthy();
+      expect(screen.queryByRole('columnheader', { name: 'Items' })).toBeNull();
+    });
+  });
+
+  describe('when observability storage supports metrics and usage resolves', () => {
+    it('renders the comparison table', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      expect(await screen.findByRole('columnheader', { name: 'Items' })).toBeTruthy();
+      expect(await findItemRow('item-a')).toBeTruthy();
+    });
+
+    it('shows each experiment total cost, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      await waitFor(() => expect(within(baseline).getByText('Total cost')).toBeTruthy());
+      expect(within(baseline).getByText('$0.0015')).toBeTruthy();
+
+      const contender = screen.getByRole('columnheader', { name: 'Contender 1' });
+      expect(within(contender).getByText('$0.003')).toBeTruthy();
+      expect(within(contender).getByText('+$0.0015')).toBeTruthy();
+    });
+
+    it('shows each item cost, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      await findItemRow('item-a');
+      const contender = sideOf('item-a', 'Contender 1');
+      await waitFor(() => expect(within(contender).getByText('Cost')).toBeTruthy());
+      expect(within(contender).getByText('$0.003')).toBeTruthy();
+      expect(within(contender).getByText('+$0.0015')).toBeTruthy();
+    });
+
+    it('shows each experiment total tokens, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      await waitFor(() => expect(within(baseline).getByText('Total tokens')).toBeTruthy());
+      expect(within(baseline).getByText('150')).toBeTruthy();
+
+      const contender = screen.getByRole('columnheader', { name: 'Contender 1' });
+      expect(within(contender).getByText('200')).toBeTruthy();
+      expect(within(contender).getByText('+50')).toBeTruthy();
+    });
+
+    it('shows each item tokens, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      await findItemRow('item-a');
+      const contender = sideOf('item-a', 'Contender 1');
+      await waitFor(() => expect(within(contender).getByText('Tokens')).toBeTruthy());
+      expect(within(contender).getByText('200')).toBeTruthy();
+      expect(within(contender).getByText('+50')).toBeTruthy();
+    });
+  });
+
+  describe('when observability storage does not support metrics', () => {
+    it('leaves the cost and the tokens out of the headers and the items', async () => {
+      renderComparison();
+
+      await waitFor(() => expect(within(sideOf('item-a', 'Baseline')).getByText(/"Paris"/)).toBeTruthy());
+      expect(screen.queryByText('Total cost')).toBeNull();
+      expect(screen.queryByText('Cost')).toBeNull();
+      expect(screen.queryByText('Total tokens')).toBeNull();
+      expect(screen.queryByText('Tokens')).toBeNull();
+    });
+  });
+
+  describe('when observability storage supports metrics and the results are still loading', () => {
+    it('requests the usage of every experiment without waiting for the results', async () => {
+      server.use(
+        http.get(`${experimentsBase}/${BASELINE_ID}/results`, () => new Promise(() => {})),
+        http.get(`${experimentsBase}/${CONTENDER_ID}/results`, () => new Promise(() => {})),
+      );
+      const requestedExperimentIds = useMetricsUsage();
+      renderComparison();
+
+      await waitFor(() => expect(requestedExperimentIds.sort()).toEqual([BASELINE_ID, CONTENDER_ID].sort()));
+    });
+  });
+
+  describe('when the experiments ran on different dataset versions', () => {
+    it('shows each experiment the version it ran on, linked to the dataset at that version', async () => {
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      const contender = screen.getByRole('columnheader', { name: 'Contender 1' });
+      expect(within(baseline).getByRole('link', { name: 'Open dataset v1' }).getAttribute('href')).toBe(
+        `/datasets/${DATASET_ID}?version=1`,
+      );
+      expect(within(contender).getByRole('link', { name: 'Open dataset v2' }).getAttribute('href')).toBe(
+        `/datasets/${DATASET_ID}?version=2`,
+      );
+    });
+  });
+
+  describe('when an experiment has no dataset version', () => {
+    it('shows no dataset version on its header', async () => {
+      server.use(
+        http.get(`${experimentsBase}/${BASELINE_ID}`, () =>
+          HttpResponse.json({ ...makeExperiment(BASELINE_ID, 1), datasetVersion: null }),
+        ),
+      );
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      expect(within(baseline).queryByRole('link', { name: /^Open dataset v/ })).toBeNull();
     });
   });
 
@@ -250,13 +497,13 @@ describe('experiments comparison table', () => {
 
       const contender = await screen.findByRole('columnheader', { name: 'Contender 1' });
       await waitFor(() => {
-        expect(within(contender).getByText(/different dataset version/)).toBeTruthy();
+        expect(within(contender).getByText(/differs from baseline/)).toBeTruthy();
       });
       expect(
-        within(screen.getByRole('columnheader', { name: 'Baseline' })).queryByText(/different dataset version/),
+        within(screen.getByRole('columnheader', { name: 'Baseline' })).queryByText(/differs from baseline/),
       ).toBeNull();
       expect(
-        within(screen.getByRole('columnheader', { name: 'Contender 2' })).queryByText(/different dataset version/),
+        within(screen.getByRole('columnheader', { name: 'Contender 2' })).queryByText(/differs from baseline/),
       ).toBeNull();
     });
   });

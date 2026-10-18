@@ -36,7 +36,12 @@
     "google/gemini-3.1-flash-lite",
     "google/gemini-3.1-pro",
     "google/gemini-3.5-flash",
+    "google/gemini-3.5-flash-lite",
+    "google/gemini-3.6-flash",
+    "google/gemini-3.7-flash",
+    "google/gemini-3.8-flash",
     "google/gemini-deep-research",
+    "google/gemini-omni-1.1-flash",
     "google/gemma-4-31b",
     "google/imagen-3",
     "google/imagen-3-fast",
@@ -138,8 +143,32 @@
     "xai/grok-4.20-multi-agent",
     "xai/grok-code-fast-1"
   ],
-  "temperature": ["novita/deepseek-v3.2", "novita/glm-4.7", "novita/glm-5", "novita/kimi-k2.5", "novita/kimi-k2.6"],
-  "structuredOutput": ["google/gemini-3.5-flash", "openai/gpt-5.5"],
+  "temperature": [
+    "google/gemini-3-flash",
+    "google/gemini-3.1-flash-lite",
+    "google/gemini-3.1-pro",
+    "google/gemini-3.5-flash",
+    "google/gemini-3.5-flash-lite",
+    "google/gemini-3.6-flash",
+    "google/gemini-3.7-flash",
+    "google/gemini-3.8-flash",
+    "novita/deepseek-v3.2",
+    "novita/glm-4.7",
+    "novita/glm-5",
+    "novita/kimi-k2.5",
+    "novita/kimi-k2.6"
+  ],
+  "structuredOutput": [
+    "google/gemini-3-flash",
+    "google/gemini-3.1-flash-lite",
+    "google/gemini-3.1-pro",
+    "google/gemini-3.5-flash",
+    "google/gemini-3.5-flash-lite",
+    "google/gemini-3.6-flash",
+    "google/gemini-3.7-flash",
+    "google/gemini-3.8-flash",
+    "openai/gpt-5.5"
+  ],
   "reasoning": {
     "cerebras/gpt-oss-120b-cs": [
       {
@@ -248,6 +277,18 @@
         "type": "toggle"
       }
     ],
+    "google/gemini-3.6-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.5-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
     "google/gemini-3-flash": [
       {
         "type": "effort",
@@ -272,6 +313,18 @@
         "type": "budget_tokens",
         "min": 0,
         "max": 24576
+      }
+    ],
+    "google/gemini-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-2.5-flash-lite": [
