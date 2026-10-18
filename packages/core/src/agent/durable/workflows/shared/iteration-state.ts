@@ -25,6 +25,7 @@ export interface IterationStateUpdateInput {
  */
 export interface StepRecord {
   text?: string;
+  content?: unknown[];
   toolCalls?: unknown[];
   toolResults?: unknown[];
   usage?: LanguageModelUsage;
@@ -71,6 +72,7 @@ export function calculateAccumulatedUsage(
 export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput): StepRecord {
   return {
     text: executionOutput.output.text,
+    content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
     toolResults: executionOutput.toolResults,
     usage: executionOutput.output.usage,

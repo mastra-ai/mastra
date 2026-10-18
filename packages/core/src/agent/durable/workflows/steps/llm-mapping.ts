@@ -52,6 +52,7 @@ const durableLLMMappingOutputSchema = z.object({
     toolCalls: z.array(z.any()).optional(),
     usage: z.any(),
     steps: z.array(z.any()),
+    content: z.array(z.any()).optional(),
   }),
   state: z.any(),
   delegationBailed: z.boolean().optional(),
@@ -391,6 +392,9 @@ export function createDurableLLMMappingStep() {
             totalTokens: undefined,
           },
           steps: [], // Steps are accumulated at the loop level
+          // Same source the stream uses for the step-finish chunk, so stopWhen
+          // sees the content stream.steps later reports.
+          content: messageList.get.response.aiV5.modelContent(-1),
         },
         state: {
           ...state,

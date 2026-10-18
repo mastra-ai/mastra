@@ -1,12 +1,7 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import {
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: what a custom `stopWhen` predicate sees.
@@ -18,10 +13,6 @@ import {
  *
  * Script: turn 1 calls `weather`, turn 2 calls `plan_activities` (optionally
  * with explanatory text in the same step), turn 3 answers with text.
- *
- * Known gap: durable engines hand stopWhen a reduced step record
- * (text/toolCalls/toolResults/usage/finishReason) with no `content`, so the
- * content-parity cases are `it.fails` there (#27496).
  */
 type StopWhenArgs = { steps: Array<{ content: Array<{ type: string }>; toolCalls: unknown[] }> };
 
@@ -58,7 +49,6 @@ function scriptThreeTurns(
 
 describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
   const getMock = useLoopScenarioAimock();
-  const itFailsOnDurable = isDurableEngineVariant(engine) ? it.fails : it;
 
   it('stops after the first tool step when the predicate sees a tool call', async () => {
     let calls = 0;
@@ -106,31 +96,28 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
   });
 
   for (const withText of [false, true]) {
-    itFailsOnDurable(
-      `passes the same last-step content stream.steps reports${withText ? ' (text and tool call in one step)' : ''}`,
-      async () => {
-        const seenLastContent: Array<Array<{ type: string }>> = [];
-        const { output } = await runLoopScenario({
-          engine,
-          llm: getMock(),
-          prompt: 'What should I be doing in Toronto today?',
-          tools,
-          stopWhen: (({ steps }: StopWhenArgs) => {
-            seenLastContent.push(JSON.parse(JSON.stringify(steps.at(-1)?.content)));
-            return false;
-          }) as any,
-          fixtures: llm => scriptThreeTurns(llm, withText ? 'It is sunny, so let me plan. ' : undefined),
-        });
+    it(`passes the same last-step content stream.steps reports${withText ? ' (text and tool call in one step)' : ''}`, async () => {
+      const seenLastContent: Array<Array<{ type: string }>> = [];
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'What should I be doing in Toronto today?',
+        tools,
+        stopWhen: (({ steps }: StopWhenArgs) => {
+          seenLastContent.push(JSON.parse(JSON.stringify(steps.at(-1)?.content)));
+          return false;
+        }) as any,
+        fixtures: llm => scriptThreeTurns(llm, withText ? 'It is sunny, so let me plan. ' : undefined),
+      });
 
-        await output.consumeStream();
-        const steps = await output.steps;
-        const types = (content: Array<{ type: string }>) => content.map(part => part.type);
+      await output.consumeStream();
+      const steps = await output.steps;
+      const types = (content: Array<{ type: string }>) => content.map(part => part.type);
 
-        const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
-        expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
-        expect(steps.map(step => types(step.content))).toEqual([['tool-call', 'tool-result'], step2Types, ['text']]);
-        expect(seenLastContent[1]).not.toEqual(seenLastContent[0]);
-      },
-    );
+      const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
+      expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
+      expect(steps.map(step => types(step.content))).toEqual([['tool-call', 'tool-result'], step2Types, ['text']]);
+      expect(seenLastContent[1]).not.toEqual(seenLastContent[0]);
+    });
   }
 });

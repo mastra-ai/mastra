@@ -557,6 +557,8 @@ export interface DurableAgenticExecutionOutput {
     toolCalls?: DurableToolCallInput[];
     usage: LanguageModelUsage;
     steps: unknown[]; // StepResult is complex, we'll serialize what we need
+    /** Model content of this step, as reported on the step-finish chunk */
+    content?: unknown[];
   };
   /** Updated state */
   state: SerializableDurableState;
