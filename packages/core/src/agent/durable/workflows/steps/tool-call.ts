@@ -45,7 +45,12 @@ import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
-import { assertExecutionNotSuperseded, assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
+import {
+  assertExecutionNotSuperseded,
+  assertExecutionOwned,
+  getExecutionOwnershipGuard,
+  isExecutionFenceError,
+} from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -347,6 +352,8 @@ export function createDurableToolCallStep() {
         getStepResult,
       } = params;
 
+      const ownership = getExecutionOwnershipGuard(params);
+
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
@@ -371,6 +378,7 @@ export function createDurableToolCallStep() {
       // to persist into the authoritative messageList (#19375 parity port).
       const processorDataParts: Array<{ type: string; data?: unknown; messageId?: string }> = [];
       const collectProcessorDataPart = (part: { type: string; data?: unknown; messageId?: string }) => {
+        ownership?.throwIfLost();
         processorDataParts.push(part);
       };
 
@@ -1243,7 +1251,7 @@ export function createDurableToolCallStep() {
 
       // Forward abort signal from the run registry so tools can observe
       // cancellation (mirrors the non-durable tool-call-step).
-      const toolAbortSignal = registryEntry?.abortSignal;
+      const toolAbortSignal = ownership?.composeSignal(registryEntry?.abortSignal) ?? registryEntry?.abortSignal;
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
@@ -1813,6 +1821,7 @@ export function createDurableToolCallStep() {
       let mappingFailure: { error: unknown } | undefined;
 
       try {
+        ownership?.throwIfLost();
         const outcome = await executeToolCall({
           tool: tool as any,
           args: cleanedArgs,
@@ -1820,11 +1829,13 @@ export function createDurableToolCallStep() {
           toolCallId,
           toolName,
           abortSignal: toolAbortSignal,
+          assertNotBailedOut: () => ownership?.throwIfLost(),
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
           logger: logger as any,
         });
 
+        ownership?.throwIfLost();
         if (outcome.status === 'aborted') {
           // Mid-flight cancellation: leave the call incomplete (no result/error,
           // no chunk emission) so the mapping step doesn't fake-complete it on
@@ -1936,6 +1947,7 @@ export function createDurableToolCallStep() {
                 : undefined,
               abortSignal: toolAbortSignal,
             });
+            ownership?.throwIfLost();
             // Sync any processor mutation back so the emitted chunk and the
             // serialized step output both carry the post-processor value.
             const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
@@ -1943,6 +1955,7 @@ export function createDurableToolCallStep() {
               result = postProcessorResult;
             }
           } catch (processorError) {
+            ownership?.throwIfLost();
             if (processorError instanceof TripWire) {
               // Blocked: emit a tripwire chunk instead of the tool-result and
               // leave the call incomplete (no result). llm-mapping skips
@@ -2026,6 +2039,7 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            ownership?.throwIfLost();
             if (emitError instanceof DurableOutputProcessorError) {
               throw emitError;
             }
@@ -2044,6 +2058,7 @@ export function createDurableToolCallStep() {
           ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       } catch (error) {
+        ownership?.throwIfLost();
         if (mappingFailure?.error === error) {
           return {
             ...typedInput,
@@ -2095,6 +2110,7 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            ownership?.throwIfLost();
             if (emitError instanceof DurableOutputProcessorError) {
               throw emitError;
             }

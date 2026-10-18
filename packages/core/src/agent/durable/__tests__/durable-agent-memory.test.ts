@@ -435,6 +435,8 @@ describe('DurableAgent memory configuration', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const result = await durableAgent.stream('user input', {
+        // Deterministic UUIDs repeat across tests while earlier run finalizers may still be draining.
+        runId: 'readonly-persist-run',
         memory: {
           thread: 'thread-readonly',
           resource: 'resource-readonly',
