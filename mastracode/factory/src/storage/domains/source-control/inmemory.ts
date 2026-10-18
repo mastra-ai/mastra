@@ -397,10 +397,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       orgId,
       factoryProjectId,
       viewerUserId,
+      updatedSince,
     }: {
       orgId: string;
       factoryProjectId: string;
       viewerUserId: string;
+      updatedSince?: Date;
     }) => {
       const connectionIds = new Set(
         this.connectionsRows.filter(row => row.factoryProjectId === factoryProjectId).map(row => row.id),
@@ -408,7 +410,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const linkIds = new Set(
         this.projectRepositoriesRows.filter(row => connectionIds.has(row.connectionId)).map(row => row.id),
       );
-      return this.sessionsRows.filter(
+      const rows = this.sessionsRows.filter(
         row =>
           row.factoryProjectId === factoryProjectId &&
           row.orgId === orgId &&
@@ -416,7 +418,13 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           linkIds.has(row.projectRepositoryId) &&
           (row.visibility !== 'private' || row.userId === viewerUserId),
       );
+      if (!updatedSince) return rows;
+      return rows
+        .filter(row => row.updatedAt.getTime() >= updatedSince.getTime())
+        .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
     },
+    countByProject: async (args: { orgId: string; factoryProjectId: string; viewerUserId: string }) =>
+      (await this.sessions.listByProject(args)).length,
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (!row) return null;

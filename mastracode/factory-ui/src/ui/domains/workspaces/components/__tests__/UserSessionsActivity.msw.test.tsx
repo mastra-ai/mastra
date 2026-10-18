@@ -28,12 +28,9 @@ function makeSession(
   return {
     id: `row-${overrides.sessionId}`,
     projectRepositoryId,
-    orgId: 'org-1',
     userId: 'user-1',
     visibility: 'org' as const,
     baseBranch: 'main',
-    sandboxId: null,
-    sandboxWorkdir: null,
     materializedAt: '2026-07-20T00:00:00.000Z',
     createdAt: '2026-07-20T00:00:00.000Z',
     updatedAt: '2026-07-20T00:00:00.000Z',

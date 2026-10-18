@@ -174,6 +174,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
     ],
     indexes: [
       { name: 'source_control_sessions_project_idx', columns: ['factory_project_id'] },
+      // Incremental sidebar polls: a Factory's sessions changed since a timestamp.
+      { name: 'source_control_sessions_project_updated_idx', columns: ['factory_project_id', 'updated_at'] },
       { name: 'source_control_sessions_origin_idx', columns: ['origin_session_id'] },
     ],
   },
@@ -488,12 +490,17 @@ export interface SourceControlStorageHandle {
     /**
      * Viewer-aware listing of the project's sessions reachable through this
      * integration, across all of its links. Same visibility rule as `list`.
+     * `updatedSince` keeps only sessions with `updatedAt >= updatedSince`
+     * (oldest first); without it, every visible session is returned.
      */
     listByProject(args: {
       orgId: string;
       factoryProjectId: string;
       viewerUserId: string;
+      updatedSince?: Date;
     }): Promise<SourceControlSession[]>;
+    /** How many sessions `listByProject` (without `updatedSince`) would return. */
+    countByProject(args: { orgId: string; factoryProjectId: string; viewerUserId: string }): Promise<number>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     /**
      * Sessions started as side sessions by `originSessionId`. System-level (no
@@ -978,6 +985,24 @@ export class SourceControlStorage extends FactoryStorageDomain {
       return toRepository(row);
     };
 
+    /** Session filter for a Factory's links in this integration (two queries), or null when it has none. */
+    const projectSessionsWhere = async (orgId: string, factoryProjectId: string) => {
+      const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
+        factory_project_id: factoryProjectId,
+        integration_id: integrationId,
+      });
+      if (connections.length === 0) return null;
+      const links = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+        connection_id: { in: connections.map(connection => connection.id) },
+      });
+      if (links.length === 0) return null;
+      return {
+        factory_project_id: factoryProjectId,
+        org_id: orgId,
+        project_repository_id: { in: links.map(link => link.id) },
+      };
+    };
+
     const requireRepository = async (args: { orgId: string; id: string }): Promise<SourceControlRepository> => {
       const repository = await getRepository(args);
       if (!repository) throw new Error('Source-control repository not found for this organization and integration.');
@@ -1392,28 +1417,36 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toSession);
         },
-        listByProject: async ({ orgId, factoryProjectId, viewerUserId }) => {
-          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
-            factory_project_id: factoryProjectId,
-            integration_id: integrationId,
-          });
-          if (connections.length === 0) return [];
-          const linkIds = new Set<string>();
-          for (const connection of connections) {
-            for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
-              connection_id: connection.id,
-            })) {
-              linkIds.add(link.id);
-            }
+        listByProject: async ({ orgId, factoryProjectId, viewerUserId, updatedSince }) => {
+          const where = await projectSessionsWhere(orgId, factoryProjectId);
+          if (!where) return [];
+          // A strict keyset cursor 1ms before `updatedSince` selects updated_at >= updatedSince
+          // at the millisecond precision Dates carry.
+          const rows = updatedSince
+            ? await db().findMany<SessionDbRow>(SESSIONS, where, {
+                orderBy: [['updated_at', 'asc']],
+                cursor: { values: [new Date(updatedSince.getTime() - 1)] },
+              })
+            : await db().findMany<SessionDbRow>(SESSIONS, where);
+          // Org-visible sessions (NULL counts as org) plus the viewer's own.
+          return rows.filter(row => row.visibility !== 'private' || row.user_id === viewerUserId).map(toSession);
+        },
+        countByProject: async ({ orgId, factoryProjectId, viewerUserId }) => {
+          const where = await projectSessionsWhere(orgId, factoryProjectId);
+          if (!where) return 0;
+          const ops = db();
+          if (!ops.count) {
+            return (await ops.findMany<SessionDbRow>(SESSIONS, where)).filter(
+              row => row.visibility !== 'private' || row.user_id === viewerUserId,
+            ).length;
           }
-          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
-            factory_project_id: factoryProjectId,
-            org_id: orgId,
-          });
-          return rows
-            .filter(row => linkIds.has(row.project_repository_id))
-            .filter(row => row.visibility !== 'private' || row.user_id === viewerUserId)
-            .map(toSession);
+          // Visible = all − private + the viewer's own private (the visibility OR has no CollectionWhere form).
+          const [all, priv, ownPrivate] = await Promise.all([
+            ops.count(SESSIONS, where),
+            ops.count(SESSIONS, { ...where, visibility: 'private' }),
+            ops.count(SESSIONS, { ...where, visibility: 'private', user_id: viewerUserId }),
+          ]);
+          return all - priv + ownPrivate;
         },
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });

@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib';
+
 import { stateSchema } from '@mastra/code-sdk/schema';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import { Agent } from '@mastra/core/agent';
@@ -5,6 +7,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
+
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -475,5 +478,133 @@ describe('source-control session routes', () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: 'Factory not found' });
+  });
+});
+
+describe('Factory sessions list (compact + incremental sync)', () => {
+  const ownerAvatar = (id: string) => `https://workoscdn.com/images/v1/${id}/${'a'.repeat(96)}`;
+  const users = {
+    getUser: async (id: string) => ({ id, name: `Name of ${id}`, avatarUrl: ownerAvatar(id) }),
+  };
+  const sessionRow = (
+    projectRepositoryId: string,
+    index: number,
+    overrides: { visibility?: 'org' | 'private'; userId?: string } = {},
+  ) =>
+    ({
+      sessionId: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      projectRepositoryId,
+      orgId: 'org-1',
+      userId: overrides.userId ?? (index % 2 === 0 ? 'user-1' : 'user-2'),
+      branch: index % 3 === 0 ? `factory/issue-${index}` : `user/session-${index}`,
+      baseBranch: 'main',
+      visibility: overrides.visibility ?? 'org',
+    }) as const;
+
+  type CompactBody = {
+    sessions: Array<Record<string, unknown> & { sessionId: string; userId: string }>;
+    owners: Record<string, { name: string; avatarUrl?: string }>;
+    total: number;
+    syncedAt: string;
+  };
+
+  it('sends each listed session once with its owner in a shared map, gzip-compressed', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    for (let index = 0; index < 60; index += 1) {
+      await sourceControl.sessions.create(sessionRow(projectRepository.id, index));
+    }
+    await sourceControl.sessions.create(
+      sessionRow(projectRepository.id, 99, { visibility: 'private', userId: 'user-2' }),
+    );
+    const app = buildApp([sourceControl], { ...seed, users });
+
+    const legacy = await app.request(`/web/factory/projects/${project.id}/sessions`);
+    const legacyBytes = (await legacy.arrayBuffer()).byteLength;
+    const compact = await app.request(`/web/factory/projects/${project.id}/sessions?compact=1`, {
+      headers: { 'Accept-Encoding': 'gzip' },
+    });
+
+    expect(compact.status).toBe(200);
+    expect(compact.headers.get('content-encoding')).toBe('gzip');
+    const compressed = new Uint8Array(await compact.arrayBuffer());
+    const json = gunzipSync(compressed).toString('utf8');
+    const body = JSON.parse(json) as CompactBody;
+    expect(body.total).toBe(60);
+    expect(body.sessions).toHaveLength(60);
+    expect(Object.keys(body.sessions[0]!).sort()).toEqual(
+      [
+        'baseBranch',
+        'branch',
+        'createdAt',
+        'id',
+        'materializedAt',
+        'projectRepositoryId',
+        'sessionId',
+        'title',
+        'updatedAt',
+        'userId',
+        'visibility',
+      ].sort(),
+    );
+    expect(body.owners).toEqual({
+      'user-1': { name: 'Name of user-1', avatarUrl: ownerAvatar('user-1') },
+      'user-2': { name: 'Name of user-2', avatarUrl: ownerAvatar('user-2') },
+    });
+    expect(json.split(ownerAvatar('user-1')).length - 1).toBe(1);
+    // The owner map and dropped sandbox fields roughly halve the JSON; gzip takes it below a tenth.
+    expect(json.length).toBeLessThan(legacyBytes * 0.6);
+    expect(compressed.byteLength).toBeLessThan(legacyBytes * 0.1);
+  });
+
+  it('with updatedSince returns only sessions changed since the last sync, plus the visible total', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => vi.useRealTimers());
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const app = buildApp([sourceControl], { ...seed, users });
+    const url = `/web/factory/projects/${project.id}/sessions?compact=1`;
+
+    vi.setSystemTime(new Date('2026-10-01T10:00:00.000Z'));
+    for (let index = 0; index < 20; index += 1) {
+      await sourceControl.sessions.create(sessionRow(projectRepository.id, index));
+    }
+    vi.setSystemTime(new Date('2026-10-01T10:04:57.000Z'));
+    const committedLate = await sourceControl.sessions.create(sessionRow(projectRepository.id, 20));
+    vi.setSystemTime(new Date('2026-10-01T10:05:00.000Z'));
+    const first = (await (await app.request(url)).json()) as CompactBody;
+    expect(first.sessions).toHaveLength(21);
+    expect(first.syncedAt).toBe('2026-10-01T10:05:00.000Z');
+
+    vi.setSystemTime(new Date('2026-10-01T10:06:00.000Z'));
+    const renamed = sessionRow(projectRepository.id, 4);
+    await sourceControl.sessions.rename({ sessionId: renamed.sessionId, title: 'Renamed' });
+    const created = await sourceControl.sessions.create(sessionRow(projectRepository.id, 21));
+    await sourceControl.sessions.create(
+      sessionRow(projectRepository.id, 22, { visibility: 'private', userId: 'user-2' }),
+    );
+    vi.setSystemTime(new Date('2026-10-01T10:07:00.000Z'));
+
+    const sync = await app.request(`${url}&updatedSince=${encodeURIComponent(first.syncedAt)}`);
+
+    expect(sync.status).toBe(200);
+    const delta = (await sync.json()) as CompactBody;
+    // Rows written in the seconds before the last sync are re-sent in case they committed after it.
+    expect(delta.sessions.map(session => [session.sessionId, session.title])).toEqual([
+      [committedLate.sessionId, null],
+      [renamed.sessionId, 'Renamed'],
+      [created.sessionId, null],
+    ]);
+    expect(Object.keys(delta.owners).sort()).toEqual(['user-1', 'user-2']);
+    expect(delta.total).toBe(22);
+    expect(delta.syncedAt).toBe('2026-10-01T10:07:00.000Z');
+  });
+
+  it('rejects an updatedSince that is not a timestamp', async () => {
+    const { seed, sourceControl, project } = await seedGitLabRepository();
+    const app = buildApp([sourceControl], seed);
+
+    const response = await app.request(`/web/factory/projects/${project.id}/sessions?compact=1&updatedSince=yesterday`);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'updatedSince must be an ISO timestamp' });
   });
 });
