@@ -155,6 +155,64 @@ describe('reviewBoard', () => {
     expect(decision).not.toHaveProperty('resume');
   });
 
+  async function invocationArguments(context: FactoryStageRuleContext): Promise<string> {
+    const decision =
+      await reviewBoard.rules.review?.[context.source as 'pullRequest' | 'gitlabPullRequest']?.onEnter?.(context);
+    if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
+    return decision.arguments;
+  }
+
+  it('tells a re-review the head the previous pass judged, so it cannot read as a repeat of that pass', async () => {
+    const first = await invocationArguments(reviewContext('feat/review-board'));
+    const context = reviewContext('feat/review-board', 'review');
+    context.item.metadata = { ...context.item.metadata, reviewVerdict: 'request changes', reviewedHeadSha: 'abc1234' };
+    const rereview = await invocationArguments(context);
+
+    expect(rereview).not.toBe(first);
+    expect(rereview).toContain('Re-review requested: this is a new review pass.');
+    expect(rereview).toContain('A previous pass recorded a verdict on head abc1234.');
+    expect(rereview).toContain('gh pr view 23029 --json headRefOid --jq .headRefOid');
+    expect(rereview).toContain('`git log abc1234..HEAD`');
+    expect(rereview).toContain('Never restate an earlier verdict without reviewing the current head.');
+  });
+
+  it('points a GitLab re-review at the provider tools for the live head', async () => {
+    const context = gitlabReviewContext('factory/gitlab-mr-head', 'review');
+    context.item.metadata = { ...context.item.metadata, reviewVerdict: 'approve', reviewedHeadSha: 'def5678' };
+    const rereview = await invocationArguments(context);
+
+    expect(rereview).toContain('A previous pass recorded a verdict on head def5678.');
+    expect(rereview).toContain('read the live MR head with source_control_get_change_request');
+    expect(rereview).toContain('`git log def5678..HEAD`');
+  });
+
+  it('still marks a re-review from done as a new pass when no reviewed head was recorded', async () => {
+    const rereview = await invocationArguments(reviewContext('feat/review-board', 'done'));
+
+    expect(rereview).toContain('A previous pass recorded a verdict on this change request.');
+    expect(rereview).not.toContain('review the commits since');
+  });
+
+  it('does not interpolate a reviewed head that is not a commit SHA', async () => {
+    const context = reviewContext('feat/review-board', 'review');
+    context.item.metadata = {
+      ...context.item.metadata,
+      reviewVerdict: 'request changes',
+      reviewedHeadSha: 'abc1234; rm -rf /',
+    };
+    const rereview = await invocationArguments(context);
+
+    expect(rereview).toContain('Re-review requested');
+    expect(rereview).not.toContain('rm -rf');
+  });
+
+  it('leaves first reviews and same-pass resumes without the re-review notice', async () => {
+    expect(await invocationArguments(reviewContext('feat/review-board'))).not.toContain('Re-review requested');
+    expect(await invocationArguments(reviewContext('feat/review-board', 'review'))).not.toContain(
+      'Re-review requested',
+    );
+  });
+
   it('keeps Done for merges: a review agent cannot move its card there', () => {
     const policy = reviewBoard.transitionPolicy!;
     const base = { fromStage: 'review', toStage: 'done' };
