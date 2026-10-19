@@ -5374,23 +5374,92 @@ export class Session<TState = unknown> {
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
   }): Promise<void> {
-    const wasActive = this.stream.isActive();
-    const signal = this.sendSignal(
-      {
-        content: this.createMessageInput({ content, files }),
-        tracingContext,
-        tracingOptions,
-        requestContext: requestContextInput,
-        untilIdle,
-        author,
-      },
-      { requireDelivery: true },
-    );
+    let lastBlockingRunId: string | undefined;
+    while (true) {
+      const wasActive = this.stream.isActive();
+      const signal = this.sendSignal(
+        {
+          content: this.createMessageInput({ content, files }),
+          tracingContext,
+          tracingOptions,
+          requestContext: requestContextInput,
+          untilIdle,
+          author,
+        },
+        { requireDelivery: true },
+      );
+      // Another agent's run on the thread can't take this message, so the
+      // thread reports itself blocked. Wait for that run to end and send again,
+      // as a message sent just before that run started would have waited.
+      let blockingRunId: string | undefined;
+      const accepted = signal.accepted.then(settled => {
+        if (settled.action !== 'blocked') return settled;
+        blockingRunId = settled.runId;
+        return { action: settled.action };
+      });
 
-    if (wasActive) {
-      await signal.accepted;
-    } else {
-      await this.waitForAcceptedRunCompletion(signal.accepted);
+      if (wasActive) {
+        await accepted;
+      } else {
+        await this.waitForAcceptedRunCompletion(accepted);
+      }
+      if (blockingRunId === undefined) return;
+      // Blocked again by the run already waited out: the wait saw nothing it
+      // could wait for, so don't spin on resending.
+      if (blockingRunId === lastBlockingRunId) {
+        this.emit({
+          type: 'error',
+          error: new Error("Your message wasn't sent: another run still holds this thread. Try again shortly."),
+        });
+        return;
+      }
+      lastBlockingRunId = blockingRunId;
+      const waited = await this.#waitForOtherAgentRun();
+      if (waited === 'stopped') return;
+      // A parked run waits on its own prompt, so waiting can't free the thread.
+      if (waited === 'suspended') {
+        this.emit({
+          type: 'error',
+          error: new Error(
+            "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+          ),
+        });
+        return;
+      }
+    }
+  }
+
+  /**
+   * Wait until no other run holds this session's thread and this session has
+   * seen it end, or until that run parks on a prompt (`'suspended'`).
+   * `'stopped'` when Stop is pressed while waiting.
+   */
+  async #waitForOtherAgentRun(): Promise<'free' | 'suspended' | 'stopped'> {
+    const threadId = this.thread.getId();
+    if (!threadId) return 'free';
+    const agent = this.machinery.getAgent();
+    const waiters = new AbortController();
+    let aborted = false;
+    const abortRequest = this.run
+      .waitForAbortRequest(waiters.signal, { after: this.run.getAbortGeneration() })
+      .then(() => {
+        aborted = true;
+      });
+    try {
+      const outcome = await Promise.race([
+        agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          agent,
+          { memory: { thread: threadId, resource: this.identity.getResourceId() }, untilSuspended: true },
+          agent.getPubSub(),
+        ),
+        abortRequest,
+      ]);
+      if (aborted) return 'stopped';
+      if (outcome === 'suspended') return 'suspended';
+      await this.waitForStreamIdle();
+      return aborted ? 'stopped' : 'free';
+    } finally {
+      waiters.abort();
     }
   }
 
