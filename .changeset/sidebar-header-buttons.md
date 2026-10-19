@@ -12,4 +12,4 @@ Made the sidebar header buttons consistent. `Sidebar.SearchTrigger` and `Sidebar
 </Sidebar.Header>
 ```
 
-Also fixed the sidebar lagging behind the cursor while it is resized, which let the header buttons spill past its edge.
+Also fixed the sidebar lagging behind the cursor while it is resized, which let the header buttons spill past its edge, and `Kbd` now centers its keys vertically in any monospace font, not only Commit Mono.
