@@ -590,25 +590,6 @@ describe('createSourceControlTools', () => {
       ]);
     });
 
-    it('pushes the local session branch whatever is checked out, in its own or another repository', async () => {
-      const setup = await fixture();
-      const built = await tools(setup);
-      // The agent sits on a scratch branch (own) or switched back to main
-      // (sibling); the session branch exists locally in both checkouts.
-      const { sandbox, pushes } = fakeSandbox();
-
-      await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
-      await (built.source_control_push_branch!.execute as any)(
-        { repository: 'acme/other' },
-        { workspace: { sandbox } },
-      );
-
-      expect(pushes().map(push => push.args)).toEqual([
-        ['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1'],
-        ['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1'],
-      ]);
-    });
-
     it('refuses to push another repository whose directory holds a different checkout', async () => {
       const setup = await fixture();
       const built = await tools(setup);
@@ -1054,6 +1035,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       providers: [{ id: provider, storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
+    const hooks: { afterCommand?: (args: string[]) => void } = {};
     const sandbox = {
       id: 'real-git',
       provider: 'custom',
@@ -1065,6 +1047,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
           timeout: 10_000,
         });
         if (result.error) throw result.error;
+        hooks.afterCommand?.(args);
         return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
       },
     };
@@ -1073,7 +1056,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
         workspace: { sandbox },
       });
     const remote = (...args: string[]) => git('--git-dir', origin, ...args);
-    return { ...setup, root, checkout, git, commit, base, push, remote };
+    return { ...setup, root, checkout, git, commit, base, push, remote, hooks };
   }
 
   describe.each(['acme/repo', 'acme/other'])('%s', repository => {
@@ -1114,12 +1097,32 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(next);
     });
 
-    it.each(['ahead', 'divergent'])('refuses to discard %s session commits or publish a stale ref', async state => {
-      const { git, commit, base, push, remote, storage } = await checkoutFixture(repository);
+    it('pushes an ahead session branch without moving the active checkout', async () => {
+      const { checkout, git, commit, base, push, remote, storage } = await checkoutFixture(repository);
       git('switch', '-c', branch);
       const sessionHead = commit('session work');
       git('switch', 'main');
-      const activeHead = state === 'divergent' ? commit('other work') : base;
+      writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted main work');
+      const dirty = git('status', '--porcelain');
+
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository });
+
+      expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(sessionHead);
+      expect(remote('show', `${branch}:tracked.txt`)).toBe('session work');
+      expect(git('rev-parse', branch)).toBe(sessionHead);
+      expect(git('rev-parse', 'HEAD')).toBe(base);
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+      expect(git('status', '--porcelain')).toBe(dirty);
+      expect(git('diff')).toContain('+uncommitted main work');
+      expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toMatchObject([{ branch }]);
+    });
+
+    it('refuses to discard divergent session commits or publish a stale ref', async () => {
+      const { git, commit, push, remote, storage } = await checkoutFixture(repository);
+      git('switch', '-c', branch);
+      const sessionHead = commit('session work');
+      git('switch', 'main');
+      const activeHead = commit('other work');
 
       await expect(push()).rejects.toMatchObject({ code: 'push-failed' });
 
@@ -1129,6 +1132,32 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
       expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
     });
+
+    it.each(['--is-ancestor', '--porcelain'])(
+      'preserves concurrent session commits and refuses to publish after %s',
+      async checkpoint => {
+        const { git, commit, base, push, remote, storage, hooks } = await checkoutFixture(repository);
+        git('branch', branch);
+        const activeHead = commit('active work');
+        const concurrentHead = git('commit-tree', 'HEAD^{tree}', '-p', base, '-m', 'concurrent session work');
+        // Schedule a real ref update between validation and materialization. (#27667)
+        hooks.afterCommand = args => {
+          if (args.includes(checkpoint)) {
+            git('update-ref', `refs/heads/${branch}`, concurrentHead, base);
+            hooks.afterCommand = undefined;
+          }
+        };
+
+        const outcome = await push().catch((error: unknown) => error);
+
+        expect(git('rev-parse', branch)).toBe(concurrentHead);
+        expect(outcome).toMatchObject({ code: 'push-failed' });
+        expect(git('rev-parse', 'HEAD')).toBe(activeHead);
+        expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+        expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
+        expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
+      },
+    );
 
     it('refuses to reset a session branch checked out in another worktree', async () => {
       const { root, git, commit, base, push, remote } = await checkoutFixture(repository);
