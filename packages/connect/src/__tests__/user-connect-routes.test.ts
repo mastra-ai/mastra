@@ -79,10 +79,11 @@ function fakePlatform(options?: {
       return Response.json({
         connectionId: 'c_new1',
         integrationId: url.pathname.split('/integrations/')[1]!.split('/')[0]!,
-        // The platform nulls the vendor link for resource-scoped sessions:
-        // the launch gate is the only reader.
+        // The platform nulls both launch capabilities (vendor link + session
+        // token) for resource-scoped sessions: the launch gate is the only
+        // reader.
         connectUrl: body.resourceId ? null : 'https://connect.test/session',
-        sessionToken: 'sess_tok',
+        sessionToken: body.resourceId ? null : 'sess_tok',
         expiresAt: '2026-10-13T15:00:00Z',
       });
     }
@@ -373,9 +374,9 @@ describe('POST /:provider/sessions', () => {
     expect(await json(response)).toEqual({
       connectionId: 'c_new1',
       integrationId: 'linear',
-      // The browser gets the launch-gate path, never the vendor connect URL.
+      // The browser gets the launch-gate path only — never a launch
+      // capability (vendor connect URL or session token).
       launchUrl: '/connect/connections/c_new1/launch',
-      sessionToken: 'sess_tok',
       expiresAt: '2026-10-13T15:00:00Z',
     });
     const sessionRequest = requests.find(request => request.url.pathname.includes('/connect-sessions'))!;

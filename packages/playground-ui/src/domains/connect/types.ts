@@ -53,7 +53,6 @@ export interface UserConnectSessionResponse {
    * URL is never exposed to the browser.
    */
   launchUrl: string;
-  sessionToken: string | null;
   expiresAt: string | null;
 }
 

@@ -460,11 +460,12 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
           {
             connectionId: session.connectionId,
             integrationId: session.integrationId,
-            // The browser never receives the vendor connect link. It opens
-            // the launch gate instead, which verifies the caller's identity
-            // against the pending row immediately before OAuth entry.
+            // The browser never receives a launch capability — neither the
+            // vendor connect link nor the session token (which can open the
+            // vendor Connect UI by itself). It opens the launch gate instead,
+            // which verifies the caller's identity against the pending row
+            // immediately before OAuth entry.
             launchUrl: `${basePath}/connections/${encodeURIComponent(session.connectionId)}/launch`,
-            sessionToken: session.sessionToken,
             expiresAt: session.expiresAt,
           },
           201,
