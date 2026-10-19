@@ -245,6 +245,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         model: { get: () => controllerModelMock },
         subagents: { model: { get: () => undefined } },
         getWorkspace: () => undefined,
+        getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
         state: {
           get: () => controllerStateMock,
@@ -2257,6 +2258,42 @@ describe('createMastraCode', () => {
         'hold',
       );
     }
+  });
+
+  it("holds another project's thread on a shared resource, and runs it as that project's session once one is live here", async () => {
+    const prepareWakeRequestContext = vi.fn();
+    const { createMastraCode } = await import('../index.js');
+    const mastraCode = await createMastraCode({ prepareWakeRequestContext, unixSocketPubSub: false });
+    const main = createdSessionMock;
+    main.getThreadScope = () => ({ projectPath: '/repo/main' });
+    controllerThreadMetadataMock = { projectPath: '/repo/feature' };
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+    const input = {
+      record: { priority: 'high', source: 'sentinel', resourceId: 'project-resource', threadId: 'feature-thread' },
+      threadState: 'idle',
+      now: new Date('2026-10-01T00:00:00.000Z'),
+    };
+
+    const foreign = await decide(input);
+    expect(foreign).toMatchObject({ action: 'deliver', hold: true });
+    expect(foreign.streamOptions).toBeUndefined();
+    expect(prepareWakeRequestContext).not.toHaveBeenCalled();
+
+    // A second live session in this process, for the feature project on the same resource.
+    const feature = {
+      ...main,
+      identity: { ...main.identity, getId: () => 'session-2' },
+      getThreadScope: () => ({ projectPath: '/repo/feature' }),
+    };
+    const trackLiveSession = controllerOnSessionCreatedMock.mock.calls.find(call => call[1] === undefined)?.[0];
+    trackLiveSession(feature);
+
+    const owned = await decide(input);
+    expect(owned.streamOptions.requestContext.get('controller').session.id).toBe('session-2');
+    expect(prepareWakeRequestContext).toHaveBeenCalledTimes(1);
+    await mastraCode.stopNotificationDispatch();
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

@@ -40,7 +40,7 @@ import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
-import { DuckDBStore } from '@mastra/duckdb';
+import type { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -57,7 +57,11 @@ import { AgentConnectionsSignalProvider } from './agent-connections/signal-provi
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
 import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
-import { hasCredentialStoreProvider, withCredentialTenantPreparation } from './agents/credential-resolver.js';
+import {
+  hasCredentialStoreProvider,
+  setCredentialLogger,
+  withCredentialTenantPreparation,
+} from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -130,6 +134,7 @@ import { isThinkingLevelSetting } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
+import { openLocalObservabilityStore } from './utils/local-observability.js';
 import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
 import { createResourceNotificationDispatcher, shouldHoldNotificationDelivery } from './utils/notification-dispatch.js';
 import {
@@ -145,6 +150,8 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes } from './utils/wake-session.js';
+import type { WakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
 const CODE_AGENT_ID = 'code-agent';
@@ -711,12 +718,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   let observabilityWarning: string | undefined;
   if (globalSettings.observability.localTracing) {
     try {
-      const observabilityDuckDB = new DuckDBStore({
-        id: 'mastra-code-observability',
-        path: getObservabilityDatabasePath(),
-      });
-      // Force an early connection attempt so the lock error surfaces now, not mid-session.
-      await observabilityDuckDB.db.getConnection();
+      const { store: observabilityDuckDB } = await openLocalObservabilityStore(getObservabilityDatabasePath());
       observabilityDomain = observabilityDuckDB.observability;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -914,10 +916,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ownsNotificationDispatch && !ownSignalsPubSub && process.platform !== 'win32'
       ? createSignalsPubSub(project.resourceId)
       : undefined;
+  const notificationDispatchLeases = ownsNotificationDispatch
+    ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider()
+    : undefined;
   const notificationDispatcher = createResourceNotificationDispatcher({
     getMastra: () => controller.getMastra(),
-    getResourceIds: () => [...liveSessions].map(session => session.identity.getResourceId()),
-    leases: ownsNotificationDispatch ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider() : undefined,
+    getSessionScopes: async () =>
+      (
+        await Promise.all(
+          [...liveSessions].map(async session => {
+            const resourceId = session.identity.getResourceId();
+            return (await sessionLeaseScopes(session)).map(scope => ({ resourceId, scope }));
+          }),
+        )
+      ).flat(),
+    leases: notificationDispatchLeases,
     owner: `${ownerId}:${process.pid}:${randomUUID()}`,
     onError: error => console.warn('Notification dispatch failed:', error),
   });
@@ -934,16 +947,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // workflow) — all need the target session's request context, or a woken idle
   // thread has no model to run with ("No model selected"). New wake paths must
   // build their options here so `prepareWakeRequestContext` runs for them.
-  const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
-    // Run the woken notification as the session that owns the target
-    // resource so it uses that session's model/mode/state/workspace. Never
-    // borrow another session: every Mastra Code process shares one database,
-    // so the target thread may belong to another project, and running it with
-    // this session's workspace would act on the wrong project.
-    const session = await controller.getSessionByResource(resourceId);
-    // No session here owns the resource. Return undefined so the dispatcher
+  const getWakeStreamOptions = async ({
+    resourceId,
+    threadId,
+    owner,
+  }: {
+    resourceId: string;
+    threadId: string;
+    /** The thread's wake session, when the caller already found it. */
+    owner?: WakeSession<MastraCodeState>;
+  }) => {
+    // Run the woken notification as the session that owns the target thread
+    // so it uses that session's model/mode/state/workspace. Never borrow
+    // another session: every Mastra Code process shares one database, so the
+    // target thread may belong to another project, and running it with this
+    // session's workspace would act on the wrong project.
+    const wake = owner ?? (await findWakeSession(controller, liveSessions, { resourceId, threadId }));
+    // No session here owns the thread. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
-    if (!session) return undefined;
+    if (!wake || wake === FOREIGN_THREAD) return undefined;
+    const { session } = wake;
     // A long-running system must be able to drive work unattended, so migrate
     // and restore the thread's persisted model before falling back to a real
     // mode or live-session default rather than failing the run.
@@ -1279,17 +1302,32 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // don't fall through to the active session and wake it under an
           // empty resource binding.
           if (!input.record.resourceId) return decision;
-          const streamOptions = await getWakeStreamOptions({
-            resourceId: input.record.resourceId,
-            threadId: input.record.threadId,
-          });
+          // A session here serves the resource but not the thread's project:
+          // another process sharing the resource runs it. Leave it pending for
+          // that process, whose own dispatch pass for the thread's scope
+          // delivers it, rather than running it with this one's workspace.
+          const owner = await findWakeSession(
+            controller,
+            liveSessions,
+            { resourceId: input.record.resourceId, threadId: input.record.threadId },
+            notificationDispatchLeases,
+          );
+          if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
+          const streamOptions = owner
+            ? await getWakeStreamOptions({
+                resourceId: input.record.resourceId,
+                threadId: input.record.threadId,
+                owner,
+              })
+            : undefined;
           const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
           if (!ownsNotificationDispatch) return withOptions;
           // `hold` only applies at delivery time; it is ignored when a
           // notification is first sent.
           const hold = shouldHoldNotificationDelivery({
             resourceId: input.record.resourceId,
-            ownedHere: streamOptions !== undefined,
+            scope: owner?.scope,
+            ownedHere: owner !== undefined,
             dispatcher: notificationDispatcher,
           });
           return hold ? { ...withOptions, hold: true } : withOptions;
@@ -2161,6 +2199,7 @@ export async function prepareAgentControllerMount(
   const finalize = async () => {
     await controller.init();
     validateExperimentalAgent(codeAgent, controller.getMastra());
+    setCredentialLogger(controller.getMastra()?.getLogger());
     if (weOwnTheMastra) {
       const mastra = controller.getMastra();
       if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });

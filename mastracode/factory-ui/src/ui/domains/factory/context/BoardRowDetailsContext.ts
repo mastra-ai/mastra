@@ -1,3 +1,8 @@
 import { createContext } from 'react';
 
-export const BoardRowDetailsContext = createContext<((open: boolean) => void) | null>(null);
+export interface BoardRowDetails {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}
+
+export const BoardRowDetailsContext = createContext<BoardRowDetails | null>(null);

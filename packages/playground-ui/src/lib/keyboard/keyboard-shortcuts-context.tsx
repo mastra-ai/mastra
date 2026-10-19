@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 
-import { createKeyboardDispatcher, type KeyboardDispatcher } from './keyboard-dispatcher';
+import { createKeyboardDispatcher } from './keyboard-dispatcher';
+import type { KeyboardDispatcher } from './keyboard-dispatcher';
 
 type KeyboardShortcutsContextValue = { status: 'missing' } | { status: 'ready'; dispatcher: KeyboardDispatcher };
 

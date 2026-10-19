@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.79.0-alpha.2",
+  "version": "1.79.0-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -103,8 +103,8 @@
     "generate:route-types": "tsx scripts/generate-route-types.ts",
     "check:permissions": "tsx scripts/check-permissions.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
@@ -129,7 +129,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "canonicalize": "^1.0.8",
-    "eslint": "^10.7.0",
     "oxfmt": "catalog:",
     "superjson": "^2.2.6",
     "tsdown": "0.22.9",

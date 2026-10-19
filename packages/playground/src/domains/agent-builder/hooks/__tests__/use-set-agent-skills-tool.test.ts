@@ -41,7 +41,7 @@ describe('useSetAgentSkillsTool', () => {
         { id: 'skill-1', name: 'Skill One' },
         { id: 'unknown', name: 'Unknown' },
       ],
-    } as any);
+    });
 
     expect(form().getValues('skills')).toEqual({ 'skill-1': true });
   });
@@ -49,7 +49,7 @@ describe('useSetAgentSkillsTool', () => {
   it('clears all skills when given an empty array', async () => {
     const { tool, form } = renderTool();
     form().setValue('skills', { 'skill-1': true, 'skill-2': true });
-    await tool.execute!({ skills: [] } as any);
+    await tool.execute!({ skills: [] });
     expect(form().getValues('skills')).toEqual({});
   });
 

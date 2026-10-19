@@ -55,16 +55,6 @@ createObservabilityVNextTests({
     await sharedSuiteStore?.db.close();
     sharedSuiteStore = undefined;
   },
-  readTimeToFirstChunkMs: async (_storage, { traceId, spanId }) => {
-    const [row] = await sharedSuiteStore!.db.query<{ rows: bigint | number; timeToFirstChunkMs: number | null }>(
-      `SELECT count(*) AS rows,
-         arg_max(timeToFirstChunkMs, timestamp) FILTER (WHERE timeToFirstChunkMs IS NOT NULL) AS timeToFirstChunkMs
-       FROM span_events WHERE traceId = ? AND spanId = ?`,
-      [traceId, spanId],
-    );
-    if (!row || Number(row.rows) === 0) throw new Error(`span ${spanId} was not stored`);
-    return row.timeToFirstChunkMs;
-  },
 });
 
 async function setupLegacyStore(): Promise<DuckDBStore> {
@@ -156,12 +146,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -179,12 +172,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
@@ -217,12 +213,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -239,12 +238,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
     } finally {
       coreFeatures.clear();

@@ -99,6 +99,36 @@ export async function hasFinalReport(
   return false;
 }
 
+/**
+ * Whether the newest report `senderSessionId` put on the recipient thread is
+ * already this exact `failed` backstop. A session stuck failing the same way
+ * (a run that dies before the model, restarted over and over) then reports
+ * once, not once per attempt; any other report in between resets it.
+ */
+export async function repeatsLastFailure(
+  notifications: FactoryReporting['notifications'],
+  {
+    senderSessionId,
+    recipientThreadId,
+    summary,
+  }: { senderSessionId: string; recipientThreadId: string; summary: string },
+): Promise<boolean> {
+  const records = await notifications.listNotifications({
+    threadId: recipientThreadId,
+    source: FACTORY_SESSION_NOTIFICATION_SOURCE,
+    limit: FINAL_REPORT_SCAN,
+  });
+  // Storage orders by `updatedAt`, which moves when a report is read; the
+  // newest report is the one created last.
+  const last = records
+    .filter(record => record.attributes?.['from-session'] === senderSessionId)
+    .reduce<(typeof records)[number] | undefined>(
+      (newest, record) => (!newest || record.createdAt > newest.createdAt ? record : newest),
+      undefined,
+    );
+  return last?.kind === 'failed' && last.attributes?.backstop === 'true' && last.summary === summary;
+}
+
 export function reportNotification({
   sender,
   status,
@@ -243,6 +273,16 @@ export async function sendRunEndReport(
     // Only the agent's own `blocked` means it ended its turn to wait; a backstop `blocked` from a parked run doesn't.
     if (outcome.status === 'done' && (await report(recipient, ['blocked'], true))) {
       waiting = true;
+      continue;
+    }
+    if (
+      outcome.status === 'failed' &&
+      (await repeatsLastFailure(reporting.notifications, {
+        senderSessionId: sender.sessionId,
+        recipientThreadId: recipient.threadId,
+        summary: message,
+      }))
+    ) {
       continue;
     }
     deliveries.push(await reporting.deliver(recipient, notification));

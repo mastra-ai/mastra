@@ -89,6 +89,7 @@ createTestSuite(new MongoDBStore(TEST_CONFIG), {
   datasetItemIdentity: false,
   datasetItemPurge: false,
   workflowResultsNoopWhenRunMissing: false,
+  skillsMetadataFilter: false,
 });
 
 // Configuration validation tests

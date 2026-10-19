@@ -58,7 +58,7 @@ describe('Postgres trace aggregate compiler', () => {
       compiled.text.indexOf('current_spans AS'),
     );
     const candidates = compiled.text.slice(compiled.text.indexOf('candidates AS'), compiled.text.indexOf('facts AS'));
-    expect(rootScope).toContain('r."entityName" IS NOT DISTINCT FROM $3');
+    expect(rootScope).toContain('r."entityName" IS NOT NULL AND r."entityName" = $3');
     expect(rootScope).not.toContain(`'error'`);
     expect(rootScope).not.toContain('metadataSearch');
     expect(candidates).not.toContain('r."entityName"');

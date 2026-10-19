@@ -1,5 +1,51 @@
 # @mastra/core
 
+## 1.79.0-alpha.3
+
+### Minor Changes
+
+- Added iteration-aware final output processing so processors receive the current feedback-continuation iteration as its own assistant message and can transform each iteration independently. ([#26346](https://github.com/mastra-ai/mastra/pull/26346))
+
+  Fixed feedback continuations with output processors so rewrites and redactions are preserved in `getFullOutput().text` and `steps[].text` instead of returning raw earlier-iteration text.
+
+  Custom output processors that persist transcripts should use `messageList.cloneForPersistence()` to retain one assistant response with its original identity and order.
+
+  ```ts
+  // Before: may persist processor-visible response messages separately.
+  const processor = {
+    id: 'transcript-persister',
+    processOutputResult: async ({ messages, messageList }) => {
+      await saveMessages(messageList.get.response.db());
+      return messages;
+    },
+  };
+
+  // After: preserves one assistant response with its original identity and order.
+  const processor = {
+    id: 'transcript-persister',
+    processOutputResult: async ({ messages, messageList }) => {
+      await saveMessages(messageList.cloneForPersistence().get.response.db());
+      return messages;
+    },
+  };
+  ```
+
+### Patch Changes
+
+- Fixed MCP tool results containing images or audio being dropped by AI SDK v5 models and rejected by AI SDK v7 models such as Amazon Bedrock (`unsupported tool content part type: image-data`). MCP media content is now passed to every model in the format it supports. ([#26662](https://github.com/mastra-ai/mastra/pull/26662))
+
+- Fixed notifications that failed on their first delivery attempt. Delivery now retries automatically, up to five attempts, instead of staying pending forever. Retries preserve the claimed-owner requirement. ([#25837](https://github.com/mastra-ai/mastra/pull/25837))
+
+- `respondToPersistedToolApproval` now accepts `alwaysAllowCategory`. Approving a tool call restored after a restart with "always allow" grants the tool's category to the run's thread, matching a live approval. ([#27222](https://github.com/mastra-ai/mastra/pull/27222))
+
+  ```ts
+  await session.respondToPersistedToolApproval({ toolCallId, approved: true, alwaysAllowCategory: true });
+  ```
+
+- Fixed agents crashing with `Class constructor ... cannot be invoked without 'new'` when a tool's schema is a class-based Standard Schema, such as an Effect `Schema.Class` adapted with `Schema.toStandardSchemaV1`. Tools can now use class-based schemas the same way as `Schema.Struct`. ([#27317](https://github.com/mastra-ai/mastra/pull/27317))
+
+- Fixed goal judges and subagents hanging inside an Agent Controller session. Previously they inherited the session's memory thread and waited on it forever. Goal judges now use their own goal-specific thread. Forked subagents use the cloned thread. Non-forked subagents no longer inherit the session's thread and resource IDs. ([#27323](https://github.com/mastra-ai/mastra/pull/27323))
+
 ## 1.79.0-alpha.2
 
 ### Minor Changes

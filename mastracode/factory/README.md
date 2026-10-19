@@ -724,6 +724,29 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
+### MCP server (ChatGPT and other MCP clients)
+
+A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
+
+```
+https://<your-factory>/web/factory/projects/<projectId>/mcp
+```
+
+It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
+
+Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. Each user gets one private connector session per Factory that the session tools act from.
+
+To connect ChatGPT, open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth. Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
+
+```ts
+new MastraFactory({
+  // ...
+  mcp: { authorizationServers: ['https://your-tenant.authkit.app'] },
+});
+```
+
+or set `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`. Pass `mcp: false` to turn the endpoint off.
+
 ### Development
 
 Run focused package checks from the repository root:

@@ -1,3 +1,5 @@
+import type { ChunkType } from '../stream';
+
 /**
  * Well-known key a stream output processor can set on its `state` to ask the
  * ProcessorRunner to re-drive an additional part through the full output
@@ -14,3 +16,23 @@
  * condition stopped the agent on that part — issue #17094).
  */
 export const REPROCESS_PART_KEY = '__mastraReprocessPart';
+
+/**
+ * Well-known key a stream output processor sets on its `state` when it holds
+ * parts back until a later part arrives (a batch, a sentence buffer). The value
+ * is a function that releases every held part, already processed by the
+ * holding processor, and clears the hold.
+ *
+ * When the stream ends, the runner calls it and pushes the released parts
+ * through the processors after the holder, so held text is not dropped when
+ * nothing follows the last held part (issue #27523).
+ */
+export const FLUSH_HELD_PARTS_KEY = '__mastraFlushHeldParts';
+
+export type FlushHeldParts = () => Promise<ChunkType[]> | ChunkType[];
+
+/** Releases the parts a processor is holding, or none if it holds nothing. */
+export async function takeHeldParts(state: Record<string, unknown> | undefined): Promise<ChunkType[]> {
+  const flush = state?.[FLUSH_HELD_PARTS_KEY] as FlushHeldParts | undefined;
+  return flush ? await flush() : [];
+}
