@@ -1,3 +1,4 @@
+import { TokenMetrics } from '@mastra/core/observability';
 import { planSpanAggregate } from '@mastra/core/storage';
 import type {
   SpanAggregateDimension,
@@ -6,7 +7,6 @@ import type {
   TraceQueryTenantScope,
   TrustedSpanAggregatePlan,
 } from '@mastra/core/storage';
-import { TokenMetrics } from '@mastra/core/observability';
 
 import { evaluateAggregate } from './trace-aggregate';
 import type {
