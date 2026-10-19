@@ -173,79 +173,11 @@
     font-size-adjust: none;
   }
 
-  /* One line weight for every lucide icon, wrapped or not. `non-scaling-stroke` reads
-     `stroke-width` in screen pixels, so the weight no longer grows with the icon the way
-     lucide's `stroke-width="2"` on a 24 grid does. The weight follows the icon's size
-     class (rules below); an icon with none gets the 16px weight. A component sizes its
-     icons and never sets a stroke; one that sizes them without a class sets
-     `--icon-stroke` on the svg (see ButtonsGroup). */
-  svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) {
-    vector-effect: non-scaling-stroke;
-    stroke-width: var(--icon-stroke, var(--icon-stroke-md));
-  }
-
-  /* Each size takes the weight of its rung, whether the size sits on the icon
-     (`size-3.5`, `h-3`, lucide's `size` prop) or on a parent that sizes its glyphs
-     (`[&>svg]:size-icon-sm` from `iconSizeClasses`, `[&_svg]:size-3.5`). A width of 24
-     is lucide's default attribute, which a class overrides, so it says nothing about
-     the rendered size. */
-  svg.lucide:is(.size-2, .size-2\.5, .size-3, .size-icon-xs, .h-2, .h-2\.5, .h-3, [width='10'], [width='12']),
-  :is(
-      [class~='[&>svg]:size-2'],
-      [class~='[&_svg]:size-2'],
-      [class~='[&>svg]:size-2.5'],
-      [class~='[&_svg]:size-2.5'],
-      [class~='[&>svg]:size-3'],
-      [class~='[&_svg]:size-3'],
-      [class~='[&>svg]:size-icon-xs'],
-      [class~='[&_svg]:size-icon-xs']
-    )
-    svg.lucide {
-    --icon-stroke: var(--icon-stroke-xs);
-  }
-
-  svg.lucide:is(.size-3\.5, .size-icon-sm, .h-3\.5, [width='13'], [width='14']),
-  :is(
-      [class~='[&>svg]:size-3.5'],
-      [class~='[&_svg]:size-3.5'],
-      [class~='[&>svg]:size-icon-sm'],
-      [class~='[&_svg]:size-icon-sm']
-    )
-    svg.lucide {
-    --icon-stroke: var(--icon-stroke-sm);
-  }
-
-  svg.lucide:is(
-    .size-5,
-    .size-6,
-    .size-7,
-    .size-8,
-    .size-10,
-    .size-icon-lg,
-    .h-5,
-    .h-6,
-    .h-7,
-    .h-8,
-    .h-10,
-    [width='18'],
-    [width='20']
-  ),
-  :is(
-      [class~='[&>svg]:size-5'],
-      [class~='[&_svg]:size-5'],
-      [class~='[&>svg]:size-6'],
-      [class~='[&_svg]:size-6'],
-      [class~='[&>svg]:size-7'],
-      [class~='[&_svg]:size-7'],
-      [class~='[&>svg]:size-8'],
-      [class~='[&_svg]:size-8'],
-      [class~='[&>svg]:size-10'],
-      [class~='[&_svg]:size-10'],
-      [class~='[&>svg]:size-icon-lg'],
-      [class~='[&_svg]:size-icon-lg']
-    )
-    svg.lucide {
-    --icon-stroke: var(--icon-stroke-lg);
+  /* Every lucide icon draws its line from one token instead of lucide's default
+     `stroke-width="2"`. The value is in the icon's 24-unit grid, so the line still
+     thickens a little as the icon grows. Components size icons; none sets a stroke. */
+  :where(svg.lucide) {
+    stroke-width: var(--icon-stroke-width);
   }
 
   :focus-visible {

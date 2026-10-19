@@ -277,8 +277,8 @@ export const BrandIcons: Story = {
 
 const strokeGlyphs = [Plus, Search, Settings, ChevronDown, Trash2, Copy, X, Check, Folder, Bell];
 
-// Every lucide icon takes its line weight from the `--icon-stroke-*` token of its size,
-// whichever way it is sized. Use this story for before/after shots of a stroke change.
+// Every lucide icon draws its line from `--icon-stroke-width`, however it is sized.
+// Use this story for before/after shots of a stroke change.
 export const Stroke: Story = {
   render: () => (
     <div className="flex flex-col gap-6">
@@ -313,7 +313,7 @@ export const Stroke: Story = {
         </Button>
       </div>
       <div className="flex items-center gap-3 text-muted-foreground">
-        <span className="w-16 text-caption">Off-rung</span>
+        <span className="w-16 text-caption">Unwrapped</span>
         <Search className="size-3" />
         <Search className="size-3.5" />
         <Search className="size-4" />
