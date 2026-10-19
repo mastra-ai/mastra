@@ -33,6 +33,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
+  credentialLabel,
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
@@ -319,6 +320,14 @@ export function resolveDeploymentModelProviders(providers: readonly string[] | u
   return resolved;
 }
 
+function tenantCredentialLabel(records: CredentialRecord[] | undefined, provider: string) {
+  const authProviderId = getAuthProviderId(provider);
+  const record =
+    records?.find(r => r.scope === 'user' && r.provider === authProviderId) ??
+    records?.find(r => r.scope === 'org' && r.provider === authProviderId);
+  return record && credentialLabel(provider, record.credential.type);
+}
+
 /**
  * Compute which providers the user can reach, mirroring the TUI's
  * `/models-pack` access derivation: OAuth/api-key from the credential store for
@@ -389,6 +398,7 @@ export interface ModelCatalogEntry {
   modelName?: string;
   hasApiKey: true;
   reasoningOptions: ReturnType<typeof getModelReasoningOptions> | undefined;
+  credentialLabel?: string;
 }
 
 /**
@@ -421,7 +431,16 @@ export async function buildModelCatalog({
   ]);
   const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
-      ? [{ id, provider, modelName, hasApiKey: true as const, reasoningOptions: getModelReasoningOptions(id) }]
+      ? [
+          {
+            id,
+            provider,
+            modelName,
+            hasApiKey: true as const,
+            reasoningOptions: getModelReasoningOptions(id),
+            credentialLabel: tenantCredentialLabel(tenantCredentials, provider),
+          },
+        ]
       : [],
   );
   // The boot-time gateway catalog only carries the local custom providers, so
@@ -440,6 +459,7 @@ export async function buildModelCatalog({
             modelName: model,
             hasApiKey: true,
             reasoningOptions: undefined,
+            credentialLabel: undefined,
           });
         }
       }

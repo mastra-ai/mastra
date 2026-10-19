@@ -606,6 +606,7 @@ describe('GET /web/config/models', () => {
           modelName: 'claude-fable-5',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
+          credentialLabel: 'Claude Pro/Max',
         },
       ],
     });

@@ -14,6 +14,7 @@ export interface AvailableModelOption {
   modelName: string;
   hasApiKey: boolean;
   reasoningOptions?: ModelReasoningOption[];
+  credentialLabel?: string;
 }
 
 export interface AvailableModelsTarget extends AvailableModelsFilter {

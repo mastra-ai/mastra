@@ -2,7 +2,9 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Building2, User } from 'lucide-react';
 
+import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
+import { useChatModels } from '../../context/useChatModels';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { credentialHolder } from '../../services/reply-credential';
@@ -17,7 +19,9 @@ function PayerMark({ payer }: { payer: Partial<ThreadOwner> | undefined }) {
 export function PayingAccount() {
   const authQuery = useFactoryAuth();
   const { owner } = useChatSessionContext();
-  const { modelScope } = useChatModelScope();
+  const { activeModelId } = useChatModels();
+  const { modelScope, catalogTarget } = useChatModelScope();
+  const modelsQuery = useAvailableModelsQuery(catalogTarget);
 
   if (!authQuery.data?.authEnabled || !modelScope) return null;
 
@@ -26,13 +30,14 @@ export function PayingAccount() {
     modelScope === 'factory'
       ? undefined
       : (owner ?? { id: viewer?.userId, name: viewer?.name, avatarUrl: viewer?.avatarUrl });
+  const credentialLabel = modelsQuery.data?.find(model => model.id === activeModelId)?.credentialLabel;
 
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
-      tooltip={`${credentialHolder(payer?.id, owner, viewer?.userId)} account pays for replies`}
+      tooltip={`${credentialHolder(payer?.id, owner, viewer?.userId)} ${credentialLabel ?? 'account'}`}
       className="cursor-help"
     >
       <PayerMark payer={payer} />

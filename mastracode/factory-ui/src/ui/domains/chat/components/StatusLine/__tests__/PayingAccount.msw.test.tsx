@@ -7,11 +7,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
 import type { SessionModelCatalog } from '../../../../../../hooks/useSessionModelCatalog';
+import { ChatModelsContext } from '../../../context/ChatModelsContext';
+import type { ChatModelsApi } from '../../../context/ChatModelsContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import { PayingAccount } from '../PayingAccount';
 
 const SHANE = { id: 'user-shane', name: 'Shane Thomas' };
+const MODEL_ID = 'anthropic/claude-opus-4-6';
 
 function renderPayingAccount({
   viewerId = 'user-damien',
@@ -20,6 +23,7 @@ function renderPayingAccount({
   projectScope = 'hybrid',
   threadScope,
   authEnabled = true,
+  credentialLabel = 'Claude Pro/Max',
 }: {
   viewerId?: string;
   owner?: ChatSessionContextApi['owner'];
@@ -27,8 +31,21 @@ function renderPayingAccount({
   projectScope?: 'factory' | 'user' | 'hybrid';
   threadScope?: SessionModelCatalog['modelScope'];
   authEnabled?: boolean;
+  credentialLabel?: string | null;
 }) {
-  const catalog: SessionModelCatalog = { models: [], modelScope: threadScope, defaultModelId: null };
+  const catalog: SessionModelCatalog = {
+    models: [
+      {
+        id: MODEL_ID,
+        provider: 'anthropic',
+        modelName: 'Claude Opus 4.6',
+        hasApiKey: true,
+        credentialLabel: credentialLabel ?? undefined,
+      },
+    ],
+    modelScope: threadScope,
+    defaultModelId: null,
+  };
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       authEnabled
@@ -53,7 +70,14 @@ function renderPayingAccount({
     kind: 'user',
     owner,
   };
-  const submitComposer = vi.fn((event: React.FormEvent) => event.preventDefault());
+  const models: ChatModelsApi = {
+    activeModelId: MODEL_ID,
+    defaultModelId: undefined,
+    isLoading: false,
+    error: undefined,
+    setModel: async () => {},
+  };
+  const submitComposer = vi.fn((event: { preventDefault: () => void }) => event.preventDefault());
   const view = renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/work']}>
       <Routes>
@@ -61,9 +85,11 @@ function renderPayingAccount({
           path="/factories/:factoryId/*"
           element={
             <ChatSessionContext.Provider value={session}>
-              <form onSubmit={submitComposer}>
-                <PayingAccount />
-              </form>
+              <ChatModelsContext.Provider value={models}>
+                <form onSubmit={submitComposer}>
+                  <PayingAccount />
+                </form>
+              </ChatModelsContext.Provider>
             </ChatSessionContext.Provider>
           }
         />
@@ -73,43 +99,49 @@ function renderPayingAccount({
   return { ...view, submitComposer };
 }
 
-const findPayer = (holder: string) => screen.findByRole('button', { name: `${holder} account pays for replies` });
+const findCredential = (name: string) => screen.findByRole('button', { name });
 
 describe('PayingAccount', () => {
-  it('names the owner when a teammate opens a session that runs on the owner’s credentials', async () => {
+  it('names the owner’s subscription when a teammate opens a session that runs on it', async () => {
     renderPayingAccount({ owner: SHANE, threadScope: 'user' });
 
-    expect(await findPayer('Shane Thomas’s')).toBeInTheDocument();
+    expect(await findCredential('Shane Thomas’s Claude Pro/Max')).toBeInTheDocument();
   });
 
-  it('tells the owner the session runs on their own account', async () => {
+  it('tells the owner the session runs on their own subscription', async () => {
     renderPayingAccount({ viewerId: SHANE.id, owner: SHANE, threadScope: 'user' });
 
-    expect(await findPayer('Your')).toBeInTheDocument();
+    expect(await findCredential('Your Claude Pro/Max')).toBeInTheDocument();
   });
 
-  it('says the organization pays for a work-item thread even in a hybrid Factory', async () => {
-    renderPayingAccount({ owner: SHANE, threadScope: 'factory' });
+  it('names the organization API key for a work-item thread even in a hybrid Factory', async () => {
+    renderPayingAccount({ owner: SHANE, threadScope: 'factory', credentialLabel: 'Anthropic API key' });
 
-    expect(await findPayer('Organization')).toBeInTheDocument();
+    expect(await findCredential('Organization Anthropic API key')).toBeInTheDocument();
   });
 
-  it('says a new chat in a hybrid Factory runs on your account before the first message', async () => {
+  it('names your credential on a new chat in a hybrid Factory before the first message', async () => {
     renderPayingAccount({ draft: true, projectScope: 'hybrid' });
 
-    expect(await findPayer('Your')).toBeInTheDocument();
+    expect(await findCredential('Your Claude Pro/Max')).toBeInTheDocument();
   });
 
-  it('says a new chat in an organization-scoped Factory runs on the organization account', async () => {
-    renderPayingAccount({ draft: true, projectScope: 'factory' });
+  it('names the organization credential on a new chat in an organization-scoped Factory', async () => {
+    renderPayingAccount({ draft: true, projectScope: 'factory', credentialLabel: 'Anthropic API key' });
 
-    expect(await findPayer('Organization')).toBeInTheDocument();
+    expect(await findCredential('Organization Anthropic API key')).toBeInTheDocument();
   });
 
-  it('does not send the draft when someone clicks the account icon inside the composer form', async () => {
+  it('falls back to whose account when the catalog cannot name the credential, as for a custom provider', async () => {
+    renderPayingAccount({ draft: true, projectScope: 'factory', credentialLabel: null });
+
+    expect(await findCredential('Organization account')).toBeInTheDocument();
+  });
+
+  it('does not send the draft when someone clicks the credential icon inside the composer form', async () => {
     const { submitComposer } = renderPayingAccount({ owner: SHANE, threadScope: 'user' });
 
-    await userEvent.click(await findPayer('Shane Thomas’s'));
+    await userEvent.click(await findCredential('Shane Thomas’s Claude Pro/Max'));
 
     expect(submitComposer).not.toHaveBeenCalled();
   });
@@ -118,6 +150,6 @@ describe('PayingAccount', () => {
     const { client } = renderPayingAccount({ draft: true, projectScope: 'factory', authEnabled: false });
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
-    expect(screen.queryByRole('button', { name: /pays for replies$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
