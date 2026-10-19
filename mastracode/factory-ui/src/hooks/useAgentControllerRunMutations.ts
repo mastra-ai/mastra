@@ -29,8 +29,6 @@ export interface SendAgentControllerMessageInput {
   text: string;
   /** Base64-encoded attachments (e.g. pasted images) forwarded to the controller session. */
   files?: Array<{ data: string; mediaType: string; filename?: string }>;
-  /** Bind the session to this exact thread first (for a send that may beat session init). */
-  threadId?: string;
 }
 
 export function useSendAgentControllerMessageMutation(args: AgentControllerRunMutationArgs) {
@@ -38,10 +36,9 @@ export function useSendAgentControllerMessageMutation(args: AgentControllerRunMu
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: (input: SendAgentControllerMessageInput | string) => {
-      const { text, files, threadId } = typeof input === 'string' ? { text: input } : input;
+      const { text, files } = typeof input === 'string' ? { text: input, files: undefined } : input;
       return requireAgentControllerSession(session).sendMessage(
         files?.length ? { content: text, files } : { content: text },
-        threadId ? { threadId } : undefined,
       );
     },
     onSuccess: invalidateSession,

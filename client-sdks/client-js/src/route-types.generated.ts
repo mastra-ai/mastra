@@ -23275,7 +23275,6 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
         filename?: string | undefined;
       }[]
     | undefined;
-  threadId?: string | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_Response =
@@ -23315,21 +23314,8 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams =
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
-export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
-  message: string;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  files?:
-    | {
-        data: string;
-        mediaType: string;
-        filename?: string | undefined;
-      }[]
-    | undefined;
-};
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body =
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -23369,7 +23355,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParam
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body =
-  PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -23583,7 +23569,6 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
   thinkingLevel?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') | undefined;
-  threadId?: string | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Response =

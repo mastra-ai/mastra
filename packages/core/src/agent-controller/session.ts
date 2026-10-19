@@ -275,7 +275,7 @@ const RESERVED_THREAD_METADATA_KEYS = [
 /** Packages that cannot import the list as a value pin their copy to it with `satisfies Record<ReservedThreadMetadataKey, true>`. */
 export type ReservedThreadMetadataKey = (typeof RESERVED_THREAD_METADATA_KEYS)[number];
 
-function isReservedThreadMetadataKey(key: string): boolean {
+export function isReservedThreadMetadataKey(key: string): boolean {
   // Legacy per-mode model keys remain reserved and read-only so existing threads can restore their model.
   return RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) || key.startsWith('modeModelId_');
 }

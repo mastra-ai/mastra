@@ -6595,8 +6595,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "files",
       "message",
-      "requestContext",
-      "threadId"
+      "requestContext"
     ],
     "hasQuery": true,
     "hasBody": true,
@@ -6738,8 +6737,7 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [
       "modelId",
-      "thinkingLevel",
-      "threadId"
+      "thinkingLevel"
     ],
     "hasQuery": true,
     "hasBody": true,

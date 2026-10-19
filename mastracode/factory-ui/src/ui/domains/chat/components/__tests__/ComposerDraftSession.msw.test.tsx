@@ -55,9 +55,9 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
+    await waitFor(() => expect(preparation.posted).toEqual(['fix the login bug']));
+    expect(preparation.delivered).toEqual([]);
     await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
-    // The prompt waits for session init to bind the session thread.
-    expect(preparation.posted).toEqual([]);
     expect(client.getQueryData(queryKeys.userSession(SESSION_ID))).toEqual(createdDraftSession('fix the login bug'));
     expect(client.getQueryData(queryKeys.sessions(PROJECT_REPOSITORY_ID))).toBeUndefined();
 
@@ -68,7 +68,7 @@ describe('Composer on a lazy user-session draft', () => {
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
   });
 
-  it('restores a first prompt interrupted before the session binds without sending it', async () => {
+  it('restores an interrupted first prompt as a draft without sending it twice', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'recover this prompt' });
     server.use(
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
@@ -81,10 +81,10 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() => expect(message).toBeEnabled());
     await user.type(message, 'recover this prompt');
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(screen.getByText('recover this prompt')).toBeInTheDocument());
+    await waitFor(() => expect(preparation.posted).toEqual(['recover this prompt']));
 
-    // The workspace is still preparing, so the session has not bound its
-    // thread. A page reload must restore the prompt, never send it on its own.
+    // The server accepted the request but is still preparing the workspace.
+    // A page reload must not automatically send it a second time.
     firstPage.unmount();
     const recoveredPage = renderThread();
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
@@ -92,39 +92,7 @@ describe('Composer on a lazy user-session draft', () => {
     recoveredPage.unmount();
     renderThread();
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
-    expect(preparation.posted).toEqual([]);
-  });
-
-  it('gives the first prompt back when the session cannot start', async () => {
-    const preparation = stubPreparingSession({ createdSessionTitle: 'never sent', failWorkspace: true });
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
-        HttpResponse.json({ session: createdDraftSession('never sent') }),
-      ),
-    );
-    const user = userEvent.setup();
-    const { client, unmount } = renderDraft();
-    const message = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(message).toBeEnabled());
-    await user.type(message, 'never sent');
-    await user.keyboard('{Enter}');
-    await waitFor(() =>
-      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
-    );
-
-    preparation.finishWorkspace();
-    await waitForMutationsIdle(client);
-
-    expect(await screen.findByText(/The session could not start, so the message was not sent/)).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('never sent'));
-    expect(preparation.posted).toEqual([]);
-
-    // The failed session blocks the composer and asks for a reload, which
-    // must bring the unsent prompt back.
-    unmount();
-    renderThread();
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('never sent'));
-    expect(preparation.posted).toEqual([]);
+    expect(preparation.posted).toEqual(['recover this prompt']);
   });
 
   describe('when the first send fails', () => {

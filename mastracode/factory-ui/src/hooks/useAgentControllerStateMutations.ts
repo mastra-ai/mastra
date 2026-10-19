@@ -2,11 +2,11 @@ import type { AgentControllerThinkingLevel } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
+import type { AgentControllerMutationArgs } from './agentControllerMutationArgs';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
 } from '../ui/domains/chat/services/agentControllerClient';
-import type { AgentControllerMutationArgs } from './agentControllerMutationArgs';
 
 export function useSetAgentControllerStateMutation({
   agentControllerId,
@@ -39,8 +39,6 @@ export function useSetAgentControllerStateMutation({
 interface ModelSwitch {
   modelId: string;
   thinkingLevel?: AgentControllerThinkingLevel;
-  /** Bind the session to this exact thread first (for a switch that may beat session init). */
-  threadId?: string;
 }
 
 export function useSwitchAgentControllerModelMutation(args: AgentControllerMutationArgs) {
@@ -48,8 +46,8 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
-    mutationFn: ({ modelId, thinkingLevel, threadId }: ModelSwitch) =>
-      requireAgentControllerSession(session).switchModel(modelId, { thinkingLevel, threadId }),
+    mutationFn: ({ modelId, thinkingLevel }: ModelSwitch) =>
+      requireAgentControllerSession(session).switchModel(modelId, { thinkingLevel }),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({

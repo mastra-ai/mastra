@@ -6,13 +6,11 @@ import { useLocation, useNavigate } from 'react-router';
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatConnection } from '../context/useChatConnection';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { takeHandoffFiles } from '../services/handoffFiles';
-import type { OutgoingFile } from '../services/transcript';
 
 interface PromptHandoff {
   handoffPrompt: string;
@@ -50,14 +48,6 @@ function readHandoffPrompt(state: unknown): string | undefined {
 
 const pendingHandoffKey = (resourceId: string) => `factory-pending-handoff:${resourceId}`;
 
-interface QueuedHandoff {
-  prompt: string;
-  files: ReturnType<typeof takeHandoffFiles>;
-  outgoing: OutgoingFile[];
-  modelId?: string;
-  thinkingLevel?: ThinkingLevelSetting;
-}
-
 function storePendingHandoff(resourceId: string, prompt: string): void {
   try {
     sessionStorage.setItem(pendingHandoffKey(resourceId), prompt);
@@ -85,9 +75,7 @@ export function clearPendingHandoff(resourceId: string): void {
 export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
-  const { resourceId, projectPath, baseUrl, sessionEnabled, sessionThreadId } = useChatSessionContext();
-  const { threadId: boundThreadId, status: connectionStatus } = useChatConnection();
-  const sessionBound = !sessionThreadId || boundThreadId === sessionThreadId;
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { localUser, clearPending, pushNotice } = useChatTranscript();
   const { prefillComposer } = useChatCommands();
   const { setImages } = useComposerImagesState();
@@ -102,7 +90,6 @@ export function useHandoffPrompt(): void {
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
   const handedOff = useRef(false);
   const recovered = useRef(false);
-  const queued = useRef<QueuedHandoff | null>(null);
   const prompt = readHandoffPrompt(location.state);
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
@@ -130,8 +117,31 @@ export function useHandoffPrompt(): void {
     if (!prompt && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
     localUser(prompt, false, outgoing);
-    queued.current = { prompt, files, outgoing, modelId, thinkingLevel };
+    void (async () => {
+      if (modelId) {
+        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
+          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
+        );
+      }
+      await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
+      clearPendingHandoff(resourceId);
+    })().catch(error => {
+      prefillComposer(prompt);
+      setImages(current => [...files, ...current]);
+      clearPending();
+      const reason = error instanceof Error ? error.message : 'The message could not be sent.';
+      // A 4xx means the server refused the message. Anything else (network
+      // failure, 5xx) can come after the server accepted it, so warn before a
+      // retry posts it twice.
+      pushNotice(
+        isRejectedRequest(error)
+          ? reason
+          : `${reason} The message may have been sent. Check the transcript before retrying.`,
+        'error',
+      );
+    });
   }, [
+    clearPending,
     localUser,
     location.pathname,
     location.search,
@@ -141,59 +151,12 @@ export function useHandoffPrompt(): void {
     prompt,
     pushNotice,
     resourceId,
+    sendMessage,
     sessionEnabled,
+    setImages,
+    switchModel,
     thinkingLevel,
   ]);
-
-  // The network calls wait for session init to bind the session thread: init
-  // also sets the session's project tags and state, which a send that created
-  // the session would skip. The calls still name the thread so a send can never
-  // land on a random-id thread this page does not read.
-  // No deps: it must also run in the same commit the first effect queues in.
-  useEffect(() => {
-    const handoff = queued.current;
-    if (!handoff) return;
-    const { prompt, files, outgoing, modelId, thinkingLevel } = handoff;
-    const restore = (message: string) => {
-      prefillComposer(prompt);
-      setImages(current => [...files, ...current]);
-      clearPending();
-      pushNotice(message, 'error');
-    };
-    if (!sessionBound) {
-      // Session init does not retry, so a failed init will never bind. The
-      // prompt was never posted: hand it back instead of leaving it pending.
-      // Keep the stored copy so the reload this failure asks for restores it.
-      if (connectionStatus !== 'error') return;
-      queued.current = null;
-      restore('The session could not start, so the message was not sent.');
-      return;
-    }
-    queued.current = null;
-    void (async () => {
-      if (modelId) {
-        await switchModel({ modelId, thinkingLevel, threadId: sessionThreadId }).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
-        );
-      }
-      await sendMessage({
-        text: prompt,
-        ...(outgoing.length ? { files: outgoing } : {}),
-        ...(sessionThreadId ? { threadId: sessionThreadId } : {}),
-      });
-      clearPendingHandoff(resourceId);
-    })().catch(error => {
-      const reason = error instanceof Error ? error.message : 'The message could not be sent.';
-      // A 4xx means the server refused the message. Anything else (network
-      // failure, 5xx) can come after the server accepted it, so warn before a
-      // retry posts it twice.
-      restore(
-        isRejectedRequest(error)
-          ? reason
-          : `${reason} The message may have been sent. Check the transcript before retrying.`,
-      );
-    });
-  });
 }
 
 function isRejectedRequest(error: unknown): boolean {

@@ -38,10 +38,6 @@ interface DraftRoute {
   posted: string[];
   bindings: string[];
   bindingsBeforePrompt: string[];
-  /** Thread-agnostic writes that reached the server before session init bound the session thread. */
-  unboundWrites: string[];
-  /** Thread each model/message write names, in order. */
-  writeThreads: string[];
   finishWorkspace: () => void;
 }
 
@@ -66,7 +62,6 @@ function stubDraftRoute({
   // The server creates the session's thread only once the controller session
   // boots, so until then reading its history is a 404, as in production.
   let threadExists = false;
-  let sessionBound = false;
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = () => {
       threadExists = true;
@@ -78,8 +73,6 @@ function stubDraftRoute({
     posted: [],
     bindings: [],
     bindingsBeforePrompt: [],
-    unboundWrites: [],
-    writeThreads: [],
     finishWorkspace: () => releaseWorkspace(),
   };
 
@@ -143,7 +136,6 @@ function stubDraftRoute({
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, async () => {
       await workspaceReady;
-      sessionBound = true;
       return HttpResponse.json({ controllerId: 'code', resourceId: DRAFT_SESSION_ID, threadId: DRAFT_SESSION_ID });
     }),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/mode`, async ({ request }) => {
@@ -177,20 +169,15 @@ function stubDraftRoute({
         }),
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
-      if (!sessionBound) route.unboundWrites.push('model');
       const body = await request.json();
-      route.writeThreads.push(readBody(body, 'threadId'));
       const thinkingLevel = readBody(body, 'thinkingLevel');
       const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
       route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
       return HttpResponse.json({ ok: true });
     }),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {
-      if (!sessionBound) route.unboundWrites.push('message');
       route.bindingsBeforePrompt = [...route.bindings];
-      const body = await request.json();
-      route.writeThreads.push(readBody(body, 'threadId'));
-      route.posted.push(readSentMessage(body));
+      route.posted.push(readSentMessage(await request.json()));
       await workspaceReady;
       return HttpResponse.json({ ok: true });
     }),
@@ -228,21 +215,14 @@ describe('a user session draft on the real thread route', () => {
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
-    const thread = () => within(screen.getByRole('main'));
-    // The prompt shows right away, while the send waits for session init to bind the session thread.
-    // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
-    await waitFor(() => expect(thread().getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument(), {
-      timeout: 5000,
-    });
-    expect(thread().queryByText(/Failed to load messages/)).not.toBeInTheDocument();
-    await new Promise(resolve => setTimeout(resolve, 200));
-    expect(route.posted).toEqual([]);
-
-    route.finishWorkspace();
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
     expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
-    expect(route.unboundWrites).toEqual([]);
-    expect(route.writeThreads).toEqual([DRAFT_SESSION_ID, DRAFT_SESSION_ID]);
+    const thread = within(screen.getByRole('main'));
+    // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
+    await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
+    expect(thread.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
+
+    route.finishWorkspace();
     await waitForMutationsIdle(client);
     expect(route.posted).toEqual(['fix the login bug']);
   });
@@ -288,11 +268,10 @@ describe('a user session draft on the real thread route', () => {
     await user.type(message, 'keep the default');
     await user.keyboard('{Enter}');
 
-    route.finishWorkspace();
     await waitFor(() => expect(route.posted).toEqual(['keep the default']));
-    expect(route.unboundWrites).toEqual([]);
     expect(route.bindingsBeforePrompt).toEqual([]);
 
+    route.finishWorkspace();
     await waitForMutationsIdle(client);
   });
 
@@ -313,11 +292,10 @@ describe('a user session draft on the real thread route', () => {
     await user.type(message, 'think harder');
     await user.keyboard('{Enter}');
 
-    route.finishWorkspace();
     await waitFor(() => expect(route.posted).toEqual(['think harder']));
-    expect(route.unboundWrites).toEqual([]);
     expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini thinking:high']);
 
+    route.finishWorkspace();
     await waitForMutationsIdle(client);
   });
 
@@ -340,11 +318,10 @@ describe('a user session draft on the real thread route', () => {
     await user.type(message, 'use the default');
     await user.keyboard('{Enter}');
 
-    route.finishWorkspace();
     await waitFor(() => expect(route.posted).toEqual(['use the default']));
-    expect(route.unboundWrites).toEqual([]);
     expect(route.bindingsBeforePrompt).toEqual([]);
 
+    route.finishWorkspace();
     await waitForMutationsIdle(client);
   });
 

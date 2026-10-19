@@ -92,7 +92,11 @@ function getAgentControllerOrThrow(
   return controller;
 }
 
-async function getSession(
+/**
+ * Get-or-create a session. Only the create-session route calls this: it is the one request that carries the
+ * tags and exact thread a conversation starts on.
+ */
+async function startSession(
   controller: AgentController<any>,
   resourceId: string,
   options?: { tags?: Record<string, string>; scope?: string; threadId?: string },
@@ -108,6 +112,41 @@ async function getSession(
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
 }
 
+/**
+ * Resolve the session every other route acts on: the live one, or a lost one (e.g. after a restart) rebuilt on
+ * its most recent stored thread. Never starts a conversation, so a write that arrives before the session was
+ * started fails instead of landing on a thread nobody reads.
+ */
+async function getSession(
+  controller: AgentController<any>,
+  resourceId: string,
+  options?: { scope?: string },
+  requestContext?: RequestContext,
+): Promise<Session<any>> {
+  await controller.init();
+  const scope = options?.scope;
+  const id = scope ? `${resourceId}::${scope}` : resourceId;
+  try {
+    return await controller.createSession({
+      resourceId,
+      id,
+      ownerId: controller.id,
+      scope,
+      resumeOnly: true,
+      requestContext,
+    });
+  } catch (error) {
+    // Matched by code, not class: this module may only import types from @mastra/core/agent-controller.
+    if (error instanceof Error && (error as { code?: unknown }).code === 'SESSION_NOT_STARTED') {
+      throw new HTTPException(404, {
+        message: `No session has been started for resource "${resourceId}". Create it with POST /agent-controller/:controllerId/sessions first.`,
+        cause: error,
+      });
+    }
+    throw error;
+  }
+}
+
 async function getExistingSession(
   controller: AgentController<any>,
   resourceId: string,
@@ -119,8 +158,8 @@ async function getExistingSession(
   if (session) return session;
 
   // Read routes inspect an existing session with read permission. If the
-  // in-memory session was lost after a restart, preserve the historical
-  // recovery behavior by recreating it through the execute-authorized path.
+  // in-memory session was lost after a restart, recover it from its stored
+  // thread through the execute-authorized path.
   return getSession(controller, resourceId, { scope }, requestContext);
 }
 
@@ -215,17 +254,10 @@ const messageFilesSchema = z
   })
   .optional();
 
-/**
- * Exact thread for a write that may be the first request to reach the session.
- * Without it, a request that creates the session binds it to a new random-id
- * thread, and a later exact-thread create switches away, stranding the write.
- */
-const targetThreadIdSchema = z.string().min(1).optional();
 const sendMessageBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
   files: messageFilesSchema,
-  threadId: targetThreadIdSchema,
 });
 const steerBodySchema = z.object({
   message: z.string(),
@@ -261,7 +293,6 @@ const switchModeBodySchema = z.object({ modeId: z.string() });
 const switchModelBodySchema = z.object({
   modelId: z.string(),
   thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
-  threadId: targetThreadIdSchema,
 });
 const switchThreadBodySchema = z.object({ threadId: z.string() });
 const createThreadBodySchema = z.object({ title: z.string().optional() });
@@ -533,14 +564,19 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   responseSchema: createSessionResponseSchema,
   summary: 'Create or resume a controller session',
   description:
-    'Creates a session for the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation.',
+    'Creates a session for the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Every other session route requires a started session and returns 404 until one exists or can be recovered from a stored thread.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, controllerId, resourceId, sessionScope, tags, threadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { tags, scope: sessionScope, threadId }, requestContext);
+      const session = await startSession(
+        controller,
+        resourceId,
+        { tags, scope: sessionScope, threadId },
+        requestContext,
+      );
       return {
         controllerId,
         resourceId,
@@ -697,15 +733,14 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   bodySchema: sendMessageBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Send a message to a controller session',
-  description:
-    'Sends a user message to the session. The reply streams as events on the session\u2019s SSE stream. Pass `threadId` to bind the session to that exact thread first (resumed if it exists, created with that id otherwise), so a send that reaches the server before the session exists cannot land on a new random thread.',
+  description: 'Sends a user message to the session. The reply streams as events on the session\u2019s SSE stream.',
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, threadId, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope, threadId }, requestContext);
+      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
@@ -934,23 +969,14 @@ export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
   responseSchema: ackResponseSchema,
   summary: 'Switch the session model',
   description:
-    'Switches the model for the session and persists it to the active thread. Optionally applies and persists a thinking level with the model. Pass `threadId` to bind the session to that exact thread first.',
+    'Switches the model for the session and persists it to the active thread. Optionally applies and persists a thinking level with the model.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({
-    mastra,
-    controllerId,
-    resourceId,
-    sessionScope,
-    modelId,
-    thinkingLevel,
-    threadId,
-    requestContext,
-  }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, modelId, thinkingLevel, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope, threadId }, requestContext);
+      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       await session.model.switch(modelId, { thinkingLevel });
       return { ok: true };
     } catch (error) {

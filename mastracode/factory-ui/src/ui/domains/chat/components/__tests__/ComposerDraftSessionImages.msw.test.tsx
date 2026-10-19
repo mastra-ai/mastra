@@ -102,13 +102,13 @@ describe('Starting a user session with images attached', () => {
 
       await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent(THREAD_URL));
       expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'what is wrong here' }]);
+      await waitFor(() => expect(preparation.posted).toEqual(['what is wrong here']));
+      expect(preparation.postedFiles).toEqual([SENT_SHOT]);
       expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
-      expect(preparation.posted).toEqual([]);
 
       preparation.finishWorkspace();
       await waitForMutationsIdle(client);
       await waitFor(() => expect(preparation.delivered).toEqual(['what is wrong here']));
-      expect(preparation.postedFiles).toEqual([SENT_SHOT]);
     });
 
     it('starts a session from an image-only first prompt', async () => {
@@ -121,12 +121,13 @@ describe('Starting a user session with images attached', () => {
 
       await user.click(screen.getByRole('button', { name: 'Send message' }));
 
-      await waitFor(() => expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: '' }]));
+      await waitFor(() => expect(preparation.posted).toEqual(['']));
+      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: '' }]);
+      expect(preparation.postedFiles).toEqual([SENT_SHOT]);
 
       preparation.finishWorkspace();
       await waitForMutationsIdle(client);
       await waitFor(() => expect(preparation.delivered).toEqual(['']));
-      expect(preparation.postedFiles).toEqual([SENT_SHOT]);
     });
 
     it('sends no images when the attachment was removed before sending', async () => {
@@ -141,11 +142,11 @@ describe('Starting a user session with images attached', () => {
       await user.type(message, 'text only');
       await user.keyboard('{Enter}');
 
-      await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent(THREAD_URL));
-      preparation.finishWorkspace();
-      await waitForMutationsIdle(client);
       await waitFor(() => expect(preparation.posted).toEqual(['text only']));
       expect(preparation.postedFiles).toEqual([]);
+
+      preparation.finishWorkspace();
+      await waitForMutationsIdle(client);
     });
 
     it('applies the draft-selected model before sending the prompt and its images', async () => {
@@ -204,9 +205,10 @@ describe('Starting a user session with images attached', () => {
       await user.type(message, 'look at this');
       await user.keyboard('{Enter}');
       await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent(THREAD_URL));
+      await waitFor(() => expect(preparation.postedFiles).toEqual([SENT_SHOT]));
+
       preparation.finishWorkspace();
       await waitForMutationsIdle(client);
-      await waitFor(() => expect(preparation.postedFiles).toEqual([SENT_SHOT]));
 
       expect(await screen.findByText(/Sandbox is gone/)).toBeInTheDocument();
       await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('look at this'));
