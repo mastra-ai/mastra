@@ -5,7 +5,7 @@ import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboa
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useWorkspaces } from '@mastra/react/hooks/workspace';
-import { Search, Wrench } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -102,19 +102,20 @@ export function AppSidebar() {
 
   return (
     <Sidebar aria-label="Sidebar">
-      <Sidebar.CommandHeader>
+      <Sidebar.Header
+        collapsedLogo={<LogoWithoutText className="size-6" />}
+        actions={isUserAuthenticated && <AuthStatus />}
+      >
         <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Studio" />
-        {isUserAuthenticated && <AuthStatus />}
         {!isMobile && (
           <Sidebar.SearchTrigger
             aria-label="Search and navigate"
             shortcut={commandShortcutLabel}
             onClick={openNavigationCommand}
-          >
-            <Search />
-          </Sidebar.SearchTrigger>
+          />
         )}
-      </Sidebar.CommandHeader>
+        <Sidebar.Trigger />
+      </Sidebar.Header>
 
       {isAgentBuilderVisible && (
         <Sidebar.NavList className="mb-1">
@@ -150,7 +151,6 @@ export function AppSidebar() {
           </Sidebar.NavList>
         )}
         <MastraVersionFooter collapsed={state === 'collapsed'} />
-        <Sidebar.FooterMeta action={<Sidebar.Trigger />} />
       </Sidebar.Footer>
     </Sidebar>
   );
